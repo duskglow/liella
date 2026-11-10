@@ -364,6 +364,18 @@ fn read_image(at: usize, out: &mut [u8]) {
     out.copy_from_slice(unsafe { conv::bytes_at(at, out.len()) });
 }
 
+/// The `len` file-backed bytes at run-time address `at` of a program `PT_LOAD` that
+/// [`liella_ld::elf::Elf::image_span_kind`] calls [`liella_ld::elf::SpanKind::Live`], read in place.
+fn live_segment(at: usize, len: usize) -> &'static [u8] {
+    // UNSAFE(slice): a PT_LOAD of the program read in place (SpanKind::Live).
+    #[allow(unsafe_code)]
+    // SAFETY: the caller checked the range is the file-backed part of a readable PT_LOAD, mapped for the
+    // process's lifetime. Live means: not writable, the program is not text-relocated, and no segment the
+    // relocator may store into overlaps it; the relocator stores only inside writable segments of such an
+    // object (reloc `inside`), so the bytes do not change while the slice is used (until `link` ends).
+    unsafe { conv::bytes_at(at, len) }
+}
+
 /// The program as the reader sees it, read from its memory image (ruling #4229, D-27.18): its program
 /// header table and `PT_DYNAMIC` copied into one anonymous mapping, each `PT_LOAD` whose bytes cannot
 /// change during loading sliced in place, and each that can change and holds a table copied into a
@@ -426,14 +438,7 @@ fn image_view<'s>(
                 copies = rest;
                 now
             } else {
-                // UNSAFE(slice): a PT_LOAD of the program read in place (SpanKind::Live).
-                #[allow(unsafe_code)]
-                // SAFETY: the segment's file-backed part is mapped readable (checked above) for the
-                // process's lifetime. `image_span_kind` returned Live: it is not writable, the program
-                // is not text-relocated and no segment the relocator may store into overlaps it, and
-                // the relocator stores only inside writable segments of such an object (reloc
-                // `inside`), so its bytes do not change while the slice is used (until `link` ends).
-                unsafe { conv::bytes_at(run_at(p.vaddr), len) }
+                live_segment(run_at(p.vaddr), len)
             };
             spans[k] = Span { vaddr: p.vaddr, bytes };
             k = k.saturating_add(1);
