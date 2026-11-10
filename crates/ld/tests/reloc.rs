@@ -384,25 +384,24 @@ fn reloc_ldso_one_object_by_two_paths() {
     let b = build(&d, "libb.so", LIBB, &["-fPIC", "-shared"]);
     let alias = d.join("libalias.so");
     std::os::unix::fs::symlink(&b, &alias).unwrap();
-    // Counts the r-xp lines of /proc/self/maps that end in "libb.so"; exits with that count.
+    // Copies /proc/self/maps to standard output; exits 0 when libb.so's function answers.
     let src = "extern int b_fn(void);
 static long sc(long n, long a, long b, long c) { long r; __asm__ volatile(\"syscall\" : \"=a\"(r) : \"a\"(n), \"D\"(a), \"S\"(b), \"d\"(c) : \"rcx\", \"r11\", \"memory\"); return r; }
 static char buf[1 << 16];
 void _start(void) {
-  long fd = sc(2, (long)\"/proc/self/maps\", 0, 0), n = 0, r, count = 0, line = 0;
-  while (fd >= 0 && (r = sc(0, fd, (long)buf + n, sizeof buf - 1 - n)) > 0) n += r;
-  for (long i = 0; i < n; i++) if (buf[i] == '\\n') {
-    if (i >= 8 && buf[line + 20] != 0 && buf[i-7] == 'l' && buf[i-6] == 'i' && buf[i-5] == 'b' && buf[i-4] == 'b' && buf[i-3] == '.') {
-      for (long j = line; j < i; j++) if (buf[j] == ' ') { if (buf[j+1] == 'r' && buf[j+3] == 'x') count++; break; }
-    }
-    line = i + 1;
-  }
-  sc(60, b_fn() == 5 ? count : 99, 0, 0);
+  long fd = sc(2, (long)\"/proc/self/maps\", 0, 0), n = 0, r;
+  while (fd >= 0 && (r = sc(0, fd, (long)buf + n, sizeof buf - n)) > 0) n += r;
+  sc(1, 1, (long)buf, n);
+  sc(60, b_fn() == 5 ? 0 : 99, 0, 0);
 }
 ";
     let p = build(&d, "pid", src, &["-fPIE", "-pie", "-Wl,--no-as-needed", b.to_str().unwrap(), alias.to_str().unwrap()]);
-    let (code, sig, err) = run(Command::new(&ld).arg(&p));
-    assert_eq!((code, sig), (Some(1), None), "libb.so must be mapped executable exactly once (exit = mappings): {err}");
+    let file = std::fs::read(&p).unwrap();
+    assert!(file.windows(12).any(|w| w == b"libalias.so\0"), "the program names the symlink too");
+    let o = Command::new(&ld).arg(&p).output().unwrap();
+    let maps = String::from_utf8_lossy(&o.stdout);
+    let text = maps.lines().filter(|l| l.split_whitespace().nth(1).is_some_and(|p| p.contains('x')) && l.ends_with("/libb.so")).count();
+    assert_eq!((o.status.code(), text), (Some(0), 1), "libb.so must be mapped executable exactly once:\n{maps}{}", String::from_utf8_lossy(&o.stderr));
     std::fs::remove_dir_all(&d).ok();
 }
 
