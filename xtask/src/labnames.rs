@@ -87,8 +87,9 @@ fn walk(root: &Path, dir: &Path, handoff: bool, out: &mut Vec<String>) {
     for e in rd.flatten() {
         let p = e.path();
         let rel = p.strip_prefix(root).map(|r| r.to_string_lossy().into_owned()).unwrap_or_default();
-        // Sync bookkeeping (`.synced*`, `.changed*`, e.g. `.changed.xtask`) and build output are not part of the tree.
-        if rel == "target" || rel == "fuzz/target" || rel == ".git" || (!handoff && rel.starts_with("handoff")) || rel.starts_with(".synced") || rel.starts_with(".changed") {
+        // Sync bookkeeping (`.synced*`, `.changed*`, e.g. `.changed.xtask`) and build output (`target/`, `fuzz/target/`, and
+        // `conformance/build/`, which the gate's conformance step writes) are not part of the tree.
+        if rel == "target" || rel == "fuzz/target" || rel == "conformance/build" || rel == ".git" || (!handoff && rel.starts_with("handoff")) || rel.starts_with(".synced") || rel.starts_with(".changed") {
             continue;
         }
         if p.is_dir() {
@@ -140,6 +141,21 @@ pub fn check(root: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn walk_skips_build_output() {
+        let root = std::env::temp_dir().join(format!("liella-walk-{}", std::process::id()));
+        for d in ["conformance/build", "target", "src"] {
+            std::fs::create_dir_all(root.join(d)).unwrap();
+        }
+        for f in ["conformance/build/s27_a.key", "target/x", "src/a.rs", ".synced"] {
+            std::fs::write(root.join(f), "x").unwrap();
+        }
+        let mut v = Vec::new();
+        walk(&root, &root, false, &mut v);
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(v, vec!["src/a.rs".to_string()]);
+    }
 
     #[test]
     fn planted_host_name_is_caught() {

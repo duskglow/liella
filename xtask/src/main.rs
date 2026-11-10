@@ -57,6 +57,7 @@ mod align;
 mod bench;
 mod classed;
 mod jcc;
+mod layout;
 mod benchstage;
 mod forkalloc;
 mod fs_order;
@@ -150,6 +151,7 @@ fn main() -> ExitCode {
         "crash-audit" => policy::crash_audit(&root),
         "reexec-audit" => policy::reexec_audit(&root),
         "lab-names" => labnames::check(&root),
+        "hottext-check" => hottext::static_check(&root),
         "private-paths" => privpaths::check(&root),
         "csys-gen" => csys::run(&root, args.iter().any(|a| a == "--check")),
         "abi-gen" => abi::run(&root, args.iter().any(|a| a == "--check")),
@@ -173,13 +175,14 @@ fn main() -> ExitCode {
         "affected" => return affected::main(&root, &args[1..]),
         "bench-rows" => benchrows::run(&root, &args[1..]),
         "sweep" => sweep::run(&root, &args[1..]),
-        "so" => so::run_so(&root),
+        "so" => hottext::regen_mode(&args[1..]).and_then(|_| so::run_so(&root)),
         "repro" => repro::run(&root, &args[1..]),
         "native" => native_examples::run_native(&root),
         "rust-dylib" => rust_dylib::run_rust_dylib(&root, args.get(1).map(String::as_str)),
         "plants" => return plants::main(&root, &args[1..]),
         "classed-xref" => classed::run(&root, &args[1..]),
         "jcc-check" => jcc::run(&root, &args[1..]),
+        "layout-check" => layout::run(&root, &args[1..]),
         _ => {
             println!("usage: cargo xtask <stubs [--force] | trace [--untested [--out F]] | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | arch-check | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] | kernel-index [--check] | records-gen [--check] | records (check | fmt [--check] | new <decision|compat|saturation> <id> [--section S] [--series S] [--story S]) | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] | sweep (run --out <dir> [--only a,b] | compare --new <class>=<tsv>... (--old <class>=<tsv>... | --old-table <md>) [--label L]) [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; --tunables V, or else a non-empty GLIBC_TUNABLES in the caller's environment, sets it for both sides; the two differing is an error) | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
             Ok(())
@@ -219,8 +222,8 @@ fn arch_tools() -> arch::Tools {
 /// on Zen 1 host before a long gate. `~/bin/static-checks` on the VMs is the same list.
 fn static_checks(root: &Path) -> Result<(), String> {
     type Check = fn(&Path) -> Result<(), String>;
-    let checks: [(&str, Check); 29] =
-        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("classed-xref", classed::static_check), ("jcc-check", jcc::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("records", records::check), ("records-gen", records::fresh_check), ("register", register::check), ("compat-ids", compat_ids::check), ("lab-names", labnames::check), ("private-paths", privpaths::check), ("reexec-audit", policy::reexec_audit), ("tables-fresh", |r| math::run_tables(r, &["--check".to_string()])), ("lock-fresh", locks::static_check)];
+    let checks: [(&str, Check); 31] =
+        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("classed-xref", classed::static_check), ("jcc-check", jcc::static_check), ("layout", layout::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("records", records::check), ("records-gen", records::fresh_check), ("register", register::check), ("compat-ids", compat_ids::check), ("lab-names", labnames::check), ("private-paths", privpaths::check), ("reexec-audit", policy::reexec_audit), ("tables-fresh", |r| math::run_tables(r, &["--check".to_string()])), ("lock-fresh", locks::static_check), ("hottext", hottext::static_check)];
     let failed: Vec<&str> = checks.iter().filter(|(name, f)| f(root).map_err(|e| eprintln!("static: {name} FAILED: {e}")).is_err()).map(|(name, _)| *name).collect();
     if failed.is_empty() { Ok(()) } else { Err(format!("failed: {}", failed.join(", "))) }
 }

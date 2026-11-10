@@ -1,0 +1,9 @@
+id = "D-X.52"
+section = "x"
+status = "active"
+story = "LAYOUT-PLACEMENT-SWEEP"
+date = "2026-11-10"
+tests = ["crates/boundary/tests/placement_sweep.rs::string_kernels_cost_about_the_same_at_every_operand_page_offset"]
+body = '''
+**Operand placement is a tested contract** (LAYOUT-PLACEMENT-SWEEP, 2026-11-10; local test decision, layout inventory L15/L16). `bench/c/cbench_hot.c` asserts at build time that its operand block is page-aligned and that no buffer starts at page offset 0 or in a page's last 64 bytes. `crates/boundary/tests/placement_sweep.rs` counts user instructions per call (perf_event_open; skips when refused or without AVX2) of strcasecmp, strncasecmp, strcmp, strncmp, memcmp, strlen, strnlen, memchr and rawmemchr with each operand at page offsets {0, 1, 15, 16, 31, 32, 4032, 4064, 4065, 4080, 4095} and every pair, and bounds the worst over the median per kernel, over all placements and over head placements (offsets <= 32): K per kernel = the spread measured on origin/next 03c9a4972 (Skylake-SP host) plus about 10%, listed in the test; bounds only tighten. The bounds are not yet measured on a Zen 1 host; a trip there is measured and, if it would loosen a bound, goes to the owner.
+'''

@@ -470,7 +470,7 @@ __mempcpy:
 	.globl liella_classed_page0
 	.hidden liella_classed_page0
 liella_classed_page0:
-/* Page 0, the SSE2 page. */
+/* Page 0, the SSE2 page. LAYOUT(CLASSED-XREF): both pages hold the same slots at the same offsets. */
 	.org liella_classed_page0 + LIELLA_SLOT_MEMSET
 	.globl liella_machine_memset
 	.hidden liella_machine_memset

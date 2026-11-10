@@ -1,0 +1,8 @@
+id = "D-X.56"
+section = "x"
+status = "active"
+story = "HOTTEXT-REGEN-UNBLOCK"
+date = "2026-11-08"
+body = '''
+**Regen builds past a dead hot-text key; listed plain fork-tier functions are `#[inline(never)]`** (HOTTEXT-REGEN-UNBLOCK, 2026-11-08; layout and tooling only, no ABI or behaviour change; keeps D-X.47 / ruling #4079 as it is). (1) A stale start-up or fork key failed `cargo xtask so`, and `tools/hottext/regen.sh` needs built products to repair the list, so the key blocked its own repair. `cargo xtask so --hottext-regen` reports the dead keys without failing; only `regen.sh --build` passes it, and regen then rebuilds with plain `cargo xtask so`, which must pass the check. `so` takes no other argument and refuses the flag when `CI` is set; `cargo xtask static` (`hottext`) fails when a tracked file other than `xtask/src/hottext.rs`, `regen.sh` or prose names it. (2) Unrelated changes moved the inliner's choices (two libm merges inlined `spawn::wait4` away and failed the build). Every fork-tier key of a non-generic workspace function names a function marked `#[inline(never)]` (`spawn::wait4`, `fork::{fork, child_reset}`, `timer::after_fork_child`, `process::exit_now`), so the key exists in both profiles; the `hottext` static check enforces it. The start-up tier is not marked: marking its 7 plain functions cost 3 to 45 user instructions per start-up row (fast and release; numbers in `handoff/hottext-regen-unblock.md`), and owner ruling HOTTEXT-PINNING (2026-11-08) keeps the start-up tier unmarked. Generic, impl and closure keys are not marked (the attribute would also stop inlining at their other call sites); the build check still guards them, and regen `--build` repairs them.
+'''

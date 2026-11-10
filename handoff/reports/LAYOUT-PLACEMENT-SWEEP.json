@@ -1,0 +1,29 @@
+{
+ "task": "LAYOUT-PLACEMENT-SWEEP",
+ "model": "opus",
+ "tokens": null,
+ "result": "Bench operand offsets asserted at build time; counter sweep of 9 string kernels over page offsets with per-kernel K (measured spread +10%); 2/2 plants caught",
+ "branch": "task/layout-placement-sweep",
+ "head": "4a813ea96",
+ "gate": {
+  "affected": "pending: mei lps-gate3 (escalated to FULL)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "affected --run escalates to FULL for this change even with --base ddc2dbdaf (parent head); cause not found in budget",
+  "K per kernel instead of one K: origin/next spreads differ (strncasecmp 527%, strcmp 426%, strcasecmp 280%); one K could not see a casecmp regression",
+  "bounds calibrated on the Skylake-SP host only; Zen 1 not measured",
+  "no manifest row BENCH-OPERAND-OFFSETS: LAYOUT-MANIFEST not on origin/next; a bench row would also need a build-assert kind",
+  "placement slow paths worth stories: strcmp 900 at 32/4065, strncmp 579, strncasecmp 701, strcasecmp 848 (instructions; medians 211/123/133/302)"
+ ],
+ "refused": [],
+ "improvement": "affected should not escalate to FULL for a new test file plus a bench C file; a --explain line naming the escalating file would have saved a gate cycle",
+ "next_step": "dispatcher reads lps-gate3; follow-up stories to cut the strcmp/strncmp/strncasecmp page-end spreads and tighten K",
+ "report_file": "handoff/LAYOUT-PLACEMENT-SWEEP.md",
+ "jobs": [
+  "mei:lps-gate3",
+  "mei:lps-plants"
+ ]
+}

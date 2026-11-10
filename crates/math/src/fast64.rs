@@ -33,6 +33,7 @@ use crate::status::{Flags, Rounding, Status};
 mod exp_log;
 mod hyperbolic;
 pub mod quick;
+pub mod quick_invhyp;
 pub mod quick_log;
 pub mod quick_pow;
 #[cfg(test)]

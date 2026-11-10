@@ -410,6 +410,7 @@ pub fn add_action(fa: Option<&mut CFileActions>, action: FileAction<'_>) -> KRes
 
 /// `wait4(pid, status, options, usage)` (and `wait`, `waitpid`, `wait3`): a cancellation point.
 /// `*status` is written only when a child is reported (`WNOHANG` with none leaves it).
+#[inline(never)]
 pub fn wait4(pid: i32, status: Option<&mut i32>, options: i32, usage: Option<&mut liella_kernel::uapi::Rusage>) -> KResult<i32> {
     let (p, st) = CP.wait4(pid, conv::bits(options), usage)?;
     if p > 0 {

@@ -66,7 +66,7 @@ pub const ALIGN: usize = 512;
 
 const _: () = assert!(LEN <= ALIGN && ALIGN.is_power_of_two() && 65536 % ALIGN == 0);
 
-/// The names, back to back, without terminators.
+/// The names, back to back, without terminators. LAYOUT(STARTUP-NAMES-WINDOW).
 #[repr(C, align(512))]
 pub struct Names([u8; LEN]);
 

@@ -12,6 +12,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stddef.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -107,8 +108,10 @@ static int (*volatile close_fn)(int) = close;
  * too (MEMCPY-NONAVX2-THRESHOLD-2): the program links statically, and as separate statics their
  * addresses moved with the size of the C library's data, which decides the string kernels' page
  * tests (a start at page offset 0 or a pair near a page end takes the longer path). With the
- * 64-byte lead no buffer starts at page offset 0 or within 64 bytes of a page end. */
-static struct {
+ * 64-byte lead no buffer starts at page offset 0 or within 64 bytes of a page end. The asserts
+ * below hold that at build time (LAYOUT-PLACEMENT-SWEEP, D-X.52): a new buffer or a reorder that
+ * breaks it fails the bench build. */
+static struct hot_bufs {
     char lead[64];
     char a64[128] __attribute__((aligned(64)));
     char b64[128] __attribute__((aligned(64)));
@@ -125,6 +128,19 @@ static struct {
     .names_b = "/usr/share/doc/libexample-dev/changelog.Debian.gz.orig-2",
     .s16 = "abcdefghijklmnop", /* 16 chars */
 };
+_Static_assert(__alignof__(bufs) == 4096, "cbench_hot: the operand block must be page-aligned");
+/* Page offset of a buffer's start: not 0, and at most 4096 - 64 (not in the last 64 bytes). */
+#define HOT_OPERAND_OK(f) (offsetof(struct hot_bufs, f) % 4096 != 0 && offsetof(struct hot_bufs, f) % 4096 <= 4096 - 64)
+_Static_assert(HOT_OPERAND_OK(a64), "cbench_hot: a64 at page offset 0 or in a page's last 64 bytes");
+_Static_assert(HOT_OPERAND_OK(b64), "cbench_hot: b64 at page offset 0 or in a page's last 64 bytes");
+_Static_assert(HOT_OPERAND_OK(big), "cbench_hot: big at page offset 0 or in a page's last 64 bytes");
+_Static_assert(HOT_OPERAND_OK(dst), "cbench_hot: dst at page offset 0 or in a page's last 64 bytes");
+_Static_assert(HOT_OPERAND_OK(names_a), "cbench_hot: names_a at page offset 0 or in a page's last 64 bytes");
+_Static_assert(HOT_OPERAND_OK(names_b), "cbench_hot: names_b at page offset 0 or in a page's last 64 bytes");
+_Static_assert(HOT_OPERAND_OK(s16), "cbench_hot: s16 at page offset 0 or in a page's last 64 bytes");
+_Static_assert(HOT_OPERAND_OK(s64), "cbench_hot: s64 at page offset 0 or in a page's last 64 bytes");
+_Static_assert(HOT_OPERAND_OK(d8), "cbench_hot: d8 at page offset 0 or in a page's last 64 bytes");
+_Static_assert(HOT_OPERAND_OK(e8), "cbench_hot: e8 at page offset 0 or in a page's last 64 bytes");
 #define a64 (bufs.a64)
 #define b64 (bufs.b64)
 #define big (bufs.big)

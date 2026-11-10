@@ -159,6 +159,7 @@ macro_rules! set_if_differs {
 }
 pub(crate) use set_if_differs;
 
+#[inline(never)]
 fn child_reset() {
     let used = USED.load(Acquire);
     thread::after_fork_child();
@@ -178,6 +179,7 @@ fn child_reset() {
 /// *prepare* handlers, which may create one), no other thread can hold a library lock, so the
 /// locks are neither taken nor released (P5): the child's state is the same, and neither side
 /// writes the lock words while their pages are shared copy-on-write.
+#[inline(never)]
 pub fn fork() -> KResult<i32> {
     prepare_handlers();
     let locks = !thread::alone();

@@ -978,7 +978,7 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     let native_names: BTreeSet<String> = crate::native::symbols(root)?.into_iter().map(|(s, _)| s).collect();
     let versioned = check_version_sets(root, &so, "libc.so.6", &have, &native_names)?;
     println!("so: version set and default version of {versioned} libc.so.6 names checked against spec/abi/versions.tsv");
-    crate::align::check(&so)?;
+    // The 64-byte entry alignment (D-4.33) is contract FN-ALIGN-EXPORTS, checked with the others at the end.
     publish(&so, &so_final)?;
 
     // 4. The start object.
@@ -1020,13 +1020,10 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     check_placement(root, &release)?;
     // R14-12: no shared product defines or exports a GLIBC_PRIVATE version.
     crate::placeholders::check_no_private(&release)?;
-    // After the last product: no build path may be left in any of them (PRODUCT-PATH-REMAP).
-    // The classed pages' XREF bias in the linked products (D-4.53, D-X.34), whatever their layout.
-    crate::classed::check_file(&release.join("libc.a"))?;
-    crate::classed::check_file(&release.join("libc.so.6"))?;
-    // The hot kernels' jumps stay off 32-byte boundaries in the archive the programs link (D-4.67).
-    crate::jcc::check_archive(root, &release.join("libc.a"))?;
-    crate::remap::check(root)?;
+    // After the last product: every layout contract of layout/contracts.tsv (D-X.48) on the products, among them
+    // the 64-byte entries (D-4.33), the classed pages' XREF bias (D-X.34), the hot kernels' jumps off 32-byte
+    // boundaries (D-4.67) and no build path in any product (PRODUCT-PATH-REMAP).
+    crate::layout::check_products(root, &release)?;
     // The marker last, so a set that was not finished has none.
     let marker = tmp_name(&release.join(".profile"));
     fs::write(&marker, format!("{}
