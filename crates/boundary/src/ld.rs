@@ -278,7 +278,9 @@ fn run(sp: usize, prog: &start::Program, bias: usize, page: u64, path: usize) ->
         // in the mapped program.
         let dyn_words = unsafe { conv::words_at(dynamic, usize::try_from(img.dynamic.1).unwrap_or(0) / 8) };
         if start::needs_objects(dyn_words) {
-            link(prog, bias, page, path);
+            // The program's name in messages: its path (`ld.so PROGRAM`), else argv[0].
+            let at = if path != 0 { path } else { usize::try_from(stack_word(sp.wrapping_add(8))).unwrap_or(0) };
+            link(prog, bias, page, if at != 0 { c_string(at) } else { b"the program" });
             crate::arch::enter(sp, prog.entry)
         }
         let ehdr = bias.wrapping_add(usize::try_from(img.header).unwrap_or(0));
@@ -340,29 +342,136 @@ fn open_file(path: usize) -> Option<(i32, usize, &'static [u8], FileId)> {
     Some((fd32, at, unsafe { conv::bytes_at(at, len) }, (st.dev, st.ino)))
 }
 
+/// A new private anonymous read-write mapping of `len` (> 0) bytes: (address, bytes).
+fn scratch(len: usize, name: &[u8]) -> (usize, &'static mut [u8]) {
+    let Ok(at) = raw::mmap(0, len, map::PROT_READ | map::PROT_WRITE, MAP_PRIVATE_I32 | MAP_ANONYMOUS_I32, -1, 0) else {
+        fail_with(&[name, b": out of memory for the program's tables\n"], program::FAILURE)
+    };
+    // UNSAFE(slice): a fresh anonymous mapping, owned by the caller.
+    #[allow(unsafe_code)]
+    // SAFETY: `len` bytes from `at` were just mapped private, readable and writable; nothing else
+    // refers to them, and the caller unmaps them only after the last use of the slice.
+    (at, unsafe { conv::bytes_at_mut(at, len) })
+}
+
+/// Copy `out.len()` bytes of the mapped program at run-time address `at` into `out` (D-27.18).
+fn read_image(at: usize, out: &mut [u8]) {
+    // UNSAFE(slice): bytes of the mapped program, copied before any relocation store.
+    #[allow(unsafe_code)]
+    // SAFETY: the caller checked [at, at + len) is the program header table (`AT_PHDR`, ⚑ KERN) or lies
+    // in the file-backed part of one readable `PT_LOAD` the kernel or `load` mapped; the slice lives
+    // only for this copy, and nothing stores into the program while it is taken.
+    out.copy_from_slice(unsafe { conv::bytes_at(at, out.len()) });
+}
+
+/// The program as the reader sees it, read from its memory image (ruling #4229, D-27.18): its program
+/// header table and `PT_DYNAMIC` copied into one anonymous mapping, each `PT_LOAD` whose bytes cannot
+/// change during loading sliced in place, and each that can change and holds a table copied into a
+/// second one, all before the first relocation store. Returns the table and the spans (in `spans`);
+/// each mapping made is added to `maps` from `*n` on.
+// The span index stays below `spans.len()` (checked before each store).
+#[allow(clippy::indexing_slicing)]
+fn image_view<'s>(
+    prog: &start::Program,
+    bias: usize,
+    name: &[u8],
+    spans: &'s mut [liella_ld::elf::Span<'static>],
+    maps: &mut [(usize, usize)],
+) -> (&'static [u8], &'s [liella_ld::elf::Span<'static>]) {
+    use liella_ld::elf::{pt, Elf, Span, SpanKind, PHDR_SIZE};
+    let bad = |what: &[u8]| -> ! { fail_with(&[name, what], program::FAILURE) };
+    let table = prog.phnum.saturating_mul(PHDR_SIZE);
+    // Pass 1: the header table alone, to find PT_DYNAMIC and size the first mapping.
+    let (at, buf) = scratch(table, name);
+    read_image(prog.phdr, buf);
+    let head: &'static [u8] = buf;
+    let probe = Elf::from_image::<Native>(head, &[]).unwrap_or_else(|_| bad(b": malformed program headers\n"));
+    let loads = || probe.program_headers().filter(|p| p.p_type == pt::LOAD);
+    if loads().count() > map::LOADS_MAX {
+        bad(b": too many loadable segments\n");
+    }
+    let run_at = |vaddr: u64| bias.wrapping_add(usize::try_from(vaddr).unwrap_or(usize::MAX));
+    // A range is read from memory only when it lies in the file-backed part of one readable PT_LOAD.
+    let mapped = |vaddr: u64, len: u64| {
+        loads().any(|p| p.flags & 4 != 0 && p.vaddr <= vaddr && vaddr.checked_add(len).is_some_and(|e| p.vaddr.checked_add(p.filesz).is_some_and(|f| e <= f)))
+    };
+    let dynph = probe.find(pt::DYNAMIC).unwrap_or_else(|| bad(b": no valid dynamic section\n"));
+    let dlen = usize::try_from(dynph.filesz).unwrap_or(usize::MAX);
+    if !mapped(dynph.vaddr, dynph.filesz) || dlen == 0 {
+        bad(b": no valid dynamic section\n");
+    }
+    maps[0] = (at, table);
+    let (at, buf) = scratch(dlen, name);
+    read_image(run_at(dynph.vaddr), buf);
+    maps[1] = (at, dlen);
+    let dynamic: &'static [u8] = buf;
+    // Pass 2: the PT_LOADs that change and hold a table, copied into one mapping.
+    let copy_len = loads().filter(|p| probe.image_span_kind(p, dynamic) == SpanKind::Copy).fold(0usize, |a, p| a.saturating_add(usize::try_from(p.filesz).unwrap_or(usize::MAX)));
+    let mut copies: &'static mut [u8] = &mut [];
+    if copy_len != 0 {
+        let (at, buf) = scratch(copy_len, name);
+        maps[2] = (at, copy_len);
+        copies = buf;
+    }
+    let mut k = 0usize;
+    for kind in [SpanKind::Copy, SpanKind::Live] {
+        for p in loads().filter(|p| probe.image_span_kind(p, dynamic) == kind) {
+            let len = usize::try_from(p.filesz).unwrap_or(usize::MAX);
+            if !mapped(p.vaddr, p.filesz) || k == spans.len() {
+                bad(b": malformed program headers\n");
+            }
+            let bytes: &'static [u8] = if kind == SpanKind::Copy {
+                let (now, rest) = core::mem::take(&mut copies).split_at_mut(len);
+                read_image(run_at(p.vaddr), now);
+                copies = rest;
+                now
+            } else {
+                // UNSAFE(slice): a PT_LOAD of the program read in place (SpanKind::Live).
+                #[allow(unsafe_code)]
+                // SAFETY: the segment's file-backed part is mapped readable (checked above) for the
+                // process's lifetime. `image_span_kind` returned Live: it is not writable, the program
+                // is not text-relocated and no segment the relocator may store into overlaps it, and
+                // the relocator stores only inside writable segments of such an object (reloc
+                // `inside`), so its bytes do not change while the slice is used (until `link` ends).
+                unsafe { conv::bytes_at(run_at(p.vaddr), len) }
+            };
+            spans[k] = Span { vaddr: p.vaddr, bytes };
+            k += 1;
+        }
+        if kind == SpanKind::Copy {
+            // After the whole-segment copies, before the live slices: PT_DYNAMIC's own copy.
+            if k == spans.len() {
+                bad(b": malformed program headers\n");
+            }
+            spans[k] = Span { vaddr: dynph.vaddr, bytes: dynamic };
+            k += 1;
+        }
+    }
+    (head, &spans[..k])
+}
+
 /// Load the program's dependencies (by path; DL-8 adds the search), check their versions, relocate
-/// everything and protect the RELRO pages (DL-10, design §6, D-27.17). `path` is the program's
-/// NUL-terminated path (`ld.so PROGRAM`), or 0 when the kernel started the program (then
-/// `/proc/self/exe` gives its file).
+/// everything and protect the RELRO pages (DL-10, design §6, D-27.17). The program is read from its
+/// memory image ([`image_view`], ruling #4229, D-27.18), never from its file; `name` names it in
+/// messages (its path for `ld.so PROGRAM`, else `argv[0]`).
 // Indices stay below `n`, which never passes OBJECTS_MAX (checked before each store).
 #[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
-fn link(prog: &start::Program, bias: usize, page: u64, path: usize) {
-    let _ = prog;
+fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8]) {
     use liella_ld::reloc::{self, Obj, Objects};
-    const SELF_EXE: &[u8] = b"/proc/self/exe\0";
-    let path = if path == 0 { SELF_EXE.as_ptr().expose_provenance() } else { path };
-    let Some((fd, at, file, id)) = open_file(path) else { fail_with(&[c_string(path), b": cannot read the program's file\n"], program::FAILURE) };
-    let _ = crate::ffi_sys::liella_sys_close(i64::from(fd));
     let mut maps = [(0usize, 0usize); OBJECTS_MAX];
-    maps[0] = (at, file.len());
-    let mut ids: [FileId; OBJECTS_MAX] = [(0, 0); OBJECTS_MAX];
-    ids[0] = id;
+    let mut own = [(0usize, 0usize); 3];
+    let mut spans = [liella_ld::elf::Span { vaddr: 0, bytes: &[] }; map::LOADS_MAX + 1];
+    let (head, view) = image_view(prog, bias, name, &mut spans, &mut own);
+    // The program's own file is not known (no file is read): (dev, ino) that no file has.
+    let mut ids: [FileId; OBJECTS_MAX] = [(u64::MAX, u64::MAX); OBJECTS_MAX];
+    let image = liella_ld::elf::Elf::from_image::<Native>(head, view).unwrap_or_else(|_| fail_with(&[name, b": malformed program headers\n"], program::FAILURE));
     let parse = |file: &'static [u8], name: &'static [u8], bias: u64| -> Obj<'static> {
         let elf = liella_ld::elf::Elf::parse::<Native>(file).unwrap_or_else(|_| fail_with(&[name, b": not a valid ELF file for this machine\n"], program::FAILURE));
         let dynm = elf.dynamic().ok().flatten().unwrap_or_else(|| fail_with(&[name, b": no valid dynamic section\n"], program::FAILURE));
         Obj { elf, dynm, bias, name }
     };
-    let first = parse(file, c_string(path), u64::try_from(bias).unwrap_or(0));
+    let dynm = image.dynamic().ok().flatten().unwrap_or_else(|| fail_with(&[name, b": no valid dynamic section\n"], program::FAILURE));
+    let first = Obj { elf: image, dynm, bias: u64::try_from(bias).unwrap_or(0), name };
     let mut objs = [first; OBJECTS_MAX];
     let mut n = 1usize;
     let mut q = 0usize;
@@ -425,7 +534,7 @@ fn link(prog: &start::Program, bias: usize, page: u64, path: usize) {
     if let Err(i) = reloc::protect_relro(objs, &mut ProcImage, page) {
         fail_with(&[objs.get(i).map_or(&b"?"[..], |o| o.name), b": cannot protect the RELRO segment\n"], program::FAILURE);
     }
-    for &(at, len) in &maps[..n] {
+    for &(at, len) in maps[1..n].iter().chain(&own).filter(|m| m.1 != 0) {
         let _ = raw::munmap(at, len);
     }
 }
