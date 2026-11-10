@@ -1,17 +1,33 @@
-{"task": "STARTUP-FAULTS-RESTORE-5", "model": "opus", "tokens": null,
+{
+ "task": "STARTUP-FAULTS-RESTORE-5",
+ "model": "opus",
+ "tokens": null,
  "result": "Merged next + regenerated codemap (inherited static red); pruned 2 locale hot-text keys the merged fast build inlines (fast so was red); relay counts identical on Skylake-SP and Zen 1, next measured too; LOCALE_BOUND 57->55, TOOL_BOUND 60->58",
- "branch": "task/startup-faults-restore-5", "head": null,
- "gate": {"affected": "see mei:startup-faults-restore-5-gate1", "peak": null},
+ "branch": "task/startup-faults-restore-5",
+ "head": "50b8c361d",
+ "gate": {
+  "affected": "32 suites ok, 11402 passed / 0 failed (conformance 126 / 0), mei:startup-faults-restore-5-gate1 rc 0",
+  "peak": "16G (page cache included), oom_kill=0"
+ },
  "accepted_first_attempt": null,
  "rulings": [],
  "informational": [
-   "Fast localtime window reads 20 on the branch vs 19 on next with equal whole-process faults (55): .data page first written by SYSINFO_EHDR at start-up on next is first written by time::zone::NEXT_ID inside the window once SYSINFO_EHDR is in .data1",
-   "cargo xtask plants printed WARN-NO-MSG for msg:\\d+ although the failure line matched; [0-9]+ used instead (run 4's plants file has the same \\d+)",
-   "tools/hottext/regen.sh is mode 644 in git; its usage line shows it run directly"
+  "Fast localtime window reads 20 on the branch vs 19 on next with equal whole-process faults (55): .data page first written by SYSINFO_EHDR at start-up on next is first written by time::zone::NEXT_ID inside the window once SYSINFO_EHDR is in .data1",
+  "cargo xtask plants printed WARN-NO-MSG for msg:\\d+ although the failure line matched; [0-9]+ used instead (run 4's plants file has the same \\d+)",
+  "tools/hottext/regen.sh is mode 644 in git; its usage line shows it run directly"
  ],
  "refused": [],
  "improvement": "plants tool: accept \\d in msg regexes or reject them at parse time instead of a WARN after an 18-minute run",
  "next_step": "Move time::zone::NEXT_ID next to its start-up neighbours (or trace-generate the .data1 list) so fast localtime returns to 19; measure every mode",
  "report_file": "handoff/STARTUP-FAULTS-RESTORE.md",
- "jobs": ["startup-faults-restore-5-gate1", "startup-faults-restore-5-plants"],
- "evidence_jobs": ["startup-faults-restore-5-measure2", "startup-faults-restore-5-next1", "startup-faults-restore-5-fmap1", "keke:startup-faults-restore-5-zen1"]}
+ "jobs": [
+  "startup-faults-restore-5-gate1",
+  "startup-faults-restore-5-plants"
+ ],
+ "evidence_jobs": [
+  "startup-faults-restore-5-measure2",
+  "startup-faults-restore-5-next1",
+  "startup-faults-restore-5-fmap1",
+  "keke:startup-faults-restore-5-zen1"
+ ]
+}
