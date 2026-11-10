@@ -57,9 +57,12 @@ story's record, records/decisions/D-10/D-10.74.toml: windows, bounds, Kahan 1987
   for cexp, run 1 of EXP-TIER-2 measured one such operand of 256 adding ~450 instructions to the average). If so,
   the bench row is fair (random operands, the decline rate is what users meet), and the fix is a cheaper tier between
   the quick tier and the 384-bit route (a double-double/triple-double accurate phase), not a faster quick tier.
-  First check: per-operand counts of the 256 bench operands (which ones decline, and why). For csqrt the other
-  candidate is latency: its tier is one dependent chain sqrt -> div -> sqrt -> div (`sqrt_dd` twice, `div_b`), which
-  instruction counts do not show; one decline in 256 (41k/256 = 160) would also explain 307 vs a ~150 tier.
+  First check: per-operand counts of the 256 bench operands (which ones decline, and why). For csqrt the sweep
+  (below) answered every operand in every regime, so declines do not explain its gap: the likely cause is latency,
+  one dependent chain sqrt -> div -> sqrt -> div (`sqrt_dd` twice, `div_b`) that instruction counts do not show.
+* Sweep `libm-cplx-log-sqrt-2-sweep` (10^7 operands, release, every tier answer compared with the 384-bit route in
+  four modes): green. Nearest answers per regime (general, |z| ~ 1, axes, wide) of 2.5M each: clog 2499106,
+  2295765, 2141293, 2499064; csqrt 2500000 in all four.
 
 ## Next steps (in order)
 
