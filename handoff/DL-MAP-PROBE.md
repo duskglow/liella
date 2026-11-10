@@ -1,9 +1,15 @@
-# DL-MAP-PROBE (-2): DL-MAP's open items (#4186, #4188, #4189)
+# DL-MAP-PROBE (-2, -3): DL-MAP's open items (#4186, #4188, #4189)
 
-**State:** branch `task/dl-map-probe-2` (continues `task/dl-map-probe`; origin/next merged at 070c02a1f, ruling #4253),
-role keke:~/w/n2. Commits of this chain: b84d12d67 (bound removed, D-27.15 amended, tests), 4050f6302 (test fixes),
-8b8a8d071 + edfa3414b (moved 2 MiB ET_DYN corpus object, -Bsymbolic), a07ef4b75 (ld.so RELRO bias fix). Decisions in force: D-27.15 (amended in run 1). `cargo xtask codemap`
-after the merge wrote nothing (no codemap change to commit).
+**State:** branch `task/dl-map-probe-3` (continues `task/dl-map-probe-2` and `task/dl-map-probe`), role keke:~/w/n2.
+Commits of this chain: b84d12d67 (bound removed, D-27.15 amended, tests), 4050f6302 (test fixes),
+8b8a8d071 + edfa3414b (moved 2 MiB ET_DYN corpus object, -Bsymbolic), a07ef4b75 (ld.so RELRO bias fix),
+run 3: 3d5f94ebc (merge origin/next), af4bc5ab2 (codemap regenerated). Decisions in force: D-27.15 (amended in run 1).
+
+**Run 3 (DL-MAP-PROBE-3):** run 2's `gate4` was rc 1 at static's codemap check (README stale: a07ef4b75 moved two
+path literals in crates/rt/src/start.rs), so its affected tests never ran; `plants4` was rc 0 (3 CAUGHT). Merged
+origin/next: one conflict in crates/ld/src/map.rs, where next added the PT_GNU_STACK executable-stack refusal, an
+empty-PT_LOAD skip and still the `LOADS_MAX` check; resolved by keeping next's two additions and this branch's removal
+of the bound (D-27.15), module comment merged. `cargo xtask codemap` on the merged head rewrote README.md (committed).
 
 ## 1. PT_LOAD bound (#4186): done
 * Black-box probe (run 1, kanon jobs `dl-map-probe-ref`, `dl-map-probe-ref2`, rc 0): a PIE and a shared object
@@ -40,15 +46,22 @@ alignment rule itself is covered by `align2m`.
   a later DL story should take the bias from AT_PHDR and the segment holding e_phoff, as map.rs's planner does.
 
 ## Jobs (keke unless named)
-* `dl-map-probe-2-lint` (inherited head + merge: codemap, clippy, static): rc 0.
-* Final head (code 4e453352e): `dl-map-probe-2-gate4` (`cargo xtask so`, clippy, static, `affected --base origin/next
-  --run`) and `dl-map-probe-2-plants4` (handoff/DL-MAP-PROBE-2-plants.txt, 3 plants) were RUNNING at hand-back (PENDING).
-* plants3 (head a07ef4b75): loads-bound CAUGHT, bias-ignores-first CAUGHT, relro-bias-phdr SURVIVED only because the
-  tool reused the baseline products (ld.so not rebuilt for a crates/boundary mutant); plants4's command for it runs
-  `cargo xtask so` first. If plants4 still shows it surviving, check the log's "build:" line before anything else.
-* SUPERSEDED: gate (stopped, stale), plants/plants2 (baseline red: GLOB_DAT, then the RELRO bug), gate2 (the RELRO
-  bug), gate3 (clippy: unused closure), plants3 (product not rebuilt for the ld.rs plant).
+* Run 3, merged head af4bc5ab2: `dl-map-probe-3-lint` (codemap, clippy, static) rc 0; `dl-map-probe-3-gate`
+  (`cargo xtask so`, clippy, static, `affected --base origin/next --run`) and `dl-map-probe-3-plants`
+  (handoff/DL-MAP-PROBE-2-plants.txt, 3 plants): results below in "Run 3 results".
+* plants3 (run 2): relro-bias-phdr SURVIVED only because the tool reused the baseline products (ld.so not rebuilt
+  for a crates/boundary mutant); the plant's command runs `cargo xtask so` first since plants4.
+* SUPERSEDED: run 2's gate4 (codemap stale, tests not run) and plants4 (pre-merge head; 3 CAUGHT); gate (stopped,
+  stale), plants/plants2 (baseline red: GLOB_DAT, then the RELRO bug), gate2 (the RELRO bug), gate3 (clippy: unused
+  closure), plants3 (product not rebuilt for the ld.rs plant).
 * SUPERSEDED from run 1: kanon gate/gate2/gate3/gate4/plants (older heads, stale ld.so, or started while BUSY).
 
+## Run 3 results
+* `dl-map-probe-3-gate` rc 0: 9 suites ok, 1768 passed, 0 failed, 92 ignored; conformance 17 passed; peak 1.5G.
+* `dl-map-probe-3-plants` rc 0: 3 CAUGHT (loads-bound by map_malformed_corpus_refused, bias-ignores-first by
+  map_model_objects_from_the_linker, relro-bias-phdr by map_proc_self_maps_of_loaded_programs with products rebuilt);
+  results in handoff/DL-MAP-PROBE-3-plants.txt. WARN-DEV-SHM only (copy under /dev/shm; no test here mounts /dev).
+
 ## Exact next step
-None for the story once gate and plants are green: it lands. Read: D-27.15, handoff/DL-MAP.md.
+None for the story: gate and plants are green on the merged head, it lands. Follow-up for a later DL story: the
+kernel-started path's bias without PT_PHDR (INFORMATIONAL in section 3). Read: D-27.15, handoff/DL-MAP.md.
