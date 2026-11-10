@@ -218,7 +218,7 @@ pub extern "C" fn liella_ld_start(sp: usize, ehdr: usize) -> ! {
     if aux.get(AT_ENTRY).and_then(|e| usize::try_from(e).ok()) != Some(own_entry) {
         if ld.trace && !secure {
             let execfn = aux.get(AT_EXECFN).and_then(|a| usize::try_from(a).ok()).unwrap_or(0);
-            list(&list_env, if execfn == 0 { b"" } else { c_string(execfn) })
+            list(&list_env, if execfn == 0 { b"" } else { c_string(execfn) }, false)
         }
         let prog = start::program(&aux).unwrap_or_else(|e| refuse(e.message()));
         let bias = liella_rt::start::program(program_headers(&prog), prog.phnum, prog.phdr).bias;
@@ -240,7 +240,7 @@ pub extern "C" fn liella_ld_start(sp: usize, ehdr: usize) -> ! {
         }
         Action::Program(name) => {
             if ld.trace && !secure {
-                list(&list_env, name)
+                list(&list_env, name, false)
             }
             // argv[1] names the program; it becomes argv[0] and the stack starts one word later.
             let (prog, bias) = load(arg(1), page);
@@ -250,7 +250,7 @@ pub extern "C" fn liella_ld_start(sp: usize, ehdr: usize) -> ! {
             store_words(argv, &[u64::try_from(argc.wrapping_sub(1)).unwrap_or(0)]);
             run(argv, &prog, bias, page)
         }
-        Action::List(name) => list(&list_env, name),
+        Action::List(name) => list(&list_env, name, true),
         other => {
             for part in program::refusal(other) {
                 write_all(2, part);
@@ -417,6 +417,7 @@ struct Obj {
     file: &'static [u8],
     path: (usize, usize),
     parent: usize,
+    bias: u64,
 }
 
 /// Open the NUL-terminated `path` and map the whole file read-only: the file and its descriptor.
@@ -475,9 +476,11 @@ fn hex16(v: u64) -> [u8; 16] {
 
 /// `ld.so --list PROGRAM` and `LD_TRACE_LOADED_OBJECTS` (ld.so(8), design §19, DL-8): find and map
 /// (through [`map::load`]) every object the program needs, breadth first in `DT_NEEDED` order, each
-/// once, and write one line per object as `ldd` shows them; nothing is relocated or run. Status 0, or
-/// 127 when a dependency was not found.
-fn list(env: &List<'_>, prog: &'static [u8]) -> ! {
+/// once, and write one line per object as `ldd` shows them; nothing is relocated or run. The lines
+/// are written once the walk is complete. A dependency that is not found is a `NAME => not found`
+/// line (status 0) when tracing; with `strict` (`--list`) it is the loader's error on stderr, nothing
+/// on stdout, status 127, as the reference's `ld.so --list` does (DL-8 probe).
+fn list(env: &List<'_>, prog: &'static [u8], strict: bool) -> ! {
     let mut path = PathBuf::default();
     let fail = |what: &[u8], msg: &[u8]| -> ! {
         for part in [&b"ld.so: "[..], what, b": ", msg] {
@@ -517,12 +520,6 @@ fn list(env: &List<'_>, prog: &'static [u8]) -> ! {
         *o = Obj { name: prog, file, path: (0, prog.len()), ..Obj::default() };
     }
     let mut count = 1usize;
-    let mut status = 0;
-    if let Some(v) = env.vdso.filter(|&v| v != 0) {
-        for part in [&b"\tlinux-vdso.so.1 (0x"[..], &hex16(v), b")\n"] {
-            write_all(1, part);
-        }
-    }
     let mut i = 0usize;
     while i < count {
         let me = i;
@@ -570,10 +567,12 @@ fn list(env: &List<'_>, prog: &'static [u8]) -> ! {
                 true
             });
             let Some((f, fd)) = hit else {
-                for part in [&b"\t"[..], name, b" => not found\n"] {
-                    write_all(1, part);
+                if strict {
+                    for part in [prog, &b": error while loading shared libraries: "[..], name, b": cannot open shared object file: No such file or directory\n"] {
+                        write_all(2, part);
+                    }
+                    exit(program::FAILURE)
                 }
-                status = program::FAILURE;
                 if let Some(o) = objs.get_mut(count) {
                     *o = Obj { name, parent: me, ..Obj::default() };
                 }
@@ -590,21 +589,35 @@ fn list(env: &List<'_>, prog: &'static [u8]) -> ! {
             wrote = wrote.saturating_add(found.len());
             let soname = dynamic_of(f).and_then(|x| dyn_string(&x, elf::dt::SONAME)).unwrap_or(b"");
             if let Some(o) = objs.get_mut(count) {
-                *o = Obj { name, soname, file: f, path: (used.saturating_add(at), found.len()), parent: me };
+                *o = Obj { name, soname, file: f, path: (used.saturating_add(at), found.len()), parent: me, bias: loaded.bias };
             }
             count = count.wrapping_add(1);
-            for part in [&b"\t"[..], name, b" => ", found, b" (0x", &hex16(loaded.bias), b")\n"] {
+        }
+        used = used.saturating_add(wrote);
+    }
+    if let Some(v) = env.vdso.filter(|&v| v != 0) {
+        for part in [&b"\tlinux-vdso.so.1 (0x"[..], &hex16(v), b")\n"] {
+            write_all(1, part);
+        }
+    }
+    for o in objs.get(1..count).unwrap_or(&[]) {
+        if o.file.is_empty() {
+            for part in [&b"\t"[..], o.name, b" => not found\n"] {
+                write_all(1, part);
+            }
+        } else {
+            let found = store.get(o.path.0..o.path.0.saturating_add(o.path.1)).unwrap_or(&[]);
+            for part in [&b"\t"[..], o.name, b" => ", found, b" (0x", &hex16(o.bias), b")\n"] {
                 write_all(1, part);
             }
         }
-        used = used.saturating_add(wrote);
     }
     let interp = interp.unwrap_or(Native::INTERP.as_bytes());
     let base = u64::try_from(env.base).unwrap_or(0);
     for part in [&b"\t"[..], interp, b" (0x", &hex16(base), b")\n"] {
         write_all(1, part);
     }
-    exit(status)
+    exit(0)
 }
 
 /// Words the loader copies of the auxiliary vector (128 pairs, `AT_NULL` included).

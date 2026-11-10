@@ -255,7 +255,8 @@ fn list_matches_reference() {
         eprintln!("SKIP: needs cc, {} (cargo xtask so) and {}", ld.display(), reference.display());
         return;
     }
-    let d = target().join(format!("dl-search-{}", std::process::id()));
+    // Canonical, so the reference's kernel-started `$ORIGIN` and the given path agree.
+    let d = std::fs::canonicalize(target()).unwrap().join(format!("dl-search-{}", std::process::id()));
     std::fs::create_dir_all(d.join("sub")).unwrap();
     std::fs::write(d.join("x.c"), "int x(void){return 1;}\n").unwrap();
     std::fs::write(d.join("main.c"), "int x(void); int main(void){return x();}\n").unwrap();
@@ -267,12 +268,18 @@ fn list_matches_reference() {
     std::fs::remove_file(d.join("libgone.so.1")).unwrap();
     let prog = d.join("prog");
     let liella_libs = target().join("liella");
-    let want = Command::new(&reference).arg("--list").arg(&prog).output().unwrap();
+    let want = Command::new(&prog).env("LD_TRACE_LOADED_OBJECTS", "1").output().unwrap();
+    let want_list = Command::new(&reference).arg("--list").arg(&prog).output().unwrap();
     let got = Command::new(&ld).arg("--list").arg(&prog).env("LD_LIBRARY_PATH", &liella_libs).output().unwrap();
     let traced = Command::new(&ld).arg(&prog).env("LD_TRACE_LOADED_OBJECTS", "1").env("LD_LIBRARY_PATH", &liella_libs).output().unwrap();
     eprintln!("reference:\n{}\nliella:\n{}{}", String::from_utf8_lossy(&want.stdout), String::from_utf8_lossy(&got.stdout), String::from_utf8_lossy(&got.stderr));
     assert!(deps(&want.stdout).iter().any(|l| l.starts_with("libgcc_s.so.1 => /")), "the reference found the system library");
-    assert_eq!(deps(&got.stdout), deps(&want.stdout), "list_matches_reference: --list differs from the reference");
-    assert_eq!(deps(&traced.stdout), deps(&want.stdout), "LD_TRACE_LOADED_OBJECTS differs from --list");
-    assert_eq!((got.status.code(), want.status.code()), (Some(127), Some(127)), "a missing dependency: status 127");
+    assert!(deps(&want.stdout).iter().any(|l| l == "libgone.so.1 => not found"), "the reference traced the missing library");
+    assert_eq!(deps(&traced.stdout), deps(&want.stdout), "list_matches_reference: LD_TRACE_LOADED_OBJECTS differs from the reference");
+    assert_eq!((traced.status.code(), want.status.code()), (Some(0), Some(0)), "tracing with a missing dependency: status 0");
+    // `--list` with a missing dependency: the loader's error on stderr, nothing on stdout, 127.
+    let err = |o: &std::process::Output| String::from_utf8_lossy(&o.stderr).split_once(": ").map(|(_, m)| m.trim_end().to_owned());
+    assert_eq!((got.status.code(), want_list.status.code()), (Some(127), Some(127)), "--list with a missing dependency: status 127");
+    assert!(got.stdout.is_empty() && want_list.stdout.is_empty(), "--list with a missing dependency prints no list");
+    assert_eq!(err(&got), err(&want_list), "--list: the missing-dependency message differs from the reference");
 }
