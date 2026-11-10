@@ -1,0 +1,12 @@
+{"task": "HEAP-FIRST-USE-2", "model": "opus", "tokens": null,
+ "result": "D-3.20 (amends D-3.12): allowed-node set asked once on the first slow path; one node never reads the node; several nodes set numa (fixes #4169); 3/3 plants caught; gate escalated to FULL and counts still running",
+ "branch": "task/heap-first-use-2", "head": "07b7a2e4f",
+ "gate": {"affected": "pending (hfu2-gate escalated to FULL on records/ paths); foreground: clippy rc 0, static rc 0, liella-rt heap_and_sync 27 passed", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "#4170 mmap_min_addr read on the first malloc: trigger site not identified yet (hfu2-counts strace -k)", "recommendation": "move the triggering small memset/memcpy off the heap path if heap-side; never weaken the guard"}],
+ "informational": ["D-3.12's rseq node_id branch is not wired (Rseq exposes no node_id); separate story recommended", "Ivy Bridge / N100 timing of first_* rows not booked (budget)"],
+ "refused": [],
+ "improvement": "cargo xtask affected escalates to FULL on any records/ path; a decision record should select its tests field or nothing",
+ "next_step": "read hfu2-gate and hfu2-counts on mei; fix #4170 from the strace -k stack; book Ivy Bridge and N100 timing of first_* rows",
+ "report_file": "handoff/HEAP-FIRST-USE-2.md",
+ "jobs": ["mei:hfu2-gate", "mei:hfu2-plants", "mei:hfu2-counts"]}
