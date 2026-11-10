@@ -520,7 +520,11 @@ impl Sqrt for f64 {
             // The barrier keeps the root behind the mode test: a caller with an unmasked
             // exception must never see the instruction run (D-X.44).
             let x = self.pin();
-            let r = crate::hot::sqrtsd(x);
+            // The root takes its own pinned copy of x, dead after it, so `sqrtsd` writes its
+            // operand's register: x stays live for the EDOM test, and a root into any other
+            // register merges that register's upper lane, waiting on its last writer (in a
+            // loop of calls, the previous root).
+            let r = crate::hot::sqrtsd(x.pin());
             // EDOM exactly when a non-NaN operand gave NaN, that is for x < 0 as the caller's
             // DAZ reads x (D-10.22: -0, a negative subnormal under DAZ and negative NaNs give none).
             if r.is_nan() && !x.is_nan() {
@@ -543,7 +547,8 @@ impl Sqrt for f32 {
             // The barrier keeps the root behind the mode test: a caller with an unmasked
             // exception must never see the instruction run (D-X.44).
             let x = self.pin();
-            let r = crate::hot::sqrtss(x);
+            // Its own copy of x for the root, as in `sqrt` (no merge with another register).
+            let r = crate::hot::sqrtss(x.pin());
             // EDOM exactly when a non-NaN operand gave NaN, that is for x < 0 as the caller's
             // DAZ reads x (D-10.22: -0, a negative subnormal under DAZ and negative NaNs give none).
             if r.is_nan() && !x.is_nan() {
