@@ -1,40 +1,33 @@
-# DL-LIBC-EARLY: LIELLA_PRIVATE, `__liella_libc_early_init` (phase 14 DL-13)
+# DL-LIBC-EARLY: LIELLA_PRIVATE, early init, the export moves and rseq publishing (phase 14 DL-13)
 
-**State:** branch `task/dl-libc-early-2` (continues `task/dl-libc-early`; base origin/next 672acd9aa), role
-kanon:~/w/kn1. First half (build tag check, early init before constructors) is done and gate-fixed; **the export moves
-and rseq publishing are NOT done** (next story, see below). Report: handoff/DL-LIBC-EARLY-2-report.md.
+**State:** branch `task/dl-libc-early-3` (on `task/dl-libc-early-2`, not yet in next), code head c914ae2c9, plants
+commit 5a2588945, role keke:~/w/n3. DL-13 is complete in code: build tag check and early init (-1/-2), export moves
+and rseq publishing (-3). Report: handoff/DL-LIBC-EARLY-3-report.md (and DL-LIBC-EARLY-2-report.md).
 
-**Decisions in force:** D-27.22 (this story; tests now name `crates/rt/src/start.rs::private_tag_layout`),
-D-27.19/D-27.20 (init order, interpreter exports), D-27.18/.21 (shared bias). Plan rows:
-plan/06-phases/17-phase-14-dynamic-linking.md DL-13; plan/ph14/design.md §14; R14-12.
+**Decisions in force:** D-27.26 (this story: placement, initial rseq area, publish before relocation),
+D-27.22 (private interface; `StartInfo` gained `rseq_size`), D-27.19/.20 (init order, interpreter exports),
+D-27.18/.21. Plan rows: plan/06-phases/17-phase-14-dynamic-linking.md DL-13; plan/ph14/design.md §14; R14-12.
 
 ## What exists
-* `liella_rt::start::private` (moved there in -2): `NODE`, `EARLY_INIT`, `BUILD_TAG`, `TAG_PREFIX`, `TAG_LEN`,
-  `TAG` (64 bytes, `LIELLA-BUILD-TAG:` + `LIELLA_BUILD_TAG` set by `cargo xtask so`), `StartInfo` (`repr(C)`).
-  `liella_ld::start::private` re-exports them and keeps `find` (lookup of `__liella_libc_early_init@LIELLA_PRIVATE`,
-  tag check, `<object>: LIELLA_PRIVATE build tag differs ...`, 127).
-* ld.so (`boundary/src/ld.rs`): tag check after the version check, before relocation; `run_init` calls the early
-  init before `.preinit_array`. libc: `runtime::early_init` (s01_startup.rs export, tag static in data.rs).
-* Tests: crates/ld/tests/reloc.rs `reloc_libc_early_init_before_preinit`, `reloc_libc_build_tag_mismatch_refused`;
-  unit `private_tag_layout` (rt). Plants: handoff/DL-LIBC-EARLY-2-plants.txt (4 plants).
+* ld.so (`boundary/src/ld.rs`, feature `ld`) defines and exports `__libc_stack_end@@GLIBC_2.2.5`,
+  `__rseq_offset/size/flags@@GLIBC_2.35` (xtask `LD_EXPORTS`, versions from versions.tsv). In `link()` it lays
+  the initial area out with `INITIAL_TAIL` (thread block + room to `RSEQ_OFFSET + 32`), maps it (`map_area`)
+  BEFORE relocation, registers rseq at tp + `RSEQ_OFFSET` unless `glibc.pthread.rseq=0` (`RSEQ_WANTED`, from the
+  tunables ld.so parses), stores `__libc_stack_end = sp`, and passes the size in `StartInfo.rseq_size`.
+  The program-alone path (`run()`, no DT_NEEDED) is unchanged (TCB_SIZE tail, no rseq).
+* libc: `early_init` → `thread::set_loader_rseq`; `entry()` (new threads) registers when
+  `RSEQ_OWNED || LOADER_RSEQ`; the initial thread's call passes `RSEQ_OWNED` (static start code unchanged).
+  libc.so.6 keeps its own four objects local (libc.a's), never names `liella_ld` (affected test green).
+* Tests: crates/ld/tests/reloc.rs `reloc_loader_objects_published` (PIE with copy relocations, kernel-started and
+  `ld.so PROGRAM`, rseq on and off; re-registering the area at tp+offset must give EBUSY); products
+  `loader_owned` now also requires ld.so's export at the versions.tsv version (s22 `sym___rseq_*`).
 
 ## Do not redo
-* The -1 gate red (`a_loader_change_does_not_select_the_math_suites`) was libc-side boundary code (data.rs,
-  runtime.rs) naming `liella_ld::`: the affected model then puts the loader crate in libc's image, so a loader
-  change selects liella-math. Rule: **libc-side code never names `liella_ld::`**; shared data goes in `liella_rt`
-  (plant `libc-names-loader-crate` proves the test catches it).
+* libc-side code never names `liella_ld::` (D-27.22 note). Do not link libc.so.6 against ld.so: libc does not
+  need the loader's objects (it learns of the registration through StartInfo).
 
-## Next step (DL-13 second half, a continuation story)
-Facts found (not built): `__libc_stack_end` is a C definition (csys/src/adapter/runtime.c) read via ffi.rs;
-`__rseq_offset/size/flags` are Rust statics in boundary/src/data.rs (exported under `runtime`), set by
-`thread.rs::register_kernel_areas` when libc registers the initial thread's rseq area (in `Thread.rseq`).
-ld.so exports only `LD_EXPORTS = ["__tls_get_addr"]` (xtask/src/so.rs, version script from versions.tsv: adding the
-four names there gives GLIBC_2.2.5 / GLIBC_2.35 nodes). libc.so.6 is linked from libc.a with no `DT_NEEDED` on the
-interpreter, so moving the objects needs: (1) libc.so.6 linked against ld.so (DT_NEEDED ld-linux-x86-64.so.2,
-references bind to ld.so's objects; libc.a keeps its own definitions); (2) ld.so's `link` resolving that DT_NEEDED
-to itself (check crates/ld search/map); (3) the versions.tsv set check in so.rs moving the four names from libc.so.6
-to ld.so; (4) rseq: ld.so registers the initial thread's area and publishes the values, or libc keeps registering
-and stores into ld.so's objects through the GOT (design §14 says ld.so registers; libc's descriptor owns the area:
-decide where the initial thread's rseq area lives under ld.so, a D-27 row). Proofs: `__libc_stack_end`/`__rseq_*`
-resolved from ld.so (dlsym/readelf on products), values non-zero in a dynamic program, static programs unchanged;
-start-up counters static and dynamic.
+## Open / next step
+* Threads in dynamic programs are still forbidden (D-22.10) until DL-14; then check a new thread's rseq area
+  is registered at the same offset (LOADER_RSEQ path) with a thread test.
+* `__libc_stack_end` products test (s01 `sym___libc_stack_end`) still checks only from C; the reloc test covers
+  the ld.so value.
