@@ -1,0 +1,11 @@
+{"task": "DL-LIBC-EARLY-4", "model": "opus", "tokens": null,
+ "result": "fixed the plants file (-3 rc 2: a \" | \" inside a plant replacement split its fields); 5/5 plants caught on the branch merged with next; gate (escalated to FULL by xtask/src/so.rs) and cbench_startup head-vs-next compare pending",
+ "branch": "task/dl-libc-early-4", "head": "see hand-back",
+ "gate": {"affected": "pending: dl-libc-early-4-gate (FULL, escalated)", "peak": null}, "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["the direct-tier gate escalates to FULL for this story because -3 changed xtask/src/so.rs", "-3 startup script used the wrong bench syntax (--counters cbench_startup); the form is --counters --only cbench_startup"],
+ "refused": [],
+ "jobs": ["dl-libc-early-4-lint", "dl-libc-early-4-plants", "dl-libc-early-4-gate", "dl-libc-early-4-startup-next2", "dl-libc-early-4-startup2", "dl-libc-early-4-startup-cmp"],
+ "improvement": "xtask plants could refuse a plants line whose pattern field has more or fewer than one \" ==> \" when split, before copying the tree (-3 lost 25 min to a baseline that ran a shell fragment)",
+ "next_step": "DL-14: when dynamic threads are allowed, add a thread test that a new thread's rseq area is registered at __rseq_offset",
+ "report_file": "handoff/DL-LIBC-EARLY-4-report.md"}

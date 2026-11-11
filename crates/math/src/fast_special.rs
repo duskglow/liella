@@ -148,6 +148,14 @@ pub(crate) const C_ERFC_Q_LOW: f64 = f64::from_bits(0x3ff0_2040_8102_0409);
 /// The least `m` of an in-place `erfc` result `y.hi·2^m` (`y.hi` in `[1, 2)`: normal).
 const M_NORMAL: i32 = -1021;
 
+/// `v` with `x`'s sign for `v > 0` (`erf |x|` here, never zero or NaN): `−v` for negative `x`,
+/// `v` otherwise, the same value as `if x < 0.0 { -v } else { v }` (`x` is not zero or NaN
+/// where it is used). One mask and one OR in place of a compare-and-blend select.
+#[inline(always)]
+fn with_sign_of(v: f64, x: f64) -> f64 {
+    f64::from_bits(v.to_bits() | (x.to_bits() & 0x8000_0000_0000_0000))
+}
+
 // The kernels and in-place entries in two builds (module doc, "Builds"): `$prod` is the exact
 // product, `$exp_dd` the matching build of `fast64::exp_dd`; `$i` is
 // the inlining (`#[inline(always)]` cannot be combined with `#[target_feature]`).
@@ -290,20 +298,23 @@ pub fn erf_nearest(x: f64) -> Option<f64> {
         }
         // erf x within 2^-55 of ±1 (module doc): ±1, the subtraction inexact.
         let v = 1.0 - ax.min(8.0) * E63;
-        return Some(if x < 0.0 { -v } else { v });
+        return Some(with_sign_of(v, x));
     }
     // The quick phase shares the table branch's range check, so the series path sees no new
     // compare (module doc, "Quick phase"); the table path it falls back to is out of line.
-    let v = if ax < SMALL {
-        let (y, eps) = erf_small_dd(ax);
-        finish(y, Some(C_EXP), 0, || eps, &mut 0)?
-    } else {
+    // `ax >= SMALL` (not `ax < SMALL` with the arms swapped): the ordered `>=` compares `ax`
+    // against the constant in memory, `<` first loads the constant (one more instruction on
+    // the SSE2 series path).
+    let v = if ax >= SMALL {
         match erf_quick_near(ax) {
             Some(v) => v,
             None => erf_table_near(ax)?,
         }
+    } else {
+        let (y, eps) = erf_small_dd(ax);
+        finish(y, Some(C_EXP), 0, || eps, &mut 0)?
     };
-    Some(if x < 0.0 { -v } else { v })
+    Some(with_sign_of(v, x))
 }
 
 /// `erfc x` rounded to nearest for the in-place envelope (module doc, "In-place entries"), or
@@ -432,7 +443,7 @@ pub fn erf_quick(x: f64) -> Option<f64> {
         return None;
     }
     let v = erf_quick_near(ax)?;
-    Some(if x < 0.0 { -v } else { v })
+    Some(with_sign_of(v, x))
 }
 
 /// `erfc x` rounded to nearest by the quick phase alone (`−6 < x < 1`, `|x| >= 2^-5`), or `None`;

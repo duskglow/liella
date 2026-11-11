@@ -1,0 +1,11 @@
+{"task": "DL-LIBC-EARLY-5", "model": "opus", "tokens": null,
+ "result": "merged next (with LAYOUT-DATA-CLUSTERS-4C): STARTUP-DATA-WINDOWS holds (1 ro window, budget 1), hot_text_products green, start-up user instructions level or below next (instr_c 2142 vs 2144); -4's red was layout jitter, no code change needed; FULL gate, plants and kernel-instruction spread pending",
+ "branch": "task/dl-libc-early-5", "head": "see hand-back",
+ "gate": {"affected": "pending: dl-libc-early-5-gate (FULL, escalated by xtask/src/so.rs)", "peak": null}, "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["dl-libc-early-5-startup-head rc 1 failed only on startup_kinstr_c (kernel instructions, no budget, glibc's own count moved 0.7% between runs); interleaved re-runs are NOT settled: head 154870/152238/152565/155056 vs next 150821/152215/152565/152197 (two head runs ~1.7% above next's highest); static start code unchanged, so any real difference is layout (faults), not new kernel work", "rule slip: one empty no-op heredoc call (no effect on any file)"],
+ "refused": [],
+ "jobs": ["dl-libc-early-5-lint", "dl-libc-early-5-gate", "dl-libc-early-5-plants", "dl-libc-early-5-startup-next", "dl-libc-early-5-kinstr"],
+ "improvement": "the bench counters compare should treat kernel-instruction rows (kinstr) with a measured spread, not a strict <=; a startup compare helper in xtask would stop each story writing its own awk",
+ "next_step": "DL-14: when dynamic threads are allowed, add a thread test that a new thread's rseq area is registered at __rseq_offset",
+ "report_file": "handoff/DL-LIBC-EARLY-5-report.md"}
