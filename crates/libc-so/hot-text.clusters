@@ -6,9 +6,7 @@
 # time: localtime_r's conversion (local_in) to the code only the first mktime runs (mode mktime).
 # strings: the string kernels to the printf entry that runs first (mode strings); the printf body after it
 # (vfprintf ...) is start-up text, at the list head since ruling #4417 (LAYOUT-TEXT-PIN-5); so is memmove,
-# which start-up reaches through its entry labels (merge.py --alias, #4467, LAYOUT-TEXT-PIN-6). It ends at
-# liella_hot_memchr_rest (HEAP-FIRST-USE-6): the folding decision is lazy (D-3.20), so the mode's first memchr
-# runs the checked rest path, which p_strlazy first touches after its printf.
+# which start-up reaches through its entry labels (merge.py --alias, #4467, LAYOUT-TEXT-PIN-6).
 # rebind: bindtextdomain to the catalog lookup and the same-text check of a rebind (mode rebind), in two
 # clusters of at most 32 KiB each (rebind, rebind-tail from catalog_of): one 38 KiB cluster took a 64 KiB
 # alignment, which moved .text's start by 60 KiB and cost 52 KiB of gap ahead of it (ruling #4363).
@@ -18,7 +16,7 @@
 # side; largest alignment first (float, 16 KiB in the fast profile, last). `@place	in-place` keeps them at
 # their list positions.
 @place	end
-strings	strlen	liella_hot_memchr_rest
+strings	strlen	__printf_chk
 time	_RNvNtC15liella_boundary4zone8local_in	_RNvNtNtC6liella4time5civil17days_from_civil64
 rebind	bindtextdomain	_RNCINvNtC13liella_legacy4intl9translateINtNtC15liella_boundary3sys8CSysImplKb0_ENtNtC15liella_boundary7catalog8CatalogsEs8_0C15liella_boundary
 rebind-tail	_RINvNtC13liella_legacy4intl10catalog_ofINtNtC15liella_boundary3sys8CSysImplKb0_ENtNtC15liella_boundary7catalog8CatalogsEC15liella_boundary	_RNvMNtNtC6liella7catalog2moNtNtNtC6liella7catalog2mo2Mo4form
