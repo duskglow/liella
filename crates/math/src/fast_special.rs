@@ -294,15 +294,15 @@ pub fn erf_nearest(x: f64) -> Option<f64> {
     }
     // The quick phase shares the table branch's range check, so the series path sees no new
     // compare (module doc, "Quick phase"); the table path it falls back to is out of line.
-    if ax >= SMALL {
-        let v = match erf_quick_near(ax) {
+    let v = if ax < SMALL {
+        let (y, eps) = erf_small_dd(ax);
+        finish(y, Some(C_EXP), 0, || eps, &mut 0)?
+    } else {
+        match erf_quick_near(ax) {
             Some(v) => v,
             None => erf_table_near(ax)?,
-        };
-        return Some(if x < 0.0 { -v } else { v });
-    }
-    let (y, eps) = erf_small_dd(ax);
-    let v = finish(y, Some(C_EXP), 0, || eps, &mut 0)?;
+        }
+    };
     Some(if x < 0.0 { -v } else { v })
 }
 
