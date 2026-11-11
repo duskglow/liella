@@ -597,22 +597,26 @@ pub fn tan<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     approx(s.div(c), mode)
 }
 
-/// `sincos(x)`: `(sin x, cos x)` with the flags of both.
+/// `sincos(x)`: `(sin x, cos x)` with the flags of both, each result the one [`sin`] and [`cos`]
+/// give. One reduction serves both (LIBM-SINCOS-SHARED, D-10.89): the integer tier's
+/// ([`wide_int::sin_cos_pair`]), and one 384-bit evaluation for whichever results it leaves.
 pub fn sincos<F: Float>(x: F, mode: Rounding) -> ((F, F), Status) {
-    if F::PREC == 113 {
-        // binary128: one reduction for both (D-10.91); an undecided one takes the 384-bit route.
-        if let Ok(n) = trig_special(x, false) {
-            if !cubic_tiny::<F>(&n) {
-                if let Some((s, c)) = wide_int::quad::sin_and_cos::<F>(&n, mode) {
-                    let (s, st) = s.unwrap_or_else(|| approx(sin_cos_of(&n).0, mode));
-                    let (c, ct) = c.unwrap_or_else(|| approx(sin_cos_of(&n).1, mode));
-                    return ((s, c), st.and(ct));
-                }
-            }
+    let n = match trig_special(x, false) {
+        Ok(n) if !cubic_tiny::<F>(&n) => n,
+        _ => {
+            // NaN, ±∞, ±0 and the tiny operands: each function's own short path.
+            let (s, st) = sin(x, mode);
+            let (c, ct) = cos(x, mode);
+            return ((s, c), st.and(ct));
         }
-    }
-    let (s, st) = sin(x, mode);
-    let (c, ct) = cos(x, mode);
+    };
+    let ((s, st), (c, ct)) = match wide_int::sin_cos_pair::<F>(&n, mode) {
+        (Some(s), Some(c)) => (s, c),
+        (ys, yc) => {
+            let (sm, cm) = sin_cos_of(&n);
+            (ys.unwrap_or_else(|| approx(sm, mode)), yc.unwrap_or_else(|| approx(cm, mode)))
+        }
+    };
     ((s, c), st.and(ct))
 }
 
