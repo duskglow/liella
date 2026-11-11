@@ -38,9 +38,11 @@ EDITS = {
     'crates/boundary/src/mathret.rs': [
         ("-> (R, Status)) -> R::C {\n    let (e, mode) = enter(unit);\n    let x = core::hint::black_box(e.operand(x));\n"
          "    let (v, mut st) = core::hint::black_box(f(x, mode));\n    let v = e.result(v, &mut st);\n    exit(e, st);\n    v.c()\n",
-         "-> (R, Status)) -> R::C {\n    math::phase_mark(0);\n    let (e, mode) = enter(unit);\n    math::phase_mark(1);\n"
+         "-> (R, Status)) -> R::C {\n    liella_math::phase_mark(0);\n    let (e, mode) = enter(unit);\n"
+         "    liella_math::phase_mark(1);\n"
          "    let x = core::hint::black_box(e.operand(x));\n    let (v, mut st) = core::hint::black_box(f(x, mode));\n"
-         "    math::phase_mark(5);\n    let v = e.result(v, &mut st);\n    exit(e, st);\n    math::phase_mark(6);\n    v.c()\n"),
+         "    liella_math::phase_mark(5);\n    let v = e.result(v, &mut st);\n    exit(e, st);\n"
+         "    liella_math::phase_mark(6);\n    v.c()\n"),
     ],
 }
 
