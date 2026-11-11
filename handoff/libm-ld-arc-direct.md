@@ -50,7 +50,8 @@ cover the root. Plants: handoff/LIBM-LD-ARC-DIRECT-plants.txt (3 functional plan
 revert to `as u64` changes no value, only the hidden hardware flag. The counts above catch it, not a test).
 
 **Gate.** kanon libm-ld-arc-direct-gate (affected --run --base origin/next on 718ba725f): 188 passed, 0 failed,
-32 ignored; peak 1.2G. Lint: libm-ld-arc-direct-lint (clippy + static) rc 0.
+32 ignored; peak 1.2G. Lint: libm-ld-arc-direct-lint (clippy + static) rc 0. `liella::hot_text_products` on the
+final tree (job libm-ld-arc-direct-hottext): 14 passed.
 
 **Do not redo.** Locating the stall (above). The IVB attribution in libm-ld-arc-rethink/results/.
 
