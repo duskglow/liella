@@ -81,6 +81,7 @@ const ONE: Val = Val { m: 1 << 127, e: -127 };
 const TWO115: f64 = (1u128 << 115) as f64;
 const TWO90: f64 = (1u128 << 90) as f64;
 const TWO37: f64 = (1u64 << 37) as f64;
+const TWO52: f64 = (1u64 << 52) as f64;
 const TWO_M26: f64 = 1.0 / (1u64 << 26) as f64;
 const TWO_M108: f64 = 1.0 / (1u128 << 108) as f64;
 const ONE_IX: f64 = 1.0 / (1u64 << 44) as f64; // 256/top53(1) = 256/2^52
@@ -155,10 +156,24 @@ fn dbl(v: u64) -> f64 {
     v as i64 as f64 // below 2^53 at every call: exact
 }
 
+/// `p as u64` for a `double` `p >= 2^52` (an integer), saturating at `2^64 − 1` from `2^64` up as
+/// `as` does, read from the bits (D-10.95). x86-64 before AVX-512 has no unsigned 64-bit
+/// conversion: `as u64` converts signed, which overflows for `p >= 2^63` and raises invalid in
+/// hardware (a flag the envelope must then clear with an MXCSR write). Every caller here passes
+/// values in `[2^52, 2^64]`, two of them always at or above `2^63`.
+#[inline(always)]
+fn big_u64(p: f64) -> u64 {
+    debug_assert!(p >= TWO52);
+    let b = p.to_bits();
+    let sh = ((b >> 52) as u32).wrapping_sub(1075); // 0..=11 below 2^64
+    let m = (b & ((1 << 52) - 1)) | (1 << 52);
+    if sh > 11 { u64::MAX } else { m << sh }
+}
+
 /// Step 1: `(n/d)·2^126` for `n`, `d` in `[2^127, 2^128)`, in `(2^125, 2^127)`.
 fn div(n: u128, d: u128) -> u128 {
     let dh = (d >> 64) as u64;
-    let v = (TWO115 / dbl(dh >> 11)) as u64; // ≈ 2^126/dh, in (2^62, 2^63]
+    let v = big_u64(TWO115 / dbl(dh >> 11)); // ≈ 2^126/dh, in (2^62, 2^63]
     let q0 = mulhi64((n >> 64) as u64, v); // ≈ (n/d)·2^62
     let t = ((u128::from(q0) * u128::from(dh)) << 2).wrapping_add((u128::from(q0) * (d & super::M64)) >> 62);
     let e = n.wrapping_sub(t) as i128; // n − q0·d/2^62, |e| < 2^78
@@ -171,7 +186,7 @@ fn div(n: u128, d: u128) -> u128 {
 /// `v·2^52`, below `2^53`, scaled): `hw` for this crate's own callers. The crate cannot issue
 /// `sqrtsd` (no `unsafe`, no `f64::sqrt` in `core`); the boundary passes it in (D-10.75).
 pub(crate) fn soft_sqrt(v: f64) -> f64 {
-    let n = (v as u64 as u128) << 52; // below 2^106
+    let n = u128::from(big_u64(v)) << 52; // below 2^106
     dbl(n.isqrt() as u64) * TWO_M26
 }
 
@@ -181,7 +196,7 @@ fn root_seed(w: u128, hw: impl Fn(f64) -> f64) -> (u64, f64) {
     let wd = (w >> 74) as i64 as f64; // w' = ⌊w/2^74⌋, in [2^52, 2^54)
     let iw = TWO90 / wd;
     let r = hw(wd); // √w', in [2^26, 2^27]
-    let s0 = (r * TWO37) as u64; // saturates at 2^64 − 1 when w is just below 2^128
+    let s0 = big_u64(r * TWO37); // in [2^63, 2^64]: saturates at 2^64 − 1 when w is just below 2^128
     (s0, r * iw) // 2^90/r = 2^127/s0
 }
 
@@ -190,7 +205,7 @@ fn root_seed(w: u128, hw: impl Fn(f64) -> f64) -> (u64, f64) {
 fn sqrt(w: u128, hw: impl Fn(f64) -> f64) -> (u128, f64) {
     let (s0, vd) = root_seed(w, hw);
     let r = w.wrapping_sub(u128::from(s0) * u128::from(s0)) as i128; // w − s0², |r| < 2^78
-    let c = mul_wide(r.unsigned_abs(), vd as u64); // r·2^63/s0
+    let c = mul_wide(r.unsigned_abs(), big_u64(vd)); // r·2^63/s0 (vd = 2^127/s0, in (2^63, 2^64])
     let s = u128::from(s0) << 64;
     (if r < 0 { s - c } else { s + c }, vd)
 }
@@ -232,6 +247,7 @@ fn atan_le_in(y: Val, x: Val, ix: impl FnOnce() -> f64) -> Val {
     let k = x.e - y.e; // >= 0
     let mut j = 0;
     if k <= 8 {
+        // RANGE: y/x <= 1 + 2^-100 and ix ≈ 256/x.m: h in [0, 256], a signed conversion in range.
         let h = (dbl((y.m >> 75) as u64) * ix()) as usize; // ⌊256·y.m/x.m⌋ within one
         j = ((h >> k) + 1) >> 1;
     }

@@ -134,7 +134,12 @@ pub(super) fn lgamma_core(x: f32) -> Option<(f64, u64)> {
 #[inline(always)]
 pub fn eval_lgamma(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
     let r = eval(Fast::Lgamma, x, mode)?;
-    Some((r, if x < 0.0 && (x as i32) & 1 == 0 { -1 } else { 1 }))
+    // RANGE: clamped to [-2^24, 0] (D-10.95): the compiler may convert before the `x < 0` test,
+    // and an unclamped huge or NaN x would raise invalid in hardware. Every float <= -2^24 is an
+    // even integer, as -2^24 is, so the parity read for x < 0 is unchanged.
+    let n = x.max(-16_777_216.0).min(0.0); // max, not clamp: a NaN x becomes -2^24, never NaN
+
+    Some((r, if x < 0.0 && (n as i32) & 1 == 0 { -1 } else { 1 }))
 }
 
 /// `tgammaf` by the fast path, or `None` (see [`eval`]).

@@ -1,0 +1,3 @@
+# LIBM-INVALID-CONVERT-SCAN plants (docs/plants.md): the root seed restored to `as u64`.
+seed-as-u64-flags | crates/math/src/wide_int/arc.rs | lit:let s0 = big_u64(r * TWO37); ==> let s0 = (r * TWO37) as u64; | cargo test -p liella-boundary --test math_kernel_no_invalid | msg:invalid raised in hardware for a valid operand
+seed-as-u64-static | crates/math/src/wide_int/arc.rs | lit:let s0 = big_u64(r * TWO37); ==> let s0 = (r * TWO37) as u64; | cargo xtask float-casts | msg:arc\.rs:\d+: `f64` to `u64` with no `RANGE:`
