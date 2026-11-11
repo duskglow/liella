@@ -279,7 +279,9 @@ fn libc_by_path(dir: &std::path::Path) -> PathBuf {
 /// host's glibc (the oracle), then the same source linked with the host's start files against
 /// Liella's `libc.so.6` (by path) with Liella's `ld.so` as its interpreter (design §14, D-27.24;
 /// #814): each must exit 0 both ways. The second link names no other C library and the loader
-/// has no search, so the library that runs is Liella's.
+/// has no search, so the library that runs is Liella's. A program's `RUN-ARGS`, `RUN-ENV` (distinct
+/// names) and `EXPECT-EXIT` directives apply as in `conformance/run.sh`; any other directive is
+/// refused, so a program that needs one is never run here without it.
 pub(crate) fn conformance_dynamic(names: &[&str]) {
     require_products();
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("dynamic-{}", std::process::id()));
@@ -289,16 +291,28 @@ pub(crate) fn conformance_dynamic(names: &[&str]) {
     let libc = libc_by_path(&dir);
     for name in names {
         let src = root().join(format!("conformance/c/{name}.c"));
+        let text = std::fs::read_to_string(&src).expect("conformance source");
+        let directive = |d: &str| text.lines().find_map(|l| l.strip_prefix(&format!("/* {d}: "))?.strip_suffix(" */").map(str::to_string));
+        for d in ["LINK-CXX", "LINK-HELPERS", "LINK-LIBM", "LINK-NOW", "LINK-UNWIND", "RUN-SECURE", "RUN-WRAP", "STATIC-PIE", "EXPECT-SIGNAL", "EXPECT-STDERR"] {
+            assert!(directive(d).is_none(), "{name}: {d} is not supported by the dynamic runner");
+        }
+        let args: Vec<String> = directive("RUN-ARGS").map(|a| a.split_whitespace().map(str::to_string).collect()).unwrap_or_default();
+        let env: Vec<(String, String)> = directive("RUN-ENV")
+            .map(|e| e.split_whitespace().map(|kv| kv.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())).expect("RUN-ENV: NAME=value")).collect())
+            .unwrap_or_default();
+        assert_eq!(env.iter().map(|(k, _)| k).collect::<BTreeSet<_>>().len(), env.len(), "{name}: repeated RUN-ENV names need conformance/run.sh");
+        let want: i32 = directive("EXPECT-EXIT").map_or(0, |n| n.trim().parse().expect("EXPECT-EXIT: a number"));
+        let run = |exe: &PathBuf| std::process::Command::new(exe).args(&args).env_clear().envs(env.iter().map(|(k, v)| (k, v))).output().expect("run");
         let exe = dir.join(name);
         let cc = std::process::Command::new("cc").args(["-std=c17", "-O1"]).arg(&src).arg("-o").arg(&exe).output().expect("cc");
         assert!(cc.status.success(), "{name}: {}", String::from_utf8_lossy(&cc.stderr));
-        let o = std::process::Command::new(&exe).env_clear().output().expect("run");
-        assert!(o.status.success(), "{name} dynamic on glibc: {:?} {}", o.status, String::from_utf8_lossy(&o.stderr));
+        let o = run(&exe);
+        assert_eq!(o.status.code(), Some(want), "{name} dynamic on glibc: {:?} {}", o.status, String::from_utf8_lossy(&o.stderr));
         let exe = dir.join(format!("{name}-liella"));
         let cc = std::process::Command::new("cc").args(["-std=c17", "-O1", "-nodefaultlibs"]).arg(format!("-Wl,--dynamic-linker={}", ld.display())).arg(&src).arg(&libc).arg("-lgcc").arg("-o").arg(&exe).output().expect("cc");
         assert!(cc.status.success(), "{name} against Liella's libc.so.6: {}", String::from_utf8_lossy(&cc.stderr));
-        let o = std::process::Command::new(&exe).env_clear().output().expect("run");
-        assert!(o.status.success(), "{name} dynamic on Liella: {:?} {}", o.status, String::from_utf8_lossy(&o.stderr));
+        let o = run(&exe);
+        assert_eq!(o.status.code(), Some(want), "{name} dynamic on Liella: {:?} {}", o.status, String::from_utf8_lossy(&o.stderr));
     }
     let _ = std::fs::remove_dir_all(&dir);
 }

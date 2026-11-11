@@ -39,6 +39,8 @@ use liella_boundary::sys::CSys;
 use liella_kernel::fd::Fd;
 use liella_kernel::sys::Sys;
 
+mod products;
+
 const EINVAL: i32 = 22;
 const ENOENT: i32 = 2;
 const PROBE: &str = "LIELLA_S01_PROBE";
@@ -485,6 +487,28 @@ fn s1_1_c_5_static_relro_read_only() {
     // s1_1_c_5: the segment is read-only before the constructors run; an ifunc's `.got` slot in
     // it is resolved first, then protected (RELRO-IRELATIVE-ORDER).
     conformance(&["s01_relro", "s01_irelative_relro"]);
+}
+
+/// s1_1_c_0..s1_1_c_6, s1_2_c_1, s1_2_c_3, s1_2_c_5, s1_2_c_6 (D-27.24, design §14): the start-up
+/// and exit conformance programs, linked dynamically, run on the host's glibc and on Liella's
+/// `libc.so.6` under Liella's `ld.so`: the dynamic `__libc_start_main` path sets up what the static
+/// start does (arguments, environment, TLS, canary, streams, constructors) and exit runs the
+/// handlers, destructors and thread-local destructors.
+#[test]
+fn s1_1_c_0_dynamic_start_conformance() {
+    // s1_1_c_0: the C execution environment before main, through ld.so and the dynamic start.
+    products::conformance_dynamic(&[
+        "s01_startup",
+        "s01_exit_order",
+        "s01_exit_status",
+        "s01_quick_exit",
+        "s01_cxa_finalize",
+        "s01_thread_dtors",
+        "s04_strings_smoke",
+        "s12_printf",
+        "s12_stdio_front",
+        "s23_timefmt",
+    ]);
 }
 
 #[test]
