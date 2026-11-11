@@ -217,10 +217,30 @@ fn tan_accurate<F: Small>(x: F, mode: Rounding) -> (F, Status) {
     elem::finish(s.div(c), 0, Residual::Above, mode)
 }
 
-/// `sincos(x)`: `(sin x, cos x)` with the flags of both.
+/// `sincos(x)`: `(sin x, cos x)` with the flags of both, each result the one [`sin`] and [`cos`]
+/// give. One reduction serves both (LIBM-SINCOS-SHARED, D-10.89): the fast path's for `double`,
+/// and the double-double path's ([`sin_cos`]) for whichever results the fast path leaves.
 pub fn sincos<F: Small>(x: F, mode: Rounding) -> ((F, F), Status) {
-    let (s, st) = sin(x, mode);
-    let (c, ct) = cos(x, mode);
+    if trig_special(x, None).is_some() {
+        // NaN, ±∞, ±0: each function's own special result.
+        let (s, st) = sin(x, mode);
+        let (c, ct) = cos(x, mode);
+        return ((s, c), st.and(ct));
+    }
+    let (fs, fc) = if F::PREC == 53 { fast::sincos(x.widen(), mode) } else { (None, None) };
+    let ((s, st), (c, ct)) = match (fs, fc) {
+        (Some(s), Some(c)) => (from_fast(s), from_fast(c)),
+        _ if dd::abs(x.widen()) < TINY => {
+            (fs.map_or_else(|| sin_accurate(x, mode), from_fast), fc.map_or_else(|| cos_accurate(x, mode), from_fast))
+        }
+        _ => {
+            let (sd, cd) = sin_cos(x.widen());
+            (
+                fs.map_or_else(|| elem::finish(sd, 0, Residual::Above, mode), from_fast),
+                fc.map_or_else(|| elem::finish(cd, 0, Residual::Above, mode), from_fast),
+            )
+        }
+    };
     ((s, c), st.and(ct))
 }
 
@@ -734,6 +754,21 @@ mod fast {
         let (n, r) = kernel::reduce(x);
         let (y, sh) = kernel::assemble(n + 32, kernel::poly(r));
         counted("cos", settle(y, eps(sh, y), mode))
+    }
+
+    /// [`sin`] and [`cos`] from one reduction and one polynomial (LIBM-SINCOS-SHARED, D-10.89):
+    /// each result is the one its own function gives (the same operations on the same values),
+    /// or `None` where that function refuses.
+    pub(super) fn sincos(x: f64, mode: Rounding) -> crate::wide_int::Pair<f64> {
+        let ax = dd::abs(x);
+        if ax < TINY || ax >= LIMIT {
+            return (sin(x, mode), cos(x, mode));
+        }
+        let (n, r) = kernel::reduce(x);
+        let p = kernel::poly(r);
+        let (ys, ss) = kernel::assemble(n, p);
+        let (yc, sc) = kernel::assemble(n + 32, p);
+        (counted("sin", settle(ys, eps(ss, ys), mode)), counted("cos", settle(yc, eps(sc, yc), mode)))
     }
 
     /// `tan = sin/cos` in double-double: relative error `<= εs/|s| + εc/|c| + 2^-100`.

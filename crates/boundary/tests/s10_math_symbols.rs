@@ -455,6 +455,54 @@ fn math_float_hyperbolic_fast_entry_matches_the_envelope_in_every_mode() {
     fpu::clear(&CSys, Flags::ALL);
 }
 
+// ARCH(x86_64): the in-place fast entry of the float sincos export (s10_0_f_0); FPCR/FPSR on aarch64 (A-9)
+#[test]
+#[allow(clippy::arithmetic_side_effects)] // counters over bounded test loops
+fn math_float_sincos_fast_entry_matches_the_envelope_in_every_mode() {
+    // Clauses: s10_0_f_0.
+    // sincosf's in-place entry (LIBM-SINCOS-SHARED, D-10.89) as the float hyperbolic test above:
+    // round to nearest in the default word takes it, DAZ forces the full envelope, and both
+    // results, the flags and errno must agree; the directed modes must give liella-math's
+    // accurate pair. Arguments: every 2^16th `float` bit pattern of each sign (the fast range
+    // 2^-26 <= |x| < 2^19 and every refused range) and the range's edges.
+    use liella_math::real::Real;
+    let pair = |x: f32| {
+        let (mut s, mut c) = (0f32, 0f32);
+        m::sincosf(x, Some(&mut s), Some(&mut c));
+        u64::from(s.to_bits()) << 32 | u64::from(c.to_bits())
+    };
+    let edges: [f32; 6] = [1.490_116_1e-8, 1.490_116_2e-8, 524_287.97, 524_288.0, std::f32::consts::FRAC_PI_4, std::f32::consts::FRAC_PI_2];
+    let mut args: Vec<f32> = edges.iter().flat_map(|&x| [x, -x]).collect();
+    args.extend((0u32..1 << 16).map(|i| f32::from_bits(i << 16 | (i & 0xffff))));
+    let (mut checked, mut bad) = (0usize, Vec::new());
+    for &x in &args {
+        if x != 0.0 && x.abs() < f32::MIN_POSITIVE {
+            continue; // DAZ reads a subnormal argument as zero: another function value
+        }
+        let mut fast = (0, 0);
+        let e_fast = observe(|| fast = around(0x1f80, || pair(x))).0;
+        let mut full = (0, 0);
+        let e_full = observe(|| full = around(0x1f80 | 0x40, || pair(x))).0;
+        if (fast.0, fast.1 | 0x40, e_fast) != (full.0, full.1, e_full) {
+            bad.push(format!("sincosf({x:e}) nearest: {fast:x?} {e_fast} vs {full:x?} {e_full}"));
+        }
+        for (rc, mode) in [(1u32, liella_math::Rounding::Down), (2, liella_math::Rounding::Up), (3, liella_math::Rounding::Zero)] {
+            let (bits, _) = around(0x1f80 | (rc << 13), || pair(x));
+            let ((s, c), _) = Real::sincos(x, mode);
+            let want = u64::from(s.to_bits()) << 32 | u64::from(c.to_bits());
+            if bits != want && !x.is_nan() {
+                bad.push(format!("sincosf({x:e}) rc {rc}: {bits:x} vs {want:x}"));
+            }
+        }
+        checked += 1;
+    }
+    let n = bad.len();
+    bad.truncate(24);
+    assert!(n == 0, "{n} mismatches, the first:\n{}", bad.join("\n"));
+    assert!(checked > 60_000, "{checked}");
+    fpu::clear(&CSys, Flags::ALL);
+}
+
 // ARCH(x86_64): the in-place fast entry of the double exp/log/pow exports (s10_0_f_0); FPCR/FPSR on aarch64 (A-9)
 #[test]
 #[ignore = "long sweep:cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_double_fast_entry_sweep"]

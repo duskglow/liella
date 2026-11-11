@@ -1,0 +1,12 @@
+{"task": "LIBM-F64-SPECIAL-QUICK-4", "model": "opus", "tokens": null,
+ "result": "Merged origin/next ca8aa835a (no conflicts); start-up fault bounds now hold on the merged head (true 12/17, locale 52/55, tool 55/58, fork 6/7); gate and plants green; no code change",
+ "branch": "task/libm-f64-special-quick-4", "head": null,
+ "gate": {"affected": "2397 passed / 0 failed (9 suites ok, 543 ignored)", "peak": "1.7G, oom_kill=0"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The fast-profile `cargo xtask so` build warns dead_code for boundary/src/hot/hyperbolic.rs:94 hyp_quick and boundary/src/heap.rs:501 c_malloc; neither file is changed by this branch (they come from next)", "SSE2 erf_series stays +1 against next (154 vs 153), landed under owner precedent #4424; fixed first in LIBM-F64-SPECIAL-QUICK-REST"],
+ "refused": [],
+ "improvement": "A fresh role has no target/liella products; hot_text_products should build them itself or say 'run cargo xtask so first' rather than failing 20 tests with link errors (cost one job here)",
+ "next_step": "Land; then LIBM-F64-SPECIAL-QUICK-REST (SSE2 erf_series +1 first)",
+ "report_file": "handoff/LIBM-F64-SPECIAL-QUICK.md",
+ "jobs": ["libm-f64-special-quick-4-gate", "libm-f64-special-quick-4-plants", "libm-f64-special-quick-4-hottext2", "libm-f64-special-quick-4-lint0"]}
