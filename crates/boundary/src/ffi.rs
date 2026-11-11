@@ -82,8 +82,6 @@ unsafe extern "C" {
     pub(crate) safe fn liella_machine_x87_env_load(env: &X87Env);
     /// `sqrtsd`: no memory access; rounds in MXCSR's direction and raises its flags there.
     pub(crate) safe fn liella_machine_sqrtsd(x: f64) -> f64;
-    /// `sqrtss`: as `liella_machine_sqrtsd`.
-    pub(crate) safe fn liella_machine_sqrtss(x: f32) -> f32;
     /// `fsqrt` under the current x87 control word: reads the 10 bytes of `x`, writes the 10 of
     /// `out`, leaves the x87 stack as it found it.
     pub(crate) safe fn liella_machine_fsqrt(x: &liella_abi::ctypes::LdBits, out: &mut liella_abi::ctypes::LdBits);

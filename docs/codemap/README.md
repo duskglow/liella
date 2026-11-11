@@ -16,7 +16,7 @@ exactly which tests a change reaches.
 | 7 | Locales and message translation | crates/boundary/src/posix/s07_locale.rs | abi::ctypes, abi::layout, boundary::catalog, boundary::conv, boundary::locale, boundary::monetary, boundary::ret, boundary::strz | s07_locale_symbols.rs, crates/core/tests/s07_locale_clauses.rs | s07_langinfo_items.c, s07_setlocale_first_case.c, s07_strfmon.c, s07_symbols_strfmon.c | plan/07-decisions/s07-locales-and-message-translation.md | catalogs-format.md, catalogs.md, ctype-words.md, env-cache.md, strfmon.md |
 | 8 | Numeric conversion and integer arithmetic | crates/boundary/src/posix/s08_numeric.rs | abi::ctypes, abi::layout, abi::pack, boundary::conv, boundary::locale, boundary::ret, boundary::strz, boundary::sys, boundary::users, kernel::machine, legacy::num_compat, legacy::string_compat | s08_numeric_symbols.rs, crates/core/tests/s08_numeric_clauses.rs | s08_strto_internal_group.c | plan/07-decisions/s08-numeric-conversion-and-integer-arithmetic.md | zones.md |
 | 9 | Random numbers | crates/boundary/src/posix/s09_random.rs | abi::ctypes, abi::layout, boundary::cancel, boundary::conv, boundary::ret, boundary::sys, kernel::sys, legacy::prng_global, legacy::prng_r | s09_random_symbols.rs, crates/core/tests/s09_random_clauses.rs |  | plan/07-decisions/s09-random-numbers.md |  |
-| 10 | Mathematics (`libm`) | crates/boundary/src/posix/s10_math.rs, crates/boundary/src/posix/s10_math_gen.rs | abi::ctypes, abi::layout, boundary::conv, boundary::hot, boundary::mathret, boundary::ret, boundary::strz, boundary::sys, rt::fpu | s10_math_symbols.rs, crates/math/tests/s10_math_clauses.rs |  | plan/07-decisions/s10-mathematics.md | libm-complex.md, libm-elem-ld.md, libm-elem.md, libm-exact.md, libm-special-ld.md, libm-special.md, math-ftz-daz.md |
+| 10 | Mathematics (`libm`) | crates/boundary/src/posix/s10_math.rs, crates/boundary/src/posix/s10_math_gen.rs | abi::ctypes, abi::layout, boundary::conv, boundary::hot, boundary::mathret, boundary::ret, boundary::strz, boundary::sys, rt::fpu | s10_math_symbols.rs, crates/math/tests/s10_math_clauses.rs | s10_sqrtl_entry.c | plan/07-decisions/s10-mathematics.md | libm-complex.md, libm-elem-ld.md, libm-elem.md, libm-exact.md, libm-special-ld.md, libm-special.md, math-ftz-daz.md |
 | 11 | Low-level I/O on file descriptors | crates/boundary/src/posix/s11_lowio.rs | abi::ctypes, abi::layout, boundary::aio, boundary::cancel, boundary::conv, boundary::raw, boundary::ret, boundary::strz, boundary::sys, kernel::fd, kernel::mem, kernel::sys, kernel::uapi, legacy::io_compat | s11_lowio_symbols.rs, crates/core/tests/s11_lowio_clauses.rs | s11_private_descriptors.c, s11_variadic.c | plan/07-decisions/s11-low-level-i-o.md | aio.md, noproc.md |
 | 12 | Buffered streams (`<stdio.h>`) | crates/boundary/src/posix/s12_stdio.rs | abi::ctypes, abi::layout, boundary::conv, boundary::printf, boundary::ret, boundary::scanf, boundary::stdio, boundary::strz, boundary::users, legacy::printf_registry, legacy::stdio_compat | s12_stdio_symbols.rs, crates/core/tests/s12_stdio_clauses.rs | s12_ftell_alone.c, s12_malloc_fails.c, s12_printf.c, s12_registry.c, s12_scanf.c, s12_stdio_front.c, s12_stdio_lockfile.c, s12_stdio_mt_front.c, s12_stdio_window.c, s12_symbols_libio.c, s12_symbols_printf.c, s12_symbols_printf_chk.c, s12_symbols_registry.c, s12_symbols_scanf.c | plan/07-decisions/s12-buffered-streams.md | compat-libio.md, getline-info.md, printf-registry.md, scanf.md, tempnam.md, terminals.md |
 | 13 | File-system interface | crates/boundary/src/posix/s13_filesystem.rs | abi::callback, abi::ctypes, abi::layout, boundary::conv, boundary::dirtree, boundary::errno, boundary::locale, boundary::mntent, boundary::raw, boundary::ret, boundary::strz, boundary::sys, kernel::errno, kernel::fd, kernel::path, kernel::sys, kernel::uapi, legacy::fs_compat, legacy::fs_tree, legacy::stubs, legacy::versioned | s13_filesystem_symbols.rs, crates/core/tests/s13_filesystem_clauses.rs | s13_efault.c, s13_readdir_alone.c | plan/07-decisions/s13-file-system.md | efault.md, fstree.md, mntent.md, noproc.md |
@@ -49,7 +49,7 @@ Other crates: abi, boundary, core, kernel, ld, ld-so, legacy, libc-so, libm-so, 
 | `/dev/` | crates/legacy/src/accounting.rs:470 |
 | `/dev/console` | crates/boundary/src/fmtmsg.rs:268, crates/core/src/log.rs:65, crates/core/src/term.rs:506 |
 | `/dev/log` | crates/core/src/log.rs:63 |
-| `/dev/null` | crates/boundary/src/selftest.rs:442, crates/boundary/src/spawn.rs:778, crates/boundary/src/spawn.rs:851, crates/rt/src/start.rs:153 |
+| `/dev/null` | crates/boundary/src/selftest.rs:442, crates/boundary/src/spawn.rs:778, crates/boundary/src/spawn.rs:851, crates/rt/src/start.rs:210 |
 | `/dev/ptmx` | crates/core/src/term.rs:335, crates/core/src/term.rs:507 |
 | `/dev/pts/` | crates/core/src/term.rs:391, crates/core/src/term.rs:502 |
 | `/dev/shm/` | crates/boundary/src/mqueue.rs:370, crates/boundary/src/nscache.rs:54 |
@@ -101,10 +101,12 @@ Other crates: abi, boundary, core, kernel, ld, ld-so, legacy, libc-so, libm-so, 
 | `/sys/devices/system/cpu` | crates/core/src/system.rs:351 |
 | `/sys/devices/system/cpu/online` | crates/core/src/system.rs:331 |
 | `/usr/` | crates/core/src/catalog/xopen.rs:197 |
-| `/usr/bin/ls` | crates/rt/src/start.rs:250 |
+| `/usr/bin/ls` | crates/rt/src/start.rs:398 |
 | `/usr/bin/prog` | crates/legacy/src/argp.rs:72 |
+| `/usr/lib` | crates/ld/src/arch.rs:305 |
 | `/usr/lib/locale` | crates/core/src/locale/mod.rs:533 |
 | `/usr/lib/locale/locale-archive` | crates/core/src/locale/mod.rs:535 |
+| `/usr/lib/x86_64-linux-gnu` | crates/ld/src/arch.rs:305 |
 | `/usr/share/i18n/charmaps/` | crates/legacy/src/global_locale.rs:96 |
 | `/usr/share/locale` | crates/legacy/src/intl.rs:62 |
 | `/usr/share/locale-langpack` | crates/legacy/src/intl.rs:66 |

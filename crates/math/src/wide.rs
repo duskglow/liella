@@ -28,6 +28,13 @@ use crate::status::{Rounding, Status};
 use crate::trig::elem_round_below;
 use crate::wide_dd;
 use crate::wide_int;
+use crate::wide_int_el;
+
+/// The fast tiers of the exponentials and logarithms in order: the integer fixed-point tier
+/// (x87 only, D-10.73), then the double-double tier; `None` leaves the 384-bit route.
+fn tiers<F: Float>(k: wide_dd::Kernel, n: &Num, mode: Rounding) -> Option<(F, Status)> {
+    wide_int_el::eval::<F>(k, n, mode).or_else(|| wide_dd::eval::<F>(k, n, mode))
+}
 
 /// The value of a finite or zero operand.
 pub(crate) fn value(n: &Num) -> Mp {
@@ -159,7 +166,7 @@ pub fn exp<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if linear_tiny::<F>(&n) {
         return near_one(false, !n.neg, mode);
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Exp, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Exp, &n, mode) {
         return r;
     }
     exp_of(value(&n), mode)
@@ -184,7 +191,7 @@ pub fn exp2<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if linear_tiny::<F>(&n) {
         return near_one(false, !n.neg, mode);
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Exp2, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Exp2, &n, mode) {
         return r;
     }
     exp_of(value(&n).mul(mp::ln2()), mode)
@@ -211,7 +218,7 @@ pub fn exp10<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if n.top() < -(F::PREC as i32 + 4) {
         return near_one(false, !n.neg, mode);
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Exp10, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Exp10, &n, mode) {
         return r;
     }
     exp_of(value(&n).mul(mp::ln10()), mode)
@@ -235,7 +242,7 @@ pub fn expm1<F: Float>(x: F, mode: Rounding) -> (F, Status) {
         // x + x²/2: above x.
         return near_x(&n, !n.neg, mode);
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Expm1, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Expm1, &n, mode) {
         return r;
     }
     approx(mp::exp(value(&n)).sub(Mp::from_i64(1)), mode)
@@ -273,7 +280,7 @@ pub fn log<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if odd_part(&n) == (1, 0) {
         return (float::zero(false), Status::OK);
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Log, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Log, &n, mode) {
         return r;
     }
     approx(mp::ln_atanh(value(&n)), mode)
@@ -289,7 +296,7 @@ pub fn log2<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if odd == 1 {
         return exact(Mp::from_i64(e), mode);
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Log2, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Log2, &n, mode) {
         return r;
     }
     approx(mp::ln_atanh(value(&n)).div(mp::ln2()), mode)
@@ -309,7 +316,7 @@ pub fn log10<F: Float>(x: F, mode: Rounding) -> (F, Status) {
             return exact(Mp::from_i64(e), mode);
         }
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Log10, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Log10, &n, mode) {
         return r;
     }
     approx(mp::ln_atanh(value(&n)).div(mp::ln10()), mode)
@@ -342,7 +349,7 @@ pub fn log1p<F: Float>(x: F, mode: Rounding) -> (F, Status) {
         // x − x²/2: below x.
         return near_x(&n, n.neg, mode);
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Log1p, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Log1p, &n, mode) {
         return r;
     }
     approx(mp::ln1p(v), mode)
@@ -583,12 +590,27 @@ pub fn tan<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if cubic_tiny::<F>(&n) {
         return near_x(&n, true, mode); // x + x³/3
     }
+    if let Some(r) = wide_int::arc::tan::<F>(&n, mode) {
+        return r;
+    }
     let (s, c) = sin_cos_of(&n);
     approx(s.div(c), mode)
 }
 
 /// `sincos(x)`: `(sin x, cos x)` with the flags of both.
 pub fn sincos<F: Float>(x: F, mode: Rounding) -> ((F, F), Status) {
+    if F::PREC == 113 {
+        // binary128: one reduction for both (D-10.91); an undecided one takes the 384-bit route.
+        if let Ok(n) = trig_special(x, false) {
+            if !cubic_tiny::<F>(&n) {
+                if let Some((s, c)) = wide_int::quad::sin_and_cos::<F>(&n, mode) {
+                    let (s, st) = s.unwrap_or_else(|| approx(sin_cos_of(&n).0, mode));
+                    let (c, ct) = c.unwrap_or_else(|| approx(sin_cos_of(&n).1, mode));
+                    return ((s, c), st.and(ct));
+                }
+            }
+        }
+    }
     let (s, st) = sin(x, mode);
     let (c, ct) = cos(x, mode);
     ((s, c), st.and(ct))
@@ -608,26 +630,41 @@ pub fn atan<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if cubic_tiny::<F>(&n) {
         return near_x(&n, false, mode); // x − x³/3
     }
+    if let Some(r) = wide_int::arc::atan::<F>(&n, mode) {
+        return r;
+    }
     approx(signed(mp::atan(value(&n).abs()), n.neg), mode)
 }
 
 /// `asin(x)`. Its domain NaN is positive for x87 `long double` (glibc's `asinl`) and the default
 /// negative one for `_Float128` (glibc's `asinf128`, D-10.19).
 pub fn asin<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    asin_sqrt(x, mode, wide_int::arc::soft_sqrt)
+}
+
+/// [`asin`] with the `double` square root `sqrt` for the x87 tier (any root within `2^-52` on
+/// operands in `[2^52, 2^54)`): the boundary passes `sqrtsd`, which this crate cannot issue (D-10.75).
+pub fn asin_sqrt<F: Float>(x: F, mode: Rounding, sqrt: impl Fn(f64) -> f64) -> (F, Status) {
     let n = float::decode(x);
     if let Some(r) = elem::nan_in(&n) {
         return r;
     }
-    if n.kind == Kind::Zero {
-        return (x, Status::OK);
+    match n.kind {
+        Kind::Zero => return (x, Status::OK),
+        Kind::Inf => return arc_domain::<F>(),
+        _ => {}
+    }
+    if cubic_tiny::<F>(&n) {
+        return near_x(&n, true, mode); // x + x³/6 (|x| < 1: no domain error)
+    }
+    // The tier first (it takes only 0 < |x| < 1): no 384-bit value on its path.
+    if let Some(r) = wide_int::arc::asin::<F>(&n, mode, sqrt) {
+        return r;
     }
     let a = value(&n).abs();
     let one = Mp::from_i64(1);
-    if n.kind == Kind::Inf || a.cmp_abs(one).is_gt() {
+    if a.cmp_abs(one).is_gt() {
         return arc_domain::<F>();
-    }
-    if cubic_tiny::<F>(&n) {
-        return near_x(&n, true, mode); // x + x³/6
     }
     let r = if a == one {
         mp::pi().ldexp(-1)
@@ -647,13 +684,25 @@ fn arc_domain<F: Float>() -> (F, Status) {
 /// `acos(x)`. A NaN operand comes back quieted, with its sign cleared for x87 `long double`
 /// (glibc's `acosl`) and kept for `_Float128` (glibc's `acosf128`, D-10.19).
 pub fn acos<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    acos_sqrt(x, mode, wide_int::arc::soft_sqrt)
+}
+
+/// [`acos`] with the `double` square root `sqrt` for the x87 tier (as for [`asin_sqrt`]).
+pub fn acos_sqrt<F: Float>(x: F, mode: Rounding, sqrt: impl Fn(f64) -> f64) -> (F, Status) {
     let n = float::decode(x);
     if let Some(r) = elem::nan_in(&Num { neg: n.neg && !F::EXPLICIT, ..n }) {
         return r;
     }
+    if n.kind == Kind::Inf {
+        return arc_domain::<F>();
+    }
+    // The tier first (it takes only 0 < |x| < 1): no 384-bit value on its path.
+    if let Some(r) = wide_int::arc::acos::<F>(&n, mode, sqrt) {
+        return r;
+    }
     let v = value(&n);
     let one = Mp::from_i64(1);
-    if n.kind == Kind::Inf || v.cmp_abs(one).is_gt() {
+    if v.cmp_abs(one).is_gt() {
         return arc_domain::<F>();
     }
     if v == one {
@@ -692,6 +741,9 @@ pub fn atan2<F: Float>(y: F, x: F, mode: Rounding) -> (F, Status) {
         let q = crate::arith::div_exact::<F>(&b, &a);
         let (v, flags) = elem_round_below::<F>(q, mode);
         return (v, float::range_errno(v, Status::flags(flags)));
+    }
+    if let Some(r) = wide_int::arc::atan2::<F>(&b, &a, mode) {
+        return r;
     }
     approx(mp::atan2(value(&b), value(&a)), mode)
 }

@@ -41,4 +41,6 @@ pub mod special_tables;
 pub mod gamma_tables;
 /// The Bessel fast-tier tables.
 pub mod bessel_tables;
+/// The x87 `long double` exponentials' and logarithms' integer-tier tables.
+pub mod ld_explog_tables;
 pub mod tables;

@@ -67,6 +67,11 @@ macro_rules! field {
 }
 
 field! {
+    /// `ThreadBlock::dtv`: the dynamic thread vector `ld.so` built (phase 14 DL-12, D-27.20).
+    Dtv = dtv
+}
+
+field! {
     /// `ThreadBlock::locale`: the thread's `uselocale` choice (D-7.8).
     Locale = locale
 }

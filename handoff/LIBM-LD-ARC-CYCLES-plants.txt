@@ -1,0 +1,8 @@
+# LIBM-LD-ARC-CYCLES plants: cargo xtask plants handoff/LIBM-LD-ARC-CYCLES-plants.txt --dir <new RAM dir>
+# atanl's own inlined copy of the arc kernel (crates/math/src/wide_int/arc.rs, D-10.75).
+# atanl's reflection for |x| > 1 dropped (atan x = pi/2 - atan(1/x)).
+atanl-reflect | crates/math/src/wide_int/arc.rs | lit:{ sub_from(PIO2, atan_le_in(ONE, y)) } ==> { atan_le_in(ONE, y) } | cargo test -p liella-math --lib wide_int::arc | msg:arc_tier_agrees_with_the_wide_route.*FAILED
+# atanl's in-range branch sends |x| <= 1 to the reflected kernel (the operand order swapped).
+atanl-order | crates/math/src/wide_int/arc.rs | lit:{ atan_le_in(y, ONE) } else ==> { sub_from(PIO2, atan_le_in(ONE, y)) } else | cargo test -p liella-math --lib wide_int::arc | msg:arc_tier_agrees_with_the_wide_route.*FAILED
+# The kernel body (now atan_le_in, shared by every arc): the atan(j/128) table read one row off.
+arc-table-index | crates/math/src/wide_int/arc.rs | lit:let tj = ATAN_J[j - 1]; ==> let tj = ATAN_J[j % 128]; | cargo test -p liella-math --lib wide_int::arc | msg:arc_tier_agrees_with_the_wide_route.*FAILED

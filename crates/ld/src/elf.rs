@@ -112,6 +112,12 @@ pub mod dt {
     pub const RPATH: u64 = 15;
     /// Type of the PLT relocations (`DT_RELA` or `DT_REL`).
     pub const PLTREL: u64 = 20;
+    /// The object has relocations against non-writable segments (gABI `DT_TEXTREL`).
+    pub const TEXTREL: u64 = 22;
+    /// Flag word (gABI `DT_FLAGS`; [`DF_TEXTREL`] is the text-relocation bit).
+    pub const FLAGS: u64 = 30;
+    /// `DF_TEXTREL` in `DT_FLAGS` (gABI).
+    pub const DF_TEXTREL: u64 = 4;
     /// Address of the PLT relocations.
     pub const JMPREL: u64 = 23;
     /// Library search path (string table offset).
@@ -122,6 +128,22 @@ pub mod dt {
     pub const RELR: u64 = 36;
     /// Size of one RELR entry.
     pub const RELRENT: u64 = 37;
+    /// Address of the initialisation function.
+    pub const INIT: u64 = 12;
+    /// Address of the termination function.
+    pub const FINI: u64 = 13;
+    /// Address of the array of initialisation functions.
+    pub const INIT_ARRAY: u64 = 25;
+    /// Address of the array of termination functions.
+    pub const FINI_ARRAY: u64 = 26;
+    /// Size in bytes of `DT_INIT_ARRAY`.
+    pub const INIT_ARRAYSZ: u64 = 27;
+    /// Size in bytes of `DT_FINI_ARRAY`.
+    pub const FINI_ARRAYSZ: u64 = 28;
+    /// Address of the array of pre-initialisation functions (the program's only).
+    pub const PREINIT_ARRAY: u64 = 32;
+    /// Size in bytes of `DT_PREINIT_ARRAY`.
+    pub const PREINIT_ARRAYSZ: u64 = 33;
     /// Address of the GNU hash table.
     pub const GNU_HASH: u64 = 0x6fff_fef5;
     /// Address of the symbol version table (`versym`).
@@ -378,8 +400,44 @@ pub struct ProgramHeader {
 /// are checked when they are read (the slice may be only a prefix of the file).
 #[derive(Clone, Copy, Debug)]
 pub struct Elf<'a> {
+    /// The file (from [`Elf::parse`]), or the program header table (image mode).
     rd: Rd<'a>,
     header: Header,
+    /// Image mode ([`Elf::from_image`]): the readable ranges by link-time address.
+    spans: Option<&'a [Span<'a>]>,
+}
+
+/// `PF_W`, `PF_R` (ELF gABI).
+const PF_W: u32 = 2;
+const PF_R: u32 = 4;
+
+/// The dynamic tags whose value is the link-time address of a table the reader reads.
+const IMAGE_TABLES: [u64; 10] = [dt::STRTAB, dt::SYMTAB, dt::HASH, dt::GNU_HASH, dt::VERSYM, dt::VERDEF, dt::VERNEED, dt::RELA, dt::JMPREL, dt::RELR];
+
+/// Image mode: `bytes` are the contents of link-time addresses `vaddr .. vaddr + bytes.len()` of a
+/// mapped object (a slice of its memory, or a copy taken before relocation; D-27.18).
+#[derive(Clone, Copy, Debug)]
+pub struct Span<'a> {
+    /// Link-time address of the first byte.
+    pub vaddr: u64,
+    /// The bytes.
+    pub bytes: &'a [u8],
+}
+
+/// How the image-mode reader sees one `PT_LOAD` ([`Elf::image_span_kind`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpanKind {
+    /// Its file-backed bytes are sliced in place: they do not change while the object is loaded.
+    Live,
+    /// Its file-backed bytes are copied before the first relocation store.
+    Copy,
+    /// Not read (empty, or changing and holding no table).
+    Unseen,
+}
+
+/// The span in `spans` holding all of `[vaddr, vaddr + len)`, as a slice of exactly that range.
+fn span_bytes<'a>(spans: &[Span<'a>], vaddr: u64, len: u64) -> Option<&'a [u8]> {
+    spans.iter().find_map(|s| sub(s.bytes, vaddr.checked_sub(s.vaddr)?, len))
 }
 
 impl<'a> Elf<'a> {
@@ -434,7 +492,7 @@ impl<'a> Elf<'a> {
         if h.phnum != 0 && usize::from(h.phentsize) != PHDR_SIZE {
             return Err(ElfError::BadPhentsize(h.phentsize));
         }
-        let elf = Elf { rd, header: h };
+        let elf = Elf { rd, header: h, spans: None };
         let table = elf.table_len();
         if sub(bytes, h.phoff, table).is_none() {
             return Err(ElfError::OutOfRange(Part::ProgramHeaders));
@@ -442,6 +500,96 @@ impl<'a> Elf<'a> {
         if overlaps(h.phoff, table, 0, ehdr_len()) {
             return Err(ElfError::OverlapsHeaders(Part::ProgramHeaders));
         }
+        elf.check_table()?;
+        Ok(elf)
+    }
+
+    /// Image mode (ruling #4229, D-27.18): an object the kernel (or the loader) has already mapped,
+    /// read from its memory instead of its file. `phdrs` holds its program header table (`AT_PHDR`,
+    /// `AT_PHNUM` entries); `spans` give the bytes of the link-time address ranges the reader may
+    /// read (see [`Elf::image_span_kind`]), searched in order. Every address the reader resolves must
+    /// lie in the file-backed part of one `PT_LOAD` and wholly in one span; anything else is
+    /// [`ElfError::AddressNotMapped`], as for a file.
+    ///
+    /// There is no file header in this mode: [`Elf::header`] returns `A`'s identity, `e_type`
+    /// `ET_DYN`, `e_phoff` 0 and the table's `e_phnum`, nothing else. The program header checks are
+    /// those of [`Elf::parse`] except the file-offset overlaps with the headers.
+    ///
+    /// # Errors
+    ///
+    /// [`ElfError::OutOfRange`] for a table that is empty, not whole entries or `PN_XNUM` entries or
+    /// more, then each program header's error in index order.
+    pub fn from_image<A: Arch>(phdrs: &'a [u8], spans: &'a [Span<'a>]) -> Result<Self, ElfError> {
+        let bad = ElfError::OutOfRange(Part::ProgramHeaders);
+        if phdrs.is_empty() || phdrs.len().checked_rem(PHDR_SIZE) != Some(0) {
+            return Err(bad);
+        }
+        let phnum = u16::try_from(phdrs.len().checked_div(PHDR_SIZE).ok_or(bad)?).ok().filter(|&n| n < PN_XNUM).ok_or(bad)?;
+        let header = Header {
+            class: A::EI_CLASS,
+            data: A::EI_DATA,
+            ident_version: 1,
+            osabi: osabi::SYSV,
+            abi_version: 0,
+            e_type: et::DYN,
+            machine: A::E_MACHINE,
+            version: 1,
+            entry: 0,
+            phoff: 0,
+            shoff: 0,
+            flags: 0,
+            ehsize: u16::try_from(EHDR_SIZE).unwrap_or(0),
+            phentsize: u16::try_from(PHDR_SIZE).unwrap_or(0),
+            phnum,
+            shentsize: 0,
+            shnum: 0,
+            shstrndx: 0,
+        };
+        let elf = Elf { rd: Rd { b: phdrs, be: A::EI_DATA == ELFDATA2MSB }, header, spans: Some(spans) };
+        elf.check_table()?;
+        Ok(elf)
+    }
+
+    /// Image mode: how the reader may see `PT_LOAD` `ph` of an object whose dynamic entries are
+    /// `dynamic` (a copy of its `PT_DYNAMIC` bytes, up to its `DT_NULL` or the end). The rule
+    /// (D-27.18): a segment whose bytes cannot change while the object is loaded and relocated is
+    /// sliced in place; a segment that can change is never sliced in place (a shared slice alive
+    /// across the relocator's stores would alias them), but copied before the first store when a
+    /// table the reader reads by address starts in it, and not seen at all otherwise.
+    #[must_use]
+    pub fn image_span_kind(&self, ph: &ProgramHeader, dynamic: &[u8]) -> SpanKind {
+        let rd = Rd { b: dynamic, be: self.rd.be };
+        let entries = (0..dynamic.len().checked_div(DYN_SIZE).unwrap_or(0))
+            .map_while(|i| {
+                let off = i.checked_mul(DYN_SIZE)?;
+                Some((rd.u64(off)?, rd.u64(off.checked_add(8)?)?))
+            })
+            .take_while(|&(tag, _)| tag != dt::NULL);
+        let mut text = false;
+        let mut holds_table = false;
+        let file_end = ph.vaddr.saturating_add(ph.filesz);
+        for (tag, val) in entries {
+            text |= tag == dt::TEXTREL || (tag == dt::FLAGS && val & dt::DF_TEXTREL != 0);
+            holds_table |= IMAGE_TABLES.contains(&tag) && ph.vaddr <= val && val < file_end;
+        }
+        // The relocator stores into PF_W segments, and into every segment of a text-relocated object.
+        let changes = |p: &ProgramHeader| p.p_type == pt::LOAD && (text || p.flags & PF_W != 0);
+        let aliased = self.program_headers().any(|p| changes(&p) && overlaps(p.vaddr, p.memsz, ph.vaddr, ph.filesz));
+        if ph.p_type != pt::LOAD || ph.filesz == 0 || ph.flags & PF_R == 0 {
+            SpanKind::Unseen
+        } else if !aliased {
+            SpanKind::Live
+        } else if holds_table {
+            SpanKind::Copy
+        } else {
+            SpanKind::Unseen
+        }
+    }
+
+    /// Every program header checked, at most one `PT_DYNAMIC` and one `PT_INTERP`.
+    fn check_table(&self) -> Result<(), ElfError> {
+        let elf = self;
+        let h = self.header;
         let mut seen_dynamic = false;
         let mut seen_interp = false;
         for i in 0..h.phnum {
@@ -459,7 +607,7 @@ impl<'a> Elf<'a> {
                 *seen = true;
             }
         }
-        Ok(elf)
+        Ok(())
     }
 
     /// The decoded ELF header.
@@ -502,7 +650,8 @@ impl<'a> Elf<'a> {
         if ph.p_type == pt::LOAD && ph.filesz > ph.memsz {
             return Err(ElfError::FileszExceedsMemsz(i));
         }
-        if matches!(ph.p_type, pt::DYNAMIC | pt::INTERP | pt::NOTE)
+        if self.spans.is_none()
+            && matches!(ph.p_type, pt::DYNAMIC | pt::INTERP | pt::NOTE)
             && (overlaps(ph.offset, ph.filesz, 0, ehdr_len())
                 || overlaps(ph.offset, ph.filesz, self.header.phoff, self.table_len()))
         {
@@ -535,7 +684,11 @@ impl<'a> Elf<'a> {
     ///
     /// [`ElfError::OutOfRange`] when the range is not wholly inside the slice.
     pub fn segment_bytes(&self, ph: &ProgramHeader) -> Result<&'a [u8], ElfError> {
-        sub(self.rd.b, ph.offset, ph.filesz).ok_or(ElfError::OutOfRange(Part::Segment(ph.index)))
+        let found = match self.spans {
+            Some(spans) => span_bytes(spans, ph.vaddr, ph.filesz),
+            None => sub(self.rd.b, ph.offset, ph.filesz),
+        };
+        found.ok_or(ElfError::OutOfRange(Part::Segment(ph.index)))
     }
 
     /// The file bytes behind `len` bytes at virtual address `vaddr`: the range must lie wholly in the
@@ -551,6 +704,9 @@ impl<'a> Elf<'a> {
             .program_headers()
             .find(|p| p.p_type == pt::LOAD && p.vaddr <= vaddr && p.vaddr.checked_add(p.filesz).is_some_and(|e| end <= e))
             .ok_or(ElfError::AddressNotMapped(vaddr))?;
+        if let Some(spans) = self.spans {
+            return span_bytes(spans, vaddr, len).ok_or(ElfError::AddressNotMapped(vaddr));
+        }
         let rel = vaddr.checked_sub(ph.vaddr).ok_or(ElfError::AddressNotMapped(vaddr))?;
         let seg = self.segment_bytes(&ph)?;
         sub(seg, rel, len).ok_or(ElfError::AddressNotMapped(vaddr))
@@ -567,6 +723,18 @@ impl<'a> Elf<'a> {
             .program_headers()
             .find(|p| p.p_type == pt::LOAD && p.vaddr <= vaddr && p.vaddr.checked_add(p.filesz).is_some_and(|e| vaddr <= e))
             .ok_or(ElfError::AddressNotMapped(vaddr))?;
+        if let Some(spans) = self.spans {
+            // The rest of the span holding `vaddr`, cut at the end of the segment's file-backed part.
+            let left = ph.vaddr.saturating_add(ph.filesz).saturating_sub(vaddr);
+            if left == 0 {
+                return Ok(&[]);
+            }
+            let rest = spans.iter().find_map(|s| {
+                let r = usize::try_from(vaddr.checked_sub(s.vaddr)?).ok()?;
+                s.bytes.get(r..).filter(|b| !b.is_empty())
+            });
+            return rest.map(|r| r.get(..usize::try_from(left).unwrap_or(usize::MAX)).unwrap_or(r)).ok_or(ElfError::AddressNotMapped(vaddr));
+        }
         let rel = vaddr.checked_sub(ph.vaddr).ok_or(ElfError::AddressNotMapped(vaddr))?;
         let seg = self.segment_bytes(&ph)?;
         usize::try_from(rel).ok().and_then(|r| seg.get(r..)).ok_or(ElfError::AddressNotMapped(vaddr))
@@ -971,9 +1139,31 @@ impl<'a> Dynamic<'a> {
                 return Err(ElfError::BadDynamicValue(dt::SYMENT));
             }
         }
-        let count = self.symbol_count()?;
+        let count = self.symtab_count()?;
         let b = self.elf.bytes_from(addr)?;
         Ok(Some(Symtab { rd: Rd { b, be: self.rd.be }, count }))
+    }
+
+    /// The count [`Dynamic::symtab`] checks an index against: [`Dynamic::symbol_count`], except when
+    /// that is only a lower bound (no SysV table and a GNU table whose buckets are all empty: the object
+    /// hashes no symbol, and its unhashed symbols need not end at `symoffset`, as linkers emit for a
+    /// program that exports nothing). Then it is raised to cover every symbol a RELA or `JMPREL` entry
+    /// names, the only indices read past the hashed ones. Objects that hash a symbol pay nothing.
+    fn symtab_count(&self) -> Result<Option<u32>, ElfError> {
+        let count = self.symbol_count()?;
+        let lower_bound = self.sysv_hash()?.is_none() && self.gnu_hash()?.is_some_and(|g| (0..g.nbuckets()).all(|i| g.bucket(i) == Some(0)));
+        let Some(mut count) = count.filter(|_| lower_bound) else { return Ok(count) };
+        for (addr, size) in [(dt::RELA, dt::RELASZ), (dt::JMPREL, dt::PLTRELSZ)] {
+            let Some((at, len)) = self.pair(addr, size)? else { continue };
+            let rd = Rd { b: self.elf.bytes_at(at, len)?, be: self.rd.be };
+            // r_info is the second word of each entry; its high half is the symbol index.
+            let mut off = 8usize;
+            while let Some(info) = rd.u64(off) {
+                count = count.max(u32::try_from(info >> 32).unwrap_or(u32::MAX).saturating_add(1));
+                off = off.saturating_add(RELA_SIZE);
+            }
+        }
+        Ok(Some(count))
     }
 
     /// The symbol version table (`DT_VERSYM`): one 16-bit entry per dynamic symbol. The table's length is

@@ -1,0 +1,12 @@
+{"task": "HOTTEXT-DEAD-KEY-REPAIR", "model": "opus", "tokens": null,
+ "result": "cargo xtask hottext-repair: builds both profiles' archives, drops keys no profile matches, records one-profile inlining in hot-text.absent, removes stale absent lines, fails if the dead-key check still fails; ran on next 672acd9aa704 in 226.7 s (nothing dead); plants 3/3 caught",
+ "branch": "task/hottext-dead-key-repair", "head": "58160acbd",
+ "gate": {"affected": "pending: hottext-dead-key-repair-gate escalated to FULL (xtask change), running at hand-back", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["cargo xtask affected escalates any xtask/src change to FULL, so this S-size tooling story runs the whole cargo xtask test as its gate", "first plants run (hottext-dead-key-repair-plants) was WARN-NO-MSG on all three (regex missed the thread id before 'panicked at'); superseded by hottext-dead-key-repair-plants2, 3 CAUGHT", "plants2 read its plants file from ~/work on the host (the role was busy with the gate, so no sync); the code under test was identical to the head", "one python heredoc was used to edit main.rs (no-heredoc rule); no effect on the result"],
+ "refused": [],
+ "improvement": "affected could gate an xtask change with the xtask unit tests plus the commands it touches instead of FULL; a 2-file tooling change spent a full cargo xtask test",
+ "next_step": "coordinator: call `cargo xtask hottext-repair --at <next sha>` from liella-ops tools/merge_next.sh when a train is red only on dead keys, and commit hot-text.list / hot-text.absent if changed",
+ "report_file": "handoff/HOTTEXT-DEAD-KEY-REPAIR.md",
+ "jobs": ["hottext-dead-key-repair-unit", "hottext-dead-key-repair-clippy", "hottext-dead-key-repair-static", "hottext-dead-key-repair-run", "hottext-dead-key-repair-plants2", "hottext-dead-key-repair-gate"]}

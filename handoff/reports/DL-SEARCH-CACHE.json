@@ -1,0 +1,36 @@
+{
+ "task": "DL-SEARCH-CACHE",
+ "model": "opus",
+ "tokens": null,
+ "result": "PENDING JOBS: search order, DSTs, pinned sonames, new-format cache reader with hwcaps, ld.so --list/LD_TRACE_LOADED_OBJECTS via the DL-7 mapper, ld_cache fuzz target; gate/plants/startup running",
+ "branch": "task/dl-search-cache",
+ "head": "3baf72862",
+ "gate": {
+  "affected": "pending (keke:dl-search-cache-gate)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "threat model rule 5 trusted dirs (/lib64,/usr/lib64) differ from the reference's probed default dirs (/lib,/usr/lib)",
+   "recommendation": "amend rule 5 to the probed list"
+  },
+  {
+   "item": "default LIELLA_PREFIX '/' makes the pinned dir /lib",
+   "recommendation": "keep '/', take the pinned dir for '/' from the arch table in the install story"
+  }
+ ],
+ "informational": [
+  "cache key matching numeric as the reference",
+  "gaps: rule 11 product test, DF_1_NODEFLIB, $PLATFORM beyond Haswell, ld_cache not run under libFuzzer, startup counts vs origin/next not yet compared"
+ ],
+ "refused": [],
+ "improvement": "a foreground clippy over ssh took >10 min on a busy keke and had to be backgrounded; a jobrun 'lint' kind with one jobwait would be cheaper in calls",
+ "next_step": "collect the three keke jobs, fix any red, compare cbench_startup with an origin/next tree",
+ "report_file": "handoff/DL-SEARCH-CACHE-report.md",
+ "jobs": [
+  "keke:dl-search-cache-gate",
+  "keke:dl-search-cache-plants",
+  "keke:dl-search-cache-startup"
+ ]
+}

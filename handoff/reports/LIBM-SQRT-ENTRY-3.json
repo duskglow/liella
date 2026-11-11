@@ -1,0 +1,16 @@
+{"task": "LIBM-SQRT-ENTRY-3", "model": "opus", "tokens": null,
+ "result": "sqrtl's assembly entry now tested from C (conformance s10_sqrtl_entry); inexact-lost plant re-aimed; plants 7/7 CAUGHT; merged next and regenerated codemap; sqrt/sqrtf target (1.1x) still not reached, profile and design for the next step in the handoff",
+ "branch": "task/libm-sqrt-entry-3", "head": null,
+ "gate": {"affected": "11428 passed / 0 failed (32 suites; conformance 127 passed)", "peak": "16G (page cache included), oom_kill=0"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "cargo xtask codemap lists the .S macro labels SQRTL/SQRTF64X of csys/src/machine/sqrtl.S as symbols (it reads labels as written); the exported names are sqrtl/sqrtf64x",
+  "-2's inexact-lost plant could not fail: it restored MXCSR around an intrinsic root that LLVM may schedule after the restore (inference, mutant disassembly not read); replaced",
+  "hot::sqrtsd in the invtrig/hyperbolic kernels may merge into another register where the operand stays live (from -2, not checked)"
+ ],
+ "refused": [],
+ "improvement": "The plants filter `sqrt` matched only Rust paths: a plant on a .S entry should be checked against a test that reaches the exported symbol (conformance), before the 50-minute plants run",
+ "next_step": "Shrink sqrt/sqrtf's in-place path (26 instructions): cold out-of-line software arm (no frame), unzeroed stmxcsr slot, root first then one NaN test; counts before/after, then timing on Ivy Bridge and N100",
+ "report_file": "handoff/libm-sqrt-entry.md",
+ "jobs": ["libm-sqrt-entry-3-gate", "libm-sqrt-entry-3-plants", "libm-sqrt-entry-3-lint2"]}

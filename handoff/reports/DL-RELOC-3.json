@@ -1,0 +1,12 @@
+{"task": "DL-RELOC-3", "model": "opus", "tokens": null,
+ "result": "COMPLETE: dl-reloc-2-plants2 red fixed at the cause (corpus had no IRELATIVE; resolver-count assertion added; plant now CAUGHT), origin/next merged, differences row wording; #4229 memory-image reader not implemented: RULING NEEDED on slice aliasing",
+ "branch": "task/dl-reloc-3", "head": null,
+ "gate": {"affected": "dl-reloc-3-gate2: 590 passed / 0 failed", "peak": "1.5G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "#4229 memory-image reader: reader slices over the live program alias the relocator's own stores (GOT, TEXTREL text), undefined behaviour as stated", "recommendation": "image mode slicing only non-writable PT_LOADs + PT_DYNAMIC, inside() refuses stores into sliced ranges for the program; refuse a kernel-started TEXTREL program with dependencies (differences row); options in handoff/DL-RELOC.md"}],
+ "informational": ["cbench_startup rows are static Liella programs that never enter ld.so; counts recorded in the handoff, no next build counted beside them", "DL-RELOC-2's corpus comment called a 64-bound-to-IFUNC relocation IRELATIVE; the corpus had no IRELATIVE until this run"],
+ "refused": [],
+ "improvement": "a plant that survives should first be checked against the corpus (does the input even contain the case?): two plant runs here were spent before the missing IRELATIVE was found; a per-plant 'site reached' check (the mutated line executed) would show it at once",
+ "next_step": "DL-RELOC-4: implement #4229 per the coordinator's answer, then drop the /proc/self/exe re-read in boundary/src/ld.rs link()",
+ "report_file": "handoff/DL-RELOC.md",
+ "jobs": ["kanon:dl-reloc-3-gate2", "kanon:dl-reloc-3-plants2", "kanon:dl-reloc-3-counts"]}

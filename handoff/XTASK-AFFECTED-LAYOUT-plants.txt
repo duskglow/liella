@@ -1,0 +1,5 @@
+# XTASK-AFFECTED-LAYOUT: plants on the start-up layout rule of `cargo xtask affected` (rule 9).
+# Run: cargo xtask plants handoff/XTASK-AFFECTED-LAYOUT-plants.txt --dir <new-directory>
+xal-rule-removed | xtask/src/affected.rs | lit:        if repo.reaches_image(f) { ==>         if false && repo.reaches_image(f) { | cargo test -p xtask --bin xtask image_changes_select | msg:image_changes_select_the_start_up_layout_tests.*(FAILED|panicked)
+xal-ld-feature-ignored | xtask/src/affected.rs | lit:!self.test_only.contains(&key) && !self.image.off.contains(&key) ==> !self.test_only.contains(&key) | cargo test -p xtask --bin xtask image_changes_select | msg:image_changes_select_the_start_up_layout_tests.*(FAILED|panicked)
+xal-dev-deps-linked | xtask/src/affected.rs | lit:if !(section == "dependencies" || ==> if !(section.ends_with("dependencies") || | cargo test -p xtask --bin xtask image_model_and_layout | msg:image_model_and_layout_test_list_follow_the_tree.*(FAILED|panicked)

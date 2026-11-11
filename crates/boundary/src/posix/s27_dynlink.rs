@@ -3,8 +3,9 @@
 //! Implementation phase: 14 (implementation-plan.md §6). Not yet implemented.
 //!
 //! `dl_iterate_phdr` (D-27.4): a static program has two objects, as glibc reports them: the
-//! main program (name "", `AT_PHDR`/`AT_PHNUM`, bias from `PT_PHDR`, or in a static PIE the
-//! bias its start relocated it by, D-27.12) and the vDSO
+//! main program (name "", `AT_PHDR`/`AT_PHNUM`, bias from `PT_PHDR` or without one from its ELF
+//! header as `ld.so` finds it (D-27.18), or in a static PIE the bias its start relocated it by,
+//! D-27.12) and the vDSO
 //! ("linux-vdso.so.1") when the kernel provided one. `dlpi_adds` is the number of objects,
 //! `dlpi_subs` 0; the main program's `dlpi_tls_modid` is 1 and `dlpi_tls_data` the calling
 //! thread's block when it has a `PT_TLS` segment. A non-zero callback result ends the walk and is
