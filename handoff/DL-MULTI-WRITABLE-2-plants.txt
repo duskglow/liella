@@ -4,3 +4,9 @@ target-bounds-removed | crates/ld/src/boot.rs | perl:s/at >= vaddr && at\.checke
 table-overlap-first-only | crates/ld/src/boot.rs | perl:s/img\.writable\(\)\.any\(/img.writable().take(1).any(/ | cargo test -p liella-ld --lib boot | msg:boot::tests::dynamic_and_headers.*FAILED
 relro-piece-unclipped | crates/rt/src/start.rs | lit:& !mask).min(to); ==> & !mask); | cargo test -p liella-rt --lib start | msg:relro_pieces_stop_at_segment_boundaries.*FAILED
 relro-first-segment-only | crates/ld/src/reloc.rs | lit:img.protect(a, n, PROT_READ).map_err(|()| i)?; ==> img.protect(a, n, PROT_READ).map_err(|()| i)?; break; | cargo xtask so && cargo test -p liella-ld --test reloc reloc_ldso_relro | msg:plast: writing RELRO in that segment after relocation must fault
+# cargo xtask plants results (5 plants: 5 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# wrong-segment-view: CAUGHT, caught by liella_ld boot::tests::refusals
+# target-bounds-removed: CAUGHT, caught by liella_ld boot::tests::refusals
+# table-overlap-first-only: CAUGHT, caught by liella_ld boot::tests::dynamic_and_headers
+# relro-piece-unclipped: CAUGHT, caught by liella_rt start::tests::relro_pieces_stop_at_segment_boundaries
+# relro-first-segment-only: CAUGHT, caught by reloc reloc_ldso_relro_across_segments

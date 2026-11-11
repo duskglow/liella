@@ -1,54 +1,64 @@
-# DL-MULTI-WRITABLE: the self-relocator accepts any number of writable PT_LOADs
+# DL-MULTI-WRITABLE: the self-relocator and ld.so accept any number of writable PT_LOADs
 
-State: branch `task/dl-multi-writable` (from origin/next), run 1 stopped at the context checkpoint. INCOMPLETE.
-Brief: `~/state/briefs/DL-MULTI-WRITABLE.md`. Decision: D-27.25 (amends D-27.10, `ann = SEC`).
+State: branch `task/dl-multi-writable-2` (run 2, continues `task/dl-multi-writable`), head: see
+handoff/reports/DL-MULTI-WRITABLE-2.json. Brief: `~/state/briefs/DL-MULTI-WRITABLE.md` ("The change").
+Decision: D-27.25 (amends D-27.10, `ann = SEC`; the reserved id, now also records RELRO across segments).
+Plants: handoff/DL-MULTI-WRITABLE-2-plants.txt (supersedes DL-MULTI-WRITABLE-plants.txt; 5 plants).
 
-## Done (run 1)
-- `crates/ld/src/boot.rs`: `Image<'h>` keeps the program headers; `Image::writable()` lists every writable
-  `PT_LOAD` (no copy, no allocation). `image` needs >= 1 writable `PT_LOAD` and refuses one whose end overflows.
-  `tables(dynamic, &img)` refuses a table overlapping ANY writable segment. New `Memory` trait (one view per
-  segment) and `Writer` (locates each target's segment with `holds`, last segment tried first, writes through
-  that segment's view). A target in no segment, or straddling two, is `Outside`.
-- `crates/boundary/src/bootstrap.rs`: `Mapped(bias)` implements `Memory` (one `bytes_at_mut` view per store,
-  UNSAFE(slice)); `Relocated` carries the headers and `phnum` instead of one segment; pass 2 (`irelative`) uses
-  one `Writer` (views are still made after each resolver returns).
-- ld.so's program path (`boundary/src/ld.rs` `run`) calls `boot::image` unchanged, so it accepts many writable
-  segments too. `liella_ld::reloc` (ld.so's general relocator) and the image reader (`elf.rs image_span_kind`)
-  already handled any number.
-- Tests: boot unit tests `writable_segments_each_relocated` (4 segments, gaps and adjacent), `refusals` (gap,
-  past the second segment, straddling, nothing written outside), `dynamic_and_headers` (table overlapping the
-  second segment). The test memory's views run past each segment's end, so only the relocator's own check refuses.
-  `conformance/c/s01_static_pie_multi_writable.c`: s01_static_pie with pointers in three writable PT_LOADs (16 KiB
-  `.data1` + 16 KiB orphan `.liella_seg3`; probe on mei, GNU ld 2.42, gives 3 RW PT_LOADs), exits 92 if the
-  linker did not split. Plants: `handoff/DL-MULTI-WRITABLE-plants.txt` (3 plants, msg: regexes).
+## Done
+- Run 1: `crates/ld/src/boot.rs` (`Image::writable()`, `Memory`, `Writer`: each target written through the
+  segment that holds it; a target in no segment or straddling two is `Outside`), `boundary/src/bootstrap.rs`
+  (`Mapped` per-segment views), boot unit tests.
+- Run 2, check3's exit 92: `conformance/c/s01_static_pie_multi_writable.c` got fewer than 3 RW PT_LOADs because its
+  16 KiB-aligned orphan followed libc.a's `.data` by less than a page (GNU ld kept it in that segment). It now has
+  three small 16 KiB-aligned sections back to back (`.liella_seg2`, `.liella_seg3`, `.data1`): each begins ~16 KiB
+  past the one before, so at least two start a new segment whatever libc.a's data size is (ld 2.42 places the two
+  orphans in either order). Readelf on shiki: 3 RW PT_LOADs; the test passes under liella-rcrt1.o. The start
+  itself was never the problem (the constructor ran with 2 segments).
+- Run 2, RELRO across segments: `liella_rt::start::relro_pieces`/`relro_piece` protect RELRO ∩ each PT_LOAD's
+  pages. ld.so uses it for objects (`reloc::protect_relro`) and for a program it relocates itself (`ld.rs`).
+  The static start (`runtime.rs protect_relro`) keeps its one mprotect and walks the headers again only if that
+  call fails (an unmapped page between kernel-mapped segments): no added start-up work in the usual case.
+  `initial_thread` also returns the header words; no closure was added in `runtime::start` (the hot-text list
+  names its closures by number: a closure there broke `cargo xtask so`'s hot-text check, check1).
+- Tests: `rt start::relro_pieces_stop_at_segment_boundaries` (hole, adjacent, one segment, error, overflow);
+  `ld tests/reloc.rs reloc_ldso_relro_across_segments`: `split_relro_load` rewrites a linked `libr.so`'s program
+  headers (its RW PT_LOAD split in two at RELRO's last whole page; the PT_NOTE slot is reused so the table keeps
+  its size; built from the tree by the test, reproducible). Under `ld.so PROG`, relocated pointers in both
+  segments are right and writing RELRO in either segment faults (SIGSEGV).
 
-## Open failure (check3, mei)
-`conformance:s01_static_pie_multi_writable` exits 92: linked with Liella's `libc.a` and `liella-rcrt1.o` the program
-has FEWER than 3 writable PT_LOADs (the guard worked; the start itself ran). The `-nostdlib` probe split into 3; with
-libc.a's data the gap before a 16 KiB-aligned section is probably under a page somewhere. Next: `readelf -lW
-conformance/build/s01_static_pie_multi_writable` on mei, then adjust the split (e.g. 64 KiB alignment, or put the
-aligned objects after a page-sized object) until 3 RW PT_LOADs appear, and check it runs. `boot` unit tests,
-clippy and static are green on head (check3 passed static before the conformance step).
+## Open questions / notes
+- The first run-2 commit message says "Checked on a Zen 1 host"; shiki is a Haswell-EP host (Xeon E5-2697 v3).
+  Not rewritten (no history rewrite); recorded here.
+- The static start's fallback (`runtime.rs`, mprotect failed -> pieces) has no end-to-end test: it needs a static
+  PIE whose RELRO spans an unmapped page between kernel-mapped segments, which a header patch cannot make
+  (moving segments moves code). `relro_pieces` itself is unit-tested and shared.
+
+## Start-up counters (cbench_startup --compare --counters, shiki, Liella instructions; glibc in brackets)
+| row | base 672acd9aa (built in /mnt/zram/.../base) | head after RELRO commit | final head (role ~/w/sh2) |
+|---|---:|---:|---:|
+| startup_instr_c | 2150 [119766] | 2157 | 2156 [119767] |
+| startup_instr_setloc | 67910 [145024] | 67913 | 67924 [145025] |
+| startup_instr_printf | 71703 [146800] | 71714 | 71713 [146800] |
+| startup_instr_wctype | 68930 [145237] | 68942 | 68936 [145237] |
+UNRESOLVED: +6..+14 on the final head. The final RELRO path adds only the mprotect result test on the usual path
+(the per-segment walk is a cold function). The base was built and run from a different, longer directory than
+the role (argv/env/PWD lengths enter start-up), and glibc's own column moved by 1, so the comparison is not
+like for like. Next: run base and head from the SAME path (e.g. sync the base into the role after the head run, or
+both under one RAM path) and attribute any remaining delta (run 1's bootstrap changes vs this run's runtime.rs)
+before landing. ALWAYS FORWARD applies: no bound may be loosened.
 
 ## Not done (next run, in order)
-1. RELRO across segments: `rt::start::program`/`relro_at` (static start, ld.so's program path) and
-   `reloc::relro_range`/`protect_relro` (objects) protect one `[page_down(start), page_down(end))` range with ONE
-   mprotect. A `PT_GNU_RELRO` spanning two segments with a gap fails (kernel-mapped: hole -> ENOMEM after the part
-   before the hole) or (ld.so mapper) makes reservation gap pages readable. Design (keeps start-up cost): count
-   writable PT_LOADs in `program()`'s existing pass; one writable -> one mprotect as now; more -> protect
-   RELRO ∩ each PT_LOAD's pages. GNU ld 2.42 keeps RELRO inside one PT_LOAD (probes: 16 KiB-aligned `.data.rel.ro`,
-   `.fini_array` first, an `INSERT AFTER .data.rel.ro` script: none split it), so the end-to-end test needs a
-   header-patched program (as `crates/ld/tests/reloc.rs` `with_loads` does).
-2. Dynamic program with 2 and 3 writable PT_LOADs under ld.so (both ways: `ld.so PROG` and PT_INTERP): add to
-   `crates/ld/tests/reloc.rs` (corpus program built with the same `.data1`/orphan 16 KiB-aligned pointers) and a
-   `-nostdlib` PIE without dependencies in `ldso_run.rs` (goes through `boot::image` + `relocate_self`).
-3. Startup counters vs origin/next (cbench_startup, same host) and `liella::hot_text_products`.
-4. The brief's "malformed image with a target in no segment is still refused" end-to-end (unit tests cover it).
+0. Settle the start-up counters above (same path), fix any real regression.
+1. A dynamic PROGRAM with 2 and 3 writable PT_LOADs under ld.so (both `ld.so PROG` and PT_INTERP): add to
+   `crates/ld/tests/reloc.rs` (the corpus program with three back-to-back 16 KiB-aligned pointer sections, as the
+   conformance test) and a `-nostdlib` PIE without dependencies in `ldso_run.rs` (goes through `boot::image` +
+   `relocate_self`). The object path with 2 writable segments is covered by `reloc_ldso_relro_across_segments`.
+2. `liella::hot_text_products` on the merged head (the coordinator's merge; not run here).
+3. The brief's "malformed image with a target in no segment is still refused" end-to-end (unit tests `refusals`).
 
-## Jobs (mei, role s3)
-See handoff/reports/DL-MULTI-WRITABLE.json `jobs`. check1 (rc 101) was the first unit-test run: a wrong test
-expectation (the RELR run `[0x1018, 3]` writes 0x1018 before refusing 0x1020), fixed. check2 (rc 1): records
-test references must be `file::fn` without the module path, fixed.
+## Jobs (shiki, role sh2): see handoff/reports/DL-MULTI-WRITABLE-2.json `jobs`.
 
 ## Do not redo
-- The GNU ld probes above (RELRO cannot be split by source attributes or an INSERT script with ld 2.42).
+- GNU ld 2.42 probes: RELRO cannot be split across PT_LOADs by source attributes or an INSERT script (run 1).
+- A single 16 KiB-aligned section does not reliably split from libc.a's `.data` (run 2).
