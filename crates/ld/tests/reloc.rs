@@ -248,7 +248,7 @@ fn reloc_model_corpus_one_object_per_type() {
             (lo, hi) = (lo.min(bias(i) + ph.vaddr), hi.max(bias(i) + ph.vaddr + ph.memsz));
         }
         m.spans.push((lo, hi));
-        objs.push(Obj { elf, dynm: elf.dynamic().unwrap().unwrap(), bias: bias(i), name: &names[i] });
+        objs.push(Obj { elf, dynm: elf.dynamic().unwrap().unwrap(), bias: bias(i), name: &names[i], tls: None });
     }
     let syms: Vec<Object> = objs.iter().map(|o| Object::new(o.dynm).unwrap()).collect();
     let global: Vec<usize> = (0..objs.len()).collect();
@@ -345,7 +345,7 @@ fn reloc_version_check_and_refusals_in_the_model() {
     let vname = v.to_str().unwrap().as_bytes();
     let obj = |f: &'static [u8], name: &'static [u8]| {
         let elf = Elf::parse::<Native>(f).unwrap();
-        Obj { elf, dynm: elf.dynamic().unwrap().unwrap(), bias: 0, name }
+        Obj { elf, dynm: elf.dynamic().unwrap().unwrap(), bias: 0, name, tls: None }
     };
     let leak = |b: Vec<u8>| -> &'static [u8] { Box::leak(b.into_boxed_slice()) };
     let (pf, vf, stub, vname) = (leak(pf), leak(vf), leak(stub), leak(vname.to_vec()));
@@ -363,7 +363,7 @@ fn reloc_version_check_and_refusals_in_the_model() {
         Err(reloc::VersionError::Missing { by: 0, file: vname, version: b"VER_1" }),
         "missing version refused"
     );
-    assert_eq!(RelocError::Tls(18).message(), b"thread-local storage relocations are not available in this build\n");
+    assert_eq!(RelocError::Tls(36).message(), b"TLS descriptor relocations are not available in this build\n");
     std::fs::remove_dir_all(&d).ok();
 }
 
@@ -660,6 +660,97 @@ fn without_pt_phdr(ld: &Path, d: &Path, p: &Path, name: &str) {
     assert_eq!((code, sig), (Some(0), None), "{name}: ld.so PROGRAM without PT_PHDR: check number {code:?} failed; stderr: {err}");
 }
 
+/// A copy of `lib/libc.so.6` at `d/name` whose `DT_SONAME` is retagged `DT_CHECKSUM` (so a program
+/// linked against it names it by path: `ld.so` has no library search yet), changed by `edit`.
+fn libc_by_path(lib: &Path, d: &Path, name: &str, edit: impl FnOnce(&mut Vec<u8>)) -> std::path::PathBuf {
+    let mut so = std::fs::read(lib.join("libc.so.6")).unwrap();
+    let elf = Elf::parse::<Native>(&so).unwrap();
+    let dynph = elf.find(liella_ld::elf::pt::DYNAMIC).unwrap();
+    let (off, len) = (dynph.offset as usize, dynph.filesz as usize);
+    let at = (off..off + len).step_by(16).find(|&o| so[o..o + 8] == 14u64.to_le_bytes()).expect("libc.so.6 has a DT_SONAME");
+    so[at..at + 8].copy_from_slice(&0x6fff_fdf8u64.to_le_bytes());
+    edit(&mut so);
+    let out = d.join(name);
+    std::fs::write(&out, &so).unwrap();
+    out
+}
+
+/// The program of [`reloc_libc_early_init_before_preinit`]: its `.preinit_array` function, the first
+/// program code to run, records 1 when the C library has no environment yet (`getenv` of a variable
+/// the test sets), 2 when the NULL-folding copy and fill with a zero length do not return; `main`
+/// exits with what it recorded (0: initialised).
+const EARLY_PROG: &str = "#include <stdlib.h>
+#include <string.h>
+static int seen = 3;
+static void pre(int argc, char **argv, char **envp) {
+  (void)argc; (void)argv; (void)envp;
+  if (getenv(\"LIELLA_EARLY_PROBE\") == 0) { seen = 1; return; }
+  seen = 2;
+  memcpy(0, 0, 0);
+  memset(0, 0, 0);
+  seen = 0;
+}
+__attribute__((section(\".preinit_array\"), used)) static void (*pre_entry)(int, char **, char **) = pre;
+int main(void) { return seen; }
+";
+
+/// Link [`EARLY_PROG`] as a PIE against `libc` (by path) with `ld` as its interpreter.
+fn early_prog(ld: &Path, d: &Path, libc: &Path, out: &str) -> std::path::PathBuf {
+    let crt1 = target().join("liella").join("liella-crt1.o");
+    let c = d.join("early.c");
+    std::fs::write(&c, EARLY_PROG).unwrap();
+    let o = d.join(out);
+    let r = Command::new("cc").args(["-O1", "-fno-builtin", "-nostdlib", "-fPIE", "-pie"]).arg(format!("-Wl,--dynamic-linker={}", ld.display())).arg("-o").arg(&o).arg(&crt1).arg(&c).arg(libc).arg("-lgcc").output().unwrap();
+    assert!(r.status.success(), "{out}: {}", String::from_utf8_lossy(&r.stderr));
+    o
+}
+
+/// s27_1_c_8, D-27.22 (design §14): `ld.so` calls libc's `__liella_libc_early_init` before any
+/// constructor, so the program's `.preinit_array` function finds the environment published and
+/// `memcpy(NULL, NULL, 0)`/`memset(NULL, 0, 0)` return; kernel-started and as `ld.so PROGRAM`.
+#[test]
+fn reloc_libc_early_init_before_preinit() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let lib = target().join("liella");
+    if !lib.join("liella-crt1.o").exists() || !lib.join("libc.so.6").exists() {
+        eprintln!("SKIP: liella-crt1.o or libc.so.6 not built (run cargo xtask so)");
+        return;
+    }
+    let d = std::fs::canonicalize(dir("libcearly")).unwrap();
+    let libc = libc_by_path(&lib, &d, "libc-early.so", |_| {});
+    let p = early_prog(&ld, &d, &libc, "early");
+    for (how, mut cmd) in [("kernel-started", Command::new(&p)), ("ld.so PROGRAM", { let mut c = Command::new(&ld); c.arg(&p); c })] {
+        let (code, sig, err) = run(cmd.env("LIELLA_EARLY_PROBE", "1"));
+        assert_eq!((code, sig), (Some(0), None), "{how}: early init before .preinit_array: check number {code:?} failed; stderr: {err}");
+    }
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// s27_1_c_8, L14-10, D-27.22: a `libc.so.6` whose `LIELLA_PRIVATE` build tag differs from the
+/// loader's (another build) is refused at load with the diagnostic, before any of its code runs.
+#[test]
+fn reloc_libc_build_tag_mismatch_refused() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let lib = target().join("liella");
+    if !lib.join("liella-crt1.o").exists() || !lib.join("libc.so.6").exists() {
+        eprintln!("SKIP: liella-crt1.o or libc.so.6 not built (run cargo xtask so)");
+        return;
+    }
+    let d = std::fs::canonicalize(dir("libctag")).unwrap();
+    let prefix = liella_ld::start::private::TAG_PREFIX;
+    let libc = libc_by_path(&lib, &d, "libc-other.so", |so| {
+        let at = so.windows(prefix.len()).position(|w| w == prefix).expect("libc.so.6 carries a build tag") + prefix.len();
+        so[at] ^= 0x20;
+    });
+    let p = early_prog(&ld, &d, &libc, "other");
+    for (how, mut cmd) in [("kernel-started", Command::new(&p)), ("ld.so PROGRAM", { let mut c = Command::new(&ld); c.arg(&p); c })] {
+        let (code, sig, err) = run(cmd.env("LIELLA_EARLY_PROBE", "1"));
+        assert_eq!((code, sig), (Some(127), None), "{how}: a libc from another build ran; stderr: {err}");
+        assert!(err.contains("libc-other.so: LIELLA_PRIVATE build tag differs"), "{how}: the build-tag diagnostic is missing: {err}");
+    }
+    std::fs::remove_dir_all(&d).ok();
+}
+
 /// The program of [`reloc_libc_bias_without_pt_phdr`]: exits 0 when libc's view of the executable's
 /// load bias is the real one (`AT_ENTRY` minus the header's `e_entry`, found without libc's help):
 /// 1 when `dl_iterate_phdr`'s first object has another `dlpi_addr`; a `%n` in a read-only format
@@ -700,14 +791,7 @@ fn reloc_libc_bias_without_pt_phdr() {
         return;
     }
     let d = std::fs::canonicalize(dir("libcbias")).unwrap();
-    let mut so = std::fs::read(lib.join("libc.so.6")).unwrap();
-    let elf = Elf::parse::<Native>(&so).unwrap();
-    let dynph = elf.find(liella_ld::elf::pt::DYNAMIC).unwrap();
-    let (off, len) = (dynph.offset as usize, dynph.filesz as usize);
-    let at = (off..off + len).step_by(16).find(|&o| so[o..o + 8] == 14u64.to_le_bytes()).expect("libc.so.6 has a DT_SONAME");
-    so[at..at + 8].copy_from_slice(&0x6fff_fdf8u64.to_le_bytes());
-    let libc_so = d.join("libc-by-path.so");
-    std::fs::write(&libc_so, &so).unwrap();
+    let libc_so = libc_by_path(&lib, &d, "libc-by-path.so", |_| {});
     let c = d.join("bias.c");
     std::fs::write(&c, LIBC_BIAS_PROG).unwrap();
     let interp = format!("-Wl,--dynamic-linker={}", ld.display());

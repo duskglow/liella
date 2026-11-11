@@ -659,10 +659,11 @@ fn init_startup_state_statics_are_in_data1() {
         "13liella_legacy13global_locale6GLOBAL",
         "13liella_legacy13global_locale4LOCK",
         "13liella_legacy7nscache7NSCACHE",
+        "15liella_boundary5timer5EPOLL",
     ] {
         let sections: Vec<&str> = table
             .lines()
-            .filter(|l| l.split_whitespace().last().is_some_and(|n| symbol_stem(n).ends_with(suffix)))
+            .filter(|l| l.split_whitespace().last().is_some_and(|n| symbol_stem(n.rsplit_once(".llvm.").map_or(n, |(s, _)| s)).ends_with(suffix)))
             // `<value> <flags> <section>\t<size> [.hidden ]<name>`
             .filter_map(|l| l.split_once('\t').and_then(|(a, _)| a.split_whitespace().last()))
             .filter(|s| *s != "*UND*")
@@ -675,9 +676,14 @@ fn init_startup_state_statics_are_in_data1() {
 /// The input sections of the `.text` output section of a GNU ld map, in address order:
 /// (name, address, size, file). A long name sits alone on its line, the rest on the next.
 fn text_inputs(map: &str) -> Vec<(String, u64, u64, String)> {
+    output_inputs(map, ".text")
+}
+
+/// The input sections of output section `output` of a GNU ld map, as [`text_inputs`].
+fn output_inputs(map: &str, output: &str) -> Vec<(String, u64, u64, String)> {
     let hex = |s: &str| s.strip_prefix("0x").and_then(|h| u64::from_str_radix(h, 16).ok());
     let lines: Vec<&str> = map.lines().skip_while(|l| !l.starts_with("Linker script and memory map")).collect();
-    let start = lines.iter().position(|l| l.split_whitespace().next() == Some(".text") && !l.starts_with(' ')).expect("no .text output section in the link map");
+    let start = lines.iter().position(|l| l.split_whitespace().next() == Some(output) && !l.starts_with(' ')).unwrap_or_else(|| panic!("no {output} output section in the link map"));
     let mut out = Vec::new();
     for (i, l) in lines.iter().enumerate().skip(start.saturating_add(1)) {
         if !l.is_empty() && !l.starts_with(' ') {
@@ -793,11 +799,23 @@ fn init_zero_fault_clusters_sit_in_one_window() {
 /// group) or in `.text` (`cold`: after it). The start file is the first object of the link, so the
 /// pad shifts everything after it, as unrelated code of a program or the library would.
 fn padded_crt1(dir: &Path, region: &str, pad: u64) -> PathBuf {
-    let section = if region == "pre" { ".section .text.unlikely.liella_pad,\"ax\",@progbits" } else { ".text" };
+    padded_start(dir, region, pad, &root().join("target/liella/liella-crt1.o"))
+}
+
+/// [`padded_crt1`] for the start file `start`; region `data` puts the pad in `.data` (it moves the
+/// end of `.data` against the start alignment of `.data1`).
+fn padded_start(dir: &Path, region: &str, pad: u64, start: &Path) -> PathBuf {
+    let body = match region {
+        "data" => format!(".section .data.liella_pad,\"aw\",@progbits\n.fill {pad},1,0\n"),
+        "pre" => format!(".section .text.unlikely.liella_pad,\"ax\",@progbits\n.fill {pad},1,0xcc\n"),
+        // Shifts every `.lbss` object by `pad` against the page grid, as another emission order would.
+        "lbss" => format!(".section .lbss.liella_pad,\"aw\",@nobits\n.zero {pad}\n"),
+        _ => format!(".text\n.fill {pad},1,0xcc\n"),
+    };
     let (s, o, crt1) = (dir.join("pad.s"), dir.join("pad.o"), dir.join("crt1pad.o"));
-    std::fs::write(&s, format!("{section}\n.fill {pad},1,0xcc\n")).expect("pad.s");
+    std::fs::write(&s, body).expect("pad.s");
     assert!(Command::new("cc").arg("-c").arg(&s).arg("-o").arg(&o).status().expect("cc -c").success(), "pad.s does not assemble");
-    let st = Command::new("ld").arg("-r").arg("-o").arg(&crt1).arg(root().join("target/liella/liella-crt1.o")).arg(&o).status().expect("ld -r");
+    let st = Command::new("ld").arg("-r").arg("-o").arg(&crt1).arg(start).arg(&o).status().expect("ld -r");
     assert!(st.success(), "ld -r of the padded start file failed");
     crt1
 }
@@ -873,4 +891,181 @@ fn init_startup_rodata_stays_in_one_window_for_any_text_size() {
     for (pad, start, _) in &spans {
         assert_eq!(start % 65536, 0, "pad {pad:#x}: .rodata1 at {start:#x} is not 64 KiB aligned (entry.S's .rodata1 not first?)");
     }
+}
+
+/// A Rust symbol without its crate hashes (`Cs<hash>_` -> `C`) or split / ThinLTO suffixes: the form of
+/// the keys in `crates/libc-so/startup-data.keys`.
+fn unhashed_key(name: &str) -> String {
+    let name = symbol_stem(name.rsplit_once(".llvm.").map_or(name, |(s, _)| s));
+    let (mut out, mut rest) = (String::new(), name);
+    while let Some(at) = rest.find("Cs") {
+        let (head, tail) = rest.split_at(at);
+        out.push_str(head);
+        let after = tail.strip_prefix("Cs").unwrap_or(tail);
+        match after.split_once('_') {
+            Some((h, r)) if !h.is_empty() && h.bytes().all(|c| c.is_ascii_alphanumeric()) && r.starts_with(|c: char| c.is_ascii_digit()) => {
+                out.push('C');
+                rest = r;
+            }
+            _ => {
+                out.push_str("Cs");
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// LAYOUT-DATA-CLUSTERS (D-X.64): every written start-up object the page-fault trace found (kind `rw`
+/// in `crates/libc-so/startup-data.keys`) that is a `.data`/`.bss` static of at most 4 KiB sits in
+/// the `.data1` cluster of libc.a, so start-up writes the fewest pages wherever the rest of `.data`
+/// and `.bss` puts it. One left in `.data`/`.bss` is named. No spec clause (layout of the products).
+#[test]
+fn init_written_startup_objects_are_in_the_data1_cluster() {
+    let keys: std::collections::BTreeSet<String> = std::fs::read_to_string(root().join("crates/libc-so/startup-data.keys"))
+        .expect("startup-data.keys")
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .filter_map(|l| {
+            let f: Vec<&str> = l.split('\t').collect();
+            (f.len() == 3 && f[1] == "rw").then(|| symbol_stem(f[0]).to_string())
+        })
+        .collect();
+    let out = Command::new("objdump").arg("-t").arg(root().join("target/liella/libc.a")).output().expect("objdump");
+    let table = String::from_utf8_lossy(&out.stdout).into_owned();
+    let (mut moved, mut named, mut bad) = (0, 0, Vec::new());
+    for l in table.lines() {
+        // `<value> <flags> <section>\t<size> [.hidden ]<name>`
+        let Some((a, b)) = l.split_once('\t') else { continue };
+        let (Some(section), Some(size), Some(name)) = (a.split_whitespace().last(), b.split_whitespace().next().and_then(|z| u64::from_str_radix(z, 16).ok()), b.split_whitespace().last()) else { continue };
+        // Only a static in a section of its own (`.data.<symbol>`) can be moved by name; a C object in a
+        // section named otherwise (`__environ` in `.bss.environ`) is out of scope (D-X.64, open).
+        if section == ".data1" && (name.ends_with("4heap4HEAP") || ["environ", "liella_machine_fold_limit", "liella_machine_cmp_sse_null", "liella_machine_set_mid"].contains(&name)) {
+            named += 1;
+        }
+        if !keys.contains(&unhashed_key(name)) || (section != ".data1" && !section.contains(name)) {
+            continue;
+        }
+        if section == ".data1" {
+            moved += 1;
+        } else if ((section.starts_with(".data.") && !section.starts_with(".data.rel.ro")) || section.starts_with(".bss.") || section.starts_with(".lbss.")) && size <= 4096 {
+            bad.push(format!("{name} ({size} bytes) in {section}"));
+        }
+    }
+    eprintln!("written start-up objects in .data1: {moved}");
+    assert!(moved > 0, "no written start-up key is in .data1 (move_startup_state not applied?)");
+    // LAYOUT-DATA-CLUSTERS-2: heap::HEAP (over 4 KiB, named in STATE_KEY_SUFFIXES) and C's environ
+    // (by section name) are written by every start and join the cluster too, as do fold.S's start-up words.
+    assert_eq!(named, 5, "heap::HEAP, environ and fold.S start-up words not all in .data1 (STATE_KEY_SUFFIXES / STATE_C_SECTIONS / fold.S)");
+    assert!(bad.is_empty(), "written start-up objects outside the .data1 cluster (xtask/src/coldbss.rs move_startup_state): {bad:#?}");
+}
+
+/// (address, size) of section `name` in `exe` (`readelf -SW`).
+fn section_span(exe: &Path, name: &str) -> Option<(u64, u64)> {
+    let out = Command::new("readelf").arg("-SW").arg(exe).output().expect("readelf");
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    let line = text.lines().find(|l| l.split_once(']').and_then(|(_, r)| r.split_whitespace().next()) == Some(name))?;
+    let f: Vec<&str> = line.split(']').nth(1)?.split_whitespace().collect();
+    Some((u64::from_str_radix(f[2], 16).ok()?, u64::from_str_radix(f[4], 16).ok()?))
+}
+
+/// LAYOUT-DATA-CLUSTERS (D-X.64): the start-up data clusters hold whatever code lies ahead of or after
+/// the hot group. The probe linked with a start file padded by 0x800, 0x2000, 0x8000 and 0xF000 bytes
+/// (`pre`, `cold`, as the text-phase test) and with `.lbss` shifted by 0x800 and 0x2000 bytes (`lbss`, as
+/// another emission order of the large tables would): `.rodata1` sits in one 64 KiB window, `.data1` (the
+/// written start-up state, heap::HEAP and environ included: LAYOUT-DATA-CLUSTERS-2) takes exactly
+/// ceil(size / 4 KiB) pages, and the start-up, tool and fork-child fault counts are the same at every
+/// `cold` and `lbss` pad, the fork child within [`FORK_BOUND`]. Before the clusters, the `cold` pads moved the
+/// read-only data window by one (LAYOUT-STABILITY-RETHINK). No spec clause (layout of the products).
+#[test]
+fn init_data_clusters_hold_at_every_text_phase() {
+    let base = std::env::temp_dir().join(format!("liella-data-phase-{}", std::process::id()));
+    let (mut bad, mut counts) = (Vec::new(), std::collections::BTreeMap::new());
+    for region in ["pre", "cold", "lbss"] {
+        for pad in [0x800_u64, 0x2000, 0x8000, 0xF000].into_iter().filter(|p| region != "lbss" || *p < 0x8000) {
+            let dir = base.join(format!("{region}-{pad:x}"));
+            std::fs::create_dir_all(&dir).expect("temp dir");
+            let crt1 = padded_crt1(&dir, region, pad);
+            let _map = link_map(&dir, &crt1);
+            let exe = dir.join("page_faults");
+            match section_span(&exe, ".rodata1") {
+                Some((a, z)) if z > 0 && a >> 16 == (a + z - 1) >> 16 => {}
+                other => bad.push(format!("{region} {pad:#x}: .rodata1 {other:x?} not in one 64 KiB window")),
+            }
+            match section_span(&exe, ".data1") {
+                Some((a, z)) if z > 0 && ((a + z - 1) >> 12) - (a >> 12) + 1 == z.div_ceil(4096) => eprintln!("data phase {region} {pad:#x}: .data1 {a:#x}+{z:#x}"),
+                other => bad.push(format!("{region} {pad:#x}: .data1 {other:x?} takes more than ceil(size / 4 KiB) pages")),
+            }
+            // The `pre` pads also move the text windows by one (the base's own text phase, measured on
+            // LAYOUT-TEXT-PIN-9's head: true 15 -> 16 at pre 0x800), so equal counts are required at the
+            // `cold` pads, where only the data classes move, and at the `lbss` pads, which move the
+            // `.lbss` objects against the page grid (the written start-up state must not be there).
+            for mode in ["true", "tool", "fork"].into_iter().filter(|_| region != "pre") {
+                let n = faults(&exe, mode);
+                eprintln!("data phase {region} {pad:#x}: {mode} {n}");
+                counts.entry(mode).or_insert_with(Vec::new).push((format!("{region} {pad:#x}"), n));
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(&base);
+    for (mode, seen) in &counts {
+        if seen.iter().any(|(_, n)| *n != seen[0].1) {
+            bad.push(format!("{mode}: fault count moves with the text phase: {seen:?}"));
+        }
+        if *mode == "fork" && seen.iter().any(|(_, n)| *n > FORK_BOUND) {
+            bad.push(format!("fork child above its bound {FORK_BOUND}: {seen:?}"));
+        }
+    }
+    assert!(bad.is_empty(), "data phase: {bad:#?}");
+}
+
+/// LAYOUT-DATA-CLUSTERS-4 (D-X.68, D-27.10): every static PIE starts whatever the phase of its data.
+/// The static-PIE start relocates an executable with exactly one writable `PT_LOAD`, and the linker
+/// starts a new segment where the gap before a writable section reaches a page; a 16 KiB `.data1`
+/// start left a 3-page gap after `.data`, and the start refused the program (exit 127). A program
+/// with initialised TLS, a constructor and relro pointers (`.tdata` and `.init_array` ahead of
+/// `.data.rel.ro`), linked through `liella-rcrt1.o` with `.data` padded to each 4 KiB phase of a
+/// 16 KiB boundary, must have one writable `PT_LOAD` and run to exit 0. No spec clause (layout of
+/// the start object).
+#[test]
+fn init_static_pie_keeps_one_writable_segment_at_every_data_phase() {
+    let base = std::env::temp_dir().join(format!("liella-spie-phase-{}", std::process::id()));
+    std::fs::create_dir_all(&base).expect("temp dir");
+    let src = base.join("spie.c");
+    let prog = "static int ctor_ran;\n__attribute__((constructor)) static void mark(void) { ctor_ran = 1; }\n\
+                __thread int tls_seed = 7;\nstatic const char *const names[] = { \"zero\", \"one\" };\n\
+                const char *const *volatile names_ref = names;\n\
+                int main(void) { return ctor_ran == 1 && tls_seed == 7 && names_ref[1][1] == 'n' ? 0 : 3; }\n";
+    std::fs::write(&src, prog).expect("spie.c");
+    let rcrt1 = root().join("target/liella/liella-rcrt1.o");
+    let mut bad = Vec::new();
+    for pad in [0_u64, 0x800, 0x1000, 0x2000, 0x3000] {
+        let dir = base.join(format!("data-{pad:x}"));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let start = if pad == 0 { rcrt1.clone() } else { padded_start(&dir, "data", pad, &rcrt1) };
+        let exe = dir.join("spie");
+        let st = Command::new("cc")
+            .args(["-std=gnu17", "-O1", "-nostdlib", "-fno-builtin", "-static-pie", "-fPIE", "-Wl,-z,pack-relative-relocs"])
+            .arg(&start)
+            .arg(&src)
+            .arg(root().join("target/liella/libc.a"))
+            .args(["-lgcc", "-o"])
+            .arg(&exe)
+            .status()
+            .expect("cc");
+        assert!(st.success(), "data {pad:#x}: the static PIE does not link against the products");
+        let ph = Command::new("readelf").arg("-lW").arg(&exe).output().expect("readelf -l");
+        let text = String::from_utf8_lossy(&ph.stdout);
+        let writable = text.lines().filter(|l| l.split_whitespace().next() == Some("LOAD") && l.split_whitespace().nth(6).is_some_and(|f| f.contains('W'))).count();
+        if writable != 1 {
+            bad.push(format!("data {pad:#x}: {writable} writable PT_LOAD segments (the static-PIE start relocates one)"));
+        }
+        let run = Command::new(&exe).stdin(Stdio::null()).output().expect("run the static PIE");
+        if run.status.code() != Some(0) {
+            bad.push(format!("data {pad:#x}: static PIE exit status {:?}: {}", run.status.code(), String::from_utf8_lossy(&run.stderr).trim()));
+        }
+    }
+    let _ = std::fs::remove_dir_all(&base);
+    assert!(bad.is_empty(), "static PIE data phase: {bad:#?}");
 }
