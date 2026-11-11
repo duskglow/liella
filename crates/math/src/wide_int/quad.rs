@@ -392,10 +392,11 @@ fn reduce(m: u128, e: i32) -> Option<Reduced> {
     let (w, r) = (p / 64, (p % 64) as u32);
     let g = |i: usize| {
         let a = word(w + i);
-        if r == 0 { a } else { (a << r) | (word(w + i + 1) >> (64 - r)) }
+        u128::from(if r == 0 { a } else { (a << r) | (word(w + i + 1) >> (64 - r)) })
     };
-    // The window, least significant word first.
-    let a: [u128; 7] = core::array::from_fn(|k| u128::from(g(6 - k)));
+    // The window, least significant word first. Written out: `core::array::from_fn` here stayed
+    // an out-of-line call of about 150 instructions once `reduce` had three callers.
+    let a: [u128; 7] = [g(6), g(5), g(4), g(3), g(2), g(1), g(0)];
     let (m0, m1) = (m & M64, m >> 64);
     // P = m·W mod 2^448, column by column (m1 < 2^49: each column sum fits 128 bits).
     let mut pw = [0u64; 7];
