@@ -1,0 +1,9 @@
+{"task": "COMPARE-ENTRY-RECORD", "model": "opus", "tokens": null,
+ "result": "SR-88 (section 3) records COMPARE-ENTRY-RETHINK-2's negative result: H2/S1/(c) (#3977), per-ISA entries S/A/B and bound pointer P with the rethink's tables, classed swap ruled off (#3994); records only",
+ "branch": "task/compare-entry-record", "head": null,
+ "gate": {"affected": "n/a (records only); records check + static green", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["The H2/-2/-3 stories' own handoffs are not on next; SR-88 uses the rethink-2 handoff's summary of them"], "refused": [],
+ "improvement": "A rethink's brief could require it to write its own NEGATIVE saturation record before hand-back, so a 'no' ruling needs no separate story",
+ "next_step": "Optional: measure whether the 29.3 us static-start cost of the classed swap is shared by all families using it",
+ "report_file": "handoff/compare-entry-record.md",
+ "jobs": ["kanon:compare-entry-record-static2"]}
