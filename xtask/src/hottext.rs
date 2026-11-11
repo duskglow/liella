@@ -666,10 +666,17 @@ fn cluster_align(bytes: u64, min: u64) -> u64 {
     bytes.next_power_of_two().max(min).min(WINDOW)
 }
 
-/// An alignment at or above this on a grouped section was set by [`group`] (functions ask for
-/// at most a cache line); a section that is no longer a cluster head goes back to [`PLAIN_ALIGN`].
-const CLUSTER_MARK: u64 = 1024;
-const PLAIN_ALIGN: u64 = 64;
+/// The new alignment of each cluster head whose alignment differs, (member, name, alignment).
+/// `grouped` is (member, name, size, alignment) as in the archive, which `so` copies fresh from
+/// cargo's build on every run: every alignment there is the one its object asked for, and every
+/// section that heads no cluster keeps it. Some ask for a page themselves: machine/fold.S's
+/// classed memset pages (the start-up swap moves one page over the other, D-4.53).
+fn head_alignments(grouped: &[(String, String, u64, u64)], heads: &BTreeMap<(String, String), u64>) -> Vec<(String, String, u64)> {
+    grouped
+        .iter()
+        .filter_map(|(m, n, _, a)| heads.get(&(m.clone(), n.clone())).filter(|h| *h != a).map(|h| (m.clone(), n.clone(), *h)))
+        .collect()
+}
 
 /// (name, size, alignment) of every section of the ELF64 little-endian object `obj`, read from
 /// its section headers. Not `readelf -SW`: it cuts names at 256 bytes, so a long mangled name
@@ -911,14 +918,14 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     // LAYOUT-TEXT-PIN (D-X.63): the head of each 0-fault cluster gets the smallest power-of-two
     // alignment not below the cluster's size, so the cluster sits inside one fault-around window
     // wherever the rest of the program moves the group (CLUSTER-WINDOW). Done after the renames,
-    // on the final names; a head left from an earlier run on this archive goes back to plain.
+    // on the final names; every other section keeps its own ([`head_alignments`]).
     let mut realign: BTreeMap<String, Vec<(String, u64)>> = BTreeMap::new();
-    let mut heads = BTreeSet::new();
+    let mut heads = BTreeMap::new();
     for c in &clusters {
         let mut secs: Vec<(String, u64, u64)> = grouped
             .iter()
             .filter(|(_, n, _, _)| position_of(n).is_some_and(|p| (c.first..=c.last).contains(&p)))
-            .map(|(_, n, s, a)| (n.clone(), *s, if *a >= CLUSTER_MARK { PLAIN_ALIGN } else { *a }))
+            .map(|(_, n, s, a)| (n.clone(), *s, *a))
             .collect();
         let min = secs.iter().map(|s| s.2).max().unwrap_or(1);
         let bytes = cluster_bytes(&mut secs);
@@ -927,17 +934,12 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
         };
         let align = cluster_align(bytes, min);
         println!("so: hot-text cluster {}: positions {}..={}, {} sections, {bytes} bytes, aligned {align}", c.name, c.first, c.last, secs.len());
-        for (m, n, _, a) in grouped.iter().filter(|g| g.1 == head) {
-            heads.insert((m.clone(), n.clone()));
-            if *a != align {
-                realign.entry(m.clone()).or_default().push((n.clone(), align));
-            }
+        for (m, n, _, _) in grouped.iter().filter(|g| g.1 == head) {
+            heads.insert((m.clone(), n.clone()), align);
         }
     }
-    for (m, n, _, a) in &grouped {
-        if *a >= CLUSTER_MARK && !heads.contains(&(m.clone(), n.clone())) {
-            realign.entry(m.clone()).or_default().push((n.clone(), PLAIN_ALIGN));
-        }
+    for (m, n, a) in head_alignments(&grouped, &heads) {
+        realign.entry(m).or_default().push((n, a));
     }
     for (m, list) in &realign {
         let mut cmd = Command::new(&objcopy);
@@ -951,8 +953,7 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     }
     if !changed.is_empty() {
         crate::so::run(Command::new(ar).current_dir(work).arg("r").arg(&archive).args(&changed))?;
-    }
-    let checked = check_renames(&archive_headers(&archive)?, &renames).map_err(|e| format!("{}: hot-text grouping: {e}", archive.display()))?;
+    }    let checked = check_renames(&archive_headers(&archive)?, &renames).map_err(|e| format!("{}: hot-text grouping: {e}", archive.display()))?;
     println!("so: hot-text grouping: {checked} section renames, all in effect");
     let _ = fs::remove_dir_all(work);
     if startup != 1 {
@@ -1331,6 +1332,20 @@ mod tests {
             let lo = start.next_multiple_of(a);
             assert_eq!(lo / WINDOW, (lo + size - 1) / WINDOW);
         }
+    }
+
+    #[test]
+    fn sections_keep_their_own_alignment_unless_they_head_a_cluster() {
+        // LAYOUT-TEXT-PIN-7 (no spec clause: layout of the products, D-X.63; the classed pages, D-4.53):
+        // a section that asks for a page itself (the classed memset pages) keeps it when it heads no
+        // cluster (it went to 64 bytes and the swap's mremap could not run); a head gets the
+        // cluster's alignment, and only a head whose alignment differs is changed.
+        let g = |n: &str, a: u64| ("a.o".to_string(), n.to_string(), 8192_u64, a);
+        let k = |n: &str| ("a.o".to_string(), n.to_string());
+        let grouped = vec![g(".text.sorted.h00115.classed", 4096), g(".text.sorted.h00002.head", 64), g(".text.sorted.h00003.big", 2048), g(".text.sorted.h00004.same", 16384)];
+        let heads = BTreeMap::from([(k(".text.sorted.h00002.head"), 32768), (k(".text.sorted.h00004.same"), 16384)]);
+        assert_eq!(head_alignments(&grouped, &heads), vec![("a.o".to_string(), ".text.sorted.h00002.head".to_string(), 32768)]);
+        assert!(head_alignments(&grouped, &BTreeMap::new()).is_empty(), "a section that heads no cluster keeps its own alignment");
     }
 
     #[test]
