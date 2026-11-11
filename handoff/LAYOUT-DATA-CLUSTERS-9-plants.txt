@@ -1,0 +1,8 @@
+# LAYOUT-DATA-CLUSTERS-9 plants (cargo xtask plants; docs/plants.md). Fast products (the gate's profile).
+# ldc9-locale-set: the first setlocale's statics dropped from the declared list: setlocale's read and write
+# faults on the last `.bss` page come back (setlocale + printf 51 -> 53, LOCALE_BOUND 52).
+# ldc8-time-compat (-8's change): time_compat's HEAD dropped: the release first localtime_r pays one fault for
+# it again (release 17 -> 18). The fast products read 19 with or without it and LOCALTIME_BOUND (20) is the
+# larger profile's count plus 1, so no gate test sees this release-only level (handoff probes measure it).
+ldc9-locale-set | crates/libc-so/startup-state.list | perl:s/\nliella_legacy::global_locale::MAPS\n.*?liella_boundary::process::SECURE\n/\n/s | cargo test -p liella --test hot_text_products -- init_short_programs init_coreutils_shaped | msg:setlocale \+ printf program: [0-9]+ page faults > 52
+ldc8-time-compat | crates/libc-so/startup-state.list | perl:s/\nliella_legacy::time_compat::HEAD\n/\n/ | cargo test -p liella --test hot_text_products -- init_first_localtime_r | equivalent:release-only level (localtime 17 vs 18); the fast gate profile reads 19 either way and LOCALTIME_BOUND (20) is the larger profile's count plus 1

@@ -125,6 +125,20 @@ symbol stderr
 liella_legacy::global_locale::GLOBAL
 liella_legacy::global_locale::LOCK
 liella_legacy::global_locale::C
+# The first setlocale reads, then writes, the table counters and the secure-mode flag `process::secure`
+# caches. LAYOUT-DATA-CLUSTERS-9: once program_invocation_name is in the cluster, start-up no longer touches
+# the last `.bss` page, and the first of these left there costs setlocale a read and a write fault on it
+# (setlocale + printf and tool +1 against next); declared one at a time, the faults moved to the next one
+# (NAME_COUNT, then SECURE, then GENERATION and MAPS), so the set is declared together.
+liella_legacy::global_locale::MAPS
+liella_legacy::global_locale::COUNT
+liella_legacy::global_locale::NAME_COUNT
+liella_legacy::global_locale::FILE_COUNT
+liella_legacy::global_locale::GENERATION
+liella_legacy::global_locale::QUERY_SEQ
+liella_legacy::global_locale::QUERY_HANDLE
+liella_legacy::global_locale::QUERY_SLOT
+liella_boundary::process::SECURE
 liella_legacy::nscache::NSCACHE
 # The first zone load (localtime_r, tzset). time_compat's HEAD and CURRENT: the first localtime_r writes both
 # (LAYOUT-DATA-CLUSTERS-8: one fault each on untouched `.bss` pages; release localtime 19 before, 17 after, as next).
