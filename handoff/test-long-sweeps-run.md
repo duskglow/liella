@@ -1,60 +1,50 @@
-# TEST-LONG-SWEEPS-RUN: the ignored sweeps of liella-math run somewhere
+# TEST-LONG-SWEEPS-RUN(-2): the ignored sweeps of liella-math run somewhere
 
-State: branch `task/test-long-sweeps-run` (from origin/next), code commit 755cc31c6. Tests and runner only, no libc
-code change. Brief: `~/state/briefs/TEST-LONG-SWEEPS-RUN.md`. No new decision record (a test runner, local).
+State: branch `task/test-long-sweeps-run-2` (TEST-LONG-SWEEPS-RUN's branch plus a merge of origin/next), code head
+61d5dac09. Tests and runner only, no libc code change. Spec: `~/state/briefs/TEST-LONG-SWEEPS-RUN.md`; this run's
+brief `~/state/briefs/TEST-LONG-SWEEPS-RUN-2.md` (merge only, wire rulings #4750/#4751). No decision record (a local
+test runner).
 
-## 1. The five `*_long` sweeps on origin/next (job `test-long-sweeps-run-sweeps`, shiki, release, 7 cores)
+## What exists
 
-| sweep | result | wall |
-|---|---|---|
-| `wide_int::arc::tests::arc_tier_agrees_with_the_wide_route_long` | pass (worst 2^-96.85, Tan) | 99.2 s |
-| `wide_int::quad::arc::tests::tier_agrees_with_the_wide_route_long` | pass (worst 2^-161.39) | 28.4 s |
-| `wide_int::quad::tests::tier_agrees_with_the_wide_route_long` | pass (worst 2^-158.25) | 36.5 s |
-| `wide_int::tests::tier_agrees_with_the_wide_route_long` | pass (worst 2^-95.67) | 29.9 s |
-| `wide_int_el::tests::tier_agrees_with_the_wide_route_long` | pass (worst 2^-103.57, Expm1) | 154.3 s |
+- `cargo xtask long-sweeps [--group long|exhaustive|count|all] [--list]` (`xtask/src/longsweeps.rs`): runs each
+  ignored sweep of liella-math once in release by exact name, fails naming any sweep that failed or did not run
+  exactly one test.
+- Groups. `long`: the five wide_int family `*_long` sweeps, `complex_fast::tests::cexp_quick_tier_sweep`,
+  `complex_fast::ls_tests::clog_csqrt_quick_tier_sweep` (new from next, added in -2), `fast_bessel_n`'s
+  `bessel_n_tier_sweep`. `count`: the two Ziv retry counts. `exhaustive`: the 24 fast32 f32 sweeps.
+- `cargo xtask test` with `LIELLA_NO_VERDICT_CACHE=1` (nightly and release) runs `long` and `count` (ruling
+  #4751, added in -2) as step `long-sweeps`. The ordinary gate is unchanged.
+- Static check `long-sweeps`: every `#[ignore]` in `crates/math/{src,tests}` is a `SWEEPS` or `NOT_SWEEPS` row,
+  every row names an existing ignored test. It caught next's new clog/csqrt sweep on this run's merge.
 
-No failure, so nothing to fix (step 2). Budget for un-ignoring: under 10 s each in the normal (opt-level 2) test run.
-None comes close, so all stay `#[ignore]`d and go into the runner (step 3).
+## -2 (this run)
 
-## 2. The runner: `cargo xtask long-sweeps` (`xtask/src/longsweeps.rs`)
+- Merge of origin/next. Conflict in `crates/math/src/wide_dd.rs`: WIDE-DD-EXPM1-BOUND un-ignored the wide_dd sweep
+  (now `tier_agrees_with_the_wide_route`, 40 000 operands, ordinary run). Kept next's side and dropped the runner's
+  wide_dd row. Conflict in `xtask/src/main.rs`: kept both static checks (`float-casts` from next, `long-sweeps`).
+- Ruling #4751: count group measured on shiki (Haswell-EP, 26 threads, load ~1), job `test-long-sweeps-run-2-count`:
+  230 s wall, of which ~3.8 min release build; `random_sample_retry_count` 1.2 s and `accuracy_suite_retry_count`
+  1.9 s of test time (the runner's per-sweep lines, 194.8 s and 34.7 s, include their builds). Added to the nightly.
+- Ruling #4750: the weekly `cargo xtask long-sweeps --group exhaustive` on an idle build host is a schedule outside
+  the repository (liella-ops); the runner's docs name it. The coordinator schedules the job.
 
-- `SWEEPS` names every ignored sweep of liella-math with a group. `long`: the five above plus `wide_dd`'s
-  `tier_agrees_with_the_wide_route_long`, `complex_fast::tests::cexp_quick_tier_sweep` and `fast_bessel_n`'s
-  `bessel_n_tier_sweep`. `exhaustive`: the 24 fast32 exhaustive f32 sweeps. `count`: the two Ziv retry counts.
-- Existing entry point: `cargo xtask test` with `LIELLA_NO_VERDICT_CACHE=1`, the nightly and release runs that run
-  every accuracy shard (D-10.57). It now runs the `long` group as step `long-sweeps`. The ordinary gate is unchanged.
-- `exhaustive` and `count` run only through `cargo xtask long-sweeps --group exhaustive|count`. Nothing schedules
-  them yet (RULING NEEDED below).
-- Each sweep runs by exact name with `--ignored --exact`. A run that does not show exactly one passing test fails,
-  so a stale name cannot pass by running nothing.
-- Static check `long-sweeps` (in `cargo xtask static` and in the xtask unit test `the_tables_match_the_tree`):
-  every `#[ignore]` in `crates/math/{src,tests}` is a `SWEEPS` row or a `NOT_SWEEPS` row with its reason, and every
-  row names an ignored test that exists. NOT_SWEEPS: `gamma_sweep_profile` (diagnostic, asserts nothing) and
-  `complex_directed`'s F80/F128 grids (open M6-10 findings, fail by design).
-- Ignore reasons and comments that named a nonexistent "accuracy job" now name the runner (wide_int family,
-  wide_dd, cexp, bessel_n, and the `LIELLA_ERF_SWEEP` comment in `fast_special.rs`).
+## Jobs (-2, shiki role sh1, head 61d5dac09)
 
-## 3. Jobs (shiki, role sh1)
+- `-lint` (merge head 0a803f8ae): static red, `long-sweeps` named next's unlisted `clog_csqrt_quick_tier_sweep`.
+  Fixed in 61d5dac09. `-lint2`: clippy, static and the xtask `longsweeps::` tests green.
+- `-count`: count group, rc 0 (numbers above).
+- `-plants` (`handoff/TEST-LONG-SWEEPS-RUN-plants.txt`; results in `handoff/TEST-LONG-SWEEPS-RUN-2-plants.txt`):
+  5 plants, 4 CAUGHT, 1 EQUIVALENT, 0 SURVIVED, 0 WARN.
+- `-runner` (`long` group on the final head): wide_int 32.9 s, wide_int_el 167.0 s, quad 39.0 s, arc 100.5 s,
+  quad::arc 30.4 s, cexp 167.9 s, clog_csqrt 350.1 s, all ok. bessel_n and the job's rc are in `~/logs/test-long-sweeps-run-2-runner.log`.
+- `-gate` (affected --run --base origin/next): its result is in jobs.tsv, see the hand-back.
 
-`test-long-sweeps-run-sweeps` (the five on origin/next), `-clippy`, `-static` (static plus the xtask unit tests),
-`-gate` (affected --run --base origin/next), `-plants` (`handoff/TEST-LONG-SWEEPS-RUN-plants.txt`, 4 plants:
-row dropped, stale row tolerated, macro ignore missed, zero tests read as a pass), `-runner` (the `long` group run
-through the new runner on this head; evidence, includes `wide_dd`, known red in #4741). Results: see the report.
+## Open / follow-ups
 
-## RULING NEEDED
+- Schedule the weekly exhaustive job (ops side, #4750).
+- TEST-LONG-SWEEPS-BOUNDARY (#4752): crates/boundary's ignored "accuracy job" tests (`exp_quick.rs`,
+  `trig_quick.rs`) and env-scaled ones (`hyperb_quick.rs`, `invhyp_quick.rs`): extend `SWEEPS` with a package
+  column and the static check to crates/boundary.
 
-- Schedule the `exhaustive` group (24 sweeps of 2^32 to 2^34 calls each; earlier runs went past 150 min together
-  under load). Recommendation: a weekly `cargo xtask long-sweeps --group exhaustive` job on an idle build host. The
-  nightly would stay at the `long` group (~6 to 10 min on 7 cores).
-- Run the `count` group with the nightly too (unmeasured here). Recommendation: measure it once, then add it to
-  `test`'s step if it takes a few minutes.
-
-## INFORMATIONAL / follow-ups
-
-- crates/boundary has ignored "accuracy job" tests as well (`exp_quick.rs`, `trig_quick.rs`) and env-scaled ones
-  that claim a long accuracy job (`hyperb_quick.rs`, `invhyp_quick.rs`). This story's check covers only crates/math.
-  Follow-up TEST-LONG-SWEEPS-BOUNDARY: extend `SWEEPS` with a package column and the check to crates/boundary.
-- `wide_dd`'s long sweep fails (#4741, WIDE-DD-EXPM1-BOUND owns it). Until that lands, the nightly `long-sweeps`
-  step is red on it, which is correct.
-
-Next step: the coordinator rules on scheduling; then TEST-LONG-SWEEPS-BOUNDARY.
+Next step: the coordinator schedules the weekly exhaustive job; then TEST-LONG-SWEEPS-BOUNDARY.
