@@ -1,9 +1,19 @@
-# LIBM-F64-SPECIAL-QUICK(-2, -3): erf/erfc quick phase (part 1 of the special-function quick phases)
+# LIBM-F64-SPECIAL-QUICK(-2, -3, -4): erf/erfc quick phase (part 1 of the special-function quick phases)
 
-State (-3, 2026-11-11): branch `task/libm-f64-special-quick-3` = -2's code head 130f3f328 merged with origin/next
-aad3df74d (merge d8099c0f2, no conflicts; the brief measures on the merged head). No code change in -3. Role
-keke:~/w/n2 (Zen 1). Decision D-10.84 (`records/decisions/D-10/D-10.84.toml`); also D-10.13, D-10.51. Plants:
-handoff/LIBM-F64-SPECIAL-QUICK-2-plants.txt.
+State (-4, 2026-11-11): branch `task/libm-f64-special-quick-4` = -3's head d4376b95b merged with origin/next
+ca8aa835a (merge 5350fa888, no conflicts). No code change in -3 or -4. Role keke:~/w/r1 (Zen 1). Decision D-10.84
+(`records/decisions/D-10/D-10.84.toml`); also D-10.13, D-10.51. Plants: handoff/LIBM-F64-SPECIAL-QUICK-2-plants.txt.
+
+## -4: the start-up fault bounds hold on the merged head (the layout data-cluster work is in next)
+
+`cargo xtask so && cargo test -p liella --test hot_text_products -- --nocapture` on the merged head (keke, fast
+profile, job `libm-f64-special-quick-4-hottext2`): 21 passed. true **12** (bound 17), setlocale + printf **52** (55),
+coreutils-shaped tool **55** (58), fork child 6 (7), localtime 19, float 3; every run equal to its warm-up. The -3
+reds (18/57/60) are gone, as -3 predicted once the start-up data objects are keyed. (First attempt
+`-hottext` failed only because the fresh role had no products: `ld: cannot find target/liella/libc.a`; superseded.)
+Then the -2 gate (records check, workspace clippy -D warnings, xtask clippy, static, `affected --run --base
+origin/next`) and the -2 plants file on this head: jobs `libm-f64-special-quick-4-gate`, `-plants` (results in the
+report, handoff/reports/LIBM-F64-SPECIAL-QUICK-4.json).
 
 ## -3: the start-up page-fault reds (CI trains 582/583) are a codegen/phase effect, not erf placement
 
@@ -91,12 +101,12 @@ lgamma/_pos/_neg, tgamma/_pos/_neg, j0, j1, y0, y1); add it and profile both bui
 static; rc 0), `-faults-next` and `-faults-head` (evidence above; rc 0 is the script, the head's test reads FAILED
 18/57/60 inside its log), `-pads` (pad sweep). Superseded: `-lint0` (the inherited head 9bf232d73 before the merge, rc 0).
 
-## Not done (next: held for the layout fix, then LIBM-F64-SPECIAL-QUICK-REST)
+-4 jobs (keke): `libm-f64-special-quick-4-lint0` (inherited head d4376b95b: xtask clippy + static, rc 0),
+`-hottext2` (fault bounds above), `-gate`, `-plants` (merged head). Superseded: `-hottext` (no products built).
 
-0. Exact next step: once LAYOUT-DATA-CLUSTERS / LAYOUT-TEXT-PIN land (or the coordinator rules on the option above),
-   merge next again, run `cargo test -p liella --test hot_text_products -- --nocapture` on the role (or
-   `bash ~/work/LIBM-F64-SPECIAL-QUICK-3/measure.sh <tree> <outdir>` for the attribution), then the -2 gate, plants
-   and counts on that head.
+## Not done (next: LIBM-F64-SPECIAL-QUICK-REST, which builds on this branch)
+
+0. Exact next step: this branch lands; then LIBM-F64-SPECIAL-QUICK-REST starts with item 1.
 1. SSE2 erf_series +1 (above; owner precedent #4424 accepted it for landing, fixed first in -REST). 2. Booked timing Ivy Bridge / N100 for erf/erfc (target <= 1.3x IVB). 3. erfc above 1
 (`e^(−x²)·Y`; plan in D-10.84's "Not in this decision"; quick Y from ERFCX_T restricted to x < 8, `e^(−x²)` from the
 exp quick kernel with `zl` as `y·(1 + zl)`). 4. erf series below 2^-5 (SSE2 153 vs 63). 5. lgamma, tgamma, Bessel four.
