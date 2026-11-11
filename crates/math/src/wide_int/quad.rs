@@ -362,7 +362,6 @@ fn div3(n: W3, d: W3) -> W3 {
 }
 
 /// Word `i` of the bits of `2/π` behind three zero words (bit `j` of `2/π` at bit `j + 191`).
-#[inline(always)] // 14 calls per reduction: with two reductions (kernel, both) it went out of line
 fn word(i: usize) -> u64 {
     match i.checked_sub(3) {
         Some(k) => t::TWO_OVER_PI[k],
