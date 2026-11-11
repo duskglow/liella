@@ -1,0 +1,28 @@
+{
+ "task": "LIBM-F128-TRIG-INT",
+ "model": "opus",
+ "tokens": null,
+ "result": "sinf128/cosf128 three-limb integer tier: 82434 -> 1257 instructions per call (glibc 7250, 0.17x); proved 2^-156, 10^7 sweep worst 2^-158.25, 0 undecided",
+ "branch": "task/libm-f128-trig-int",
+ "head": "22961c258",
+ "gate": {
+  "affected": "187 passed / 0 failed",
+  "peak": "354M"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "Timing not taken (story split): instructions only; LIBM-F128-TRIG-INT-2 books it"
+ ],
+ "refused": [],
+ "improvement": "A shared bigint/continued-fraction helper for near-multiple sweeps would serve every format's reduction proof (written twice now)",
+ "next_step": "LIBM-F128-TRIG-INT-2: booked timing, tanf128/sincosf128 and the f128 inverse functions on this kernel",
+ "report_file": "handoff/libm-f128-trig-int.md",
+ "jobs": [
+  "shiki:libm-f128-trig-int-gate",
+  "shiki:libm-f128-trig-int-plants",
+  "shiki:libm-f128-trig-int-sweep",
+  "shiki:libm-f128-trig-int-percall",
+  "shiki:libm-f128-trig-int-static-final2"
+ ]
+}

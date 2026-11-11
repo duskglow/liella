@@ -72,6 +72,20 @@ fn count_auxv(addr: usize) -> usize {
     }
 }
 
+/// The first 64 bytes of the page at `at`, which holds the executable's program headers: the
+/// candidate ELF header `liella_rt::start::bias` checks when the program has no `PT_PHDR`
+/// (`process::exe_bias`, D-27.21). Not called at start-up.
+pub(crate) fn exe_header(at: usize) -> [u8; 64] {
+    let mut out = [0u8; 64];
+    // UNSAFE(slice): the start of the mapped page holding the executable's program headers.
+    #[allow(unsafe_code)]
+    // SAFETY: `at` is `AT_PHDR` rounded down to its 4096-byte page (⚑ KERN); the kernel maps the
+    // headers readable in that page, and the 64 bytes from its start lie inside it.
+    let page = unsafe { conv::bytes_at(at, out.len()) };
+    out.copy_from_slice(page);
+    out
+}
+
 /// A static program's initial thread: map its static TLS and thread block, copy the TLS image,
 /// set the guards from `AT_RANDOM`, and make it the thread pointer. Returns what the headers
 /// said (the TLS image and the RELRO pages), read once. `PIE`: started by `liella-rcrt1.o`, the
@@ -158,13 +172,33 @@ fn initial_thread<const PIE: bool>(aux: &Auxv<'_>) -> (start::Program, Option<bo
 /// and their target words lie in `.got` inside RELRO), and nothing after it writes there.
 /// A dynamically linked program's segments are its loader's (phase 14). The range comes from
 /// the one header pass `initial_thread` made (STATIC-RELRO-2: no second walk of the headers or
-/// the auxiliary vector on the start-up path).
+/// the auxiliary vector on the start-up path). A `PT_GNU_RELRO` that spans two writable
+/// segments with an unmapped page between them makes that one call fail (D-27.25): only then
+/// does `relro_by_segment` walk the headers again, so the usual start carries nothing more
+/// than the test of the call's result (the fallback takes no argument: nothing is kept live
+/// across the call for it).
 #[inline(always)]
 fn protect_relro(range: Option<(usize, usize)>) {
     if let Some((addr, len)) = range {
-        // A failure (not seen in practice) leaves the segment writable: the program still runs.
-        let _ = raw::mprotect(addr, len, i32::try_from(PROT_READ).unwrap_or(1));
+        if raw::mprotect(addr, len, i32::try_from(PROT_READ).unwrap_or(1)).is_err() {
+            relro_by_segment();
+        }
     }
+}
+
+/// `PT_GNU_RELRO` made read-only segment by segment (D-27.25), after the single `mprotect` of
+/// the whole range failed: the executable's headers from `AT_PHDR`/`AT_PHNUM` of the saved
+/// auxiliary vector (`process::auxval`), at its bias (`EXE_BIAS`: set by a static PIE's start, 0
+/// for a fixed-address program).
+#[cold]
+#[inline(never)]
+fn relro_by_segment() {
+    let get = |k: u64| process::auxval(k).and_then(|v| usize::try_from(v).ok()).unwrap_or(0);
+    let (phdr, phnum) = (get(AT_PHDR), get(AT_PHNUM));
+    let words = conv::program_headers(phdr, phnum.saturating_mul(start::PHDR_WORDS));
+    let prot = i32::try_from(PROT_READ).unwrap_or(1);
+    // A failure of a piece (not seen in practice) leaves it writable: the program still runs.
+    let _ = start::relro_pieces(words, phnum, process::EXE_BIAS.load(Relaxed), start::PAGE, |a, l| raw::mprotect(a, l, prot));
 }
 
 /// Secure mode: drop the unsafe variables from the initial environment array, in place.
@@ -263,6 +297,56 @@ extern "C" fn run_fini() {
 #[allow(clippy::as_conversions)] // a function pointer's address: the only spelling Rust has
 fn addr0(f: Fn0) -> usize {
     f as usize
+}
+
+/// Start step 3 for [`early_init`]: `environ`, the arguments (the native interface's), the program
+/// names and `__libc_stack_end`, as [`start`] publishes them (kept apart so the static start's code
+/// and its hot-text keys stay as they are; DL-14 makes `start` skip its copy under Liella's `ld.so`).
+fn publish(argv_addr: usize, n_args: usize, envp: usize, stack_end: usize) {
+    ffi::environ.store(envp, Release);
+    process::ARGV.store(argv_addr, Release);
+    process::ARGC.store(n_args, Release);
+    if n_args > 0 {
+        // UNSAFE(slice): argv[0] and its text.
+        #[allow(unsafe_code)]
+        // SAFETY: argv has argc entries before its NULL (⚑ KERN).
+        let argv0 = unsafe { conv::words_at(argv_addr, 1) }.first().and_then(|&p| usize::try_from(p).ok()).unwrap_or(0);
+        // UNSAFE(slice): the text of argv[0].
+        #[allow(unsafe_code)]
+        // SAFETY: argv[0] is NULL or a NUL-terminated string on the initial stack.
+        let name = unsafe { strz::strz(core::ptr::with_exposed_provenance(argv0)) }.unwrap_or(&[]);
+        let short = start::short_name(name);
+        ffi::program_invocation_name.store(argv0, Release);
+        ffi::program_invocation_short_name.store(argv0.wrapping_add(name.len().saturating_sub(short.len())), Release);
+    }
+    ffi::__libc_stack_end.store(stack_end, Release);
+}
+
+/// `__liella_libc_early_init` (`LIELLA_PRIVATE`, plan/ph14/design.md §14, D-27.22): Liella's
+/// `ld.so` calls it after relocation and before any constructor, `.preinit_array` included, so
+/// constructors see an initialised C library: the auxiliary vector, steps 3 and 4 (`environ`, the
+/// program names, `__libc_stack_end`, the tunables and the CPU paths). The NULL-folding guard is
+/// decided at the first small copy or fill (`dispatch::resolve_fold`). `__libc_start_main` runs
+/// the same steps again with the same values (DL-14 makes it skip them).
+pub fn early_init(info: usize) {
+    // UNSAFE(slice): the start description `ld.so` passes.
+    #[allow(unsafe_code)]
+    // SAFETY: `ld.so` passes the address of a live, aligned `StartInfo` on its stack for the call
+    // (design §14); NULL is ignored.
+    let Some(info) = (unsafe { core::ptr::with_exposed_provenance::<liella_rt::start::private::StartInfo>(info).as_ref() }) else { return };
+    let auxv_words = count_auxv(info.auxv);
+    process::AUXV_WORDS.store(auxv_words, Release);
+    process::AUXV_ADDR.store(info.auxv, Release);
+    // UNSAFE(slice): the auxiliary vector, measured above.
+    #[allow(unsafe_code)]
+    // SAFETY: `count_auxv` measured these words on the initial stack `ld.so` describes.
+    let aux = Auxv::from_words(unsafe { conv::words_at(info.auxv, auxv_words) });
+    crate::sys::set_sysinfo_ehdr(aux.get(AT_SYSINFO_EHDR).and_then(|v| usize::try_from(v).ok()).unwrap_or(0));
+    publish(info.argv, info.argc, info.envp, info.stack_end);
+    // The tunables without diagnostics (`ld.so` read the string already).
+    let secure = aux.get(AT_SECURE).is_some_and(|v| v != 0);
+    let tunables = process::getenv(crate::startup_names::GLIBC_TUNABLES).map_or(Tunables::default(), |v| Tunables::parse(strz::env_value(v), secure));
+    let _ = cpu::init_with(&tunables);
 }
 
 /// `__libc_start_main(main, argc, argv, init, fini, rtld_fini, stack_end)`; with `PIE`, the

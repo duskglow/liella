@@ -1,0 +1,12 @@
+{"task": "DL-MULTI-WRITABLE-4", "model": "opus", "tokens": null,
+ "result": "COMPLETE: merged origin/next after LAYOUT-DATA-CLUSTERS-4C; STARTUP-DATA-WINDOWS ro 1 <= 1, hot_text_products 21 passed, gate green, 8/8 plants caught, startup_instr_c 2148 <= 2150; no code change needed",
+ "branch": "task/dl-multi-writable-4", "head": "45c7c1946 (code tested by the jobs; the commit after it adds handoff/ only)",
+ "gate": {"affected": "9 suites, 4855 passed / 0 failed (450 ignored), conformance 22 passed", "peak": "13G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["origin/next's own startup_instr_c was not measured on the same host (LAYOUT-DATA-CLUSTERS-4C reported 2146 on another host); 2148 is checked against the 2150 limit only"],
+ "refused": [],
+ "improvement": "A held story whose only remaining step is merge + re-gate could be done by the dispatcher (merge, so, gate, plants, counters) without an agent run",
+ "next_step": "Land; optional follow-up: an end-to-end test of the static start's RELRO fallback",
+ "report_file": "handoff/DL-MULTI-WRITABLE.md",
+ "jobs": ["shiki:dl-multi-writable-4-so-hot", "shiki:dl-multi-writable-4-gate", "shiki:dl-multi-writable-4-plants-unit", "shiki:dl-multi-writable-4-plants-e2e", "shiki:dl-multi-writable-4-startup"]}

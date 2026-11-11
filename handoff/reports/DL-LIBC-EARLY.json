@@ -1,0 +1,11 @@
+{"task": "DL-LIBC-EARLY", "model": "opus", "tokens": null,
+ "result": "PENDING JOBS: LIELLA_PRIVATE build-tag refusal and __liella_libc_early_init before .preinit_array done (proofs pass); export moves and rseq publishing left for a continuation",
+ "branch": "task/dl-libc-early", "head": "fe50fd01d",
+ "gate": {"affected": "running (dl-libc-early-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["build tag = FNV-1a over product sources (role dirs are not git checkouts); liella-ld rebuilds when any product source changes", "__libc_start_main unchanged: it repeats steps 3-4 under Liella's ld.so until DL-14"],
+ "refused": [],
+ "jobs": ["dl-libc-early-gate", "dl-libc-early-plants", "dl-libc-early-startup"],
+ "improvement": "hot-text keys pin closure numbering inside __libc_start_main, so any refactor of start() trips xtask so; a key scheme by source span or a named fn would let start-up code be refactored",
+ "next_step": "read the gate, plants and startup jobs; then a continuation does the export moves (__libc_stack_end, __rseq_*) and rseq publishing in ld.so",
+ "report_file": "handoff/DL-LIBC-EARLY.md"}
