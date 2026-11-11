@@ -12,6 +12,8 @@
  * asin/acos [-1, 1]; atanh [-0.99, 0.99]; acosh [1, 100]; erf/erfc [-5, 5]; j [-20, 20]; y [0.01, 20];
  * jn/yn order 3; pow x [0.01, 10], y [-10, 10]; hypot [-100, 100]^2; atan2 [-10, 10]^2; cbrt [-100, 100];
  * sqrt [0, 100]; complex z in [-3, 3]^2, cpow exponent 1.5+0.25i. `csinl` is not exported yet (M5-3).
+ * The `_axis` rows put z on the real axis (y = +0 and -0 in turn), the `_near1` rows at | |z| - 1 | from
+ * 2^-52 to 2^-1, log-uniform (where clog's real part cancels).
  * The rows `add_baseline`, `mxcsr_pair` and `mxcsr_wrapper_seq` call no libm function (a loop floor,
  * one MXCSR save/load, the MXCSR sequence of Liella's entry wrapper); they print for `--compare` and
  * have no budget row. The GLIBC_2.2.5 compat entries are not measured here: Liella does not export them. */
@@ -160,6 +162,54 @@ static void fill(double lo, double hi, double lo2, double hi2)
         TIMED(name, { T s_ = 0; for (long r_ = 0; r_ < reps; r_++) for (int i_ = 0; i_ < N; i_++) { CT z_ = f(a[i_] + b[i_] * (CT)I); s_ += __real__ z_ + __imag__ z_; } sink = s_; }); \
     } while (0)
 
+/* The real axis: x in [-3, 3], y = +0 and -0 in turn (a real operand passed as complex). */
+static void fill_axis(void)
+{
+    fill(-3, 3, 0, 0);
+    for (int i = 1; i < N; i += 2) {
+        bf[i] = -0.0f;
+        bd[i] = -0.0;
+        bl[i] = -0.0L;
+        bq[i] = -0.0;
+    }
+}
+
+/* Near the unit circle: |z| = 1 + d, |d| = 2^-k * m with k uniform in [2, 52], m in [1, 2), random
+ * signs, at an angle from t in [-1, 1] by z = ((1 - t^2) + 2t i) / (1 + t^2) (arithmetic only, so both
+ * sides see the same operands), x mirrored at random. */
+static void fill_near1(void)
+{
+    rng = 88172645463325252ULL;
+    for (int i = 0; i < N; i++) {
+        double t = -1 + 2 * urand(), q = 1 + t * t;
+        double p = 1;
+        for (int k = 2 + (int)(51 * urand()); k > 0; k--)
+            p *= 0.5;
+        double d = p * (1 + urand());
+        double s = urand() < 0.5 ? 1 - d : 1 + d;
+        double x = s * (1 - t * t) / q, y = s * 2 * t / q;
+        if (urand() < 0.5)
+            x = -x;
+        af[i] = (float)x;
+        ad[i] = x;
+        al[i] = x;
+        aq[i] = x;
+        bf[i] = (float)y;
+        bd[i] = y;
+        bl[i] = y;
+        bq[i] = y;
+    }
+}
+
+/* Complex function of z = a + b i built part by part (signed zeros kept), operands from `filler`. */
+#define RCZ(name, f, T, CT, a, b, sink, filler)                                   \
+    do {                                                                          \
+        if (cb_skip(name))                                                        \
+            break;                                                                \
+        filler();                                                                 \
+        TIMED(name, { T s_ = 0; for (long r_ = 0; r_ < reps; r_++) for (int i_ = 0; i_ < N; i_++) { CT z_ = f(__builtin_complex(a[i_], b[i_])); s_ += __real__ z_ + __imag__ z_; } sink = s_; }); \
+    } while (0)
+
 /* cpow(z, 1.5 + 0.25i). */
 #define RCP(name, f, T, CT, a, b, sink)                                           \
     do {                                                                          \
@@ -178,12 +228,15 @@ static void fill(double lo, double hi, double lo2, double hi2)
 static void (*volatile sincosf_fn)(float, float *, float *) = sincosf;
 static void (*volatile sincos_fn)(double, double *, double *) = sincos;
 static void (*volatile sincosl_fn)(long double, long double *, long double *) = sincosl;
+static void (*volatile sincosf128_fn)(_Float128, _Float128 *, _Float128 *) = sincosf128;
 static float (*volatile sinf_fn)(float) = sinf;
 static float (*volatile cosf_fn)(float) = cosf;
 static double (*volatile sin_fn)(double) = sin;
 static double (*volatile cos_fn)(double) = cos;
 static long double (*volatile sinl_fn)(long double) = sinl;
 static long double (*volatile cosl_fn)(long double) = cosl;
+static _Float128 (*volatile sinf128_fn)(_Float128) = sinf128;
+static _Float128 (*volatile cosf128_fn)(_Float128) = cosf128;
 
 static unsigned long long digest;
 
@@ -332,6 +385,7 @@ int main(void)
     RSC("sincosf", sincosf_fn, sinf_fn, cosf_fn, float, 4, af, sf, -10.0, 10.0);
     RSC("sincos", sincos_fn, sin_fn, cos_fn, double, 8, ad, sd, -10.0, 10.0);
     RSC("sincosl", sincosl_fn, sinl_fn, cosl_fn, long double, 10, al, sl, -10.0, 10.0);
+    RSC("sincosf128", sincosf128_fn, sinf128_fn, cosf128_fn, _Float128, 16, aq, sq, -10.0, 10.0);
     RU("tanf", tanf, float, af, sf, -10.0, 10.0);
     RU("tan", tan, double, ad, sd, -10.0, 10.0);
     RU("tanl", tanl, long double, al, sl, -10.0, 10.0);
@@ -435,6 +489,12 @@ int main(void)
     RC("csqrtf", csqrtf, float, float complex, af, bf, sf);
     RC("csqrt", csqrt, double, double complex, ad, bd, sd);
     RC("csqrtl", csqrtl, long double, long double complex, al, bl, sl);
+    RCZ("clogf_axis", clogf, float, float complex, af, bf, sf, fill_axis);
+    RCZ("clog_axis", clog, double, double complex, ad, bd, sd, fill_axis);
+    RCZ("csqrtf_axis", csqrtf, float, float complex, af, bf, sf, fill_axis);
+    RCZ("csqrt_axis", csqrt, double, double complex, ad, bd, sd, fill_axis);
+    RCZ("clogf_near1", clogf, float, float complex, af, bf, sf, fill_near1);
+    RCZ("clog_near1", clog, double, double complex, ad, bd, sd, fill_near1);
     RCP("cpowf", cpowf, float, float complex, af, bf, sf);
     RCP("cpow", cpow, double, double complex, ad, bd, sd);
     RCP("cpowl", cpowl, long double, long double complex, al, bl, sl);

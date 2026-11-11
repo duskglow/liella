@@ -1,0 +1,23 @@
+{
+ "task": "LIBM-CPLX-LOG-SQRT-7",
+ "model": "opus",
+ "tokens": null,
+ "result": "COMPLETE: next merged; hot-text list repaired (Features::detect key restored, one dead key pruned with prune.py over both profiles); 12/12 layout contracts; FULL gate green incl. every start-up fault bound (LAYOUT-JITTER gone); 14/14 plants CAUGHT",
+ "branch": "task/libm-cplx-log-sqrt-7",
+ "head": "see git log -1 (handoff commit on code tree 8cffd5240)",
+ "gate": {
+  "affected": "FULL (escalated: hot-text.list differs from next): 11590 passed / 0 failed, 32 suites, conformance 127/0",
+  "peak": "16G (page cache included), oom_kill=0"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "affected escalates to FULL whenever hot-text.list differs from next, so this branch's gate ran FULL (34 min)",
+  "cexp: 1 of cbench_libm's 256 operands takes the 384-bit route, +449 instructions per call (#4432): follow-up story, named in the handoff"
+ ],
+ "refused": [],
+ "improvement": "cargo xtask so could print the prune.py command with both profiles' hot-text.matched paths when a key is dead (the release file only exists after a LIELLA_FULL_PROFILE build).",
+ "next_step": "Land; follow-ups: cexp routed operand (#4432) and non-FMA product, csqrt time 3.41x, clog 1.52x",
+ "report_file": "handoff/libm-cplx-log-sqrt.md",
+ "jobs": ["mei:libm-cplx-log-sqrt-7-gate", "mei:libm-cplx-log-sqrt-7-plants", "mei:libm-cplx-log-sqrt-7-lint"]
+}

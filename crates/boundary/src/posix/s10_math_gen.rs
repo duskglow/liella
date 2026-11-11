@@ -1064,7 +1064,7 @@ pub extern "C" fn liella_cimagl_bits(x: mret::Complex<LdBits>) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn clog(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::clog)
+    mret::cplx_fast(x, mret::Unit::Sse, math::complex_fast::clog_nearest, math::complex::clog)
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -1109,7 +1109,7 @@ pub extern "C" fn liella_clog10l_bits(x: mret::Complex<LdBits>) -> mret::Complex
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn clogf(x: mret::Complex<f32>) -> mret::Complex<f32> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::clog)
+    mret::cplx_fast(x, mret::Unit::Sse, math::fast32::clogf_nearest, math::complex::clog)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1119,17 +1119,17 @@ pub extern "C" fn liella_clogf128_bits(x: mret::Complex<F128Bits>) -> mret::Comp
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn clogf32(x: mret::Complex<f32>) -> mret::Complex<f32> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::clog)
+    mret::cplx_fast(x, mret::Unit::Sse, math::fast32::clogf_nearest, math::complex::clog)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn clogf32x(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::clog)
+    mret::cplx_fast(x, mret::Unit::Sse, math::complex_fast::clog_nearest, math::complex::clog)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn clogf64(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::clog)
+    mret::cplx_fast(x, mret::Unit::Sse, math::complex_fast::clog_nearest, math::complex::clog)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1504,12 +1504,12 @@ pub extern "C" fn liella_csinl_bits(x: mret::Complex<LdBits>) -> mret::Complex<L
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn csqrt(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csqrt)
+    mret::cplx_fast(x, mret::Unit::Sse, crate::hot::csqrt_nearest, math::complex::csqrt)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn csqrtf(x: mret::Complex<f32>) -> mret::Complex<f32> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csqrt)
+    mret::cplx_fast(x, mret::Unit::Sse, crate::hot::csqrtf_nearest, math::complex::csqrt)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1519,17 +1519,17 @@ pub extern "C" fn liella_csqrtf128_bits(x: mret::Complex<F128Bits>) -> mret::Com
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn csqrtf32(x: mret::Complex<f32>) -> mret::Complex<f32> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csqrt)
+    mret::cplx_fast(x, mret::Unit::Sse, crate::hot::csqrtf_nearest, math::complex::csqrt)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn csqrtf32x(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csqrt)
+    mret::cplx_fast(x, mret::Unit::Sse, crate::hot::csqrt_nearest, math::complex::csqrt)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn csqrtf64(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csqrt)
+    mret::cplx_fast(x, mret::Unit::Sse, crate::hot::csqrt_nearest, math::complex::csqrt)
 }}
 
 export! { libm "LIELLA_PRIVATE";

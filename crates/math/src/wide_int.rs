@@ -110,8 +110,14 @@ pub(crate) type Pair<F> = (Option<(F, Status)>, Option<(F, Status)>);
 
 /// `(sin x, cos x)` as [`sin_cos`] gives each (the same operations on the same values, so the
 /// same result or refusal), from one reduction and one evaluation of each series (`sincos`,
-/// LIBM-SINCOS-SHARED, D-10.89). Same precondition on `n`.
+/// LIBM-SINCOS-SHARED, D-10.89; binary128 through [`quad::sin_and_cos`], D-10.91). Same
+/// precondition on `n`.
 pub(crate) fn sin_cos_pair<F: Float>(n: &Num, mode: Rounding) -> Pair<F> {
+    if F::PREC == 113 {
+        if let Some(pair) = quad::sin_and_cos::<F>(n, mode) {
+            return pair;
+        }
+    }
     if F::PREC != 64 || !F::EXPLICIT {
         return (sin_cos::<F>(n, false, mode), sin_cos::<F>(n, true, mode));
     }

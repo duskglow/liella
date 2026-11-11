@@ -1,0 +1,11 @@
+id = "D-27.21"
+section = "s26-29"
+spec = "§27"
+ann = "SEC"
+status = "active"
+amends = ["D-27.12"]
+story = "DL-LIBC-START-BIAS-3"
+date = "2026-11-11"
+body = '''
+**libc finds the executable's load bias as `ld.so` does, from one implementation (escalations #4371, #4414, #4422, #4476; design point #4528; amends D-27.12).** Without the static-PIE start's bias, libc's one source of the executable's bias (`exe_bias` in `boundary/src/process.rs`: `dl_iterate_phdr`, `_dl_find_object`, the `%n` check, the backtrace) used `PT_PHDR` only, so a dynamically linked program without `PT_PHDR` was seen at bias 0. It now uses `liella_rt::start::bias` (D-27.18's method: `PT_PHDR`, or without one the ELF header at the start of the page holding `AT_PHDR` and the `PT_LOAD` holding the program headers; 0 when neither gives one). The function lives where libc's start lives (`liella_rt::start`) and `liella_ld::start` re-exports it, so `ld.so` and libc cannot disagree. It reads no header when there are no program headers. Start-up does not call it: the static start keeps `start::program`'s one pass (a static ET_EXEC's bias is 0, a static PIE's comes from its relocator). Test: `reloc_libc_bias_without_pt_phdr` (crates/ld/tests/reloc.rs), a PIE and an ET_EXEC linked against `libc.so.6` with `PT_PHDR` removed, kernel-started and as `ld.so PROGRAM`, and a static ET_EXEC.
+'''

@@ -1,0 +1,14 @@
+# LIBM-F128-TRIG-INT-2 plants: cargo xtask plants handoff/LIBM-F128-TRIG-INT-2-plants.txt --dir <new RAM dir>
+# tanf128 and sincosf128 on the binary128 integer tier (crates/math/src/wide_int/quad.rs, D-10.91).
+# The low limb of the quotient's residual correction dropped: about 2^-127 relative, far above step 6's 2^-162.
+f128-div-corr-limb | crates/math/src/wide_int/quad.rs | lit:let corr = (ea >> 64) * vh + (((ea & M64) * vh) >> 64); ==> let corr = (ea >> 64) * vh; | cargo test -p liella-math --lib wide_int::quad | msg:quotient_meets_its_bound.*FAILED
+# Half the Newton step: the reciprocal stays within 2^-52 only, the corrected quotient within 2^-103.
+f128-div-newton-half | crates/math/src/wide_int/quad.rs | lit:((i128::from(v) * eps) >> 46) ==> ((i128::from(v) * eps) >> 47) | cargo test -p liella-math --lib wide_int::quad | msg:quotient_meets_its_bound.*FAILED
+# The q1·d1 column of the residual dropped: the residual and so the quotient wrong by up to 2^-62.
+f128-div-residual-column | crates/math/src/wide_int/quad.rs | lit:hi.wrapping_add(q1 * d1).wrapping_add(q0 * d2) ==> hi.wrapping_add(q0 * d2) | cargo test -p liella-math --lib wide_int::quad | msg:quotient_meets_its_bound.*FAILED
+# tan's sign without the odd-quadrant term (cot a is -tan(a ± π/2)).
+f128-tan-sign | crates/math/src/wide_int/quad.rs | lit:Some((n.neg ^ r.negf ^ odd, m, e + top.1 - bot.1)) ==> Some((n.neg ^ r.negf, m, e + top.1 - bot.1)) | cargo test -p liella-math --lib wide_int::quad | msg:tier_agrees_with_the_wide_route.*FAILED
+# sincos taking sin|a| where cos|a| belongs (odd quadrants).
+f128-sincos-pick | crates/math/src/wide_int/quad.rs | lit:let (m, e) = if odd { c } else { s }; ==> let (m, e) = if odd { s } else { c }; | cargo test -p liella-math --lib wide_int::quad | msg:tier_agrees_with_the_wide_route.*FAILED
+# The rounding test skipped (shared by sin, cos, tan and sincos): the pinned boundary cases must see it.
+f128-round-skipped | crates/math/src/wide_int/quad.rs | lit:if (low & ((1 << 78) - 1)).wrapping_sub(ERR) > (1 << 78) - 2 * ERR { ==> if false { | cargo test -p liella-math --lib wide_int::quad | msg:rounding_test_refuses_near_a_boundary.*FAILED

@@ -1,0 +1,4 @@
+# DL-LIBC-EARLY-2B plants (cargo xtask plants; docs/plants.md): the regex scratch claim (D-14.12) removed, caught by the fixed regex_reentry
+claim-always | crates/boundary/src/users.rs | lit:.filter(|s| s.busy.compare_exchange(0, 1, Acquire, Relaxed).is_ok()) ==> .filter(|_| true) | cargo test -p liella-boundary --test regex_reentry | msg:(outer|inner) wrong [1-9][0-9]*|the child failed: .*signal: [0-9]+
+# cargo xtask plants results (1 plants: 1 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# claim-always: CAUGHT, caught by regex_reentry regexec_reentered_from_a_signal_handler_keeps_both_answers

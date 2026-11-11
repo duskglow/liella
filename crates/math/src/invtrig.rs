@@ -385,6 +385,24 @@ macro_rules! kernels {
         /// The FMA build (`fused`) only: the CPU must support FMA and the OS must save the AVX state.
         $(#[$a])* #[inline]
         pub fn atan2_nearest(y: f64, x: f64) -> Option<f64> {
+            let (th, tl, tab, sg) = atan2_reduce(y, x)?;
+            two_tier(th, tl, tab, sg, y.to_bits(), |r| r)
+        }
+
+        /// `atan2(|y|, x)` as a double-double within `2^-65.5` relative (module comment, tier 2
+        /// [`atan_unit`]), for `2^-400 <= |x|, |y| < 2^400` with `min/max >= 2^-60`, else `None`:
+        /// the argument of the `clog` quick tier (`crate::complex_fast`, LIBM-CPLX-LOG-SQRT).
+        $(#[$a])* $(#[$i])*
+        #[allow(dead_code)] // the clog tier calls the plain build only; the FMA build's copy is unused
+        pub(crate) fn atan2_abs(y: f64, x: f64) -> Option<Dd> {
+            let (th, tl, tab, sg) = atan2_reduce(y, x)?;
+            Some(atan_unit(th, tl, tab, sg))
+        }
+
+        /// The reduction shared by [`atan2_nearest`] and [`atan2_abs`]: `atan2(|y|, x)` =
+        /// `tab[j] + sg·atan(th + tl)`, or `None` outside their window.
+        $(#[$a])* $(#[$i])*
+        fn atan2_reduce(y: f64, x: f64) -> Option<(f64, f64, &'static Table, f64)> {
             let (yb, xb) = (y.to_bits(), x.to_bits());
             let (ay, ax) = (yb & !SIGN, xb & !SIGN);
             let win = pow2_bits(-400)..pow2_bits(400);
@@ -400,13 +418,13 @@ macro_rules! kernels {
             }
             let p = $prod(th, d);
             let tl = ((n - p.hi) - p.lo) / d;
-            let (tab, sg): (&Table, f64) = match (swap, xb & SIGN != 0) {
+            let (tab, sg): (&'static Table, f64) = match (swap, xb & SIGN != 0) {
                 (false, false) => (&t::ATAN_J64, 1.0),
                 (true, false) => (&HALF_MINUS, -1.0),
                 (false, true) => (&PI_MINUS, -1.0),
                 (true, true) => (&HALF_PLUS, 1.0),
             };
-            two_tier(th, tl, tab, sg, yb, |r| r)
+            Some((th, tl, tab, sg))
         }
 
         /// `hypot(x, y)` to nearest, for `2^-450 <= |x|, |y| < 2^450` within a factor `2^61` of
