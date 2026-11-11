@@ -149,11 +149,17 @@ pub(crate) fn resolv_only(name: &str) {
     assert!(root().join("target/liella/libresolv.a").exists(), "the libresolv.a placeholder is missing");
 }
 
-/// A symbol `ld.so` owns in glibc: in `libc.a` for the programs Liella starts, and local in
-/// `libc.so.6` (a dynamically linked program sees the host loader's).
+/// A symbol `ld.so` owns (versions.tsv, R14-12, D-27.26): in `libc.a` for the programs Liella
+/// starts statically, local in `libc.so.6`, and exported by Liella's `ld.so` as its default
+/// version of the versions.tsv row.
 pub(crate) fn loader_owned(name: &str) {
     archived(name);
     assert!(!dynsym().contains_key(name), "{name} must stay local in libc.so.6");
+    let interp = "ld-linux-x86-64.so.2";
+    let table = std::fs::read_to_string(root().join("spec/abi/versions.tsv")).expect("versions.tsv");
+    let ver = table.lines().map(|l| l.split('\t').collect::<Vec<_>>()).find(|f| f.first() == Some(&interp) && f.get(1) == Some(&name)).and_then(|f| f.get(2).map(|v| (*v).to_string())).unwrap_or_else(|| panic!("versions.tsv has no {interp} row for {name}"));
+    let got = dynsym_of(interp).remove(name).unwrap_or_default();
+    assert!(got.contains(&format!("@{ver}")), "{name}: {interp} must export {name}@@{ver}, exports {got:?}");
 }
 
 /// `name@VERSION` pairs of a product shared object's dynamic symbol table.
