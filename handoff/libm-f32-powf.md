@@ -1,31 +1,35 @@
 # LIBM-F32-POWF: handoff (one-pass `powf`)
 
-**LIBM-F32-POWF-3 (11-11): no code change; the red is start-up data layout, held as LAYOUT-JITTER (section 0).**
-Branch `task/libm-f32-powf-3` = POWF-2's head ad8e819b6 + this note. Role shiki:~/w/sh2.
+**LIBM-F32-POWF-4 (11-11): next merged; STARTUP-DATA-WINDOWS holds (13 <= 20); one gate red, a cold-text page phase
+in locale code the story does not touch, held as LAYOUT-JITTER (section 0).** Branch `task/libm-f32-powf-4`, role shiki:~/w/sh2.
 
-## 0. LIBM-F32-POWF-3: STARTUP-DATA-WINDOWS red attributed (shiki, Haswell; jobs `libm-f32-powf-3-*`)
-* POWF-2's plants2/counts2 went rc 2/1 because `cargo xtask so` stops at the layout contract STARTUP-DATA-WINDOWS:
-  21 written start-up pages > rw-budget-fast 20. Reproduced on shiki (`-lint`: clippy + static rc 0, `so` 21 pages).
-* origin/next f1f5358d5 (= the story's merge base; next has not moved) built at its own layout (role tree minus the
-  story's diff, RAM copy; `-nextso`): 17 pages, all 12 contracts hold.
-* Cause, from the linked start-up probe of both trees (`-probesec`, link maps compared): every written-data output
-  section has the same size and start (.data.rel.ro 0xb1b0, .data 0x19bf2, .data1 0x2a0, .lbss 0x56418 at 0x856000;
-  .bss +0x10 is the only size change), and the per-kind input-section totals are equal. What differs is the ORDER in
-  which rustc emits the boundary crate's objects: in .lbss, thread::KEYS, fmtmsg::ADDED and report::LAST_NAME now sit
-  before heap::RESERVE_MEM (auxv WORDS after), so RESERVE_MEM moves from 0x86a000 (page-aligned by chance) to
-  0x877800 and it, HEAP and EXIT_HANDLERS straddle pages; the anonymous .data.rel.ro constants are renamed and reordered
-  the same way. The story adds no static and touches no start-up code (powf body, two generic helpers in mathret.rs,
-  math-crate code); the order is decided by rustc's codegen-unit item order, which any boundary-crate code change moves.
-* Phase test (a .lbss pad object `ld -r`-merged into liella-crt1.o, then `cargo xtask layout-check <dir>`):
-  | .lbss pad (bytes) | 0 | 512 | 1024 | 1536 | 2048 | 2560 | 3072 | 3584 |
-  |---|---|---|---|---|---|---|---|---|
-  | next f1f5358d5 | 17 | 19 | 19 | 19 | 20 | 20 | 19 | 19 |
-  | head (story) | 21 | - | 20 | - | 18 | - | 20 | - |
-  The count moves by up to 3 pages with the phase alone; the story's order puts phase 0 at the top of that range.
-  next did not reach 21 at these 8 phases (the ruling's literal test is NOT met: the head range is one page higher).
-* Not done (owner ruling #4347: do not chase): no regen loop, no section move, no alignment of start-up objects, no
-  budget change. The real fix is LAYOUT-DATA-CLUSTERS (written start-up state in one aligned cluster), after which the
-  count no longer depends on rustc's order. RULING NEEDED in the hand-back.
+## 0. LIBM-F32-POWF-4 (shiki, Haswell; jobs `libm-f32-powf-4-*`)
+* Merged origin/next ca8aa835a (LAYOUT-DATA-CLUSTERS-4C/-4D landed) into the branch: 4b416fc54, no conflict, no
+  powf change. `-lint` (clippy + static + `cargo xtask so`): rc 0, all 12 layout contracts hold, STARTUP-DATA-WINDOWS
+  13 written start-up pages (rw-budget-fast 20; POWF-3 had 21 on the unclustered layout). The POWF-3 red is gone.
+* Plants (`-plants`, handoff/LIBM-F32-POWF-plants.txt): 7 CAUGHT, 0 SURVIVED, 0 WARN. Counts (`-counts2`, base
+  ca8aa835a primed with validation/wl_prime_base.sh; `-counts` was rc 2, base not primed): powf_typ 78.0 / 275.3 /
+  155.9 (glibc / base / new), powf_int 73.1 / 328.2 / 160.1, expf_typ 42.0 / 58.0 / 58.0: identical to POWF-2.
+* Gate (`-gate`, direct tier): rc 1. 2523 passed, 2 failed (one test, run twice: plain and exports interposed),
+  conformance 16/16, static ok, peak 3.8G. Failing: `hot_text_products::init_data_clusters_hold_at_every_text_phase`
+  (LAYOUT-DATA-CLUSTERS): mode `tool` takes 56 faults at the `cold 0x800` pad and 55 at cold 0x2000/0x8000/0xF000 and
+  lbss 0x800/0x2000 (5 equal runs each). origin/next ca8aa835a, same test in a RAM copy (`-nextphase`): 55 at every
+  pad, passes. Head alone (`-headphase`): 56 at cold 0x800 again, so it is deterministic, not a flake.
+* Fault map (`-faultmap`: the test's link at cold 0x800 and 0x2000, `perf record -e page-faults -d`,
+  tools/hottext/faultmap.py): the one extra fault is `liella::locale::find_cached::<Files<Glue>>`, a 0x4fa-byte
+  function in plain `.text` (not in the hot group: crates/libc-so/hot-text.list has `find_named` and `candidates`
+  in its locale tier but not `find_cached`). At cold 0x800 it lies at 0x65fcc0-0x6601ba, across a page boundary; at
+  0x2000 it fits in one page. Everything else differs only by address. In next's libc.a it is the same separate
+  function, the same size: at next's text phase it happens to fit at both phases the test samples (0 and +0x800; the
+  other three pads are whole pages). The story's code (powf, mathret.rs) lies before it in `.text`, so its growth
+  moved find_cached's page phase. A 1274-byte function crosses a page at about 31% of phases, so any code growth
+  ahead of it can flip this test.
+* Not done (rulings #4347/#4521): no hot-list regen, no section move or alignment, no change to the test. RULING NEEDED
+  in the hand-back: the hot list should take `find_cached` (tool/locale start-up text), a layout story's change.
+
+POWF-3 (11-11, no code): STARTUP-DATA-WINDOWS 21 > 20 on the unclustered layout, caused by rustc's emission order in
+.lbss (heap::RESERVE_MEM moved across a page); next ranged 17-20 and the head 18-21 over 8 .lbss phases. Fixed by
+LAYOUT-DATA-CLUSTERS (13 pages above).
 
 State before POWF-3: branch `task/libm-f32-powf-2` (LIBM-F32-POWF-2), which holds all of `task/libm-f32-powf` (code 8e913f324, plants
 33b3c36c6, record fix dc05891b6, handoff 67729b223) plus a merge of origin/next 8253a107c (99116e35d: the only conflict
@@ -84,12 +88,15 @@ serial log/double-double/exp chain with partial-write merges. Cycles on the book
   answered by the one-pass path) + 62607 hard pairs x 16 modes: 0 mismatches. First run's gate2 (mei): 2408/0, rc 0.
 
 ## Open / next (in order)
-0. (POWF-3) Held for LAYOUT-DATA-CLUSTERS (section 0). When it lands: merge next, `cargo xtask so` (the layout
-   contracts), then gate, plants (handoff/LIBM-F32-POWF-plants.txt) and counts on that head. No powf change needed.
+0. (POWF-4) Held for the `find_cached` hot-list fix (section 0). When it lands: merge next, rerun the gate (and
+   plants and counts only if the merge changes powf code). Plants and counts on 4b416fc54 are green and need no redo.
 1. Time is 1.82-1.83x glibc on both timing hosts (target 1.5x). The log is the long pole (128-entry LOG_INV/LOG_C,
    8-term series, needed for the 2^-50 relative bound at |t| up to 88). A log2-domain table (t = y·log2 x with e
    exact), or a 2^-46 bound with a wider margin, would shorten it; y = 3, 4 and 0.5 still go to the envelope (exact
-   candidates): cube/square products or sqrt could take them on the bits. Profile the 155.9 first (wl_trace with
-   --spec validation/percall/math_f32.c), then design.
+   candidates): cube/square products or sqrt could take them on the bits. Profile (POWF-4, wl_trace powf_typ call 11, `-trace`): 138 instructions, all inlined in `powf`, a
+   leaf: bit tests and exact-case screening 37, log reduction + degree-8 series + combine ~50, y*L*(128/ln 2) and the
+   range test 14, exp_z ~24, rounding test + sign + cvtsd2ss 13. glibc's 78.0 per call includes ~18 of loop, so the
+   1.5x target (117 per call) needs ~38 fewer: a shorter log series under a looser bound (a margin of 2^18 in the 28
+   low bits refuses ~0.2%) and cheaper exact-case screening are the two largest phases.
 Not to redo: the profile in section 1; the exact-case proof; the SSE2 count; the 10^9-pair run (rerun only if the
 kernel changes).
