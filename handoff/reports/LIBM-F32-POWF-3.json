@@ -1,0 +1,33 @@
+{
+ "task": "LIBM-F32-POWF-3",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: LAYOUT-JITTER: STARTUP-DATA-WINDOWS 21 > 20 on the story head vs 17 on origin/next f1f5358d5; no written-data section changes size, only rustc's emission order of boundary-crate .lbss/.data.rel.ro objects; .lbss phase alone moves next 17-20 and the head 18-21",
+ "branch": "task/libm-f32-powf-3",
+ "head": null,
+ "gate": {
+  "affected": "not run (xtask so stops at the layout contract; no code change in this run)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "STARTUP-DATA-WINDOWS 21 > 20 on the powf head: next reaches 20 but not 21 at 8 .lbss phases, so the ruling #4347 literal test is not met, though the cause is rustc object order, not any section the story adds",
+   "recommendation": "treat as LAYOUT-JITTER and hold the story for LAYOUT-DATA-CLUSTERS (then merge next and rerun so/gate/plants/counts); do not align or move start-up objects in this story"
+  }
+ ],
+ "informational": [
+  "next f1f5358d5 at .lbss pads 0/512/1024/1536/2048/2560/3072/3584 B: 17/19/19/19/20/20/19/19 written start-up pages; head at 0/1024/2048/3072: 21/20/18/20 (shiki, Haswell, fast profile)",
+  "cause: in .lbss thread::KEYS, fmtmsg::ADDED, report::LAST_NAME now precede heap::RESERVE_MEM, which moves from 0x86a000 (page-aligned by chance) to 0x877800; output section sizes identical (.bss +0x10)",
+  "the budget sits 3 pages above next's best phase, so any boundary-crate code change can trip it until written start-up state is clustered"
+ ],
+ "refused": [],
+ "improvement": "the layout checker could print the per-phase range (pad .lbss/.data by 0..3 KiB itself) so a red names jitter vs a real growth at once; this run spent ~35 calls building next and padding by hand",
+ "next_step": "after LAYOUT-DATA-CLUSTERS lands: merge origin/next, cargo xtask so, then gate, plants and counts on that head; then the powf speed work (log stage) in handoff/libm-f32-powf.md",
+ "report_file": "handoff/libm-f32-powf.md",
+ "jobs": [
+  "libm-f32-powf-3-lint2",
+  "libm-f32-powf-3-nextso",
+  "libm-f32-powf-3-padnext2"
+ ]
+}

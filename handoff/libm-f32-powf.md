@@ -1,6 +1,33 @@
 # LIBM-F32-POWF: handoff (one-pass `powf`)
 
-State: branch `task/libm-f32-powf-2` (LIBM-F32-POWF-2), which holds all of `task/libm-f32-powf` (code 8e913f324, plants
+**LIBM-F32-POWF-3 (11-11): no code change; the red is start-up data layout, held as LAYOUT-JITTER (section 0).**
+Branch `task/libm-f32-powf-3` = POWF-2's head ad8e819b6 + this note. Role shiki:~/w/sh2.
+
+## 0. LIBM-F32-POWF-3: STARTUP-DATA-WINDOWS red attributed (shiki, Haswell; jobs `libm-f32-powf-3-*`)
+* POWF-2's plants2/counts2 went rc 2/1 because `cargo xtask so` stops at the layout contract STARTUP-DATA-WINDOWS:
+  21 written start-up pages > rw-budget-fast 20. Reproduced on shiki (`-lint`: clippy + static rc 0, `so` 21 pages).
+* origin/next f1f5358d5 (= the story's merge base; next has not moved) built at its own layout (role tree minus the
+  story's diff, RAM copy; `-nextso`): 17 pages, all 12 contracts hold.
+* Cause, from the linked start-up probe of both trees (`-probesec`, link maps compared): every written-data output
+  section has the same size and start (.data.rel.ro 0xb1b0, .data 0x19bf2, .data1 0x2a0, .lbss 0x56418 at 0x856000;
+  .bss +0x10 is the only size change), and the per-kind input-section totals are equal. What differs is the ORDER in
+  which rustc emits the boundary crate's objects: in .lbss, thread::KEYS, fmtmsg::ADDED and report::LAST_NAME now sit
+  before heap::RESERVE_MEM (auxv WORDS after), so RESERVE_MEM moves from 0x86a000 (page-aligned by chance) to
+  0x877800 and it, HEAP and EXIT_HANDLERS straddle pages; the anonymous .data.rel.ro constants are renamed and reordered
+  the same way. The story adds no static and touches no start-up code (powf body, two generic helpers in mathret.rs,
+  math-crate code); the order is decided by rustc's codegen-unit item order, which any boundary-crate code change moves.
+* Phase test (a .lbss pad object `ld -r`-merged into liella-crt1.o, then `cargo xtask layout-check <dir>`):
+  | .lbss pad (bytes) | 0 | 512 | 1024 | 1536 | 2048 | 2560 | 3072 | 3584 |
+  |---|---|---|---|---|---|---|---|---|
+  | next f1f5358d5 | 17 | 19 | 19 | 19 | 20 | 20 | 19 | 19 |
+  | head (story) | 21 | - | 20 | - | 18 | - | 20 | - |
+  The count moves by up to 3 pages with the phase alone; the story's order puts phase 0 at the top of that range.
+  next did not reach 21 at these 8 phases (the ruling's literal test is NOT met: the head range is one page higher).
+* Not done (owner ruling #4347: do not chase): no regen loop, no section move, no alignment of start-up objects, no
+  budget change. The real fix is LAYOUT-DATA-CLUSTERS (written start-up state in one aligned cluster), after which the
+  count no longer depends on rustc's order. RULING NEEDED in the hand-back.
+
+State before POWF-3: branch `task/libm-f32-powf-2` (LIBM-F32-POWF-2), which holds all of `task/libm-f32-powf` (code 8e913f324, plants
 33b3c36c6, record fix dc05891b6, handoff 67729b223) plus a merge of origin/next 8253a107c (99116e35d: the only conflict
 was the train-owned docs/codemap/symbols.tsv, taken from next; never commit it) and the two odd-y plants (21ec45efa),
 then a second merge of origin/next f1f5358d5 (9357c30cf: next's exp10f/logf-family one-pass entry points next to
@@ -57,6 +84,8 @@ serial log/double-double/exp chain with partial-write merges. Cycles on the book
   answered by the one-pass path) + 62607 hard pairs x 16 modes: 0 mismatches. First run's gate2 (mei): 2408/0, rc 0.
 
 ## Open / next (in order)
+0. (POWF-3) Held for LAYOUT-DATA-CLUSTERS (section 0). When it lands: merge next, `cargo xtask so` (the layout
+   contracts), then gate, plants (handoff/LIBM-F32-POWF-plants.txt) and counts on that head. No powf change needed.
 1. Time is 1.82-1.83x glibc on both timing hosts (target 1.5x). The log is the long pole (128-entry LOG_INV/LOG_C,
    8-term series, needed for the 2^-50 relative bound at |t| up to 88). A log2-domain table (t = y·log2 x with e
    exact), or a 2^-46 bound with a wider margin, would shorten it; y = 3, 4 and 0.5 still go to the envelope (exact
