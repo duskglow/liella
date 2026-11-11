@@ -74,9 +74,9 @@
 //! return the same pairs bit for bit, take the same branches and return the same results.
 //!
 //! **Quick phase** (LIBM-F64-SPECIAL-QUICK, D-10.84): a cheaper first evaluation in front of the
-//! in-place entries, round-to-nearest only ([`erf_tiered`], [`erfc_tiered`]). For `2^-5 <= |x| <
-//! 6` it evaluates the same `ERF_T` row to degree 12 with one exact product: `t² = RN(t·t)`, `t⁴ =
-//! RN(t²·t²)`, `a = p3 + p4·t + p5·t²`, `b1 = p6 + … + p9·t³`, `b2 = p10 + p11·t + p12·t²` by
+//! in-place entries' table path, round-to-nearest only ([`erf_nearest`], [`erfc_nearest`]). For
+//! `2^-5 <= |x| < 6` it evaluates the same `ERF_T` row to degree 12 with one exact product:
+//! `t² = RN(t·t)`, `t⁴ = RN(t²·t²)`,`a = p3 + p4·t + p5·t²`, `b1 = p6 + … + p9·t³`, `b2 = p10 + p11·t + p12·t²` by
 //! `f64` Horner (`P3` by its high part), `b = b1 + t⁴·b2`, `r = P2h + (t·a + t⁴·b)` (Estrin's
 //! split, Knuth TAOCP 2 4.6.4: the three chains are independent, so the critical path is about
 //! half of degree-12 Horner), `P0h + P1h·t` by the exact product and one Fast2Sum (`|P1h·t| <=
@@ -90,7 +90,8 @@
 //! `RHO_ERFC_Q_LOW = 2^-61` (same test: 2^-61.55). Rounding: [`fast64`]'s `near` with the matching
 //! multiplier (de Dinechin, Lauter & Muller, RAIRO-ITA 41, 2007); `erf` and `erfc` are never a
 //! double or a midpoint at a double `x != 0`, so `w != 0` holds wherever the test answers. Every
-//! other operand, and every operand the test refuses, goes to the in-place entry unchanged.
+//! operand the test refuses continues on the table path; the phase sits inside the entries' own
+//! `|x| >= 2^-5` branch, so the series path and `erfc`'s `x >= 1` path run with no added compare.
 //! Both builds round the same operations (the fused build's only difference is the exact
 //! product), so they return the same pairs bit for bit.
 
@@ -202,15 +203,19 @@ fn erf_small(x: f64) -> Dd {
     fast_two_sum(y.hi, y.lo + x * sum.lo)
 }
 
-/// `erf x` for `2^-55 <= x < 6` as `(y, eps)`: `|erf x − y| <= eps` (module doc).
+/// `erf x` for `2^-5 <= x < 6` as `(y, eps)`: `|erf x − y| <= eps` (module doc).
 $(#[$a])*
 $(#[$i])*
-fn erf_dd(x: f64) -> (Dd, f64) {
-    if x >= SMALL {
-        let (i, c) = slot(x, 0x3fa0);
-        let y = taylor(&t::ERF_T[i], x - c);
-        return (y, dd::abs(y.hi) * f64::from_bits(t::ERF_T_EPS));
-    }
+fn erf_table_dd(x: f64) -> (Dd, f64) {
+    let (i, c) = slot(x, 0x3fa0);
+    let y = taylor(&t::ERF_T[i], x - c);
+    (y, dd::abs(y.hi) * f64::from_bits(t::ERF_T_EPS))
+}
+
+/// `erf x` for `2^-55 <= x < 2^-5` as `(y, eps)`: `|erf x − y| <= eps` (module doc).
+$(#[$a])*
+$(#[$i])*
+fn erf_small_dd(x: f64) -> (Dd, f64) {
     let y = erf_small(x);
     (y, dd::abs(y.hi) * (f64::from_bits(t::ERF_SMALL_EPS) + E104))
 }
@@ -224,7 +229,7 @@ $(#[$a])*
 $(#[$i])*
 pub fn erf_kernel(x: f64) -> (Dd, f64, i32) {
     if x >= LINEAR {
-        let (y, eps) = erf_dd(x);
+        let (y, eps) = if x >= SMALL { erf_table_dd(x) } else { erf_small_dd(x) };
         return (y, eps, 0);
     }
     let (xs, m) = if x < SCALED {
@@ -287,7 +292,16 @@ pub fn erf_nearest(x: f64) -> Option<f64> {
         let v = 1.0 - ax.min(8.0) * E63;
         return Some(if x < 0.0 { -v } else { v });
     }
-    let (y, eps) = erf_dd(ax);
+    // The quick phase shares the table branch's range check, so the series path sees no new
+    // compare (module doc, "Quick phase").
+    let (y, eps) = if ax >= SMALL {
+        if let Some(v) = erf_quick_near(ax) {
+            return Some(if x < 0.0 { -v } else { v });
+        }
+        erf_table_dd(ax)
+    } else {
+        erf_small_dd(ax)
+    };
     let v = finish(y, Some(C_EXP), 0, || eps, &mut 0)?;
     Some(if x < 0.0 { -v } else { v })
 }
@@ -314,7 +328,15 @@ pub fn erfc_nearest(x: f64) -> Option<f64> {
             // erfc x within 2^-55 of 2 (module doc): 2, the subtraction inexact.
             return Some(2.0 - ax.min(8.0) * E63);
         }
-        let (y, eps) = erf_dd(ax);
+        // As in `erf_nearest`: the quick phase inside the table branch only.
+        let (y, eps) = if ax >= SMALL {
+            if let Some(v) = erfc_quick_near(x, ax) {
+                return Some(v);
+            }
+            erf_table_dd(ax)
+        } else {
+            erf_small_dd(ax)
+        };
         let (y, c) = if x < 0.0 { (y, C_EXP) } else { (y.neg(), C_ERFC_LOW) };
         let s = fast_two_sum(1.0, y.hi);
         let r = fast_two_sum(s.hi, s.lo + y.lo);
@@ -352,8 +374,27 @@ fn erf_quick_dd(x: f64) -> Dd {
     fast_two_sum(s.hi, t2 * r + low)
 }
 
+/// The quick phase's `erf x` rounded to nearest for `2^-5 <= x < 6`, or `None` when its rounding
+/// test refuses (module doc, "Quick phase").
+$(#[$a])*
+$(#[$i])*
+fn erf_quick_near(x: f64) -> Option<f64> {
+    fast64::near(erf_quick_dd(x), C_ERF_Q, 0)
+}
+
+/// The quick phase's `erfc x` rounded to nearest for `ax = |x|`, `2^-5 <= ax < 6`, `x < 1`, or
+/// `None` when its rounding test refuses.
+$(#[$a])*
+$(#[$i])*
+fn erfc_quick_near(x: f64, ax: f64) -> Option<f64> {
+    let y = erf_quick_dd(ax);
+    let (y, c) = if x < 0.0 { (y, C_ERF_Q) } else { (y.neg(), C_ERFC_Q_LOW) };
+    let s = fast_two_sum(1.0, y.hi);
+    fast64::near(fast_two_sum(s.hi, s.lo + y.lo), c, 0)
+}
+
 /// `erf x` rounded to nearest by the quick phase alone, or `None` (outside `2^-5 <= |x| < 6`, or
-/// the rounding test refuses).
+/// the rounding test refuses); [`erf_nearest`] runs the same phase first.
 ///
 /// # Safety
 ///
@@ -365,11 +406,12 @@ pub fn erf_quick(x: f64) -> Option<f64> {
     if !(SMALL..ERF_ONE).contains(&ax) {
         return None;
     }
-    let v = fast64::near(erf_quick_dd(ax), C_ERF_Q, 0)?;
+    let v = erf_quick_near(ax)?;
     Some(if x < 0.0 { -v } else { v })
 }
 
-/// `erfc x` rounded to nearest by the quick phase alone (`−6 < x < 1`, `|x| >= 2^-5`), or `None`.
+/// `erfc x` rounded to nearest by the quick phase alone (`−6 < x < 1`, `|x| >= 2^-5`), or `None`;
+/// [`erfc_nearest`] runs the same phase first.
 ///
 /// # Safety
 ///
@@ -381,38 +423,7 @@ pub fn erfc_quick(x: f64) -> Option<f64> {
     if !(SMALL..ERF_ONE).contains(&ax) || x >= 1.0 {
         return None;
     }
-    let y = erf_quick_dd(ax);
-    let (y, c) = if x < 0.0 { (y, C_ERF_Q) } else { (y.neg(), C_ERFC_Q_LOW) };
-    let s = fast_two_sum(1.0, y.hi);
-    fast64::near(fast_two_sum(s.hi, s.lo + y.lo), c, 0)
-}
-
-/// `erf x` rounded to nearest: the quick phase, then [`erf_nearest`] (module doc).
-///
-/// # Safety
-///
-/// As [`erf_nearest`].
-$(#[$a])*
-$(#[$i])*
-pub fn erf_tiered(x: f64) -> Option<f64> {
-    match erf_quick(x) {
-        Some(v) => Some(v),
-        None => erf_nearest(x),
-    }
-}
-
-/// `erfc x` rounded to nearest: the quick phase, then [`erfc_nearest`] (module doc).
-///
-/// # Safety
-///
-/// As [`erf_nearest`].
-$(#[$a])*
-$(#[$i])*
-pub fn erfc_tiered(x: f64) -> Option<f64> {
-    match erfc_quick(x) {
-        Some(v) => Some(v),
-        None => erfc_nearest(x),
-    }
+    erfc_quick_near(x, ax)
 }
     };
 }
@@ -495,7 +506,7 @@ mod tests {
         // erf on [2^-55, 6) and erfc on (−6, 0) within RHO_EXP; erfc on (0, 1) within RHO_ERFC_LOW.
         let tiny = (0..4000u32).map(|k| dd::pow2(i32::try_from(k % 50).unwrap_or(0) - 55) * (1.0 + f64::from(k) / 4000.0));
         for x in operands(40_000, LINEAR, ERF_ONE).chain(tiny) {
-            let (y, eps) = erf_dd(x);
+            let (y, eps) = if x >= SMALL { erf_table_dd(x) } else { erf_small_dd(x) };
             assert!(eps <= fast64::RHO_EXP * dd::abs(y.hi), "erf({x:e})");
             for (sign, rho) in [(1.0, fast64::RHO_EXP), (-1.0, RHO_ERFC_LOW)] {
                 if sign < 0.0 && x >= 1.0 {
@@ -525,8 +536,24 @@ mod tests {
             let below = f64::from_bits(c.to_bits() - 1);
             assert!(Mp::from_f64(below).mul(k).cmp_abs(one_u).is_le(), "quick C not the least");
         }
+        // The tier's hard cases: operands where the quick `(zh, zl)` lies on a midpoint (or within
+        // 2^-12 ulp of one) and the exact `erf x` on its other side, so only the rounding test keeps
+        // the phase from misrounding them (from a search of 2^28 operands of [2^-5, 6) against the
+        // accurate path: 3867 such operands, about 1 in 69000; LIBM-F64-SPECIAL-QUICK-2).
+        const HARD: [u64; 10] = [
+            0x3ff0_2c47_393a_484c, // 2^-12 ulp from the midpoint
+            0x3ff4_f02c_80f0_96af,
+            0x3fe1_f91d_dd34_d5fa,
+            0x3ffe_0b69_ef59_cc12,
+            0x4010_1d2a_dfa7_5c87, // x ≈ 4.03, erf x just below 1
+            0x3ff3_2328_b759_f1d1, // (zh, zl) exactly on the midpoint
+            0x3fdd_ef19_dd2b_ee47,
+            0x3fc5_f184_b3f6_c9a4,
+            0x3fb7_0371_50f2_948d,
+            0x4000_0264_5585_4952,
+        ];
         let (mut miss, mut n) = (0u32, 0u32);
-        for x in operands(20_000, SMALL, ERF_ONE) {
+        for x in operands(20_000, SMALL, ERF_ONE).chain(HARD.iter().map(|&b| f64::from_bits(b))) {
             for x in [x, -x] {
                 let want = crate::special::erf(x, Rounding::Nearest).0;
                 match erf_quick(x) {

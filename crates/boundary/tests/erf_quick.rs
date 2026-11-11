@@ -68,3 +68,28 @@ fn erf_quick_both_builds_round_correctly() {
     }
     selftest::set_math_fma(had);
 }
+
+/// The operands the per-call probe's self-check prints (validation/percall/libm_erf.c, the erfc
+/// row's `ex[5]` and `ex[17]`): both builds return the correctly rounded values, taken from a
+/// quad-precision oracle (`erfc(0x1.b12e88p+0)` is 0.69 ulp above `0x1.11c9655380462p-6`, so it
+/// rounds up). Clause: s10_0_f_0.
+#[test]
+fn erfc_probe_operands_round_correctly() {
+    let _held = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let had = selftest::math_fma();
+    let cases = [
+        (0x3ffb_12e8_8000_0000_u64, 0x3f91_1c96_5538_0463_u64), // 0x1.b12e88p+0 -> 0x1.11c9655380463p-6
+        (0xbfd1_c7d6_0000_0000, 0x3ff4_e3c3_8c5a_2b12),         // -0x1.1c7d6p-2 -> 0x1.4e3c38c5a2b12p+0
+    ];
+    for (build, fma) in [("SSE2", false), ("FMA", true)] {
+        if !selftest::set_math_fma(fma) {
+            eprintln!("SKIP {build}: this CPU (or its OS) has no FMA; only the SSE2 build exists here");
+            continue;
+        }
+        for (x, want) in cases {
+            let (x, want) = (f64::from_bits(x), f64::from_bits(want));
+            assert_eq!(m::erfc(x).to_bits(), want.to_bits(), "{build} erfc({x:e}) misrounded");
+        }
+    }
+    selftest::set_math_fma(had);
+}
