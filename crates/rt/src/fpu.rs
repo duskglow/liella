@@ -162,14 +162,6 @@ pub const fn is_default_control(mxcsr: u32) -> bool {
     mxcsr & !MX_FLAGS == MX_DEFAULT
 }
 
-/// Whether an MXCSR value holds the default control word in all but its rounding direction,
-/// whatever its flags: every exception masked, no flush-to-zero, no denormals-are-zero, any
-/// rounding field. A function whose quick phase is proved in every direction runs in place under
-/// such a word (D-10.94).
-pub const fn is_default_but_rounding(mxcsr: u32) -> bool {
-    mxcsr & !(MX_FLAGS | MX_RC) == MX_DEFAULT
-}
-
 /// MXCSR flush-to-zero (results).
 const MX_FTZ: u32 = 1 << 15;
 
