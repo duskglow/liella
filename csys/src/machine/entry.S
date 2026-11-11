@@ -53,12 +53,13 @@ liella_machine_ld_entry:
 	.cfi_endproc
 	.size liella_machine_ld_entry, .-liella_machine_ld_entry
 
-/* liella_machine_ld_enter(sp, entry) (phase 14 DL-6, R14-8 "program entry transfer", D-27.14): hand
- * the process to a program's entry point. Register convention: %rdi = the stack pointer the program
- * gets (argc at it, then argv, envp and the auxiliary vector, laid out as the kernel's initial
- * stack), %rsi = the entry address. As at a kernel entry (x86-64 psABI §3.4.1, "Process
- * Initialization"): %rsp = %rdi, %rdx = 0 (no termination function for the program to register),
- * %rbp = 0 (outermost frame). Never returns; no logic (K2). Declared once in boundary/src/arch/. */
+/* liella_machine_ld_enter(sp, entry, fini) (phase 14 DL-6, R14-8 "program entry transfer", D-27.14,
+ * DL-11 D-27.19): hand the process to a program's entry point. Register convention: %rdi = the stack
+ * pointer the program gets (argc at it, then argv, envp and the auxiliary vector, laid out as the
+ * kernel's initial stack), %rsi = the entry address, %rdx = the termination function the program
+ * registers with atexit (0 = none), left in %rdx as x86-64 psABI §3.4.1 "Process Initialization"
+ * places it. %rsp = %rdi, %rbp = 0 (outermost frame). Never returns; no logic (K2). Declared once in
+ * boundary/src/arch/. */
 	.section .text.liella_machine_ld_enter,"ax",@progbits
 	.globl liella_machine_ld_enter
 	.hidden liella_machine_ld_enter
@@ -68,7 +69,6 @@ liella_machine_ld_enter:
 	.cfi_startproc
 	.cfi_undefined %rip
 	movq %rdi, %rsp
-	xorl %edx, %edx
 	xorl %ebp, %ebp
 	jmp *%rsi
 	.cfi_endproc

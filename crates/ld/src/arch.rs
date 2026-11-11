@@ -95,6 +95,67 @@ pub trait Arch {
     /// properties"), each with its name. The loader parses them and ignores them (L14-12); a type not
     /// listed is ignored as well.
     const PROPERTIES: &'static [(u32, &'static str)] = &[];
+    /// The TLS variant (design §0a "TLS variant"; Drepper, "ELF Handling For Thread-Local Storage",
+    /// §3.4): where the static TLS blocks sit relative to the thread pointer.
+    const TLS_VARIANT: TlsVariant;
+    /// The bytes of the thread control block at the thread pointer that the static layout keeps clear
+    /// of module blocks (variant II: the block above TP; variant I: the TCB below the first module).
+    const TCB_SIZE: u64;
+    /// The alignment of the thread pointer (and of the TCB).
+    const TCB_ALIGN: u64;
+    /// The TP-relative slot of the thread pointer itself (`None` when the architecture keeps none).
+    const SELF_SLOT: Option<u64>;
+    /// The TP-relative slot holding the dynamic thread vector's address.
+    const DTV_SLOT: u64;
+    /// The TP-relative slot of the stack-protector canary (`None`: the canary is not TP-relative).
+    const STACK_GUARD_SLOT: Option<u64>;
+    /// The TP-relative slot of the pointer guard (`None` when there is none).
+    const POINTER_GUARD_SLOT: Option<u64>;
+    /// The bias a `DtpOff` field carries: the stored value is the offset in the module's block minus
+    /// this (and `__tls_get_addr` adds it back).
+    const DTP_BIAS: u64;
+    /// The bias a `TpOff` field carries on top of the block's offset from the thread pointer.
+    const TP_BIAS: i64;
+    /// The field of one TLS relocation (`DtpMod`, `DtpOff`, `TpOff`; DL-12, D-27.20), `Ok(None)` for
+    /// any other kind is never returned: a kind without TLS arithmetic is [`ApplyError::NoArithmetic`].
+    ///
+    /// # Errors
+    ///
+    /// [`ApplyError::NoArithmetic`] for a kind other than the three above (`TlsDesc` included).
+    fn apply_tls(kind: RelocKind, o: TlsOperands) -> Result<Field, ApplyError> {
+        let a = u64::from_ne_bytes(o.a.to_ne_bytes());
+        let tp = u64::from_ne_bytes(o.tp_offset.wrapping_add(Self::TP_BIAS).to_ne_bytes());
+        let value = match kind {
+            RelocKind::DtpMod => o.module,
+            RelocKind::DtpOff => o.s.wrapping_add(a).wrapping_sub(Self::DTP_BIAS),
+            RelocKind::TpOff => o.s.wrapping_add(a).wrapping_add(tp),
+            _ => return Err(ApplyError::NoArithmetic),
+        };
+        Ok(Field { value, width: 8 })
+    }
+}
+
+/// The TLS variants of Drepper's "ELF Handling For Thread-Local Storage" §3.4.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TlsVariant {
+    /// The TCB at the thread pointer, module blocks after it (higher addresses).
+    I,
+    /// The TCB at the thread pointer, module blocks below it, the program's ending at TP.
+    II,
+}
+
+/// The inputs of a TLS relocation's arithmetic.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TlsOperands {
+    /// S: the symbol's offset in its module's TLS block (`st_value` of an `STT_TLS` symbol; 0 for a
+    /// relocation without a symbol).
+    pub s: u64,
+    /// A: the addend.
+    pub a: i64,
+    /// The module ID of the object that defines the symbol (1 onwards).
+    pub module: u64,
+    /// The defining module's block address minus the thread pointer (static TLS only).
+    pub tp_offset: i64,
 }
 
 /// The inputs of a relocation's arithmetic, in the psABI's notation.
@@ -211,6 +272,25 @@ impl Arch for X86_64 {
     /// 47-bit user addresses (four-level paging; the kernel gives a program addresses above this
     /// only when it asks for them with a hint, which the loader never does).
     const USER_END: u64 = 1 << 47;
+    /// Variant II (x86-64 psABI §3.4.6 "Thread-Local Storage"; Drepper §3.4.2): `%fs` points at the
+    /// thread control block and the static blocks lie below it.
+    const TLS_VARIANT: TlsVariant = TlsVariant::II;
+    /// Liella's whole thread block (`liella_rt::tls::ThreadBlock`, D-4.15, 0x300 bytes).
+    const TCB_SIZE: u64 = 0x300;
+    /// The thread block's alignment (`#[repr(align(64))]`).
+    const TCB_ALIGN: u64 = 64;
+    /// `%fs:0` holds the thread pointer (x86-64 psABI §3.4.6: `movq %fs:0, %rax` gives TP).
+    const SELF_SLOT: Option<u64> = Some(0);
+    /// `ThreadBlock::dtv`.
+    const DTV_SLOT: u64 = 0x08;
+    /// `%fs:0x28` (GCC's and Clang's `-fstack-protector` on x86-64).
+    const STACK_GUARD_SLOT: Option<u64> = Some(0x28);
+    /// `%fs:0x30` (`ThreadBlock::pointer_guard`).
+    const POINTER_GUARD_SLOT: Option<u64> = Some(0x30);
+    /// x86-64 psABI §4.4.1: `R_X86_64_DTPOFF64` is the plain offset in the block.
+    const DTP_BIAS: u64 = 0;
+    /// x86-64 psABI §4.4.1: `R_X86_64_TPOFF64` is the plain (negative) offset from TP.
+    const TP_BIAS: i64 = 0;
 
     /// x86-64's features come from CPUID and XGETBV ([`Features::detect`], D-4.25): the same decision
     /// libc's dispatch makes. `AT_HWCAP` on x86-64 is CPUID leaf 1 EDX only (a subset), so it is not read.

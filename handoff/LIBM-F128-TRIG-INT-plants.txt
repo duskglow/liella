@@ -1,0 +1,11 @@
+# LIBM-F128-TRIG-INT plants: cargo xtask plants handoff/LIBM-F128-TRIG-INT-plants.txt --dir <new RAM dir>
+# The binary128 sinf128/cosf128 integer tier (crates/math/src/wide_int/quad.rs, D-10.52, D-10.85).
+# The reduction's lowest window limb dropped: P moves by up to m·2^-382 of a quarter turn, invisible for most
+# operands (|f| near 2^-8) but above the 2^-152 bound at the near multiples of π/2 (|f| near 2^-120), which the
+# continued-fraction sweep must catch.
+f128-limb-dropped | crates/math/src/wide_int/quad.rs | lit:core::array::from_fn(|k| u128::from(g(6 - k))) ==> core::array::from_fn(|k| if k == 0 { 0 } else { u128::from(g(6 - k)) }) | cargo test -p liella-math --lib wide_int::quad | msg:tier_agrees_with_the_wide_route.*FAILED
+# The rounding test skipped: every operand is rounded from the approximation. The error is far below the bound, so
+# agreement with the 384-bit route rarely sees it: the pinned boundary cases must.
+f128-round-skipped | crates/math/src/wide_int/quad.rs | lit:if (low & ((1 << 78) - 1)).wrapping_sub(ERR) > (1 << 78) - 2 * ERR { ==> if false { | cargo test -p liella-math --lib wide_int::quad | msg:rounding_test_refuses_near_a_boundary.*FAILED
+# The third limb of sin(jπ/256) dropped (the shared table's 128-bit value alone): about 2^-129 relative.
+f128-sclo-dropped | crates/math/src/wide_int/quad.rs | lit:let (sj, cj) = (W3::with_lo(sh, sl), W3::with_lo(ch, cl)); ==> let (sj, cj) = (W3::with_lo(sh, 0), W3::with_lo(ch, cl)); | cargo test -p liella-math --lib wide_int::quad | msg:tier_agrees_with_the_wide_route.*FAILED
