@@ -1,0 +1,12 @@
+{"task": "LIBM-INVALID-CONVERT-SCAN-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: next merged (one big_u64), tanf128 div3 site fixed + flags test, accuracy 10^7 green, counts -3/-1 on arc/tanf128; lgammaf sign still +3 instr over base",
+ "branch": "task/libm-invalid-convert-scan-3", "head": null,
+ "gate": {"affected": "gate2 running at hand-back (keke:libm-invalid-convert-scan-3-gate2)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["lgammaf(-2.5) value MISMATCH vs reference in wl_percall check (value path untouched)", "lgammaf negative operands 21x reference by instructions"],
+ "refused": [],
+ "jobs": ["keke:libm-invalid-convert-scan-3-accuracy", "keke:libm-invalid-convert-scan-3-counts", "keke:libm-invalid-convert-scan-3-counts-lgammaf2", "keke:libm-invalid-convert-scan-3-gate2", "keke:libm-invalid-convert-scan-3-plants2"],
+ "improvement": "the -2 plan listed counts last; a count on the one change that adds instructions (lgammaf clamp) should run first, it decided the rest of this run",
+ "next_step": "move lgammaf's parity read under the negative branch until lgammaf rows are at or below base, then gate/plants/lint and the disassembly script",
+ "report_file": "handoff/libm-invalid-convert-scan.md"}
