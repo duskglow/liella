@@ -1,0 +1,10 @@
+{"task": "LIBM-CEXP-COLD-MIDDLE", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: blocked - the middle tier to move (LIBM-CEXP-ROUTE-2) is not in next yet (queued_ci); no code changed",
+ "branch": "task/libm-cexp-cold-middle", "head": null,
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "dispatch order: story stacks on next but its base code is only on task/libm-cexp-route-2", "recommendation": "ops hold LIBM-CEXP-COLD-MIDDLE --until-landed LIBM-CEXP-ROUTE-2, then re-dispatch unchanged"}],
+ "informational": [], "refused": [],
+ "improvement": "the dispatcher should not admit a fix-forward story whose Stacks-on base lacks the story it fixes (check the fixed story is landed, or stack on it)",
+ "next_step": "re-dispatch after LIBM-CEXP-ROUTE-2 lands; move the middle-tier call to the cold path as handoff/libm-cexp-cold-middle.md says",
+ "report_file": "handoff/libm-cexp-cold-middle.md",
+ "jobs": []}
