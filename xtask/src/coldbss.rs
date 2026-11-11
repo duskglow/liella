@@ -22,29 +22,7 @@ use crate::run;
 /// sections are the small state words themselves).
 pub const MIN: u64 = 1024;
 
-/// Small statics only the dynamic start path touches (D-27.24: `early_init` writes them, and
-/// `start` reads them only after its static-program test), so a static program never does: they
-/// are cold like the large tables and stay off the start-up pages.
-const COLD_KEY_SUFFIXES: [&str; 2] = ["15liella_boundary7runtime10EARLY_DONE", "15liella_boundary7runtime12PROGRAM_INIT"];
-
-/// The key of a static from its section name without `.data.`/`.bss.`: ThinLTO's promotion
-/// suffix (`.llvm.<hash>`) and then LLVM's part number (`.<symbol>.0`, a split static) dropped,
-/// in that order (`.<symbol>.0.llvm.<hash>`: `sys::SYSINFO_EHDR` in the `fast` profile).
-fn section_key(sym: &str) -> String {
-    let digits = |n: &str| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit());
-    let sym = match sym.rsplit_once(".llvm.") {
-        Some((s, h)) if digits(h) => s,
-        _ => sym,
-    };
-    let sym = match sym.rsplit_once('.') {
-        Some((s, n)) if digits(n) => s,
-        _ => sym,
-    };
-    crate::hottext::key(sym)
-}
-
-/// The `.bss.*` sections of at least [`MIN`] bytes, and those of [`COLD_KEY_SUFFIXES`], per
-/// archive member, from `readelf -SW`.
+/// The `.bss.*` sections of at least [`MIN`] bytes per archive member, from `readelf -SW`.
 fn cold_sections(listing: &str) -> BTreeMap<String, Vec<String>> {
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut member = None;
@@ -62,9 +40,8 @@ fn cold_sections(listing: &str) -> BTreeMap<String, Vec<String>> {
             continue;
         }
         let Ok(size) = u64::from_str_radix(size, 16) else { continue };
-        let dynamic_only = || COLD_KEY_SUFFIXES.iter().any(|s| section_key(&name[".bss.".len()..]).ends_with(s));
         match &member {
-            Some(m) if size >= MIN || dynamic_only() => out.entry(m.clone()).or_default().push((*name).to_string()),
+            Some(m) if size >= MIN => out.entry(m.clone()).or_default().push((*name).to_string()),
             _ => {}
         }
     }
@@ -148,7 +125,19 @@ fn state_sections(listing: &str) -> Result<BTreeMap<String, Vec<String>>, String
         }
         let Some(name) = l.split_once("] ").and_then(|(_, r)| r.split_whitespace().next()) else { continue };
         let Some(sym) = name.strip_prefix(".data.").or_else(|| name.strip_prefix(".bss.")) else { continue };
-        let k = section_key(sym);
+        let digits = |n: &str| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit());
+        // ThinLTO promotes a static another unit uses (`.llvm.<hash>`), after any part number
+        // (`.data.<symbol>.0.llvm.<hash>`, the `fast` profile's `sys::SYSINFO_EHDR`).
+        let sym = match sym.rsplit_once(".llvm.") {
+            Some((s, h)) if digits(h) => s,
+            _ => sym,
+        };
+        // LLVM may split a static and number the part (`.data.<symbol>.0`).
+        let sym = match sym.rsplit_once('.') {
+            Some((s, n)) if digits(n) => s,
+            _ => sym,
+        };
+        let k = crate::hottext::key(sym);
         if let Some(i) = STATE_KEY_SUFFIXES.iter().position(|s| k.ends_with(s)) {
             seen[i] += 1;
             out.entry(member.clone()).or_default().push(name.to_string());
@@ -224,11 +213,10 @@ mod tests {
 
     #[test]
     fn picks_large_bss_sections_per_member() {
-        let listing = "\nFile: libc.a(a.o)\n  [ 3] .text.f           PROGBITS        0000000000000000 000040 000400 00  AX  0   0 16\n  [ 4] .bss.big          NOBITS          0000000000000000 000440 000400 00  WA  0   0  8\n  [ 5] .bss.small        NOBITS          0000000000000000 000440 0003ff 00  WA  0   0  8\n  [ 6] .tbss.t           NOBITS          0000000000000000 000440 001000 00 WAT  0   0  8\n  [ 7] .data.d           PROGBITS        0000000000000000 000440 002000 00  WA  0   0  8\n\nFile: libc.a(b.o)\n  [12] .bss.huge         NOBITS          0000000000000000 000440 010000 00  WA  0   0 64\n  [13] .bss._RNvNtCsX_15liella_boundary7runtime12PROGRAM_INIT.1.llvm.77 NOBITS 0000000000000000 000440 000008 00  WA  0   0  8\n  [14] .bss._RNvNtCsX_15liella_boundary7runtime6OTHER NOBITS 0000000000000000 000440 000008 00  WA  0   0  8\n";
+        let listing = "\nFile: libc.a(a.o)\n  [ 3] .text.f           PROGBITS        0000000000000000 000040 000400 00  AX  0   0 16\n  [ 4] .bss.big          NOBITS          0000000000000000 000440 000400 00  WA  0   0  8\n  [ 5] .bss.small        NOBITS          0000000000000000 000440 0003ff 00  WA  0   0  8\n  [ 6] .tbss.t           NOBITS          0000000000000000 000440 001000 00 WAT  0   0  8\n  [ 7] .data.d           PROGBITS        0000000000000000 000440 002000 00  WA  0   0  8\n\nFile: libc.a(b.o)\n  [12] .bss.huge         NOBITS          0000000000000000 000440 010000 00  WA  0   0 64\n";
         let got = cold_sections(listing);
         assert_eq!(got.len(), 2);
         assert_eq!(got["a.o"], vec![".bss.big".to_string()]);
-        // D-27.24: a small static only the dynamic start path touches is cold too.
-        assert_eq!(got["b.o"], vec![".bss.huge".to_string(), ".bss._RNvNtCsX_15liella_boundary7runtime12PROGRAM_INIT.1.llvm.77".to_string()]);
+        assert_eq!(got["b.o"], vec![".bss.huge".to_string()]);
     }
 }
