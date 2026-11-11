@@ -1,12 +1,14 @@
 # DL-LIBC-EARLY: LIELLA_PRIVATE, early init, the export moves and rseq publishing (phase 14 DL-13)
 
-**State:** branch `task/dl-libc-early-5` (-4's head 02086ac72 plus a merge of origin/next ca8aa835a, which has
-LAYOUT-DATA-CLUSTERS-4C), merge 16c1e78c4, code unchanged since c914ae2c9, role keke:~/w/n4. DL-13 is complete
+**State:** branch `task/dl-libc-early-6` (= -5's head d4d21d28f: -4's head 02086ac72 plus a merge of origin/next
+ca8aa835a, which has LAYOUT-DATA-CLUSTERS-4C), merge 16c1e78c4, code unchanged since c914ae2c9, role shiki:~/w/sh2.
+-6: start-up counts settled (user-mode medians level with next, kernel medians +0.13%, noise); FULL gate and plants
+pending at hand-back (dl-libc-early-6-gate, dl-libc-early-6-plants on shiki). DL-13 is complete
 in code: build tag check and early init (-1/-2), export moves and rseq publishing (-3). -4 went red in CI on
 STARTUP-DATA-WINDOWS (layout jitter, the branch adds no start-up read-only data); on the merged head that contract
 holds (1 window, budget 1), hot_text_products passes, start-up user instructions are level with next or below.
-Gate (FULL by escalation) and plants were pending at -5's hand-back. Plants file: handoff/DL-LIBC-EARLY-4-plants.txt.
-Reports: handoff/DL-LIBC-EARLY-5-report.md (-4, -3, -2 too).
+Plants file: handoff/DL-LIBC-EARLY-4-plants.txt.
+Reports: handoff/DL-LIBC-EARLY-6-report.md, handoff/DL-LIBC-EARLY-5-report.md (-4, -3, -2 too).
 
 **Decisions in force:** D-27.26 (this story: placement, initial rseq area, publish before relocation),
 D-27.22 (private interface; `StartInfo` gained `rseq_size`), D-27.19/.20 (init order, interpreter exports),
