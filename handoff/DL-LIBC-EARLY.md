@@ -1,50 +1,40 @@
-# DL-LIBC-EARLY: LIELLA_PRIVATE, `__liella_libc_early_init` (phase 14 DL-13, first half)
+# DL-LIBC-EARLY: LIELLA_PRIVATE, `__liella_libc_early_init` (phase 14 DL-13)
 
-**State:** branch `task/dl-libc-early` (base origin/next 672acd9aa, which already holds DL-INIT-ORDER-3 and
-DL-TLS-STATIC-2: no merge needed), role shiki:~/w/sh1. Split point taken (brief): "early init runs before
-constructors" is done; **the export moves and rseq publishing are NOT done** (continuation).
+**State:** branch `task/dl-libc-early-2` (continues `task/dl-libc-early`; base origin/next 672acd9aa), role
+kanon:~/w/kn1. First half (build tag check, early init before constructors) is done and gate-fixed; **the export moves
+and rseq publishing are NOT done** (next story, see below). Report: handoff/DL-LIBC-EARLY-2-report.md.
 
-**Decisions in force:** D-27.22 (new, this story), D-27.19/D-27.20 (init order, interpreter exports), D-27.18/.21
-(shared bias). Plan rows: plan/06-phases/17-phase-14-dynamic-linking.md DL-13; plan/ph14/design.md §14; R14-12.
+**Decisions in force:** D-27.22 (this story; tests now name `crates/rt/src/start.rs::private_tag_layout`),
+D-27.19/D-27.20 (init order, interpreter exports), D-27.18/.21 (shared bias). Plan rows:
+plan/06-phases/17-phase-14-dynamic-linking.md DL-13; plan/ph14/design.md §14; R14-12.
 
-## What was done
-* `liella_ld::start::private`: the `LIELLA_PRIVATE` names, the 64-byte build tag (`LIELLA-BUILD-TAG:` + identity),
-  `StartInfo` (argc, argv, envp, auxv, stack_end; `repr(C)`), and `find`: the first loaded object (not ld.so)
-  defining `__liella_libc_early_init@LIELLA_PRIVATE` must carry `__liella_build_tag@LIELLA_PRIVATE` (64 bytes,
-  inside a PT_LOAD's file part) equal to ld.so's tag, else `<object>: LIELLA_PRIVATE build tag differs ...`, 127.
-* ld.so (`boundary/src/ld.rs`): the check runs after the version check, before any relocation; `run_init` calls
-  the early init with the initial stack before `.preinit_array`.
-* libc (`runtime::early_init`, export in s01_startup.rs; tag static in data.rs): publishes auxv, environ,
-  program names, `__libc_stack_end`, parses tunables (no diagnostics), `cpu::init_with`. `__libc_start_main` is
-  byte-for-byte unchanged (its hot-text keys depend on closure numbering: a refactor renamed one, so early init
-  has its own step-3 helper; DL-14 makes `start` skip steps 1-4 under Liella's ld.so).
-* xtask so: `LIELLA_BUILD_TAG` = FNV-1a 64 over crates/, csys/, include/, Cargo.lock (sorted paths) for both
-  products (role dirs are not git checkouts, so a commit id would always be "unversioned"); libc.so.6 gets a
-  `LIELLA_PRIVATE` node (`LIBC_PRIVATE` list); the versions.tsv set check skips those names.
-* Tests (crates/ld/tests/reloc.rs): `reloc_libc_early_init_before_preinit` (preinit sees getenv work, memcpy/memset
-  NULL,0 return; kernel-started and `ld.so PROGRAM`), `reloc_libc_build_tag_mismatch_refused` (one tag byte
-  flipped in a by-path libc copy: 127 + diagnostic); unit `private_tag_layout`. libc named by path (#4537).
+## What exists
+* `liella_rt::start::private` (moved there in -2): `NODE`, `EARLY_INIT`, `BUILD_TAG`, `TAG_PREFIX`, `TAG_LEN`,
+  `TAG` (64 bytes, `LIELLA-BUILD-TAG:` + `LIELLA_BUILD_TAG` set by `cargo xtask so`), `StartInfo` (`repr(C)`).
+  `liella_ld::start::private` re-exports them and keeps `find` (lookup of `__liella_libc_early_init@LIELLA_PRIVATE`,
+  tag check, `<object>: LIELLA_PRIVATE build tag differs ...`, 127).
+* ld.so (`boundary/src/ld.rs`): tag check after the version check, before relocation; `run_init` calls the early
+  init before `.preinit_array`. libc: `runtime::early_init` (s01_startup.rs export, tag static in data.rs).
+* Tests: crates/ld/tests/reloc.rs `reloc_libc_early_init_before_preinit`, `reloc_libc_build_tag_mismatch_refused`;
+  unit `private_tag_layout` (rt). Plants: handoff/DL-LIBC-EARLY-2-plants.txt (4 plants).
 
-## Results (shiki)
-* clippy `dl-libc-early-clippy3` rc 0; `dl-libc-early-static3` (clippy + records check + static) rc 0 on the
-  pre-final code (the final commit only moved exports and the xtask skip; static re-runs inside the gate's steps).
-* proofs `dl-libc-early-proof4` rc 0: 3 passed (bias test + the two new), no SKIP.
-* Started detached on head fe50fd01d (PENDING at hand-back): `dl-libc-early-gate` (affected --run),
-  `dl-libc-early-plants` (handoff/DL-LIBC-EARLY-plants.txt: early-after-preinit, tag-check-skipped, both msg:),
-  `dl-libc-early-startup` (~/work/DL-LIBC-EARLY/counts.sh: cbench_startup counters, head vs next = head minus
-  this story's diff, release builds in /mnt/zram/claude/DL-LIBC-EARLY/counts-1). Expectation: static rows equal
-  (start() unchanged, only new functions); the dynamic start-up row was not measured (no dynamic start-up bench
-  row exists yet that I found).
-* Superseded: clippy, clippy2 (lint fixes), static, static2 (records tests paths, export category), proof,
-  proof2, proof3 (hot-text key, versions.tsv set check).
+## Do not redo
+* The -1 gate red (`a_loader_change_does_not_select_the_math_suites`) was libc-side boundary code (data.rs,
+  runtime.rs) naming `liella_ld::`: the affected model then puts the loader crate in libc's image, so a loader
+  change selects liella-math. Rule: **libc-side code never names `liella_ld::`**; shared data goes in `liella_rt`
+  (plant `libc-names-loader-crate` proves the test catches it).
 
-## Open / next step
-1. Read the three jobs; a red plants/gate is fixed in a continuation.
-2. Continuation (DL-13 second half): move `__libc_stack_end` and `__rseq_offset/size/flags` to ld.so's exports
-   (versions.tsv places them in ld-linux-x86-64.so.2; libc.a keeps them), ld.so registers rseq and publishes the
-   values; libc.so.6 then references them from ld.so (needs libc.so.6 linked against ld.so or the objects
-   resolved through ld.so's scope). Also DL-PLACEHOLDERS #3633: malloc_get/set_state forwarders once wanted.
-3. INFORMATIONAL: the tag env var makes liella-ld and its dependants rebuild when any product source changes
-   (they mostly do anyway); hashing ~13 MB costs xtask so a fraction of a second.
-
-Plants file: handoff/DL-LIBC-EARLY-plants.txt. Read: D-27.22, design §14.
+## Next step (DL-13 second half, a continuation story)
+Facts found (not built): `__libc_stack_end` is a C definition (csys/src/adapter/runtime.c) read via ffi.rs;
+`__rseq_offset/size/flags` are Rust statics in boundary/src/data.rs (exported under `runtime`), set by
+`thread.rs::register_kernel_areas` when libc registers the initial thread's rseq area (in `Thread.rseq`).
+ld.so exports only `LD_EXPORTS = ["__tls_get_addr"]` (xtask/src/so.rs, version script from versions.tsv: adding the
+four names there gives GLIBC_2.2.5 / GLIBC_2.35 nodes). libc.so.6 is linked from libc.a with no `DT_NEEDED` on the
+interpreter, so moving the objects needs: (1) libc.so.6 linked against ld.so (DT_NEEDED ld-linux-x86-64.so.2,
+references bind to ld.so's objects; libc.a keeps its own definitions); (2) ld.so's `link` resolving that DT_NEEDED
+to itself (check crates/ld search/map); (3) the versions.tsv set check in so.rs moving the four names from libc.so.6
+to ld.so; (4) rseq: ld.so registers the initial thread's area and publishes the values, or libc keeps registering
+and stores into ld.so's objects through the GOT (design §14 says ld.so registers; libc's descriptor owns the area:
+decide where the initial thread's rseq area lives under ld.so, a D-27 row). Proofs: `__libc_stack_end`/`__rseq_*`
+resolved from ld.so (dlsym/readelf on products), values non-zero in a dynamic program, static programs unchanged;
+start-up counters static and dynamic.

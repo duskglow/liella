@@ -227,15 +227,21 @@ pub mod private {
     pub const TAG_PREFIX: &[u8] = b"LIELLA-BUILD-TAG:";
     /// The tag's size in bytes.
     pub const TAG_LEN: usize = 64;
-    /// This build's tag: `cargo xtask so` sets `LIELLA_BUILD_TAG` (a hash of the product sources) for
-    /// both products, so a loader and a C library from different builds carry different tags.
-    pub const TAG: [u8; TAG_LEN] = tag(match option_env!("LIELLA_BUILD_TAG") {
-        Some(t) => t.as_bytes(),
-        None => b"unversioned",
-    });
+    /// A build's tag from its identity: each product passes `option_env!("LIELLA_BUILD_TAG")` (a hash
+    /// of the product sources `cargo xtask so` sets for both), so a loader and a C library from
+    /// different builds carry different tags. The variable is read only by the two crates holding a
+    /// tag (the loader and the boundary), never here: a crate reading it is rebuilt with all its
+    /// dependants whenever any product source changes.
+    #[must_use]
+    pub const fn tag(id: Option<&str>) -> [u8; TAG_LEN] {
+        tag_bytes(match id {
+            Some(t) => t.as_bytes(),
+            None => b"unversioned",
+        })
+    }
 
     /// [`TAG_PREFIX`] then `id`, cut at [`TAG_LEN`] bytes, zero-filled.
-    const fn tag(id: &[u8]) -> [u8; TAG_LEN] {
+    const fn tag_bytes(id: &[u8]) -> [u8; TAG_LEN] {
         let mut out = [0u8; TAG_LEN];
         let mut dst: &mut [u8] = &mut out;
         let (mut first, mut second) = (TAG_PREFIX, id);
@@ -279,12 +285,12 @@ pub mod private {
         /// no spec clause (D-27.22): the tag is the prefix then the identity, zero-filled, cut at its size.
         #[test]
         fn private_tag_layout() {
-            assert!(TAG.starts_with(TAG_PREFIX));
-            let t = tag(b"abc");
+            assert!(tag(None).starts_with(b"LIELLA-BUILD-TAG:unversioned\0"));
+            let t = tag(Some("abc"));
             let (head, rest) = t.split_at(TAG_PREFIX.len() + 3);
             assert_eq!(head, b"LIELLA-BUILD-TAG:abc");
             assert!(rest.iter().all(|&b| b == 0));
-            assert_eq!(tag(&[b'x'; 100]).last(), Some(&b'x'));
+            assert_eq!(tag_bytes(&[b'x'; 100]).last(), Some(&b'x'));
         }
     }
 }

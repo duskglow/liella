@@ -225,7 +225,7 @@ pub static __rseq_flags: core::sync::atomic::AtomicU32 = core::sync::atomic::Ato
 #[cfg_attr(feature = "runtime", unsafe(no_mangle))]
 #[allow(unsafe_code)]
 #[allow(non_upper_case_globals)]
-pub static __liella_build_tag: [u8; liella_rt::start::private::TAG_LEN] = liella_rt::start::private::TAG;
+pub static __liella_build_tag: [u8; liella_rt::start::private::TAG_LEN] = liella_rt::start::private::tag(option_env!("LIELLA_BUILD_TAG"));
 
 // ------------------------------------------------------------------------------ §12 objects
 //
