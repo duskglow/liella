@@ -15,8 +15,8 @@ use core::alloc::{GlobalAlloc, Layout};
 #[cfg(not(feature = "export"))]
 use core::ffi::c_int;
 use core::ffi::c_void;
-use core::sync::atomic::AtomicUsize;
-use core::sync::atomic::Ordering::Relaxed;
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
+use core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
 
 use liella::config::Tunables;
 use liella_kernel::auxv::Auxv;
@@ -25,7 +25,7 @@ use liella_ld::arch::{Arch, Native};
 use liella_ld::program::{self, Action};
 use liella_ld::cache::Cache;
 use liella_ld::search::{self, Ctx, PathBuf, Scope};
-use liella_ld::{boot, elf, map, start};
+use liella_ld::{boot, elf, init, map, start};
 use liella_legacy::search_c::CWords;
 use liella_rt::tls::ThreadBlock;
 
@@ -302,8 +302,8 @@ fn run(sp: usize, prog: &start::Program, bias: usize, page: u64, path: usize) ->
         if start::needs_objects(dyn_words) {
             // The program's name in messages: its path (`ld.so PROGRAM`), else argv[0].
             let at = if path != 0 { path } else { usize::try_from(stack_word(sp.wrapping_add(8))).unwrap_or(0) };
-            link(prog, bias, page, if at != 0 { c_string(at) } else { b"the program" });
-            crate::arch::enter(sp, prog.entry)
+            let fini = link(prog, bias, page, if at != 0 { c_string(at) } else { b"the program" }, sp);
+            crate::arch::enter(sp, prog.entry, fini)
         }
         let ehdr = bias.wrapping_add(usize::try_from(img.header).unwrap_or(0));
         if crate::bootstrap::relocate_self(prog.phdr, prog.phnum, ehdr).is_err() {
@@ -316,7 +316,7 @@ fn run(sp: usize, prog: &start::Program, bias: usize, page: u64, path: usize) ->
             refuse(b"ld.so: cannot protect the program's RELRO segment\n");
         }
     }
-    crate::arch::enter(sp, prog.entry)
+    crate::arch::enter(sp, prog.entry, 0)
 }
 
 /// The low 32 bits of `w`.
@@ -522,7 +522,7 @@ fn parse<'a>(file: &'static [u8], name: &'a [u8], bias: u64) -> liella_ld::reloc
 /// messages (its path for `ld.so PROGRAM`, else `argv[0]`).
 // Indices stay below `n`, which never passes OBJECTS_MAX (checked before each store).
 #[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
-fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8]) {
+fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: usize) -> usize {
     use liella_ld::reloc::{self, Obj, Objects};
     let mut maps = [(0usize, 0usize); OBJECTS_MAX];
     let mut own = [(0usize, 0usize); 3];
@@ -535,11 +535,21 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8]) {
     let mut objs = [first; OBJECTS_MAX];
     let mut n = 1usize;
     let mut q = 0usize;
+    // The DT_NEEDED links (dependent, dependency) in the order each object names them (DL-11).
+    let mut edges = [(0u8, 0u8); EDGES_MAX];
+    let mut ne = 0usize;
+    let mut edge = |from: usize, to: usize, name: &[u8]| {
+        let (Ok(a), Ok(b)) = (u8::try_from(from), u8::try_from(to)) else { fail_with(&[name, b": too many objects\n"], program::FAILURE) };
+        let Some(slot) = edges.get_mut(ne) else { fail_with(&[name, b": too many DT_NEEDED entries\n"], program::FAILURE) };
+        *slot = (a, b);
+        ne += 1;
+    };
     while q < n {
         let needed = objs[q].dynm;
         for name in needed.needed() {
             let name = name.unwrap_or_else(|_| fail_with(&[objs[q].name, b": malformed DT_NEEDED\n"], program::FAILURE));
-            if objs[..n].iter().any(|o| o.name == name) {
+            if let Some(j) = objs[..n].iter().position(|o| o.name == name) {
+                edge(q, j, name);
                 continue;
             }
             if !name.contains(&b'/') {
@@ -552,9 +562,10 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8]) {
             let cpath = name.as_ptr().expose_provenance();
             let Some((fd, at, file, id)) = open_file(cpath) else { fail_with(&[name, b": cannot open shared object file\n"], program::FAILURE) };
             // Another path to an object already loaded (L14-4): the same object, loaded once.
-            if ids[..n].contains(&id) {
+            if let Some(j) = ids[..n].iter().position(|x| *x == id) {
                 let _ = crate::ffi_sys::liella_sys_close(i64::from(fd));
                 let _ = raw::munmap(at, file.len());
+                edge(q, j, name);
                 continue;
             }
             let loaded = map::load::<Native, _>(&mut SysMapper { fd }, file, page);
@@ -563,6 +574,7 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8]) {
             maps[n] = (at, file.len());
             ids[n] = id;
             objs[n] = parse(file, name, loaded.bias);
+            edge(q, n, name);
             n += 1;
         }
         q += 1;
@@ -594,8 +606,85 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8]) {
     if let Err(i) = reloc::protect_relro(objs, &mut ProcImage, page) {
         fail_with(&[objs.get(i).map_or(&b"?"[..], |o| o.name), b": cannot protect the RELRO segment\n"], program::FAILURE);
     }
+    let hooks: [init::Hooks; OBJECTS_MAX] = core::array::from_fn(|i| objs.get(i).map_or_else(init::Hooks::default, |o| init::hooks(&o.dynm, o.bias, i == 0)));
     for &(at, len) in maps[1..n].iter().chain(&own).filter(|m| m.1 != 0) {
         let _ = raw::munmap(at, len);
+    }
+    run_init(&hooks[..n], &edges[..ne], sp)
+}
+
+/// Most `DT_NEEDED` links over all objects of one start.
+const EDGES_MAX: usize = 1024;
+
+/// The words of a function array in a mapped, relocated object.
+fn array_words(a: init::Array) -> &'static [u64] {
+    let (Ok(addr), Ok(len)) = (usize::try_from(a.addr), usize::try_from(a.len)) else { return &[] };
+    // UNSAFE(slice): an object's DT_PREINIT_ARRAY, DT_INIT_ARRAY or DT_FINI_ARRAY, read only.
+    #[allow(unsafe_code)]
+    // SAFETY: `addr` is bias + the array's link-time address in an object mapped for the process's
+    // lifetime (the loader never unmaps an object at start), `len` its size tag / 8, both from the
+    // object's dynamic array as the static linker wrote them; relocation already ran.
+    unsafe {
+        conv::words_at(addr, len)
+    }
+}
+
+/// The objects' termination hooks in finalisation order (DL-11): `[DT_FINI_ARRAY address, entries,
+/// DT_FINI]` per object, written once before the program is entered, read by [`fini_all`].
+static FINI_HOOKS: [[AtomicU64; 3]; OBJECTS_MAX] = [const { [const { AtomicU64::new(0) }; 3] }; OBJECTS_MAX];
+static FINI_LEN: AtomicUsize = AtomicUsize::new(0);
+static FINI_DONE: AtomicBool = AtomicBool::new(false);
+
+/// Run the initialisation functions after relocation (design §9, D-27.19): the program's
+/// `DT_PREINIT_ARRAY`, then each other object's `DT_INIT` and `DT_INIT_ARRAY` in
+/// [`init::init_order`], each called with `(argc, argv, envp)` from the initial stack at `sp`. The
+/// program's own `DT_INIT`/`DT_INIT_ARRAY` are its C library's start (probe: the reference loader
+/// runs neither). Records the finalisation order for [`fini_all`] and returns its address, the
+/// termination function the program gets in `%rdx`.
+fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize) -> usize {
+    let mut order = [0u8; OBJECTS_MAX];
+    let mut fini_order = [0u8; OBJECTS_MAX];
+    let (Ok(len), Ok(fini_len)) = (init::init_order(hooks.len(), edges, &mut order), init::fini_order(hooks.len(), edges, &mut fini_order)) else {
+        refuse(b"ld.so: cannot order the objects' initialisation\n")
+    };
+    let argc = stack_word(sp);
+    let argv = sp.wrapping_add(8);
+    let envp = argv.wrapping_add(usize::try_from(argc).unwrap_or(0).wrapping_add(1).wrapping_mul(8));
+    let args = |v: usize| i64::from_ne_bytes(u64::try_from(v).unwrap_or(0).to_ne_bytes());
+    let (a, b, c) = (i64::from_ne_bytes(argc.to_ne_bytes()), args(argv), args(envp));
+    let call = |f: u64| {
+        let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), a, b, c);
+    };
+    // Only the program's preinit array is non-empty (`init::hooks` drops a shared object's).
+    for h in hooks {
+        init::init_calls(0, array_words(h.preinit)).for_each(call);
+    }
+    for &i in order.get(..len).unwrap_or(&[]) {
+        let Some(h) = hooks.get(usize::from(i)).filter(|_| i != 0) else { continue };
+        init::init_calls(h.init, array_words(h.init_array)).for_each(call);
+    }
+    for (slot, &i) in FINI_HOOKS.iter().zip(fini_order.get(..fini_len).unwrap_or(&[])) {
+        let h = hooks.get(usize::from(i)).copied().unwrap_or_default();
+        for (w, v) in slot.iter().zip([h.fini_array.addr, h.fini_array.len, h.fini]) {
+            w.store(v, Relaxed);
+        }
+    }
+    FINI_LEN.store(fini_len, Release);
+    #[allow(clippy::as_conversions)] // a function's address has no conversion other than `as`
+    (fini_all as *const ()).expose_provenance()
+}
+
+/// The termination function passed to the program (`rtld_fini`): each object's `DT_FINI_ARRAY` in
+/// reverse, then its `DT_FINI`, the objects in [`init::fini_order`], the program first. Runs once.
+extern "C" fn fini_all() {
+    if FINI_DONE.swap(true, AcqRel) {
+        return;
+    }
+    for slot in FINI_HOOKS.iter().take(FINI_LEN.load(Acquire)) {
+        let [addr, len, fini] = [0, 1, 2].map(|k| slot.get(k).map_or(0, |w| w.load(Relaxed)));
+        for f in init::fini_calls(fini, array_words(init::Array { addr, len })) {
+            let _ = crate::ffi::liella_machine_call0(usize::try_from(f).unwrap_or(0));
+        }
     }
 }
 
