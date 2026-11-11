@@ -136,7 +136,7 @@ impl W3 {
 }
 
 /// `⌊a·b/2^192⌋` less at most 6 (the products below the third word dropped).
-#[inline(always)]
+#[inline]
 fn mulhi3(a: W3, b: W3) -> W3 {
     let (a2, a1, a0) = (a.h >> 64, a.h & M64, u128::from(a.l));
     let (b2, b1, b0) = (b.h >> 64, b.h & M64, u128::from(b.l));
@@ -146,7 +146,7 @@ fn mulhi3(a: W3, b: W3) -> W3 {
 }
 
 /// `⌊a·b/2^128⌋` less at most 3.
-#[inline(always)]
+#[inline]
 fn mul32(a: W3, b: u128) -> W3 {
     let (a2, a1, a0) = (a.h >> 64, a.h & M64, u128::from(a.l));
     let (b1, b0) = (b >> 64, b & M64);
@@ -362,7 +362,6 @@ fn div3(n: W3, d: W3) -> W3 {
 }
 
 /// Word `i` of the bits of `2/π` behind three zero words (bit `j` of `2/π` at bit `j + 191`).
-#[inline(always)]
 fn word(i: usize) -> u64 {
     match i.checked_sub(3) {
         Some(k) => t::TWO_OVER_PI[k],
@@ -386,7 +385,6 @@ struct Reduced {
 }
 
 /// Steps 1 and 2 for `|x| = m·2^e`, or `None` for `|d| < 2^-160`.
-#[inline(always)]
 fn reduce(m: u128, e: i32) -> Option<Reduced> {
     let p = (e + 190) as usize; // bit e - 1 of 2/π; e >= -190
     let (w, r) = (p / 64, (p % 64) as u32);
@@ -456,7 +454,7 @@ fn reduce(m: u128, e: i32) -> Option<Reduced> {
 }
 
 /// `sin(πd/2)/d` in units of `2^-190`.
-#[inline(always)]
+#[inline]
 fn sin_poly(u: W3) -> W3 {
     let (uh, u1) = (u.h, (u.h >> 64) as u64);
     let a = S6 - (mulhi64(u1, S7) >> 20); // units 2^-88
@@ -469,7 +467,7 @@ fn sin_poly(u: W3) -> W3 {
 }
 
 /// `cos(πd/2)` in units of `2^-191`.
-#[inline(always)]
+#[inline]
 fn cos_poly(u: W3) -> W3 {
     let (uh, u1) = (u.h, (u.h >> 64) as u64);
     let b = C6 - (mulhi64(u1, C7) >> 20); // units 2^-85
