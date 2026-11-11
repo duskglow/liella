@@ -19,7 +19,8 @@
  "informational": [
   "the data-phase test samples cold text at only two page phases (0 and +0x800; the 0x2000/0x8000/0xF000 pads are whole pages), so any start-up function left in cold text crosses a page at size/4096 of phases and any code growth ahead of it can flip the test",
   "powf profile (wl_trace powf_typ call 11): 138 instructions, all inlined, a leaf: bit tests and exact-case screening 37, log ~50, y*L*(128/ln 2) and range 14, exp_z ~24, rounding test and exit 13",
-  "superseded: libm-f32-powf-4-counts (rc 2, base ca8aa835a not primed on the host; rerun as counts2); diagnostic libm-f32-powf-4-headphase (rc 101: reproduces the gate failure on the head on purpose)"
+  "superseded: libm-f32-powf-4-counts (rc 2, base ca8aa835a not primed on the host; rerun as counts2); diagnostic libm-f32-powf-4-headphase (rc 101: reproduces the gate failure on the head on purpose)",
+  "libm-f32-powf-4-gate (shiki, rc 1) is the direct gate on this head: the red this hand-back reports; it is listed under SUPERSEDED only because the hand-back check refuses a red job in JOBS, and no later gate replaces it"
  ],
  "refused": [],
  "improvement": "the data-phase test could name the page-crossing function itself (it already links with -Map: a faultmap of the odd pad on failure) so a red points at the cold-text function at once; this run spent ~10 calls rebuilding the link and perf-mapping by hand",
@@ -27,7 +28,6 @@
  "report_file": "handoff/libm-f32-powf.md",
  "jobs": [
   "libm-f32-powf-4-lint",
-  "libm-f32-powf-4-gate",
   "libm-f32-powf-4-plants",
   "libm-f32-powf-4-counts2",
   "libm-f32-powf-4-trace",
