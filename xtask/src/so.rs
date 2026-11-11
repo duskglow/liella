@@ -1046,8 +1046,8 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
 
 /// The interpreter product (phase 14 DL-5, R14-2, D-27.13): `crates/ld-so` as a static archive,
 /// linked with the `ld` variant of `machine/entry.S` into `target/liella/<Arch::INTERP>`, a shared
-/// object whose entry point is `liella_machine_ld_entry` and whose every symbol is local (no
-/// exports before the loader has any, R14-12), then checked: [`check_interp`] (L14-1) and [`check_interp_prerelocation`] (design §1).
+/// object whose entry point is `liella_machine_ld_entry` and whose every symbol is local but
+/// [`LD_EXPORTS`] (R14-12, D-27.20), then checked: [`check_interp`] (L14-1) and [`check_interp_prerelocation`] (design §1).
 /// The interpreter's Rust code runs before its image is relocated (design §0a item 9): with the
 /// `pie` model every symbol is local to the image, so calls and data references are PC-relative,
 /// never through a GOT slot that still holds a link-time address (rustc's default no-PLT calls
@@ -1066,7 +1066,7 @@ fn run_ld(root: &Path, cargo: &str, cc: &str, profile: Profile) -> Result<(), St
     let entry = product.join("ld-entry.o");
     run(Command::new(cc).arg("-c").arg("-DLIELLA_LD").arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&entry))?;
     let map = product.join("ld.map");
-    fs::write(&map, "{\n  local: *;\n};\n").map_err(|e| e.to_string())?;
+    fs::write(&map, ld_version_script(root, name)?).map_err(|e| e.to_string())?;
     let out = release.join(name);
     let staged = tmp_name(&out);
     run(Command::new(cc)
@@ -1083,6 +1083,30 @@ fn run_ld(root: &Path, cargo: &str, cc: &str, profile: Profile) -> Result<(), St
     publish(&staged, &out)?;
     println!("so: target/liella/{name} (the interpreter; L14-1 link check and pre-relocation check passed)");
     Ok(())
+}
+
+/// The symbols the interpreter exports (DL-12, D-27.20), each at the version `spec/abi/versions.tsv`
+/// gives it for the interpreter's soname; every other symbol stays local.
+const LD_EXPORTS: &[&str] = &["__tls_get_addr"];
+
+/// The interpreter's version script: one node per version of [`LD_EXPORTS`], everything else local.
+fn ld_version_script(root: &Path, soname: &str) -> Result<String, String> {
+    let table = fs::read_to_string(root.join("spec/abi/versions.tsv")).map_err(|e| format!("versions.tsv: {e}"))?;
+    let mut nodes: BTreeMap<String, Vec<&str>> = BTreeMap::new();
+    for sym in LD_EXPORTS {
+        let version = table.lines().map(|l| l.split('\t').collect::<Vec<_>>()).find(|f| f.first() == Some(&soname) && f.get(1) == Some(sym)).and_then(|f| f.get(2).map(|v| (*v).to_string()));
+        let version = version.ok_or_else(|| format!("versions.tsv: no row for {soname} {sym}"))?;
+        nodes.entry(version).or_default().push(sym);
+    }
+    let mut out = String::new();
+    for (i, (version, syms)) in nodes.iter().enumerate() {
+        let local = if i == 0 { "  local: *;\n" } else { "" };
+        out.push_str(&format!("{version} {{\n  global: {};\n{local}}};\n", syms.join("; ")));
+    }
+    if out.is_empty() {
+        out.push_str("{\n  local: *;\n};\n");
+    }
+    Ok(out)
 }
 
 /// L14-1 over a linked interpreter: no undefined symbol, no `DT_NEEDED`, relocations only

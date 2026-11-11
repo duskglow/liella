@@ -1,0 +1,20 @@
+# LIBM-F128-TRIG-INT-3 plants: cargo xtask plants handoff/LIBM-F128-TRIG-INT-3-plants.txt --dir <new RAM dir>
+# The binary128 sin/cos/tan/sincos tier (crates/math/src/wide_int/quad.rs, D-10.85, D-10.91, D-10.92): the
+# reduction window written out (this story) and the plants of LIBM-F128-TRIG-INT-2 on the code it handed back.
+# The least significant word of the 2/pi window dropped: the reduced operand loses its low bits, which matters only
+# where |f| is small (operands near a multiple of pi/2), the cases the near-multiple checks pin.
+f128-window-low-word | crates/math/src/wide_int/quad.rs | lit:[g(6), g(5), g(4), g(3), g(2), g(1), g(0)] ==> [0, g(5), g(4), g(3), g(2), g(1), g(0)] | cargo test -p liella-math --lib wide_int::quad | msg:tier_agrees_with_the_wide_route.*FAILED|panicked
+# The window one word out of order at the top: the quadrant and every bit of f wrong.
+f128-window-order | crates/math/src/wide_int/quad.rs | lit:[g(6), g(5), g(4), g(3), g(2), g(1), g(0)] ==> [g(6), g(5), g(4), g(3), g(2), g(0), g(1)] | cargo test -p liella-math --lib wide_int::quad | msg:tier_agrees_with_the_wide_route.*FAILED|panicked
+# The low limb of the quotient's residual correction dropped: about 2^-127 relative, far above step 6's 2^-162.
+f128-div-corr-limb | crates/math/src/wide_int/quad.rs | lit:let corr = (ea >> 64) * vh + (((ea & M64) * vh) >> 64); ==> let corr = (ea >> 64) * vh; | cargo test -p liella-math --lib wide_int::quad | msg:quotient_meets_its_bound.*FAILED
+# Half the Newton step: the reciprocal stays within 2^-52 only, the corrected quotient within 2^-103.
+f128-div-newton-half | crates/math/src/wide_int/quad.rs | lit:((i128::from(v) * eps) >> 46) ==> ((i128::from(v) * eps) >> 47) | cargo test -p liella-math --lib wide_int::quad | msg:quotient_meets_its_bound.*FAILED
+# The q1·d1 column of the residual dropped: the residual and so the quotient wrong by up to 2^-62.
+f128-div-residual-column | crates/math/src/wide_int/quad.rs | lit:hi.wrapping_add(q1 * d1).wrapping_add(q0 * d2) ==> hi.wrapping_add(q0 * d2) | cargo test -p liella-math --lib wide_int::quad | msg:quotient_meets_its_bound.*FAILED
+# tan's sign without the odd-quadrant term (cot a is -tan(a ± π/2)).
+f128-tan-sign | crates/math/src/wide_int/quad.rs | lit:Some((n.neg ^ r.negf ^ odd, m, e + top.1 - bot.1)) ==> Some((n.neg ^ r.negf, m, e + top.1 - bot.1)) | cargo test -p liella-math --lib wide_int::quad | msg:tier_agrees_with_the_wide_route.*FAILED
+# sincos taking sin|a| where cos|a| belongs (odd quadrants).
+f128-sincos-pick | crates/math/src/wide_int/quad.rs | lit:let (m, e) = if odd { c } else { s }; ==> let (m, e) = if odd { s } else { c }; | cargo test -p liella-math --lib wide_int::quad | msg:tier_agrees_with_the_wide_route.*FAILED
+# The rounding test skipped (shared by sin, cos, tan and sincos): the pinned boundary cases must see it.
+f128-round-skipped | crates/math/src/wide_int/quad.rs | lit:if (low & ((1 << 78) - 1)).wrapping_sub(ERR) > (1 << 78) - 2 * ERR { ==> if false { | cargo test -p liella-math --lib wide_int::quad | msg:rounding_test_refuses_near_a_boundary.*FAILED

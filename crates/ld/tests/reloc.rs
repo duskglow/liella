@@ -248,7 +248,7 @@ fn reloc_model_corpus_one_object_per_type() {
             (lo, hi) = (lo.min(bias(i) + ph.vaddr), hi.max(bias(i) + ph.vaddr + ph.memsz));
         }
         m.spans.push((lo, hi));
-        objs.push(Obj { elf, dynm: elf.dynamic().unwrap().unwrap(), bias: bias(i), name: &names[i] });
+        objs.push(Obj { elf, dynm: elf.dynamic().unwrap().unwrap(), bias: bias(i), name: &names[i], tls: None });
     }
     let syms: Vec<Object> = objs.iter().map(|o| Object::new(o.dynm).unwrap()).collect();
     let global: Vec<usize> = (0..objs.len()).collect();
@@ -345,7 +345,7 @@ fn reloc_version_check_and_refusals_in_the_model() {
     let vname = v.to_str().unwrap().as_bytes();
     let obj = |f: &'static [u8], name: &'static [u8]| {
         let elf = Elf::parse::<Native>(f).unwrap();
-        Obj { elf, dynm: elf.dynamic().unwrap().unwrap(), bias: 0, name }
+        Obj { elf, dynm: elf.dynamic().unwrap().unwrap(), bias: 0, name, tls: None }
     };
     let leak = |b: Vec<u8>| -> &'static [u8] { Box::leak(b.into_boxed_slice()) };
     let (pf, vf, stub, vname) = (leak(pf), leak(vf), leak(stub), leak(vname.to_vec()));
@@ -363,7 +363,7 @@ fn reloc_version_check_and_refusals_in_the_model() {
         Err(reloc::VersionError::Missing { by: 0, file: vname, version: b"VER_1" }),
         "missing version refused"
     );
-    assert_eq!(RelocError::Tls(18).message(), b"thread-local storage relocations are not available in this build\n");
+    assert_eq!(RelocError::Tls(36).message(), b"TLS descriptor relocations are not available in this build\n");
     std::fs::remove_dir_all(&d).ok();
 }
 
@@ -658,6 +658,76 @@ fn without_pt_phdr(ld: &Path, d: &Path, p: &Path, name: &str) {
     assert_eq!((code, sig), (Some(0), None), "{name}: kernel-started program without PT_PHDR: check number {code:?} failed; stderr: {err}");
     let (code, sig, err) = run(Command::new(ld).arg(&q));
     assert_eq!((code, sig), (Some(0), None), "{name}: ld.so PROGRAM without PT_PHDR: check number {code:?} failed; stderr: {err}");
+}
+
+/// The program of [`reloc_libc_bias_without_pt_phdr`]: exits 0 when libc's view of the executable's
+/// load bias is the real one (`AT_ENTRY` minus the header's `e_entry`, found without libc's help):
+/// 1 when `dl_iterate_phdr`'s first object has another `dlpi_addr`; a `%n` in a read-only format
+/// passed to `__printf_chk` aborts (the fortify check places the format by that bias, D-12.4) when
+/// the bias is wrong.
+const LIBC_BIAS_PROG: &str = "#define _GNU_SOURCE
+#include <elf.h>
+#include <link.h>
+#include <stdint.h>
+#include <sys/auxv.h>
+extern const ElfW(Ehdr) __ehdr_start;
+extern int __printf_chk(int, const char *, ...);
+static const char ro[] = \"%n\";
+static int first(struct dl_phdr_info *i, size_t n, void *d) { (void)n; *(uintptr_t *)d = i->dlpi_addr; return 1; }
+int main(void) {
+  uintptr_t want = getauxval(AT_ENTRY) - __ehdr_start.e_entry, got = 1;
+  int w = -1;
+  dl_iterate_phdr(first, &got);
+  if (got != want) return 1;
+  __printf_chk(1, ro, &w);
+  return w == 0 ? 0 : 2;
+}
+";
+
+/// s27_1_c_8, D-27.18, D-27.12 (DL-LIBC-START-BIAS-3): libc's own lookups of the executable
+/// (`dl_iterate_phdr`, the `%n` check) see its real load bias when it has no `PT_PHDR`: a PIE and
+/// an ET_EXEC linked against `libc.so.6`, started by the kernel through `PT_INTERP` and as
+/// `ld.so PROGRAM`, and a static ET_EXEC (which the linker gives no `PT_PHDR`). `libc.so.6` is
+/// named by path (a copy whose `DT_SONAME` is retagged `DT_CHECKSUM`): `ld.so` has no library search
+/// yet. Keep naming it by path until phase 14's library search lands, then link by soname.
+#[test]
+fn reloc_libc_bias_without_pt_phdr() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let lib = target().join("liella");
+    let (crt1, libc_a) = (lib.join("liella-crt1.o"), lib.join("libc.a"));
+    if !crt1.exists() || !libc_a.exists() {
+        eprintln!("SKIP: {} or libc.a not built (run cargo xtask so)", crt1.display());
+        return;
+    }
+    let d = std::fs::canonicalize(dir("libcbias")).unwrap();
+    let mut so = std::fs::read(lib.join("libc.so.6")).unwrap();
+    let elf = Elf::parse::<Native>(&so).unwrap();
+    let dynph = elf.find(liella_ld::elf::pt::DYNAMIC).unwrap();
+    let (off, len) = (dynph.offset as usize, dynph.filesz as usize);
+    let at = (off..off + len).step_by(16).find(|&o| so[o..o + 8] == 14u64.to_le_bytes()).expect("libc.so.6 has a DT_SONAME");
+    so[at..at + 8].copy_from_slice(&0x6fff_fdf8u64.to_le_bytes());
+    let libc_so = d.join("libc-by-path.so");
+    std::fs::write(&libc_so, &so).unwrap();
+    let c = d.join("bias.c");
+    std::fs::write(&c, LIBC_BIAS_PROG).unwrap();
+    let interp = format!("-Wl,--dynamic-linker={}", ld.display());
+    let link = |out: &str, flags: &[&str], libc: &Path| {
+        let o = d.join(out);
+        let r = Command::new("cc").args(["-O1", "-fno-builtin", "-nostdlib", "-D_FORTIFY_SOURCE=0"]).args(flags).arg("-o").arg(&o).arg(&crt1).arg(&c).arg(libc).arg("-lgcc").output().unwrap();
+        assert!(r.status.success(), "{out}: {}", String::from_utf8_lossy(&r.stderr));
+        o
+    };
+    let pie = link("pie", &["-fPIE", "-pie", &interp], &libc_so);
+    let exe = link("exe", &["-fno-pie", "-no-pie", &interp], &libc_so);
+    for (i, p) in [pie, exe].iter().enumerate() {
+        without_pt_phdr(&ld, &d, p, &format!("libc{i}-nophdr"));
+    }
+    let stat = link("static", &["-static", "-fno-pie", "-no-pie"], &libc_a);
+    let file = std::fs::read(&stat).unwrap();
+    assert!(Elf::parse::<Native>(&file).unwrap().find(liella_ld::elf::pt::PHDR).is_none(), "the static ET_EXEC has no PT_PHDR");
+    let (code, sig, err) = run(&mut Command::new(&stat));
+    assert_eq!((code, sig), (Some(0), None), "static ET_EXEC without PT_PHDR: check number {code:?} failed; stderr: {err}");
+    std::fs::remove_dir_all(&d).ok();
 }
 
 /// s27_1_c_1, D-27.15, D-27.18: a program with dependencies and 300 `PT_LOAD`s (no count bound) runs

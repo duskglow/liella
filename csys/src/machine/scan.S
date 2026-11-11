@@ -7312,6 +7312,11 @@ liella_machine_strpair:
 	jnz .Lliella_machine_strpair_avx_loop
 	/* rax is 64-aligned. One 64-byte group first when it is not 128-aligned (PERF-STRSTR-LONG). */
 .Lliella_machine_strpair_avx_al64:
+	/* liella_machine_strpair_avx_run (STRSTR-HIT-64): liella_machine_strstr enters here after its
+	 * own head, with rax 64-aligned, rdi = p, rsi = off, rdx = p, r8 the mode, ymm0-2 as here. */
+	.globl liella_machine_strpair_avx_run
+	.hidden liella_machine_strpair_avx_run
+liella_machine_strpair_avx_run:
 	movq %rsi, %r9
 	negq %r9
 	testl $64, %eax
@@ -7600,6 +7605,11 @@ liella_machine_strpair:
 	testl $63, %eax
 	jnz .Lliella_machine_strpair_sse_loop
 	.p2align 4
+	/* liella_machine_strpair_sse_run (STRSTR-HIT-64): liella_machine_strstr enters here after its
+	 * own head, with rax 64-aligned, rdi = p, r9 = -off, xmm0-2 as here. */
+	.globl liella_machine_strpair_sse_run
+	.hidden liella_machine_strpair_sse_run
+liella_machine_strpair_sse_run:
 .Lliella_machine_strpair_sse_loop64:
 	/* PERF-STRSTR-LONG: a 64-aligned group of four blocks (one page) tested at once: unit q is a
 	 * candidate or 0 exactly when min((Y ^ c1) | (L ^ c0), Y) is 0, as on AVX2. */
@@ -7651,6 +7661,9 @@ liella_machine_strpair:
  *   - one 16-byte load of h: a NUL at an index below last = m - 1 means the haystack is shorter
  *     than the needle's first m - 1 bytes: NULL. Else bytes [0, last) of h are text, the
  *     contract of liella_machine_strpair(h + last, last, n[0], n[last]).
+ *   - STRSTR-HIT-64: when h's page offset is 1..4016, strpair's head test runs here on
+ *     [p, p + 64), p = h + last (no call); a stop is compared in place (below), and with no stop
+ *     the call enters strpair's aligned run (liella_machine_strpair_avx_run / _sse_run).
  *   - its answer 2k (candidate at h + k): when h + k has a page offset <= 4080, one 16-byte load
  *     there is compared with the needle (kept in xmm15) over bits [0, m); equal returns h + k.
  *     Answer 2k + 1 (a NUL at h + last + k): that byte read again is 0: NULL.
@@ -7676,9 +7689,9 @@ liella_machine_strstr:
 	.type strstr, @function
 strstr:
 #endif
-	leal -1(%rdi), %eax
-	andl $4095, %eax
-	cmpl $4080, %eax
+	leal -1(%rdi), %r8d
+	andl $4095, %r8d
+	cmpl $4080, %r8d
 	jae .Lsstr_slow
 	leal -1(%rsi), %eax
 	andl $4095, %eax
@@ -7693,20 +7706,179 @@ strstr:
 	/* eax = m; m == 0 (CF after the subtraction): h. Else eax = last. */
 	subl $1, %eax
 	jc .Lsstr_empty
-	movdqu (%rdi), %xmm1
+	movdqu (%rdi), %xmm4
 	pxor %xmm2, %xmm2
-	pcmpeqb %xmm1, %xmm2
+	pcmpeqb %xmm4, %xmm2
 	pmovmskb %xmm2, %edx
 	orl $0x10000, %edx
 	bsfl %edx, %edx
 	cmpl %eax, %edx
 	jb .Lsstr_null
+	/* STRSTR-HIT-64: when h has a page offset of 1..4016 the head is settled here, without the
+	 * strpair call: [h, h + 80) lies in h's page, which holds every load below (the blocks at
+	 * p = h + last up to p + 64 <= h + 78, their blocks at h + j, the compare at a candidate
+	 * h + k, k < 64). r11d = the bits from m on, for the compare. */
+	cmpl $4016, %r8d
+	jae .Lsstr_call
+	movl %eax, %ecx
+	movl $-2, %r11d
+	shll %cl, %r11d
+	leaq (%rdi,%rax), %rdx
+	cmpl $0, liella_machine_scan_level(%rip)
+	je .Lsstr_sse2
+	/* AVX2: the strpair head test (min((Y ^ c1) | (L ^ c0), Y) == 0 at a candidate or the
+	 * terminator) on the blocks at p + j (j = 0, 32), each with its L block at h + j. */
+	vpbroadcastb (%rsi), %ymm0
+	vpbroadcastb (%rsi,%rax), %ymm1
+	vpxor %xmm2, %xmm2, %xmm2
+	vmovdqu (%rdx), %ymm3
+	vpxor (%rdi), %ymm0, %ymm4
+	vpxor %ymm3, %ymm1, %ymm5
+	vpor %ymm4, %ymm5, %ymm5
+	vpminub %ymm3, %ymm5, %ymm5
+	vpcmpeqb %ymm2, %ymm5, %ymm5
+	vpmovmskb %ymm5, %r10d
+	testl %r10d, %r10d
+	jnz .Lsstr_avx_stop0
+	vmovdqu 32(%rdx), %ymm6
+	vpxor 32(%rdi), %ymm0, %ymm4
+	vpxor %ymm6, %ymm1, %ymm5
+	vpor %ymm4, %ymm5, %ymm5
+	vpminub %ymm6, %ymm5, %ymm5
+	vpcmpeqb %ymm2, %ymm5, %ymm5
+	vpmovmskb %ymm5, %r10d
+	testl %r10d, %r10d
+	jnz .Lsstr_avx_stop32
+	/* No stop in [p, p + 64): strpair's aligned run from the 64-byte boundary in (p, p + 64], in
+	 * the filter mode its head would pick (pair when either block holds c1), rdx = p. */
+	vpcmpeqb %ymm3, %ymm1, %ymm3
+	vpcmpeqb %ymm6, %ymm1, %ymm6
+	vpor %ymm3, %ymm6, %ymm6
+	vpmovmskb %ymm6, %r8d
+	pushq %rsi
+	movq %rax, %rsi
+	movq %rdx, %rdi
+	leaq 64(%rdx), %rax
+	andq $-64, %rax
+	call liella_machine_strpair_avx_run
+	jmp .Lsstr_back
+.Lsstr_avx_stop0:
+	vzeroupper
+	bsfl %r10d, %r10d
+	leaq (%rdi,%r10), %rcx
+	jmp .Lsstr_verify
+.Lsstr_avx_stop32:
+	vzeroupper
+	bsfl %r10d, %r10d
+	leaq 32(%rdi,%r10), %rcx
+	jmp .Lsstr_verify
+	/* SSE2: the same test on four blocks at p + 16j, L at h + 16j (the block at h is xmm4). */
+.Lsstr_sse2:
+	movzbl (%rsi), %r8d
+	imull $0x01010101, %r8d, %r8d
+	movd %r8d, %xmm0
+	pshufd $0, %xmm0, %xmm0
+	movzbl (%rsi,%rax), %r8d
+	imull $0x01010101, %r8d, %r8d
+	movd %r8d, %xmm1
+	pshufd $0, %xmm1, %xmm1
+	pxor %xmm2, %xmm2
+	movdqu (%rdx), %xmm5
+	movdqa %xmm5, %xmm3
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub %xmm5, %xmm3
+	pcmpeqb %xmm2, %xmm3
+	pmovmskb %xmm3, %r10d
+	testl %r10d, %r10d
+	jnz .Lsstr_sse_stop0
+	movdqu 16(%rdx), %xmm5
+	movdqu 16(%rdi), %xmm4
+	movdqa %xmm5, %xmm3
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub %xmm5, %xmm3
+	pcmpeqb %xmm2, %xmm3
+	pmovmskb %xmm3, %r10d
+	testl %r10d, %r10d
+	jnz .Lsstr_sse_stop16
+	movdqu 32(%rdx), %xmm5
+	movdqu 32(%rdi), %xmm4
+	movdqa %xmm5, %xmm3
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub %xmm5, %xmm3
+	pcmpeqb %xmm2, %xmm3
+	pmovmskb %xmm3, %r10d
+	testl %r10d, %r10d
+	jnz .Lsstr_sse_stop32
+	movdqu 48(%rdx), %xmm5
+	movdqu 48(%rdi), %xmm4
+	movdqa %xmm5, %xmm3
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub %xmm5, %xmm3
+	pcmpeqb %xmm2, %xmm3
+	pmovmskb %xmm3, %r10d
+	testl %r10d, %r10d
+	jz .Lsstr_sse_run
+	bsfl %r10d, %r10d
+	leaq 48(%rdi,%r10), %rcx
+	/* The candidate h + k (rcx) for a stop at p + k: equal over bytes [0, m) returns it (its byte
+	 * last is c1, not 0, so the stop was no terminator). Else the stop byte decides: 0 is the
+	 * terminator (no candidate before it: NULL), anything else a failed candidate, r = 2k. */
+.Lsstr_verify:
+	movdqu (%rcx), %xmm0
+	pcmpeqb %xmm15, %xmm0
+	pmovmskb %xmm0, %r10d
+	orl %r11d, %r10d
+	incl %r10d
+	jnz .Lsstr_vfail
+	movq %rcx, %rax
+	ret
+.Lsstr_vfail:
+	cmpb $0, (%rcx,%rax)
+	je .Lsstr_null
+	subq %rdi, %rcx
+	addq %rcx, %rcx
+	leaq 1(%rax), %rdx
+	jmp liella_hot_strstr_next
+.Lsstr_sse_stop0:
+	bsfl %r10d, %r10d
+	leaq (%rdi,%r10), %rcx
+	jmp .Lsstr_verify
+.Lsstr_sse_stop16:
+	bsfl %r10d, %r10d
+	leaq 16(%rdi,%r10), %rcx
+	jmp .Lsstr_verify
+.Lsstr_sse_stop32:
+	bsfl %r10d, %r10d
+	leaq 32(%rdi,%r10), %rcx
+	jmp .Lsstr_verify
+.Lsstr_sse_run:
+	/* No stop in [p, p + 64): strpair's SSE2 groups from the 64-byte boundary in (p, p + 64]. */
+	pushq %rsi
+	movq %rax, %rsi
+	movq %rdx, %rdi
+	movq %rax, %r9
+	negq %r9
+	leaq 64(%rdx), %rax
+	andq $-64, %rax
+	call liella_machine_strpair_sse_run
+	jmp .Lsstr_back
+	/* h's page offset is above 4016: the strpair call from p = h + last. */
+.Lsstr_call:
 	pushq %rsi
 	movzbl (%rsi), %edx
 	movzbl (%rsi,%rax), %ecx
 	addq %rax, %rdi
 	movq %rax, %rsi
 	call liella_machine_strpair
+.Lsstr_back:
 	popq %r8
 	testb $1, %al
 	jnz .Lsstr_nul

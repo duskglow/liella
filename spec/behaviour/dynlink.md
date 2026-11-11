@@ -83,6 +83,20 @@ constructor registered, then `dtor F`. `exit` with E still open: atexit handlers
 DT_FINI), B, E, C, F. `_exit`: nothing. A dependency cycle H <-> I opened by `dlopen("libH")`:
 `ctor I`, `ctor H`; `dlclose`: `dtor H`, `dtor I`.
 
+**Order without a C library** (tools/probe/dl/order.sh, DL-11, D-27.19). `-nostdlib` objects print what
+runs; each program's `_start` calls the termination function it gets in `%rdx`. The loader runs the
+program's preinit array but not its constructors or `init_array` (its C library's start does), and
+does not run a shared object's `DT_PREINIT_ARRAY` (made by retagging `DT_INIT_ARRAY`). Start order:
+`main -> R, Q, P; P -> R`: R, P, Q. `main -> L, K; L -> N; N -> K; K -> M`: M, K, N, L. A cycle at
+start, `main -> H; H <-> I`: H, I. `main -> X; X -> Y; Y -> Z, W; Z -> X`: W, Y, X, Z. The
+reference's termination function cannot be called without its C library (an internal assertion,
+status 127), so the exit order comes from the same programs linked with it: the program's
+`fini_array` and destructor, then the objects in the reverse of the start order (H <-> I: I, H;
+cycle of three: Z, X, Y, W). Rule that fits every case here and DL-0b's: a depth-first walk over the
+objects in reverse load order, each after the objects it needs, a cycle member already being walked
+passed over, the root (program, or the object opened) last; at exit the same walk over every loaded
+object, reversed.
+
 **Loader exit status and messages** (record `== loader`). Missing DT_NEEDED: 127, `<prog>: error
 while loading shared libraries: <name>: cannot open shared object file: No such file or
 directory`. Undefined function: 127 `<prog>: symbol lookup error: <object>: undefined symbol:

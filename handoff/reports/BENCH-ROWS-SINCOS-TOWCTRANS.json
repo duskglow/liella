@@ -1,0 +1,12 @@
+{"task": "BENCH-ROWS-SINCOS-TOWCTRANS", "model": "opus", "tokens": null,
+ "result": "cbench rows sincosf/sincos/sincosl (cbench_libm) and towctrans_toupper_utf8/towctrans_tolower_utf8 (cbench_locale), through volatile pointers, each checked once against sin/cos or towupper/towlower before timing; ratios (one unbooked run) sincosf 4.84, sincos 1.59, sincosl 0.76, towctrans 2.08/2.43",
+ "branch": "task/bench-rows-sincos-towctrans", "head": null,
+ "gate": {"affected": "341 passed / 0 failed", "peak": "1.3G"}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Liella sincosf (31 ns) is slower than sinf + cosf called separately (about 21 ns), 4.8x glibc in one unbooked Zen 1 run: candidate libm story (shared range reduction)",
+                   "Liella vs glibc sincos results on the bench operands differ by at most 1 ulp (d 1/512, f 5/512, ld 18/512); towctrans identical for every code point"],
+ "refused": [],
+ "improvement": "the plant tool rebuilds the products (about 4 min) for every plant whose command is a shell line, even for plants on bench C files that cannot change the products; a 'products unaffected by this path' rule for bench/c would cut a 5-plant run from about 25 to 5 minutes",
+ "next_step": "none for this story; optional: libm story for sincosf, host_limits calibration after the next timing sweep",
+ "report_file": "handoff/BENCH-ROWS-SINCOS-TOWCTRANS.md",
+ "jobs": ["mei:bench-rows-sincos-towctrans-clippy", "mei:bench-rows-sincos-towctrans-gate", "mei:bench-rows-sincos-towctrans-plants", "mei:bench-rows-sincos-towctrans-rows2"]}
