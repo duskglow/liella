@@ -315,7 +315,8 @@ mod tests {
     }
 
     fn check_atan(n: &Num, tally: &mut Tally) {
-        let want = mp::atan(exact(n));
+        let a = mp::atan(exact(n).abs()); // the 384-bit atan takes a magnitude
+        let want = if n.neg { a.neg() } else { a };
         let y = mag(n).unwrap();
         let k = if (y.e, y.m) <= (UNIT.e, UNIT.m) { atan_le(y, UNIT) } else { sub_from(191, atan_le(UNIT, y)) };
         check(want, Some(k), n.neg, |mode| atan::<F128>(n, mode), tally, &format!("atan {n:?}"));
@@ -375,6 +376,12 @@ mod tests {
         for (y, x) in pairs {
             check_atan2(&y, &x, tally);
             check_atan2(&x, &y, tally);
+        }
+        // y/x = 2^-8 with X within 2^98 of the top: where the index gives j = 1, x + cy carries
+        // into a 129th bit (step 3).
+        for d in 0..8u128 {
+            let m = top - (d << 60);
+            check_atan2(&num(false, m, -120), &num(d & 1 != 0, m, -112), tally);
         }
     }
 
