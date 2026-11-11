@@ -471,7 +471,7 @@ fn math_float_sincos_fast_entry_matches_the_envelope_in_every_mode() {
         m::sincosf(x, Some(&mut s), Some(&mut c));
         u64::from(s.to_bits()) << 32 | u64::from(c.to_bits())
     };
-    let edges: [f32; 6] = [1.490_116_1e-8, 1.490_116_2e-8, 524_287.97, 524_288.0, 0.785_398_2, 1.570_796_4];
+    let edges: [f32; 6] = [1.490_116_1e-8, 1.490_116_2e-8, 524_287.97, 524_288.0, std::f32::consts::FRAC_PI_4, std::f32::consts::FRAC_PI_2];
     let mut args: Vec<f32> = edges.iter().flat_map(|&x| [x, -x]).collect();
     args.extend((0u32..1 << 16).map(|i| f32::from_bits(i << 16 | (i & 0xffff))));
     let (mut checked, mut bad) = (0usize, Vec::new());

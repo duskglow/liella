@@ -759,7 +759,7 @@ mod fast {
     /// [`sin`] and [`cos`] from one reduction and one polynomial (LIBM-SINCOS-SHARED, D-10.89):
     /// each result is the one its own function gives (the same operations on the same values),
     /// or `None` where that function refuses.
-    pub(super) fn sincos(x: f64, mode: Rounding) -> (Option<(f64, Status)>, Option<(f64, Status)>) {
+    pub(super) fn sincos(x: f64, mode: Rounding) -> crate::wide_int::Pair<f64> {
         let ax = dd::abs(x);
         if ax < TINY || ax >= LIMIT {
             return (sin(x, mode), cos(x, mode));
