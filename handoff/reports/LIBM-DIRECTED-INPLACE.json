@@ -1,0 +1,25 @@
+{
+ "task": "LIBM-DIRECTED-INPLACE",
+ "model": "opus",
+ "tokens": null,
+ "result": "CHECKPOINT: double exp directed quick phase written, proved (directed_bounds test) and wired; tests for the new path, plants, counts, timing, D-10.94 record pending",
+ "branch": "task/libm-directed-inplace",
+ "head": "856fcb002",
+ "gate": {
+  "affected": null,
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "expf already runs in the caller direction (elem32_onepass, D-10.63/D-10.72); untouched"
+ ],
+ "refused": [],
+ "improvement": "brief should say which listed functions are already in-place (expf was, since D-10.63) so the run does not re-derive it",
+ "next_step": "directed tests + accuracy job in exp_quick.rs, plants, D-10.94 record, gate, counts, booked timing (handoff/libm-directed-inplace.md)",
+ "report_file": "handoff/libm-directed-inplace.md",
+ "jobs": [
+  "shiki:libm-directed-inplace-gen2",
+  "shiki:libm-directed-inplace-tests"
+ ]
+}
