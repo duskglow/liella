@@ -256,6 +256,8 @@ cbench_locale	isalpha_c	ratio_host	1.10	target: within about 10% of glibc (owner
 cbench_locale	toupper_c	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
 cbench_locale	strtod_c	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
 cbench_locale	towupper_utf8	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	towctrans_toupper_utf8	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; BENCH-ROWS-SINCOS-TOWCTRANS: no host_limits entry yet (the next timing sweep calibrates it); checked once against towupper/towlower
+cbench_locale	towctrans_tolower_utf8	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; BENCH-ROWS-SINCOS-TOWCTRANS: no host_limits entry yet (the next timing sweep calibrates it); checked once against towupper/towlower
 cbench_locale	iswalpha_utf8	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
 cbench_locale	wcwidth_utf8	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
 cbench_locale	mbrtowc_utf8_3	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
@@ -507,6 +509,9 @@ cbench_libm	cosf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-1
 cbench_libm	cos	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
 cbench_libm	cosl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
 cbench_libm	cosf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sincosf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry); BENCH-ROWS-SINCOS-TOWCTRANS: through a function pointer, checked once against sin/cos
+cbench_libm	sincos	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry); BENCH-ROWS-SINCOS-TOWCTRANS: through a function pointer, checked once against sin/cos
+cbench_libm	sincosl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry); BENCH-ROWS-SINCOS-TOWCTRANS: through a function pointer, checked once against sin/cos
 cbench_libm	tanf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
 cbench_libm	tan	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
 cbench_libm	tanl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
