@@ -1049,7 +1049,7 @@ fn isolated_data_script(dir: &Path) -> PathBuf {
         match l.split_once(':') {
             Some((a, b)) if isolated => {
                 script.push_str(&format!("{a}: SUBALIGN(65536){b}\n"));
-                n += 1;
+                n = n.saturating_add(1_u32);
             }
             _ => {
                 script.push_str(l);
