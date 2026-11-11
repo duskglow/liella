@@ -1,0 +1,26 @@
+{
+ "task": "HEAP-FIRST-USE-6",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: merged next (LAYOUT-TEXT-PIN-11), fixed regen TZ loss under env -i, lists regenerated; time path green, release strings path 1 fault (memchr rest path outside the strings cluster)",
+ "branch": "task/heap-first-use-6",
+ "head": null,
+ "gate": {
+  "affected": "not run on the final head (release hot_text_products 19 passed / 2 failed)",
+  "peak": "1.3G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "regen.sh's env -i (#4318) dropped next's TZ=America/New_York prefix on the p_cold trace; fixed with tz=<zone> trace (HOTTEXT-REGEN-HOSTS should take both)",
+  "#4321 cause: the two WARN-NO-MSG plants were rejected by the build's own dead-key checks, not by the test"
+ ],
+ "refused": [],
+ "improvement": "regen.sh should trace page_faults' own modes (rethink item 2): p_strlazy's printf-first order put a strings-mode function outside the strings cluster",
+ "next_step": "faultmap the release strings fault, then reorder p_strlazy (strings before printf) or add a small checked-rest cluster after strings; keep 32 KiB alignment",
+ "report_file": "handoff/HEAP-FIRST-USE-6.md",
+ "jobs": [
+  "hfu6-regen2",
+  "hfu6-release-bounds"
+ ]
+}
