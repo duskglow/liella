@@ -49,8 +49,14 @@ EDITS = {
 
 def main():
     op, tree, bak = sys.argv[1], sys.argv[2], sys.argv[3]
+    # `math-only`: leave the boundary crate untouched (no entry/exit marks 0, 1, 5, 6).
+    math_only = len(sys.argv) > 4 and sys.argv[4] == 'math-only'
     for rel, edits in EDITS.items():
         path, saved = os.path.join(tree, rel), os.path.join(bak, rel.replace('/', '__'))
+        if op == 'restore' and not os.path.exists(saved):
+            continue
+        if op != 'restore' and math_only and rel.startswith('crates/boundary/'):
+            continue
         if op == 'restore':
             with open(saved) as f, open(path, 'w') as g:
                 g.write(f.read())
