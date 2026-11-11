@@ -80,6 +80,8 @@
 //!    rounding test's `2^-152`. `|d| >= 2^-160` and `|x| >= 2^-58` keep `tan` in `[2^-59,
 //!    2^161]`: normal.
 
+pub(crate) mod arc;
+
 use super::{M64, SC, mul_wide, mulhi, mulhi64};
 use crate::coeffs::tables as t;
 use crate::float::{Float, Kind, Num};
@@ -588,7 +590,7 @@ mod tests {
     use crate::mp::{self, Mp};
 
     /// `v·2^units` rounded to the nearest integer as 192 bits (these values are irrational: no ties).
-    fn fixed3(v: Mp, units: i64) -> (u128, u64) {
+    pub(super) fn fixed3(v: Mp, units: i64) -> (u128, u64) {
         let w = v.ldexp(units);
         let top = W3 { h: (u128::from(w.m[mp::LIMBS - 1]) << 64) | u128::from(w.m[mp::LIMBS - 2]), l: w.m[mp::LIMBS - 3] };
         let sh = 192 - w.exp;
@@ -643,7 +645,7 @@ mod tests {
     }
 
     /// `±M·2^e` exactly, in the 384-bit arithmetic.
-    fn value(neg: bool, m: W3, e: i32) -> Mp {
+    pub(super) fn value(neg: bool, m: W3, e: i32) -> Mp {
         Mp::from_u128(neg, m.h, i64::from(e) + 64).add(Mp::from_u128(neg, u128::from(m.l), i64::from(e)))
     }
 
