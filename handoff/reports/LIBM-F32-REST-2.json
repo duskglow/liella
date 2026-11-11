@@ -1,12 +1,27 @@
-{"task": "LIBM-F32-REST-2", "model": "opus", "tokens": null,
+{
+ "task": "LIBM-F32-REST-2",
+ "model": "opus",
+ "tokens": null,
  "result": "Run 1's two plant survivors settled (red-lowpart re-planted on the exhaustive atanf sweep; asin-partial-write's mutant shown hazard-free and replaced by one with the hazard); lgammaf profiled: one operand of the bench's 256 takes the 384-bit path (499.5k instructions), not latency; no product code changed",
- "branch": "task/libm-f32-rest-2", "head": null,
- "gate": {"affected": "see f32rest2-gate (kanon)", "peak": null}, "accepted_first_attempt": null,
+ "branch": "task/libm-f32-rest-2",
+ "head": "b5eee57e3",
+ "gate": {
+  "affected": "4073 passed / 0 failed (13 suites, conformance 20/20; f32rest2-gate, kanon)",
+  "peak": "12G, oom_kill 0"
+ },
+ "accepted_first_attempt": null,
  "rulings": [],
- "informational": ["The brief's lgammaf premise (9.18x time at 1.04x instructions, latency) misreads results/timing-sweep-1110-table.md: the instr column is 7.765; 1.001 is the change column. The surplus is one mp call (x = -3.14382577) in the bench's 256 operands; without it Liella is about 1.12x glibc by instructions.",
-                   "The checker needs no change for asin-partial-write: run 1's mutant wrote its conversion into a register pand had just written (no false dependency); D-10.68's check correctly passed it."],
+ "informational": [
+  "The brief's lgammaf premise (9.18x time at 1.04x instructions, latency) misreads results/timing-sweep-1110-table.md: the instr column is 7.765; 1.001 is the change column. The surplus is one mp call (x = -3.14382577) in the bench's 256 operands; without it Liella is about 1.12x glibc by instructions.",
+  "The checker needs no change for asin-partial-write: run 1's mutant wrote its conversion into a register pand had just written (no false dependency); D-10.68's check correctly passed it."
+ ],
  "refused": [],
  "improvement": "A brief that names a ratio should quote the column it came from; a per-operand instruction probe over the bench's exact operands found the lgammaf cause in one job, cheaper than a per-phase trace.",
  "next_step": "LIBM-F32-REST-3: lgammaf near-zero and tiny-|x| refusals through fast_gamma::lgamma_kernel (handoff step 1), then booked timing of asinf/acosf/atanf/atan2f, then erff/erfcf/hypotf.",
  "report_file": "handoff/LIBM-F32-REST.md",
- "jobs": ["f32rest2-lint1", "f32rest2-plants1", "f32rest2-gate"]}
+ "jobs": [
+  "f32rest2-lint1",
+  "f32rest2-plants1",
+  "f32rest2-gate"
+ ]
+}
