@@ -1,0 +1,12 @@
+id = "D-27.25"
+section = "s26-29"
+spec = "§1.1, §27"
+ann = "SEC"
+status = "active"
+amends = ["D-27.10"]
+story = "DL-MULTI-WRITABLE"
+date = "2026-11-11"
+tests = ["crates/ld/src/boot.rs::tests::writable_segments_each_relocated", "crates/ld/src/boot.rs::tests::refusals", "crates/ld/src/boot.rs::tests::dynamic_and_headers"]
+body = '''
+**The self-relocator accepts any number of writable `PT_LOAD`s** (DL-MULTI-WRITABLE, owner ruling #4655: "All the security in the world is useless if it doesn't work."). Amends D-27.10 rule (2), which required exactly one: a static PIE whose data is aligned above 4 KiB (a 16 KiB-aligned `.data1` makes GNU ld 2.42 start a new writable segment) and a program run by `ld.so` with two writable segments were refused at start (exit 127). The ELF format allows any number of `PT_LOAD`s with any flags. Now `liella_ld::boot::image` needs one `PT_DYNAMIC` and at least one writable `PT_LOAD`, keeps the program headers and lists the writable segments from them (no copy, no allocation: the relocator runs before the heap and before relocation). Each relocation target is located in the writable segment that holds all 8 of its bytes (`boot::Writer`; the segment of the last target is tried first, so a run of targets in one segment costs one range check each) and written through that segment's own view (`boot::Memory`, made by `boundary/src/bootstrap.rs` for one store, category *slice*). **Checks that stay** (D-27.10, `ann = SEC`): a target outside every writable segment, or straddling two, is refused (`BootError::Outside`, exit 127 before any relocated data is read); a writable segment whose end overflows the address space is refused; every relocation table holds whole entries and overlaps no writable segment (the relocator never reads what it writes); `DT_TEXTREL`, a wrong `DT_RELAENT`/`DT_RELRENT`/`DT_PLTREL`, a missing `DT_NULL`, a RELR bitmap before an address and address overflow are refused; only `Relative` in pass 1 and `Irelative` in pass 2; no panics; no write outside a mapped segment (a view is made only for a segment the headers name writable); the mapper's refusal of a writable-and-executable segment and the secure-mode rules are unchanged. The unit tests' memory gives each segment a view that runs past its end, so only the relocator's own check can refuse a target in a gap. `ld.so`'s general relocator (`liella_ld::reloc`) and the image reader already accepted any number of writable segments.
+'''
