@@ -1,0 +1,12 @@
+{"task": "DL-TLS-SELF-IMAGE", "model": "opus", "tokens": null,
+ "result": "ld.so takes its own scope entry (for __tls_get_addr) from its mapped image via image_view; no open of its PT_INTERP path or /proc/self/exe at start-up (strace: interpreter's own openat gone in both start modes); origin/next merged in to get the image reader",
+ "branch": "task/dl-tls-self-image", "head": "47ed30c19",
+ "gate": {"affected": "pending at hand-back (dl-tls-self-image-gate); targeted: tls 5/5, reloc 14/14, clippy and static rc 0 (dl-tls-self-image-t2)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "origin/next merged into the stacked branch (brief names Stacks-on DL-TLS-STATIC and the reader that is only on next, but no merge explicitly)", "recommendation": "accept the merge; briefs that stack on an unlanded branch and use next-only code should name the merge"}],
+ "informational": ["A dependency naming ld.so's file by path (not soname) now loads a second copy: the interpreter's (dev, ino) is not known without reading its file; same case as ruling #4341", "Start-up syscalls per object read by image: openat, fstat, lseek, close fewer, one scratch mmap/munmap pair more (net -2); split inferred from traces", "cbench_startup programs are static and never enter ld.so; counts job run on this head only (no next side-by-side)"],
+ "refused": [],
+ "improvement": "A sync_role 'base drift' warning when a story branch lacks code its brief names on next would have saved the merge investigation",
+ "next_step": "none required; optional: share one scratch mapping for the header table and PT_DYNAMIC copy in image_view",
+ "report_file": "handoff/DL-TLS-SELF-IMAGE.md",
+ "jobs": ["dl-tls-self-image-t2", "dl-tls-self-image-gate", "dl-tls-self-image-plants", "dl-tls-self-image-counts", "dl-tls-self-image-count-before"]}
