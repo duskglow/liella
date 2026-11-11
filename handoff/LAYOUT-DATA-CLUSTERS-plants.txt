@@ -1,0 +1,6 @@
+# LAYOUT-DATA-CLUSTERS plants (cargo xtask plants; docs/plants.md): the brief's two (skip the .data1 move for one
+# object; drop the relro rename) plus the EPOLL guard and the cluster alignment.
+ldc-skip-one | xtask/src/coldbss.rs | lit:} else if keys.contains(split_stem(&k)) && size_of ==> } else if keys.contains(split_stem(&k)) && !k.contains("3cpu15ERMS_LARGE_FROM") && size_of | cargo xtask so && cargo test -p liella --test hot_text_products init_written_startup_objects_are_in_the_data1_cluster | msg:ERMS_LARGE_FROM.*in \.(data|bss)\.
+ldc-no-relro | xtask/src/startup_ro.rs | lit:    for (m, secs) in &relro { ==>     for (m, secs) in relro.iter().take(0) { | cargo xtask so && cargo test -p liella --test hot_text_products init_data_clusters_hold_at_every_text_phase | msg:relro
+ldc-epoll | xtask/src/coldbss.rs | lit:"15liella_boundary5timer5EPOLL", ==> "15liella_boundary5timer5EPOLX", | cargo xtask so | msg:5timer5EPOLX \(0 sections\)
+ldc-align | xtask/src/startup_ro.rs | lit:b.max(4096).next_power_of_two().min(65536) ==> b.max(64).min(64) | cargo test -p xtask --bin xtask startup_ro::tests::cluster_alignment | msg:cluster_alignment.*(FAILED|panicked)|left

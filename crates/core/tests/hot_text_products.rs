@@ -885,21 +885,23 @@ fn init_startup_rodata_stays_in_one_window_for_any_text_size() {
 /// the keys in `crates/libc-so/startup-data.keys`.
 fn unhashed_key(name: &str) -> String {
     let name = symbol_stem(name.rsplit_once(".llvm.").map_or(name, |(s, _)| s));
-    let b = name.as_bytes();
-    let mut out = String::new();
-    let mut i = 0;
-    while i < b.len() {
-        if b[i] == b'C' && b.get(i + 1) == Some(&b's') {
-            let n = b[i + 2..].iter().take_while(|c| c.is_ascii_alphanumeric()).count();
-            if b.get(i + 2 + n) == Some(&b'_') && b.get(i + 3 + n).is_some_and(u8::is_ascii_digit) {
+    let (mut out, mut rest) = (String::new(), name);
+    while let Some(at) = rest.find("Cs") {
+        let (head, tail) = rest.split_at(at);
+        out.push_str(head);
+        let after = tail.strip_prefix("Cs").unwrap_or(tail);
+        match after.split_once('_') {
+            Some((h, r)) if !h.is_empty() && h.bytes().all(|c| c.is_ascii_alphanumeric()) && r.starts_with(|c: char| c.is_ascii_digit()) => {
                 out.push('C');
-                i += 3 + n;
-                continue;
+                rest = r;
+            }
+            _ => {
+                out.push_str("Cs");
+                rest = after;
             }
         }
-        out.push(b[i] as char);
-        i += 1;
     }
+    out.push_str(rest);
     out
 }
 
@@ -930,10 +932,8 @@ fn init_written_startup_objects_are_in_the_data1_cluster() {
         }
         if section == ".data1" {
             moved += 1;
-        } else if (section.starts_with(".data.") && !section.starts_with(".data.rel.ro")) || section.starts_with(".bss.") {
-            if size <= 4096 {
-                bad.push(format!("{name} ({size} bytes) in {section}"));
-            }
+        } else if ((section.starts_with(".data.") && !section.starts_with(".data.rel.ro")) || section.starts_with(".bss.")) && size <= 4096 {
+            bad.push(format!("{name} ({size} bytes) in {section}"));
         }
     }
     eprintln!("written start-up objects in .data1: {moved}");
