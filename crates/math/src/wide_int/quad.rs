@@ -80,6 +80,8 @@
 //!    rounding test's `2^-152`. `|d| >= 2^-160` and `|x| >= 2^-58` keep `tan` in `[2^-59,
 //!    2^161]`: normal.
 
+pub(crate) mod arc;
+
 use super::{M64, SC, mul_wide, mulhi, mulhi64};
 use crate::coeffs::tables as t;
 use crate::float::{Float, Kind, Num};
@@ -327,7 +329,9 @@ fn tan_kernel(n: &Num) -> Option<(bool, W3, i32)> {
 const TWO115: f64 = (1u128 << 115) as f64;
 
 /// Step 6: `(n/d)·2^190` for `n`, `d` in `[2^191, 2^192)`, in `[2^188, 2^191)` (`n/d` in `(1/2,
-/// 2)`, the approximation a little either side), within `2^-162` relative.
+/// 2)`, the approximation a little either side), within `2^-162` relative. Inlined: with the arc
+/// tier's callers (D-10.96) it went out of line and `tan` paid the call (18 instructions).
+#[inline(always)]
 fn div3(n: W3, d: W3) -> W3 {
     let dh = (d.h >> 64) as u64;
     let v = (TWO115 / ((dh >> 11) as i64 as f64)) as u64; // 2^62/δ within 2^-50.99, at most 2^63
@@ -588,7 +592,7 @@ mod tests {
     use crate::mp::{self, Mp};
 
     /// `v·2^units` rounded to the nearest integer as 192 bits (these values are irrational: no ties).
-    fn fixed3(v: Mp, units: i64) -> (u128, u64) {
+    pub(super) fn fixed3(v: Mp, units: i64) -> (u128, u64) {
         let w = v.ldexp(units);
         let top = W3 { h: (u128::from(w.m[mp::LIMBS - 1]) << 64) | u128::from(w.m[mp::LIMBS - 2]), l: w.m[mp::LIMBS - 3] };
         let sh = 192 - w.exp;
@@ -643,7 +647,7 @@ mod tests {
     }
 
     /// `±M·2^e` exactly, in the 384-bit arithmetic.
-    fn value(neg: bool, m: W3, e: i32) -> Mp {
+    pub(super) fn value(neg: bool, m: W3, e: i32) -> Mp {
         Mp::from_u128(neg, m.h, i64::from(e) + 64).add(Mp::from_u128(neg, u128::from(m.l), i64::from(e)))
     }
 
