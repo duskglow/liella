@@ -1,0 +1,13 @@
+# LAYOUT-TEXT-PIN(-2) (D-X.63): plants on xtask/src/hottext.rs and xtask/src/coldbss.rs.
+# Inherited (run 1, rationale in handoff/LAYOUT-TEXT-PIN-plants.txt): ltp-no-rename, ltp-unlikely-only, ltp-no-align.
+# Run 2: ltp2-cold-any-type takes a non-NOBITS `.bss.*` as cold (the header reader's sh_type must matter);
+# ltp2-ar-longname breaks the GNU long-name lookup of the in-memory ar reader; ltp2-check-to never reports a missing
+# rename target; ltp2-rename-nothing makes every coldbss/start-up state rename name no section (what a 256-byte
+# cut name did), which the read-back check must turn into a failed `so`.
+ltp-no-rename | xtask/src/hottext.rs | perl:s/let want = section_for\(f, keys\);/let want = section_for(f, keys); if !keys.contains_key(&key(f)) && !_name.starts_with(".text.hot.") { return _name.to_string(); }/ | cargo test -p liella --test hot_text_products init_no_library_text_precedes_the_hot_group | msg:TEXT-PREFIX: \d+ libc.a input sections lie ahead.*text.unlikely
+ltp-unlikely-only | xtask/src/hottext.rs | perl:s/\["unlikely", "exit", "startup", "hot"\]/["unlikely"]/ | cargo test -p liella --test hot_text_products init_no_library_text_precedes_the_hot_group | msg:TEXT-PREFIX: 1 libc.a input sections lie ahead.*\.text\.exit \(7 bytes\)
+ltp-no-align | xtask/src/hottext.rs | perl:s/let align = cluster_align\(bytes, min\);/let align = min;/ | cargo test -p liella --test hot_text_products init_zero_fault_calls_hold_at_every_text_phase | msg:straddles a 64 KiB window|faults, want 0
+ltp2-cold-any-type | xtask/src/coldbss.rs | perl:s/s\.kind == SHT_NOBITS && // | cargo test -p xtask --bin xtask coldbss::tests::picks_large_bss_sections_per_member | msg:picks_large_bss_sections_per_member.*(FAILED|panicked)|assertion .*left == right
+ltp2-ar-longname | xtask/src/hottext.rs | perl:s/rest\.windows\(2\)/rest.windows(1)/ | cargo test -p xtask --bin xtask hottext::tests::archive_members_and_rename_check | msg:archive_members_and_rename_check.*(FAILED|panicked)|not terminated
+ltp2-check-to | xtask/src/hottext.rs | perl:s/if !has\(to\) \{/if false \&\& !has(to) {/ | cargo test -p xtask --bin xtask hottext::tests::archive_members_and_rename_check | msg:archive_members_and_rename_check.*(FAILED|panicked)|\.text\.z missing
+ltp2-rename-nothing | xtask/src/coldbss.rs | perl:s/format!\("\{from\}=\{to\}"\)/format!("{from}.none={to}")/ | cargo xtask so | msg:coldbss: \d+ of \d+ section renames did not take effect

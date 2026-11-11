@@ -670,17 +670,19 @@ fn symbols_of(obj: &Path) -> Result<Vec<SymRow>, String> {
     Ok(v)
 }
 
-/// `readelf -SW` of `obj`: section index to name.
+/// The section headers of `obj`: section index (decimal, as `readelf -sW` prints `Ndx`) to whole
+/// name. Read from the ELF headers, not `readelf -SW`, which cuts a name at 256 bytes: an alias
+/// added at a cut name would land in a section the object does not have (#4375).
 pub(crate) fn sections_of(obj: &Path) -> Result<BTreeMap<String, String>, String> {
-    let out = Command::new("readelf").args(["-SW"]).arg(obj).output().map_err(|e| format!("readelf: {e}"))?;
-    let mut m = BTreeMap::new();
-    for line in String::from_utf8_lossy(&out.stdout).lines() {
-        let Some((idx, rest)) = line.trim_start().strip_prefix('[').and_then(|l| l.split_once(']')) else { continue };
-        if let Some(name) = rest.split_whitespace().next() {
-            m.insert(idx.trim().to_string(), name.to_string());
-        }
-    }
-    Ok(m)
+    let b = fs::read(obj).map_err(|e| format!("{}: {e}", obj.display()))?;
+    let headers = crate::hottext::elf_headers(&b).ok_or_else(|| format!("{}: not a well-formed ELF64 little-endian object", obj.display()))?;
+    Ok(index_names(headers))
+}
+
+/// Section index (decimal) to name, for the headers in index order; the null section 0 is left
+/// out (no symbol is defined in it).
+fn index_names(headers: Vec<crate::hottext::Shdr>) -> BTreeMap<String, String> {
+    headers.into_iter().enumerate().skip(1).map(|(i, h)| (i.to_string(), h.name)).collect()
 }
 
 /// Whether a symbol is the library's C-visible name for something (not a mangled Rust name or
@@ -896,15 +898,20 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
         run(Command::new(std::env::var("AR").unwrap_or_else(|_| "ar".into())).arg("s").arg(&archive))?;
     }
     localize_builtins(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &names, &product.join("libc-work"))?;
-    // Large zero-initialised tables after the small state words, out of the start-up pages (D-X.22).
+    // The written start-up state into the `.data1` cluster first (D-X.64), so that a written object of
+    // 1 KiB or more joins it instead of `.lbss`; then the large zero-initialised tables after the small
+    // state words, out of the start-up pages (D-X.22).
+    crate::coldbss::move_startup_state(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, root, &product.join("state-work"))?;
     crate::coldbss::move_cold_bss(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("coldbss-work"))?;
-    crate::coldbss::move_startup_state(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("state-work"))?;
     // The library's own copies and fills call its internal entries, directly (D-X.15).
     let copies = crate::copies::direct_internal_copies(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("copies-work"))?;
     // (done in the archive as rustc built it, so `libc.so.6` and the weakened `libc.a` both get it)
     // The functions short programs run, grouped into `.text.hot.*` (PAGEFAULTS-2: fewer text faults).
     let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &root.join("crates/libc-so/hot-text.list"), &product.join("hot-work"), rustflags.is_none().then(|| profile.name()))?;
     println!("so: {hot} function sections grouped as hot text");
+    // The read-only data start-up reads, after the grouping (it places STARTUP_NAMES), in one aligned section (D-X.62).
+    let (ro, ro_bytes) = crate::startup_ro::place(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, root, &product.join("startup-ro-work"))?;
+    println!("so: {ro} start-up read-only data sections in {} (at most {ro_bytes} of {} bytes)", crate::startup_ro::SECTION, crate::startup_ro::ALIGN);
     let edges = exclude_link_edges(&archive)?;
     println!("so: {edges} link-edge words excluded from every link output (D-22.16)");
     check_archive_elf(&archive)?;
@@ -1036,12 +1043,16 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     publish(&so, &so_final)?;
 
     // 4. The start object.
+    // Each start-up data cluster's start alignment, from its size over the whole archive (D-X.64).
+    let aligns = crate::startup_ro::cluster_aligns(&release.join("libc.a"))?;
+    println!("so: start-up data cluster alignments {}", aligns.iter().map(|(d, a)| format!("{d}={a}")).collect::<Vec<_>>().join(" "));
+    let defines: Vec<String> = aligns.iter().map(|(d, a)| format!("-D{d}={a}")).collect();
     let crt1 = tmp_name(&release.join("liella-crt1.o"));
-    run(Command::new(&cc).arg("-c").arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&crt1))?;
+    run(Command::new(&cc).arg("-c").args(&defines).arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&crt1))?;
     publish(&crt1, &release.join("liella-crt1.o"))?;
     // The static-PIE start object (D-27.10): the same file, calling the relocating start.
     let rcrt1 = tmp_name(&release.join("liella-rcrt1.o"));
-    run(Command::new(&cc).arg("-c").arg("-DLIELLA_STATIC_PIE").arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&rcrt1))?;
+    run(Command::new(&cc).arg("-c").arg("-DLIELLA_STATIC_PIE").args(&defines).arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&rcrt1))?;
     start_object_pc_relative(&rcrt1)?;
     publish(&rcrt1, &release.join("liella-rcrt1.o"))?;
     // The profiling start object for `-pg` programs (GCRT1-START): the same `_start`, plus
@@ -1810,5 +1821,20 @@ mod tests {
         assert!(prerelocation_errors(&unfollowable, &words).is_err_and(|e| e.contains("cannot follow")));
         let inlined = clean.replace("call   1200 <_RNvNtCs1_15liella_boundary9bootstrap14relocate_image>", "nop");
         assert!(prerelocation_errors(&inlined, &words).is_err_and(|e| e.contains("does not call relocate_image")));
+    }
+
+    #[test]
+    fn alias_sections_keep_whole_names_at_their_index() {
+        // D-X.14 (no spec clause: product build): the in-place aliases go into the section the
+        // renamed definition's `Ndx` names, by whole name (readelf -SW cut names at 256 bytes,
+        // #4375) and by header index (index 0, the null section, names nothing).
+        let sec = |name: &str| crate::hottext::Shdr { name: name.to_string(), kind: 1, size: 8, align: 16 };
+        let long = format!(".text.{}", "y".repeat(300));
+        let got = index_names(vec![sec(""), sec(".text.a"), sec(&long), sec(".text.b")]);
+        assert_eq!(got.len(), 3);
+        assert_eq!(got.get("0"), None);
+        assert_eq!(got["1"], ".text.a");
+        assert_eq!(got["2"], long);
+        assert_eq!(got["3"], ".text.b");
     }
 }

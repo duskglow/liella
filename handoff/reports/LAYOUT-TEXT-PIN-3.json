@@ -1,0 +1,12 @@
+{"task": "LAYOUT-TEXT-PIN-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: fast localtime 21 -> 18 (p_cold traced in America/New_York, fast regen); sections_of on the ELF reader; release regen blocked by STARTUP-TEXT-WINDOWS (inherited 5 > 4, fast-regen list 7 > 4)",
+ "branch": "task/layout-text-pin-3", "head": null,
+ "gate": {"affected": "not run (hot_text_products 18 passed / 0 failed fast; direct gate not run)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "Cluster padding 106,451 B of address space per static binary (gaps 77,779 B + .text start +28,672 B), above ~32 KB", "recommendation": "owner decides size vs faults; next run first tries cluster ordering so the 32 KiB alignments fall back to back and aligning only the clusters whose probes need it"}],
+ "informational": ["The inherited PIN-2 head already breaks STARTUP-TEXT-WINDOWS in release products (5 windows > budget-release 4) and gives release localtime 21; PIN-2 never built release", "regen.sh --build enforces layout contracts in its own product build, so a contract that depends on list order blocks the regen that would repair the order (as the dead-key check did before HOTTEXT-REGEN-UNBLOCK)", "Fast tool count 58 = bound 58 on the Skylake-SP host (56 on the Zen 1 host in PIN-2)", "Commit 62fcaac7e's message names the Zen 1 host for the counts; they were measured on the Skylake-SP host"],
+ "refused": [],
+ "improvement": "regen.sh traced the host's time zone, so a UTC build host silently dropped zone code from the hot list; probe environments that change which code runs should be pinned in the tracing script, and a regen should report keys the bounded probes run that are missing from the list",
+ "next_step": "Find why release start-up text spans 5-7 windows (release-only start-up keys behind 32 KiB cluster heads?), fix it, run the release regen, measure release counts, then the padding options and the direct gate",
+ "report_file": "handoff/LAYOUT-TEXT-PIN-3.md",
+ "jobs": ["layout-text-pin-3-final", "layout-text-pin-3-plants"]}

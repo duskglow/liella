@@ -1,0 +1,13 @@
+# LAYOUT-TEXT-PIN-6: plants on keys.py --aliases and merge.py --alias (#4467: a start-up key traced at a label inside a
+# function section brings that section to the start-up head).
+# ltp6-alias-off drops the alias resolution in merge.py; ltp6-self-alias keeps a section's own name as an alias of itself;
+# ltp6-ambiguous keeps a name found in two sections; ltp6-prefix breaks the grouped-section prefix strip (`.text.sorted.h<n>.`).
+ltp6-alias-off | tools/hottext/merge.py | perl:s/head \|= \{alias\[k\] for k in head if k not in pos and k in alias\}/head |= set()/ | cargo test -p xtask --bin xtask hottext::tests::a_startup_label_brings_its_section_to_the_head | msg:a_startup_label_brings_its_section_to_the_head.*(FAILED|panicked)|assertion .*left == right
+ltp6-self-alias | tools/hottext/keys.py | perl:s/if sym != sec and sym != "main":/if sym != "main":/ | cargo test -p xtask --bin xtask hottext::tests::a_startup_label_brings_its_section_to_the_head | msg:a_startup_label_brings_its_section_to_the_head.*(FAILED|panicked)|assertion .*left == right
+ltp6-ambiguous | tools/hottext/keys.py | perl:s/if len\(seen\[k\]\) == 1:/if len(seen[k]) >= 1:/ | cargo test -p xtask --bin xtask hottext::tests::a_startup_label_brings_its_section_to_the_head | msg:a_startup_label_brings_its_section_to_the_head.*(FAILED|panicked)|assertion .*left == right
+ltp6-prefix | tools/hottext/keys.py | perl:s/sorted\\\.h\[0-9\]\+/sorted\\.hX/ | cargo test -p xtask --bin xtask hottext::tests::a_startup_label_brings_its_section_to_the_head | msg:a_startup_label_brings_its_section_to_the_head.*(FAILED|panicked)|assertion .*left == right
+# cargo xtask plants results (4 plants: 4 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# ltp6-alias-off: CAUGHT, caught by xtask hottext::tests::a_startup_label_brings_its_section_to_the_head
+# ltp6-self-alias: CAUGHT, caught by xtask hottext::tests::a_startup_label_brings_its_section_to_the_head
+# ltp6-ambiguous: CAUGHT, caught by xtask hottext::tests::a_startup_label_brings_its_section_to_the_head
+# ltp6-prefix: CAUGHT, caught by xtask hottext::tests::a_startup_label_brings_its_section_to_the_head

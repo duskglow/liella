@@ -1,0 +1,11 @@
+{"task": "LAYOUT-STARTUP-RODATA-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: hot read-only data (start-up + stdio/strings/locale/tool tiers, transitive) in one 64 KiB-aligned .rodata1: 1 ro window at any text size, but tool/locale faults 57/54 vs next 56/53 (one ungrouped constant + RW-segment shift); not ready to land",
+ "branch": "task/layout-startup-rodata-2", "head": "ee594ef18",
+ "gate": {"affected": "not run (fault bounds not met; lint job lsr2-lint8 green)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Inherited head failed cargo xtask clippy (type_complexity) and static (host name in D-X.62, codemap stale): fixed.", "Fault maps: the remaining +1 is one .rodata constant read by liella_legacy::global_locale::replace (relocated from a hot section but not chosen by plan: open bug) and one .data.rel.ro fault from the 64 KiB gap shifting the RW segment."],
+ "refused": [],
+ "improvement": "A plan dump mode for startup_ro (which hot sections reach which constants) would have found the missed constant in one call instead of a 6-minute build per hypothesis.",
+ "next_step": "Find why plan misses .rodata.anon.e930...100 (debug print of the starts and relocations of .text.sorted.h00180), group it, then the RW half (#4315) and the release profile; target tool/locale/startup <= 56/53/17.",
+ "report_file": "handoff/LAYOUT-STARTUP-RODATA.md",
+ "jobs": ["mei:lsr2-lint8"]}
