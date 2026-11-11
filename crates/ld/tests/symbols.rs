@@ -274,6 +274,15 @@ fn programs_bind_like_the_reference() {
         let got = bind_program(&c["unver"], &c[lib], &["f", "h", "b", "g", "m"]);
         assert_eq!(got, s(&[("b", "<base>"), ("f", "VER_1"), ("g", "VER_1"), ("h", "VER_1"), ("m", "VER_1")]), "{lib}");
     }
+    // A needed version (verneed) gives a relocation reference, which a base definition earlier in the
+    // scope also satisfies ("Symbol binding": the program's f@VER_1 binds a preloaded unversioned f).
+    let p = obj(&c["ver"], HashStyle::Gnu);
+    let st = p.symtab();
+    let h_wants: Vec<Want<'_>> = (1..st.count().unwrap())
+        .filter(|&i| st.get(i).is_ok_and(|s| s.shndx == 0 && p.dynamic().string(u64::from(s.name)).unwrap() == b"h"))
+        .map(|i| p.reference_want(i).unwrap())
+        .collect();
+    assert_eq!(h_wants, [Want::Reference(b"VER_2")]);
     // The program's own undefined entries are not definitions.
     assert_eq!(found(&obj(&c["ver"], HashStyle::Gnu), "f", Want::Oldest), "-");
     // Nor are a library's: the SysV table indexes undefined entries too (the GNU table does not).
