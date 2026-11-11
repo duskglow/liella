@@ -45,7 +45,7 @@ fn ask() -> [usize; 6] {
     let ok = usize::from(!p.is_null() && !q.is_null());
     mem::free(p);
     mem::free(q);
-    let registered = usize::from(process::thread_atexit(no_dtor as usize, 0, 0));
+    let registered = usize::from(process::thread_atexit(no_dtor as extern "C" fn(*mut core::ffi::c_void) as usize, 0, 0));
     [usize::from(!(tp..tp + BLOCK_SIZE).contains(&(e as usize))), usize::from(e == again), read as usize, ok, registered, usize::from(dg::__errno_location() == e)]
 }
 
