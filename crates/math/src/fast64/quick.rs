@@ -356,16 +356,21 @@ pub fn exp_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
 
 /// `e^x` rounded in the caller's direction (down, up or toward zero, read by nothing here: the
 /// arithmetic runs in it) for `2^-60 <= |x| < 708` when the directed test decides it, else `None`
-/// (module doc, "Directed rounding", D-10.94). `h` is `−1/2` when the caller rounds up and `+1/2`
-/// when it rounds down or toward zero, so that `k` is `x·128/ln2` rounded to nearest within `2^-34`
-/// whatever the direction. Not for round to nearest (`h = ±1/2` there breaks the reduction).
+/// (module doc, "Directed rounding", D-10.94). `UP` is whether the caller rounds up: `h` is then
+/// `−1/2`, and `+1/2` when it rounds down or toward zero, so that `k` is `x·128/ln2` rounded to
+/// nearest within `2^-34` whatever the direction. Not for round to nearest (`h = ±1/2` there breaks
+/// the reduction). The direction is a constant of the instance, never an argument: the caller
+/// picks the instance by a branch on its MXCSR value, so the arithmetic does not wait for that
+/// read (which waits for the caller's earlier floating-point work); a data `h` serialised
+/// successive calls (D-10.94).
 $(#[$a])*
 $(#[$i])*
 #[doc(hidden)] // public for the boundary's FMA-build tests only
-pub fn exp_directed(x: f64, h: f64) -> Option<f64> {
+pub fn exp_directed<const UP: bool>(x: f64) -> Option<f64> {
     if (x.to_bits() & ABS).wrapping_sub(LO_BITS) >= SPAN {
         return None;
     }
+    let h = if UP { -0.5 } else { 0.5 };
     let tt = $ma(x, INV, h) + SHIFT;
     let kd = tt - SHIFT;
     let kb = tt.to_bits().wrapping_sub(KBIAS);
