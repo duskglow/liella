@@ -17,8 +17,8 @@
 //! and not executable for the first pass and restored before the second (never W+X, L14-6); a
 //! deferred store into such a segment is refused. Relocation code matches on [`RelocKind`] only.
 
-use crate::arch::{ApplyError, Arch, Operands, RelocKind, ELFDATA2LSB};
-use crate::elf::{dt, pt, Dynamic, Elf, ElfError, ProgramHeader, Rela, STB_LOCAL, STB_WEAK, STT_GNU_IFUNC, STV_DEFAULT, SHN_UNDEF};
+use crate::arch::{ApplyError, Arch, Operands, RelocKind, TlsOperands, ELFDATA2LSB};
+use crate::elf::{dt, pt, Dynamic, Elf, ElfError, ProgramHeader, Rela, STB_LOCAL, STB_WEAK, STT_GNU_IFUNC, STT_TLS, STV_DEFAULT, SHN_UNDEF};
 use crate::map::{PROT_EXEC, PROT_READ, PROT_WRITE};
 use crate::symbols::{self, Binding, Found, LookupError, Object, Request, Scope, UniqueRegistry};
 
@@ -43,6 +43,8 @@ pub struct Obj<'a> {
     /// The name it was loaded by (its `DT_NEEDED` string, or the program's path): messages, and the
     /// `vn_file` of a version need when the object has no `DT_SONAME`.
     pub name: &'a [u8],
+    /// Where its static TLS block is ([`crate::tls::layout`]); `None` when it has no `PT_TLS`.
+    pub tls: Option<crate::tls::Placed>,
 }
 
 /// The objects of one load, in load order (index 0 is the program), with their lookup views and the
@@ -78,8 +80,10 @@ pub trait Image {
 pub enum RelocError<'a> {
     /// A relocation type the architecture's table does not handle (the raw `r_type`).
     Unsupported(u32),
-    /// A TLS relocation (DL-12 adds them).
+    /// A TLS descriptor relocation (the raw `r_type`; not available in this build).
     Tls(u32),
+    /// A TLS relocation whose defining object has no TLS block (the field's offset).
+    TlsModule(u64),
     /// A text-field relocation in an object without `DT_TEXTREL` (design §6).
     TextRel(u32),
     /// A strong reference without a definition (the symbol's name).
@@ -113,7 +117,8 @@ impl<'a> RelocError<'a> {
     pub fn message(self) -> &'static [u8] {
         match self {
             RelocError::Unsupported(_) => b"unsupported relocation type\n",
-            RelocError::Tls(_) => b"thread-local storage relocations are not available in this build\n",
+            RelocError::Tls(_) => b"TLS descriptor relocations are not available in this build\n",
+            RelocError::TlsModule(_) => b"a thread-local storage relocation refers to an object without a TLS segment\n",
             RelocError::TextRel(_) => b"relocation of a text field in an object not marked DT_TEXTREL\n",
             RelocError::Undefined(_) => b"undefined symbol: ",
             RelocError::Outside(_) => b"relocation outside the object's writable segments\n",
@@ -169,7 +174,8 @@ struct Target {
 
 /// The run-time value of definition `st` in object `o`.
 fn value_of(set: &Objects<'_, '_>, o: usize, st: &crate::elf::Sym) -> u64 {
-    let bias = if st.shndx == SHN_ABS { 0 } else { set.objs.get(o).map_or(0, |x| x.bias) };
+    // A TLS symbol's value is an offset in its module's block: the load bias does not move it.
+    let bias = if st.shndx == SHN_ABS || st.kind() == STT_TLS { 0 } else { set.objs.get(o).map_or(0, |x| x.bias) };
     bias.wrapping_add(st.value)
 }
 
@@ -264,7 +270,21 @@ fn one<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, r: &Rela, deferre
             img.copy(p, t.s, len);
             Ok(false)
         }
-        RelocKind::DtpMod | RelocKind::DtpOff | RelocKind::TpOff | RelocKind::TlsDesc => Err(RelocError::Tls(r.r_type)),
+        RelocKind::DtpMod | RelocKind::DtpOff | RelocKind::TpOff if deferred => Ok(false),
+        RelocKind::DtpMod | RelocKind::DtpOff | RelocKind::TpOff => {
+            // No symbol: the object's own module (local-dynamic and initial-exec on a local symbol).
+            let (s, def) = if r.sym == 0 {
+                (0, Some(i))
+            } else {
+                let t = target(set, i, r.sym, false, unique)?;
+                (t.s, t.obj)
+            };
+            let placed = def.and_then(|d| set.objs.get(d)).and_then(|d| d.tls).ok_or(RelocError::TlsModule(r.offset))?;
+            let ops = TlsOperands { s, a: r.addend, module: placed.module, tp_offset: placed.tp_offset };
+            let f = A::apply_tls(r.kind, ops).map_err(|_| RelocError::Unsupported(r.r_type))?;
+            put(img, Some(f), text).map(|()| false)
+        }
+        RelocKind::TlsDesc => Err(RelocError::Tls(r.r_type)),
         RelocKind::Unsupported(n) => Err(RelocError::Unsupported(n)),
     }
 }

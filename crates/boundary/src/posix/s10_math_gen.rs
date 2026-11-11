@@ -1229,7 +1229,7 @@ pub extern "C" fn cos(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn cosf(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::cos_nearest, math::real::Real::cos)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::cosf_nearest, math::real::Real::cos)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1239,7 +1239,7 @@ pub extern "C" fn liella_cosf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn cosf32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::cos_nearest, math::real::Real::cos)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::cosf_nearest, math::real::Real::cos)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -4902,7 +4902,7 @@ pub extern "C" fn liella_sincosl_bits(x: LdBits, y: Option<&mut LdBits>, z: Opti
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn sinf(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::sin_nearest, math::real::Real::sin)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::sinf_nearest, math::real::Real::sin)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4912,7 +4912,7 @@ pub extern "C" fn liella_sinf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn sinf32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::sin_nearest, math::real::Real::sin)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::sinf_nearest, math::real::Real::sin)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -5022,7 +5022,7 @@ pub extern "C" fn tan(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn tanf(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::tan_nearest, math::real::Real::tan)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::tanf_nearest, math::real::Real::tan)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -5032,7 +5032,7 @@ pub extern "C" fn liella_tanf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn tanf32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::tan_nearest, math::real::Real::tan)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::tanf_nearest, math::real::Real::tan)
 }}
 
 export! { libm "GLIBC_2.27";

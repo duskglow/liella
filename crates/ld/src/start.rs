@@ -11,8 +11,12 @@
 //! * [`rewrite`]: for `ld.so PROGRAM`, the auxiliary vector entries that describe the program the
 //!   loader mapped instead of the loader itself.
 //! * [`ld_env`], [`preload_names`]: the `LD_*` settings, read once.
+//! * [`bias`]: the mapped program's load bias, from `PT_PHDR` or, without one, its ELF header.
 //! * [`needs_objects`]: whether a dynamic array names a `DT_NEEDED` object (loading dependencies
 //!   comes with DL-8; until then such a program is refused).
+//! * [`private`]: the C library's private start interface (`LIELLA_PRIVATE`, design §14, L14-10,
+//!   D-27.22): the build tag both products carry, [`private::StartInfo`] and the lookup of
+//!   `__liella_libc_early_init` with the tag check.
 
 use liella_kernel::auxv::Auxv;
 use liella_kernel::uapi::{AT_BASE, AT_ENTRY, AT_PHDR, AT_PHENT, AT_PHNUM, AT_SECURE};
@@ -177,3 +181,80 @@ pub fn needs_objects(words: &[u64]) -> bool {
 
 /// The diagnostic for a program with dependencies (DL-8 loads them).
 pub const NEEDS_OBJECTS: &[u8] = b"ld.so: the program needs shared objects; loading them is not available in this build\n";
+
+/// The load bias of a mapped program (D-27.18, ruling #4371): `PT_PHDR`'s, or without one the
+/// one its ELF header and the `PT_LOAD` holding its program headers give. One implementation,
+/// in libc's start (`liella_rt::start::bias`), shared with libc's own lookups of the executable.
+pub use liella_rt::start::bias;
+
+/// The private start interface between `ld.so` and `libc.so.6` (version node `LIELLA_PRIVATE`,
+/// plan/ph14/design.md §14, L14-10, R14-12, D-27.22). Never in a public header.
+pub mod private {
+    use crate::reloc::Obj;
+    use crate::symbols::{Object, Request, Want};
+
+    pub use liella_rt::start::private::{BUILD_TAG, EARLY_INIT, NODE, StartInfo, TAG_LEN, TAG_PREFIX};
+
+    /// The loader's build tag (`liella_rt::start::private::tag`), compared with the C library's.
+    pub const TAG: [u8; TAG_LEN] = liella_rt::start::private::tag(option_env!("LIELLA_BUILD_TAG"));
+
+    /// [`TAG_LEN`] as a symbol size.
+    const TAG_SIZE: u64 = 64;
+
+    /// The C library's early-init entry found among the loaded objects.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct Found {
+        /// The object defining it.
+        pub obj: usize,
+        /// Its run-time address.
+        pub early_init: u64,
+    }
+
+    /// Why the private interface refuses a pair (the object's index).
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum PrivateError {
+        /// The object's tag is missing, malformed or not this loader's: built from another commit.
+        Mismatch(usize),
+        /// The object's symbol tables cannot be read.
+        Malformed(usize),
+    }
+
+    impl PrivateError {
+        /// The diagnostic after the object's name (standard error).
+        pub fn message(self) -> &'static [u8] {
+            match self {
+                PrivateError::Mismatch(_) => b": LIELLA_PRIVATE build tag differs from the dynamic loader's (the C library and ld.so come from different builds)\n",
+                PrivateError::Malformed(_) => b": malformed LIELLA_PRIVATE symbols\n",
+            }
+        }
+    }
+
+    /// The first object but `skip` (the loader itself) that defines [`EARLY_INIT`] at [`NODE`], once its
+    /// [`BUILD_TAG`] is checked against [`TAG`] (L14-10): the tag must be a [`TAG_LEN`]-byte object
+    /// inside the file part of a `PT_LOAD`, read through `read(address, out)` (the object is mapped).
+    /// `None`: no object has the interface (a program without Liella's C library).
+    ///
+    /// # Errors
+    ///
+    /// [`PrivateError`] for the object whose tag differs or whose tables cannot be read.
+    pub fn find(objs: &[Obj<'_>], syms: &[Object<'_>], skip: Option<usize>, mut read: impl FnMut(u64, &mut [u8])) -> Result<Option<Found>, PrivateError> {
+        let (early, tag) = (Request::new(EARLY_INIT, Want::Version(NODE)), Request::new(BUILD_TAG, Want::Version(NODE)));
+        for (k, (o, s)) in objs.iter().zip(syms).enumerate().filter(|&(k, _)| Some(k) != skip) {
+            let Some(def) = s.lookup(&early).map_err(|_| PrivateError::Malformed(k))? else { continue };
+            let t = s.lookup(&tag).map_err(|_| PrivateError::Malformed(k))?.filter(|t| t.st.size == TAG_SIZE);
+            let Some(t) = t.filter(|t| {
+                let end = t.st.value.checked_add(TAG_SIZE);
+                o.elf.program_headers().any(|p| p.p_type == crate::elf::pt::LOAD && p.vaddr <= t.st.value && end.is_some_and(|e| e <= p.vaddr.saturating_add(p.filesz)))
+            }) else {
+                return Err(PrivateError::Mismatch(k));
+            };
+            let mut theirs = [0u8; TAG_LEN];
+            read(o.bias.wrapping_add(t.st.value), &mut theirs);
+            if theirs != TAG {
+                return Err(PrivateError::Mismatch(k));
+            }
+            return Ok(Some(Found { obj: k, early_init: o.bias.wrapping_add(def.st.value) }));
+        }
+        Ok(None)
+    }
+}

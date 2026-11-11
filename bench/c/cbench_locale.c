@@ -99,6 +99,35 @@ static int (*volatile iswalpha_l_fn)(wint_t, locale_t) = iswalpha_l;
 static wint_t (*volatile towupper_l_fn)(wint_t, locale_t) = towupper_l;
 static int (*volatile iswctype_fn)(wint_t, wctype_t) = iswctype;
 static char *(*volatile nl_langinfo_l_fn)(nl_item, locale_t) = nl_langinfo_l;
+static wint_t (*volatile towctrans_fn)(wint_t, wctrans_t) = towctrans;
+static wint_t (*volatile towlower_fn)(wint_t) = towlower;
+
+/* The towctrans rows' check (BENCH-ROWS-SINCOS-TOWCTRANS), run once before they are timed: for every code
+ * point and WEOF, towctrans with the "toupper" and "tolower" descriptors must equal towupper and towlower
+ * of the same library (probed on glibc: no difference in C and C.UTF-8). A difference ends the program; the
+ * FNV-1a digest of the mapped values goes to stderr, so the Liella and glibc builds can be compared. */
+static void check_towctrans(wctrans_t up, wctrans_t lo)
+{
+    static const char bad[] = "cbench_locale: towctrans identity check failed (towctrans differs from towupper/towlower)\n";
+    if (up == (wctrans_t)0 || lo == (wctrans_t)0) {
+        (void)!write(2, bad, sizeof bad - 1);
+        exit(1);
+    }
+    unsigned long long h = 0xcbf29ce484222325ULL;
+    for (wint_t c = 0;; c++) {
+        wint_t x = c > 0x10FFFF ? WEOF : c;
+        wint_t u = towctrans_fn(x, up), l = towctrans_fn(x, lo);
+        if (u != towupper_fn(x) || l != towlower_fn(x)) {
+            (void)!write(2, bad, sizeof bad - 1);
+            exit(1);
+        }
+        h = (h ^ u) * 0x100000001b3ULL;
+        h = (h ^ l) * 0x100000001b3ULL;
+        if (x == WEOF)
+            break;
+    }
+    fprintf(stderr, "cbench_locale: check towctrans_utf8 digest %#llx\n", h);
+}
 static const struct tm tm_fixed = { .tm_mday = 5, .tm_mon = 3, .tm_wday = 2, .tm_year = 120 };
 
 /* Case-insensitive pairs (PJ-23): equal apart from case, so every byte is folded.
@@ -172,6 +201,13 @@ int main(void)
 
     setlocale(LC_ALL, "C.UTF-8");
     MEASURE("towupper_utf8", 10000000L, towupper_fn((wint_t)(0xE0 + (i & 31))));
+    {
+        wctrans_t up = wctrans("toupper"), lo = wctrans("tolower");
+        if (!cb_skip("towctrans_toupper_utf8") || !cb_skip("towctrans_tolower_utf8"))
+            check_towctrans(up, lo);
+        MEASURE("towctrans_toupper_utf8", 10000000L, towctrans_fn((wint_t)(0xE0 + (i & 31)), up));
+        MEASURE("towctrans_tolower_utf8", 10000000L, towctrans_fn((wint_t)(0xC0 + (i & 31)), lo));
+    }
     MEASURE("iswalpha_utf8", 10000000L, iswalpha_fn((wint_t)(0x4E00 + (i & 255))));
     MEASURE("wcwidth_utf8", 10000000L, wcwidth_fn((wchar_t)(0x4E00 + (i & 255))));
     mbstate_t st;

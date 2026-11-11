@@ -1,0 +1,10 @@
+# WIDE-DD-EXPM1-BOUND: plants on the double-double tier's expm1 paths without the subtraction (crates/math/src/wide_dd.rs).
+# The r^6 term back in f64 on the k = 0 branch (the defect this story fixes): the sweep's exact bound check catches it.
+r6-f64-k0 | crates/math/src/wide_dd.rs | lit:return Some((expm1_poly_rel(r), 0, B_MAIN)); ==> return Some((expm1_poly(r), 0, B_MAIN)); | cargo test --release -p liella-math --lib wide_dd | msg:Expm1 Num .*error 2\^-[0-9]+\.[0-9]+ against the bound 2\^-100
+# The r^6 term back in f64 on the pinned operands' branch, pinned test alone (no sweep).
+r6-f64-pinned | crates/math/src/wide_dd.rs | lit:return Some((expm1_poly_rel(r), 0, B_MAIN)); ==> return Some((expm1_poly(r), 0, B_MAIN)); | cargo test --release -p liella-math --lib wide_dd::tests::expm1_without_subtraction | msg:error [0-9]+\.[0-9]+ of the bound
+# The low part of the tier's last correction term (r^2·acc in r + r^2·acc) dropped.
+last-correction-lo | crates/math/src/wide_dd.rs | lit:r.add(acc.mul(r).mul(r)) ==> r.add_f64(acc.mul(r).mul(r).hi) | cargo test --release -p liella-math --lib wide_dd | msg:error 2\^-[0-9]+\.[0-9]+ against the bound 2\^-[0-9]+
+# The polynomial's last term (r^11/11!) dropped: 2^-100.54 of r at |r| = ln2/128 against the other
+# errors' 2^-102.2, still below 2^-100 (2^-108 of e^r for exp), so the bound the tier claims holds.
+last-term-e11 | crates/math/src/wide_dd.rs | lit:(f64::from_bits(E10) + x * f64::from_bits(E11)) ==> (f64::from_bits(E10)) | cargo test --release -p liella-math --lib wide_dd | equivalent:r^11/11! is below 2^-100.5 of r on |r| <= ln2/128 and 2^-108 of e^r; with the other errors (2^-102.2) every claimed bound still holds

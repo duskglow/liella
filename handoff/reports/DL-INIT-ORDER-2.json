@@ -1,0 +1,28 @@
+{
+ "task": "DL-INIT-ORDER-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "origin/next merged into DL-INIT-ORDER; ld.rs conflict resolved keeping both the init/fini order (D-27.19) and the memory-image reader (D-27.18, start::bias untouched); gate, 6/6 plants and start-up counts vs next green on the merged head",
+ "branch": "task/dl-init-order-2",
+ "head": "35f3e3238",
+ "gate": {
+  "affected": "15 suites ok, 12161 passed / 0 failed; conformance 127/0; ld.so suites 36 passed / 0 failed",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "the direct tier ran liella-math for 2203 s (plus 583 s interposed) on keke for a loader-only change; most of the 98-minute gate"
+ ],
+ "refused": [],
+ "improvement": "affected selects liella-math (37 min) for crates/ld and crates/boundary/src/ld.rs changes; a narrower rule for loader-only files would cut such gates to about a third",
+ "next_step": "none for this story; DL-INIT-ORDER's next steps stand (DL-13 libc early init, then DL-0b's dlorder under both loaders)",
+ "report_file": "handoff/DL-INIT-ORDER-2.md",
+ "jobs": [
+  "dl-init-order-2-gate",
+  "dl-init-order-2-plants",
+  "dl-init-order-2-counts",
+  "dl-init-order-2-counts-next",
+  "dl-init-order-2-lint"
+ ]
+}

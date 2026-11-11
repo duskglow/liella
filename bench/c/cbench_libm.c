@@ -169,6 +169,85 @@ static void fill(double lo, double hi, double lo2, double hi2)
         TIMED(name, { T s_ = 0; for (long r_ = 0; r_ < reps; r_++) for (int i_ = 0; i_ < N; i_++) { CT z_ = f(a[i_] + b[i_] * (CT)I, (CT)1.5 + (CT)0.25 * I); s_ += __real__ z_ + __imag__ z_; } sink = s_; }); \
     } while (0)
 
+/* sincos in each format (BENCH-ROWS-SINCOS-TOWCTRANS), through volatile pointers so the compiler can
+ * neither inline, fold nor split the call. Before a row is timed it is checked once on its own operands:
+ * sincos must return exactly the bits of sin and cos of the same library (probed on glibc: no mismatch in
+ * 300000 operands per format over [-10, 10], [1e6, 1e300] and [-1e-3, 1e-3]); a mismatch ends the program.
+ * The row also prints an FNV-1a digest of its results on stderr, so the Liella and glibc builds' outputs on
+ * the same operands can be compared line by line. Timed: the sum of both results. */
+static void (*volatile sincosf_fn)(float, float *, float *) = sincosf;
+static void (*volatile sincos_fn)(double, double *, double *) = sincos;
+static void (*volatile sincosl_fn)(long double, long double *, long double *) = sincosl;
+static void (*volatile sincosf128_fn)(_Float128, _Float128 *, _Float128 *) = sincosf128;
+static float (*volatile sinf_fn)(float) = sinf;
+static float (*volatile cosf_fn)(float) = cosf;
+static double (*volatile sin_fn)(double) = sin;
+static double (*volatile cos_fn)(double) = cos;
+static long double (*volatile sinl_fn)(long double) = sinl;
+static long double (*volatile cosl_fn)(long double) = cosl;
+static _Float128 (*volatile sinf128_fn)(_Float128) = sinf128;
+static _Float128 (*volatile cosf128_fn)(_Float128) = cosf128;
+
+static unsigned long long digest;
+
+static void mix(const void *p, size_t n)
+{
+    const unsigned char *b = p;
+    for (size_t i = 0; i < n; i++) {
+        digest ^= b[i];
+        digest *= 0x100000001b3ULL;
+    }
+}
+
+static void say(const char *s)
+{
+    (void)!write(2, s, strlen(s));
+}
+
+static void sincos_fail(const char *name, int i)
+{
+    char idx[4] = {(char)('0' + i / 100), (char)('0' + i / 10 % 10), (char)('0' + i % 10), 0};
+    say("cbench_libm: sincos identity check failed: row ");
+    say(name);
+    say(" operand ");
+    say(idx);
+    say(" (sincos differs from sin/cos)\n");
+    exit(1);
+}
+
+static void sincos_digest(const char *name)
+{
+    char hex[17];
+    for (int k = 0; k < 16; k++)
+        hex[k] = "0123456789abcdef"[(digest >> (60 - 4 * k)) & 15];
+    hex[16] = 0;
+    say("cbench_libm: check ");
+    say(name);
+    say(" digest 0x");
+    say(hex);
+    say("\n");
+}
+
+/* sincos `fn` of type `T` (`w` significant bytes) over `a` in [lo, hi], checked against `sfn`/`cfn`. */
+#define RSC(name, fn, sfn, cfn, T, w, a, sink, lo, hi)                            \
+    do {                                                                          \
+        if (cb_skip(name))                                                        \
+            break;                                                                \
+        fill(lo, hi, 0, 0);                                                       \
+        digest = 0xcbf29ce484222325ULL;                                           \
+        for (int i_ = 0; i_ < N; i_++) {                                          \
+            T s_ = 0, c_ = 0;                                                     \
+            fn(a[i_], &s_, &c_);                                                  \
+            T s2_ = sfn(a[i_]), c2_ = cfn(a[i_]);                                 \
+            if (memcmp(&s_, &s2_, w) || memcmp(&c_, &c2_, w))                     \
+                sincos_fail(name, i_);                                            \
+            mix(&s_, w);                                                          \
+            mix(&c_, w);                                                          \
+        }                                                                         \
+        sincos_digest(name);                                                      \
+        TIMED(name, { T s_ = 0; for (long r_ = 0; r_ < reps; r_++) for (int i_ = 0; i_ < N; i_++) { T sn_; T cs_; fn(a[i_], &sn_, &cs_); s_ += sn_ + cs_; } sink = s_; }); \
+    } while (0)
+
 /* The floors: no libm call. */
 static void floors(void)
 {
@@ -253,6 +332,10 @@ int main(void)
     RU("cos", cos, double, ad, sd, -10.0, 10.0);
     RU("cosl", cosl, long double, al, sl, -10.0, 10.0);
     RU("cosf128", cosf128, _Float128, aq, sq, -10.0, 10.0);
+    RSC("sincosf", sincosf_fn, sinf_fn, cosf_fn, float, 4, af, sf, -10.0, 10.0);
+    RSC("sincos", sincos_fn, sin_fn, cos_fn, double, 8, ad, sd, -10.0, 10.0);
+    RSC("sincosl", sincosl_fn, sinl_fn, cosl_fn, long double, 10, al, sl, -10.0, 10.0);
+    RSC("sincosf128", sincosf128_fn, sinf128_fn, cosf128_fn, _Float128, 16, aq, sq, -10.0, 10.0);
     RU("tanf", tanf, float, af, sf, -10.0, 10.0);
     RU("tan", tan, double, ad, sd, -10.0, 10.0);
     RU("tanl", tanl, long double, al, sl, -10.0, 10.0);

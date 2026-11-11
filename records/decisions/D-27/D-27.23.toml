@@ -1,0 +1,11 @@
+id = "D-27.23"
+section = "s26-29"
+spec = "§27.3"
+ann = "SEC"
+status = "active"
+amends = ["D-27.20"]
+story = "DL-TLS-SELF-IMAGE"
+date = "2026-11-11"
+body = '''
+**The interpreter's own scope entry comes from its mapped image (DL-TLS-SELF-IMAGE; ruling #4501, family of #4229).** When an initially loaded object names the interpreter's soname (`DT_NEEDED`, for `__tls_get_addr`), `ld.so` enters itself in the scope from its memory image through the image-mode reader of D-27.18: its ELF header at its own run-time base (the first bytes of its first `PT_LOAD`) gives the program header table, and `image_view` builds the spans as for the program. It opens no file of its own at start-up: neither the program's `PT_INTERP` path nor `/proc/self/exe` (D-27.20 read one of them). Gains: one open, one mapping and one close fewer at start-up; start-up works without `/proc` and when the interpreter's file may be executed but not read; no path that could be replaced between the kernel's mapping and a second open is trusted. The interpreter keeps its D-27.20 treatment otherwise: never relocated again, its initialisers not run by the loader's initialiser pass. Its `(dev, ino)` is not known (no file is read), so a dependency naming the interpreter's file by path rather than by soname is loaded separately (the case ruling #4341 accepted for the program). Tests: `tls_interpreter_scope_entry_without_reading_its_file` (execute-only interpreter, `PT_INTERP` and `ld.so PROGRAM`), `tls_model_matrix_over_initially_loaded_objects`; plants handoff/DL-TLS-SELF-IMAGE-plants.txt.
+'''

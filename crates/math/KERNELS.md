@@ -80,8 +80,13 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 
 ## fast32/trig.rs (f32 trig)
 
-- `fast32/trig.rs:65` `pub(super) fn trig_core(x: f32) -> Option<(f64, f64)>` — bound: undocumented — doc: (sin x, cos x) as `double`s, each with |y/f - 1| ≤ 24.3·2^-53, for 2^-26 ≤ |x| < 2^19.
-- `fast32/trig.rs:93` `pub fn sincos(x: f32, mode: Rounding) -> ((f32, f32), Status)` — bound: undocumented — doc: `sincosf`: one reduction for both results; each one that fails its rounding test is computed by the accurate path, so the pair and the flags are those of `sinf`…
+- `fast32/trig.rs:66` `pub(super) fn trig_core(x: f32) -> Option<(f64, f64)>` — bound: undocumented — doc: (sin x, cos x) as `double`s, each with |y/f - 1| ≤ 24.3·2^-53, for 2^-26 ≤ |x| < 2^19.
+- `fast32/trig.rs:73` `fn widen_bits(x: f32) -> f64` — bound: undocumented — doc: `f64::from(x)` built from x's bits, for a normal `float` with biased exponent 101..=145 ([`trig_core`]'s range): the exponent rebased by 896, the fraction moved…
+- `fast32/trig.rs:85` `pub(super) fn trig_core_with(x: f32, widen: impl Fn(f32) -> f64) -> Option<(f64, f64)>` — bound: undocumented — doc: [`trig_core`] with the `double` operand from `widen` (LIBM-SINF-IVB-RATCHET-2, D-10.79): the boundary passes one in-place `cvtss2sd` (`hot::fpregs::widen`; this…
+- `fast32/trig.rs:115` `pub fn sin_nearest_widen(x: f32, widen: impl Fn(f32) -> f64) -> Option<f32>` — bound: undocumented — doc: `sin_nearest` with the `double` operand from `widen` ([`trig_core_with`], D-10.79): the boundary passes the in-place `cvtss2sd`.
+- `fast32/trig.rs:121` `pub fn cos_nearest_widen(x: f32, widen: impl Fn(f32) -> f64) -> Option<f32>` — bound: undocumented — doc: [`sin_nearest_widen`] for cos.
+- `fast32/trig.rs:127` `pub fn tan_nearest_widen(x: f32, widen: impl Fn(f32) -> f64) -> Option<f32>` — bound: undocumented — doc: [`sin_nearest_widen`] for tan = s/c.
+- `fast32/trig.rs:134` `pub fn sincos(x: f32, mode: Rounding) -> ((f32, f32), Status)` — bound: undocumented — doc: `sincosf`: one reduction for both results; each one that fails its rounding test is computed by the accurate path, so the pair and the flags are those of `sinf`…
 
 ## fast32.rs (f32 core)
 
