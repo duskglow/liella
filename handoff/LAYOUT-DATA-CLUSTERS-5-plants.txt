@@ -1,0 +1,4 @@
+# LAYOUT-DATA-CLUSTERS-5 plants (cargo xtask plants; docs/plants.md): one start-up data key removed (#4602).
+# program_invocation_name is traced in both profiles; with its key gone its section (.bss.program_invocation_name,
+# an alias of __progname, whose key stays) is not moved, and the traced probe must name it. Not run yet (see handoff).
+ldc5-key-pin | crates/libc-so/startup-data.keys | perl:s/^program_invocation_name\t[^\n]*\n//m | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_data_accesses_are_in_the_data1_cluster | msg:bss\.program_invocation_name \([0-9]+ bytes

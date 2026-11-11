@@ -1,5 +1,9 @@
 # LIBM-F64-SPECIAL-QUICK(-2, -3, -4): erf/erfc quick phase (part 1 of the special-function quick phases)
 
+**Superseded by LIBM-F64-SPECIAL-QUICK-REST (2026-11-11): see handoff/LIBM-F64-SPECIAL-QUICK-REST.md.** The SSE2
+erf_series +1 (item 1 of "Not done" below) is fixed there (154 -> 151, D-10.90); lgamma/tgamma/Bessel are profiled
+there and continue in LIBM-F64-SPECIAL-QUICK-REST-2.
+
 State (-4, 2026-11-11): branch `task/libm-f64-special-quick-4` = -3's head d4376b95b merged with origin/next
 ca8aa835a (merge 5350fa888, no conflicts). No code change in -3 or -4. Role keke:~/w/r1 (Zen 1). Decision D-10.84
 (`records/decisions/D-10/D-10.84.toml`); also D-10.13, D-10.51. Plants: handoff/LIBM-F64-SPECIAL-QUICK-2-plants.txt.

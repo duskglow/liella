@@ -804,6 +804,66 @@ fn reloc_libc_early_init_before_preinit() {
     std::fs::remove_dir_all(&d).ok();
 }
 
+/// A program that reads the objects `ld.so` exports (D-27.26) through copy relocations (a PIE's
+/// extern data): exit status = the first failed check.
+const LOADER_OBJECTS_PROG: &str = "#include <stddef.h>
+extern void *__libc_stack_end;
+extern ptrdiff_t __rseq_offset;
+extern unsigned int __rseq_size, __rseq_flags;
+static long sys4(long n, long a, long b, long c, long d) {
+    long r;
+    register long r10 __asm__(\"r10\") = d;
+    __asm__ volatile(\"syscall\" : \"=a\"(r) : \"0\"(n), \"D\"(a), \"S\"(b), \"d\"(c), \"r\"(r10) : \"rcx\", \"r11\", \"memory\");
+    return r;
+}
+int main(int argc, char **argv) {
+    int local = 0;
+    (void)argv;
+    if (__libc_stack_end == 0 || (char *)&local >= (char *)__libc_stack_end) return 1;
+    if (__rseq_flags != 0) return 2;
+    if (argc > 1) return __rseq_size == 0 ? 0 : 3;
+    if (__rseq_size != 32 || __rseq_offset == 0) return 4;
+    char *tp;
+    __asm__(\"mov %%fs:0, %0\" : \"=r\"(tp));
+    /* The area at tp + __rseq_offset is the one registered: registering it again is EBUSY. */
+    if (sys4(334, (long)(tp + __rseq_offset), 32, 0, 0x53053053) != -16) return 5;
+    return 0;
+}
+";
+
+/// s1_1_c_0, §22.9, R14-12, D-27.26: `ld.so` exports `__libc_stack_end` and the rseq objects and
+/// publishes them before relocation (the program's copies hold the values): the stack end above
+/// `main`'s frame, `__rseq_size` 32 and `__rseq_offset` the offset of the initial thread's
+/// registered area from the thread pointer, `__rseq_flags` 0; with `glibc.pthread.rseq=0`, size 0.
+/// Kernel-started and as `ld.so PROGRAM`.
+#[test]
+fn reloc_loader_objects_published() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let lib = target().join("liella");
+    if !lib.join("liella-crt1.o").exists() || !lib.join("libc.so.6").exists() {
+        eprintln!("SKIP: liella-crt1.o or libc.so.6 not built (run cargo xtask so)");
+        return;
+    }
+    let d = std::fs::canonicalize(dir("ldobjects")).unwrap();
+    let libc = libc_by_path(&lib, &d, "libc-objects.so", |_| {});
+    let c = d.join("objects.c");
+    std::fs::write(&c, LOADER_OBJECTS_PROG).unwrap();
+    let p = d.join("objects");
+    let crt1 = lib.join("liella-crt1.o");
+    let r = Command::new("cc").args(["-O1", "-fno-builtin", "-nostdlib", "-fPIE", "-pie"]).arg(format!("-Wl,--dynamic-linker={}", ld.display())).arg("-o").arg(&p).arg(&crt1).arg(&c).arg(&libc).arg(&ld).arg("-lgcc").output().unwrap();
+    assert!(r.status.success(), "objects: {}", String::from_utf8_lossy(&r.stderr));
+    for off in [false, true] {
+        for (how, mut cmd) in [("kernel-started", Command::new(&p)), ("ld.so PROGRAM", { let mut c = Command::new(&ld); c.arg(&p); c })] {
+            if off {
+                cmd.arg("off").env("GLIBC_TUNABLES", "glibc.pthread.rseq=0");
+            }
+            let (code, sig, err) = run(&mut cmd);
+            assert_eq!((code, sig), (Some(0), None), "{how}, rseq tunable off {off}: loader objects: check number {code:?} failed; stderr: {err}");
+        }
+    }
+    std::fs::remove_dir_all(&d).ok();
+}
+
 /// s27_1_c_8, L14-10, D-27.22: a `libc.so.6` whose `LIELLA_PRIVATE` build tag differs from the
 /// loader's (another build) is refused at load with the diagnostic, before any of its code runs.
 #[test]

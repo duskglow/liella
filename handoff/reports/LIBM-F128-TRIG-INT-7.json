@@ -1,0 +1,26 @@
+{
+ "task": "LIBM-F128-TRIG-INT-7",
+ "model": "opus",
+ "tokens": null,
+ "result": "merged origin/next (big_u64 conflict resolved, float-casts RANGE comment); STARTUP-DATA-WINDOWS 14/20 written pages; so + hot_text_products, gate, plants 6/6 CAUGHT green; asinf128 1341.0 / acosf128 1375.2 vs glibc 9271.5 / 9604.8 instr",
+ "branch": "task/libm-f128-trig-int-7",
+ "head": "481058bd3",
+ "gate": {
+  "affected": "libm-f128-trig-int-7-gate rc 0 (affected: ok, direct tier, 2 SKIPPED lines)",
+  "peak": "3.5G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "STARTUP-DATA-WINDOWS on the merged head: 14 written pages (budget 20), 1 read-only window (budget 1)"
+ ],
+ "refused": [],
+ "improvement": "a continuation brief that only waits on another story landing could carry the merge-and-recheck steps as a dispatcher action, no agent run needed unless the merge conflicts",
+ "next_step": "if the gate/plants/percall are green the branch lands; then booked timing of asinf128/acosf128 on Ivy Bridge and N100",
+ "report_file": "handoff/libm-f128-trig-int-7.md",
+ "jobs": [
+  "mei:libm-f128-trig-int-7-gate",
+  "mei:libm-f128-trig-int-7-plants",
+  "mei:libm-f128-trig-int-7-percall"
+ ]
+}

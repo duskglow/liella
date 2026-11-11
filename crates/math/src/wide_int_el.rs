@@ -627,7 +627,7 @@ mod tests {
     /// modes, and the hard operands. `cargo test --release -p liella-math --lib wide_int_el --
     /// --ignored`.
     #[test]
-    #[ignore = "8 x 10^7 operands against the 384-bit route: run in release as a job"]
+    #[ignore = "8 x 10^7 operands against the 384-bit route: cargo xtask long-sweeps runs it in release (nightly and release runs)"]
     fn tier_agrees_with_the_wide_route_long() {
         const TOTAL: usize = 10_000_000;
         let threads = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
