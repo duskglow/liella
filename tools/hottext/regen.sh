@@ -58,8 +58,11 @@ trace() { # <tier> <LANG> <program> <args...>
     printf '%s=%s\n' "$tier" "$work/names.$n" >> "$work/tagged"
     # HEAP-FIRST-USE-5: a clean environment with LANG only, as hot_text_products runs the probes; an
     # inherited LC_CTYPE (ssh forwards LC_*, often C.UTF-8) made setlocale(LC_ALL, "") skip the locale
-    # file's LC_CTYPE path, and the list lost its keys.
-    env -i PATH="$PATH" HOME="$HOME" LANG="$lang" HOT_TEXT_OUT="$work/names.$n" HOT_TEXT_STDIN="${stdin:-$work/in.txt}" HOT_TEXT_FOLLOW_FORK="${follow:-}" timeout 900 \
+    # file's LC_CTYPE path, and the list lost its keys. A probe that needs a time zone names it with
+    # `tz=<zone> trace ...` (as stdin= and follow=): the caller's TZ never reaches the trace.
+    local zone=()
+    if [ -n "${tz:-}" ]; then zone=(TZ="$tz"); fi
+    env -i PATH="$PATH" HOME="$HOME" LANG="$lang" "${zone[@]}" HOT_TEXT_OUT="$work/names.$n" HOT_TEXT_STDIN="${stdin:-$work/in.txt}" HOT_TEXT_FOLLOW_FORK="${follow:-}" timeout 900 \
         gdb -nx -batch -x "$here/trace_gdb.py" --args "$@" > "$work/gdb.$n.log" 2>&1 || { tail -5 "$work/gdb.$n.log"; exit 1; }
 }
 # Startup (p_true) first, then the probes from the most common calls to the rarer ones (printf before
@@ -104,7 +107,7 @@ for p in $probes; do
         # (page_faults.c localtime, localtime_mktime, mktime) and cbench_opt's zone rows use, not the
         # host's: a UTC host traced no rule-string parse, no period cache and another crate's vector
         # growth, so those stayed out of the group and cost the first localtime_r two faults.
-        TZ=America/New_York trace "$(tier_of "$p")" en_US.UTF-8 "./$p"
+        tz=America/New_York trace "$(tier_of "$p")" en_US.UTF-8 "./$p"
         check_calls "$p"
     else
         trace "$(tier_of "$p")" en_US.UTF-8 "./$p"
