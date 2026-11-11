@@ -7,6 +7,7 @@
 //! through its slow path, a destructor registers, and the words stay as they were. A binary with
 //! one test; nothing but Liella runs while the garbage is in place, and the block is restored
 //! before anything is asserted.
+// opaque-ok: the test is about Liella's own `malloc`/`free` in a process another library started.
 #![no_builtins]
 #![allow(clippy::unwrap_used, clippy::as_conversions, clippy::arithmetic_side_effects, missing_docs)]
 

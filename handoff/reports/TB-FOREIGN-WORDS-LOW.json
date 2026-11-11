@@ -1,0 +1,12 @@
+{"task": "TB-FOREIGN-WORDS-LOW", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: 0x80-0x9b words (errno, dtors, heap cache, node) gated on owned() with registry words in foreign processes; foreign tests green; counts, affected gate, decision record and probe not run",
+ "branch": "task/tb-foreign-words-low", "head": null,
+ "gate": {"affected": "not run (tb_foreign_low_words 1/1, tb_foreign_words 1/1, heap_and_sync 25/25 in tbfwl-lint-2)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "owned() gate on malloc/free fast path and errno likely moves counts (+3..+4, unmeasured)", "recommendation": "fold a FOREIGN bit into the malloc-debug flags word already tested on every heap entry (zero cost on own threads); __errno_location in csys asm with cmpb on liella_machine_owned (+2)"}],
+ "informational": ["listed thread blocks (setxid, tid_of) are always runtime-made, so their 0x84 reads are safe", "SPARE fallback: no heap cache (Pages::cache_slot -> None), shared errno word; no plant covers it"],
+ "refused": [],
+ "improvement": "the brief's call budget (90) did not fit audit + code + lint + plants + counts + probe for a 5-word safety change; split audit/code from measurement",
+ "next_step": "clippy+static+affected on final head, read plants-1, percall errno and malloc/free, then decide the zero-cost gate ruling",
+ "report_file": "handoff/TB-FOREIGN-WORDS-LOW.md",
+ "jobs": ["keke:tb-foreign-words-low-plants-1"]}

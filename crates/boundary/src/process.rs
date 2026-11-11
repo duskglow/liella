@@ -24,7 +24,6 @@ use crate::conv;
 use crate::ffi;
 use crate::heap::{KernelPages, HEAP};
 use crate::sys::CSys;
-use crate::tb;
 
 /// `atexit`, `on_exit` and `__cxa_atexit` registrations.
 pub static EXIT_HANDLERS: Registry = Registry::new();
