@@ -378,7 +378,10 @@ fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
 /// STARTUP-FAULTS-RESTORE-3: 6 after the merge with next (fork-tier functions `#[inline(never)]`,
 /// HOTTEXT-REGEN-UNBLOCK): Haswell-EP host, every run identical, and 6 on the Zen 1 host in that
 /// story's base column, so the bound is 7.
-const FORK_BOUND: u64 = 7;
+/// LAYOUT-DATA-CLUSTERS-7 (D-X.70): 5 in both profiles at every `data` pad (Haswell-EP host, every run
+/// identical; next read 6 release and 7 fast) once the state the child reads joined the `.data1` cluster,
+/// whose pages start-up touches, so the bound is 6.
+const FORK_BOUND: u64 = 6;
 
 #[test]
 fn init_fork_child_stays_within_its_page_fault_bound() {
