@@ -230,8 +230,11 @@ fn sign(n: &Num, r: &Reduced, cos: bool) -> (bool, bool) {
     ((!cos && n.neg) ^ (k & 2 != 0) ^ (!odd && r.negf), odd)
 }
 
+/// A positive value `M·2^E` as `(M, E)`, `M` in `[2^191, 2^192)`.
+type Scaled = (W3, i32);
+
 /// `v·2^-units` (`v` at least `2^128`) as `(M, E)`, `M` in `[2^191, 2^192)`.
-fn norm(v: W3, units: u32) -> (W3, i32) {
+fn norm(v: W3, units: u32) -> Scaled {
     let l = v.h.leading_zeros();
     (v.shl(l), -(units as i32) - l as i32)
 }
@@ -277,7 +280,7 @@ fn kernel(n: &Num, cos: bool) -> Option<(bool, W3, i32)> {
 
 /// Steps 1 to 4 for both functions: the reduced operand, `sin|a|` and `cos|a|` (each `(M, E)`,
 /// `M` in `[2^191, 2^192)`, within the bounds of step 4).
-fn both(n: &Num) -> Option<(Reduced, (W3, i32), (W3, i32))> {
+fn both(n: &Num) -> Option<(Reduced, Scaled, Scaled)> {
     let r = reduced(n)?;
     let (u, s) = sq_and_sine(&r);
     let c = cos_poly(u);
