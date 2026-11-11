@@ -34,9 +34,17 @@ rc1 (2 curated keys, pruned), step4 rc0 (release regen). FINAL: `dl-libc-start-3
 so, hot_text_products, reloc_libc_start, the dynamic subset, fpu_control, xtask native, affected --base origin/next)
 and `dl-libc-start-3-plants2` (3 plants); results in the report json / hand-back.
 
+Correction to item 4: dropping `rt::start::program` was wrong (it still has a section; my nm check grepped the
+hash-less key) and failed hot_text_products; it and `intl::record_for` were restored (55f53ff6e). FINAL gate is
+`dl-libc-start-3-gate2`: clippy, static, so, hot_text_products PASS; reloc_libc_start_hello_world FAILS in its
+ORACLE step: keke's host C library prints `preinit setenv lost`, the test hard-codes `kept` (written on mei). Liella's
+variants did not run; the subset, fpu_control, native and affected did not run (script stops at the first red).
+
 ## Next step
-1. If the gate or plants are red: read `~/logs/dl-libc-start-3-gate.log` on keke (`grep -n "^== "` shows the step).
-   A dynamic-subset program that fails on Liella is a real dynamic-start gap: fix it, never drop the program.
+1. Fix reloc_libc_start_hello_world's host dependence (crates/ld/tests/reloc.rs ~891): find by a black-box probe
+   why the host library loses a `.preinit_array` setenv on keke and keeps it on mei (version? setenv into a static
+   environ copy?), decide what Liella must print (spec §1.1/§1.3), and compare Liella to that, not to one host.
+   Then rerun ~/work/DL-LIBC-START-3/step5.sh on keke. A dynamic-subset program failing on Liella is a real gap: fix it.
 2. cbench_startup side by side with origin/next (NOT RUN: no next product tree on keke; needs a second role or
    `cargo xtask bench --ab-from <next tree> --counters cbench_startup`): static start must not change.
 3. D-10.5's body still says the dynamic run is a skip: an `amends` record once the subset is green.
