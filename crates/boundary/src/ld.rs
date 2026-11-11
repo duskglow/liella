@@ -542,10 +542,8 @@ fn read_image(at: usize, out: &mut [u8]) {
     // UNSAFE(slice): bytes of the mapped program, copied before any relocation store.
     #[allow(unsafe_code)]
     // SAFETY: [at, at + len) is the program header table (`AT_PHDR`, ⚑ KERN), the start of its (whole, readable)
-    // page, or the file-backed part of one readable `PT_LOAD` the kernel or `load` mapped; or, for the
-    // interpreter's own image (D-27.23), its ELF header at its base (the start of its first `PT_LOAD`, which
-    // `relocate_image` already read) or one of the ranges above in its image; the slice lives only for this
-    // copy, and nothing stores into the program (or the interpreter, relocated before) while it is taken.
+    // page, or the file-backed part of one readable `PT_LOAD` mapped by the kernel, `load`, or (ld.so's own ELF
+    // header, D-27.23) its first PT_LOAD; the slice lives only for this copy, and nothing stores meanwhile.
     out.copy_from_slice(unsafe { conv::bytes_at(at, out.len()) });
 }
 
@@ -557,8 +555,7 @@ fn live_segment(at: usize, len: usize) -> &'static [u8] {
     // SAFETY: the caller checked the range is the file-backed part of a readable PT_LOAD, mapped for the
     // process's lifetime. Live means: not writable, the program is not text-relocated, and no segment the
     // relocator may store into overlaps it; the relocator stores only inside writable segments of such an
-    // object (reloc `inside`), so the bytes do not change while the slice is used (until `link` ends). The
-    // interpreter's own image (D-27.23) is never relocated by `link` at all.
+    // object (reloc `inside`; ld.so's own image not at all), so the bytes do not change until `link` ends.
     unsafe { conv::bytes_at(at, len) }
 }
 
