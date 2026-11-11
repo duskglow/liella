@@ -1,0 +1,4 @@
+# LAYOUT-STARTUP-RODATA-8: the one change the branch still carries over next, the first-wins assertion in
+# liella_rt::start's program_headers_give_the_tls_image_and_the_bias (two PT_TLS headers: the first counts),
+# planted on next's program-header loop (LAYOUT-DATA-CLUSTERS-4C). Direct tests: the liella-rt unit tests.
+lsr8-last-tls-wins | crates/rt/src/start.rs | lit:PT_TLS if tls.is_none() => tls = Some(h), ==> PT_TLS => tls = Some(h), | cargo test -p liella-rt --lib start:: | msg:first header of a type counts
