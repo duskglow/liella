@@ -1,0 +1,15 @@
+# LAYOUT-TEXT-PIN-5: plants on merge.py --startup-head (ruling #4417), the regenerated list, and LAYOUT-TEXT-PIN-4's
+# @place end code (clusters_at_end, the h9 decode in position_of), whose plants were still open.
+# ltp5-no-head keeps the merged order (no partition); ltp5-no-tier leaves moved keys in their traced tier (the partition
+# then leaves them behind); ltp5-list-late takes getrusage out of the start-up tier of the committed list.
+ltp5-no-head | tools/hottext/merge.py | perl:s/out = \[k for k in out if tier\[k\] == "startup"\] \+ \[k for k in out if tier\[k\] != "startup"\]/out = list(out)/ | cargo test -p xtask --bin xtask hottext::tests::merge_moves_startup_text_keys_to_the_head | msg:merge_moves_startup_text_keys_to_the_head.*(FAILED|panicked)|assertion .*left == right
+ltp5-no-tier | tools/hottext/merge.py | perl:s/tier\[k\] = "startup"/tier[k] = tier[k]/ | cargo test -p xtask --bin xtask hottext::tests::merge_moves_startup_text_keys_to_the_head | msg:merge_moves_startup_text_keys_to_the_head.*(FAILED|panicked)|assertion .*left == right
+ltp5-list-late | crates/libc-so/hot-text.list | perl:s/^getrusage\tstartup\t/getrusage\textra\t/m | cargo test -p xtask --bin xtask hottext::tests::startup_text_keys_lead_the_hot_text_list | msg:start-up keys after list position
+ltp4-place-end | xtask/src/hottext.rs | perl:s/\["place", "end"\] => true/["place", "end"] => false/ | cargo test -p xtask --bin xtask hottext::tests::clusters_are_aligned_to_their_size | msg:clusters_are_aligned_to_their_size.*(FAILED|panicked)|assertion .*left == right
+ltp4-h9-decode | xtask/src/hottext.rs | perl:s/if digits == 8 && d\.starts_with\('9'\) \{ &d\[3\.\.\] \} else \{ d \}/d/ | cargo test -p xtask --bin xtask hottext::tests::clusters_are_aligned_to_their_size | msg:clusters_are_aligned_to_their_size.*(FAILED|panicked)|assertion .*left == right
+# cargo xtask plants results (5 plants: 5 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# ltp5-no-head: CAUGHT, caught by xtask hottext::tests::merge_moves_startup_text_keys_to_the_head
+# ltp5-no-tier: CAUGHT, caught by xtask hottext::tests::merge_moves_startup_text_keys_to_the_head
+# ltp5-list-late: CAUGHT, caught by xtask hottext::tests::startup_text_keys_lead_the_hot_text_list
+# ltp4-place-end: CAUGHT, caught by xtask hottext::tests::clusters_are_aligned_to_their_size
+# ltp4-h9-decode: CAUGHT, caught by xtask hottext::tests::clusters_are_aligned_to_their_size

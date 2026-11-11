@@ -1,0 +1,3 @@
+# LAYOUT-TEXT-PIN-7 plants (cargo xtask plants; docs/plants.md)
+ltp7-realign-all | xtask/src/hottext.rs | perl:s/\*h != a\)/*h != 0)/ | cargo test -p xtask --bin xtask hottext::tests::sections_keep_their_own_alignment_unless_they_head_a_cluster | msg:sections_keep_their_own_alignment_unless_they_head_a_cluster.*(FAILED|panicked)|assertion .*left == right
+ltp7-real-label | xtask/src/hottext.rs | perl:s/fixture_set_entry\\tstartup/liella_machine_fill_avx2_entry\\tstartup/ | cargo test -p xtask --bin xtask affected::tests::layout_manifest_names_select_the_layout_check | msg:layout_manifest_names_select_the_layout_check.*(FAILED|panicked)|is named by `xtask/src/hottext.rs`

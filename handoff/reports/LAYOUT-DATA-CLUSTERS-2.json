@@ -1,0 +1,11 @@
+{"task": "LAYOUT-DATA-CLUSTERS-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: HEAP/EXIT_HANDLERS/environ/fold.S words into .data1 (EXIT_HANDLERS was lost to the cold .lbss rename order), relro head dropped, plants-baseline test bug fixed; fast true/locale/tool/fork 17/55/58/7 -> 12/51/54/6, rwPages 10 -> 7, cold pads stable; localtime fast 21 vs next 20",
+ "branch": "task/layout-data-clusters-2", "head": "1db846eec",
+ "gate": {"affected": "ldc2-gate running at hand-back", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["move_cold_bss (D-X.22) ran before move_startup_state, so keyed 1-4 KiB writers became .lbss; code model is small", "relro tail beside .got cannot be named in GNU ld's default script: dropped per #4577", "release tool Dr 2 vs next 1 not attributed"],
+ "refused": [],
+ "improvement": "ldc_measure.py should perf every fault-bounded mode (localtime too), so a +1 can be attributed in the same job",
+ "next_step": "attribute localtime fast 21 vs 20 (perf by class, next vs this); then #4602 key-by-access for stdout/_IO_2_1_stdout_/SETTINGS",
+ "report_file": "handoff/LAYOUT-DATA-CLUSTERS-2.md",
+ "jobs": ["ldc2-unit", "ldc2-after", "ldc2-plants", "ldc2-gate", "ldc2-base-measure"]}
