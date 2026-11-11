@@ -1,0 +1,4 @@
+# LAYOUT-DATA-CLUSTERS-5 plants (cargo xtask plants; docs/plants.md): one start-up data key removed (#4602).
+# A removed key leaves its static in its own .data section; the traced probe must name it. (The regenerated keys
+# hold _IO_2_1_stderr_, fast, not _IO_2_1_stdout_: `page_faults true` touches stderr's stream, not stdout's.)
+ldc5-key-stderr | crates/libc-so/startup-data.keys | perl:s/^_IO_2_1_stderr_\t[^\n]*\n//m | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_data_accesses_are_in_the_data1_cluster | msg:data\._IO_2_1_stderr_ \([0-9]+ bytes

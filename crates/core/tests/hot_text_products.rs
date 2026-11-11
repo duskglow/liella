@@ -976,14 +976,23 @@ fn section_span(exe: &Path, name: &str) -> Option<(u64, u64)> {
 /// another emission order of the large tables would): `.rodata1` sits in one 64 KiB window, `.data1` (the
 /// written start-up state, heap::HEAP and environ included: LAYOUT-DATA-CLUSTERS-2) takes exactly
 /// ceil(size / 4 KiB) pages, and the start-up, tool and fork-child fault counts are the same at every
-/// `cold` and `lbss` pad, the fork child within [`FORK_BOUND`]. Before the clusters, the `cold` pads moved the
-/// read-only data window by one (LAYOUT-STABILITY-RETHINK). No spec clause (layout of the products).
+/// `cold`, `lbss` and `data` pad, the fork child within [`FORK_BOUND`]. Before the clusters, the `cold` pads moved the
+/// read-only data window by one (LAYOUT-STABILITY-RETHINK). LAYOUT-DATA-CLUSTERS-5 (#4602): `data` pads
+/// `.data` by 0x800, 0x1000, 0x2000 and 0x3000 bytes ahead of every library object, as another order of
+/// `.data` would (a libm change re-partitioned liella_boundary's codegen units and moved
+/// `__libc_single_threaded` and `_IO_2_1_stdout_` to a page of their own): start-up writes nothing in
+/// `.data` outside the cluster, so the counts stay. No spec clause (layout of the products).
 #[test]
 fn init_data_clusters_hold_at_every_text_phase() {
     let base = std::env::temp_dir().join(format!("liella-data-phase-{}", std::process::id()));
     let (mut bad, mut counts) = (Vec::new(), std::collections::BTreeMap::new());
-    for region in ["pre", "cold", "lbss"] {
-        for pad in [0x800_u64, 0x2000, 0x8000, 0xF000].into_iter().filter(|p| region != "lbss" || *p < 0x8000) {
+    for region in ["pre", "cold", "lbss", "data"] {
+        let pads: &[u64] = match region {
+            "lbss" => &[0x800, 0x2000],
+            "data" => &[0x800, 0x1000, 0x2000, 0x3000],
+            _ => &[0x800, 0x2000, 0x8000, 0xF000],
+        };
+        for &pad in pads {
             let dir = base.join(format!("{region}-{pad:x}"));
             std::fs::create_dir_all(&dir).expect("temp dir");
             let crt1 = padded_crt1(&dir, region, pad);
@@ -999,8 +1008,8 @@ fn init_data_clusters_hold_at_every_text_phase() {
             }
             // The `pre` pads also move the text windows by one (the base's own text phase, measured on
             // LAYOUT-TEXT-PIN-9's head: true 15 -> 16 at pre 0x800), so equal counts are required at the
-            // `cold` pads, where only the data classes move, and at the `lbss` pads, which move the
-            // `.lbss` objects against the page grid (the written start-up state must not be there).
+            // `cold` pads, where only the data classes move, and at the `lbss` and `data` pads, which move
+            // the `.lbss` and `.data` objects against the page grid (the written start-up state must not be there).
             for mode in ["true", "tool", "fork"].into_iter().filter(|_| region != "pre") {
                 let n = faults(&exe, mode);
                 eprintln!("data phase {region} {pad:#x}: {mode} {n}");
@@ -1018,6 +1027,105 @@ fn init_data_clusters_hold_at_every_text_phase() {
         }
     }
     assert!(bad.is_empty(), "data phase: {bad:#?}");
+}
+
+/// The default linker script (`ld --verbose`) with every input section of `.data`, `.bss` and `.lbss` on
+/// a 64 KiB boundary of its own (`SUBALIGN`), so each object there that a run touches faults at its own
+/// address; `.data1` stays packed. tools/hottext/startup_data.sh traces the same way (it aligns `.data1` too).
+fn isolated_data_script(dir: &Path) -> PathBuf {
+    let out = Command::new("ld").arg("--verbose").output().expect("ld --verbose");
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    let (mut inside, mut script, mut n) = (false, String::new(), 0);
+    for l in text.lines() {
+        if l.starts_with("=====") {
+            inside = !inside;
+            continue;
+        }
+        if !inside {
+            continue;
+        }
+        let t = l.trim_start();
+        let isolated = [".data", ".bss", ".lbss"].iter().any(|s| t.strip_prefix(*s).is_some_and(|r| r.starts_with(char::is_whitespace) && r.trim_start().starts_with(':')));
+        match l.split_once(':') {
+            Some((a, b)) if isolated => {
+                script.push_str(&format!("{a}: SUBALIGN(65536){b}\n"));
+                n += 1;
+            }
+            _ => {
+                script.push_str(l);
+                script.push('\n');
+            }
+        }
+    }
+    assert!(n >= 3, "ld --verbose: the .data/.bss/.lbss output sections were not found ({n})");
+    let path = dir.join("isolated.ld");
+    std::fs::write(&path, script).expect("isolated.ld");
+    path
+}
+
+/// LAYOUT-DATA-CLUSTERS-5 (#4602, D-X.69): the writable data start-up touches is keyed by access
+/// (`crates/libc-so/startup-data.keys`) and joins `.data1`; a key the trace no longer matches (a static
+/// renamed, or split by another codegen-unit partition) is named here instead of costing a page that
+/// moves with unrelated changes. The probe is linked with every `.data`, `.bss` and `.lbss` input
+/// section on a 64 KiB boundary of its own and `true` is traced with `perf record -e page-faults -d`:
+/// a fault in a static of at most 4 KiB in a section of its own outside `.data1` (what
+/// `xtask/src/coldbss.rs` moves by key) is named. No spec clause (layout of the products).
+#[test]
+fn init_startup_data_accesses_are_in_the_data1_cluster() {
+    let dir = std::env::temp_dir().join(format!("liella-startup-access-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let script = isolated_data_script(&dir);
+    let (exe, map, data) = (dir.join("page_faults"), dir.join("page_faults.map"), dir.join("perf.data"));
+    let (t, m) = (format!("-Wl,-T,{}", script.display()), format!("-Wl,-Map={}", map.display()));
+    build_crt1(&exe, &[&t, &m], &root().join("target/liella/liella-crt1.o"));
+    let map = std::fs::read_to_string(&map).expect("link map");
+    let inputs: Vec<(String, u64, u64, String)> = [".data", ".bss", ".lbss"]
+        .into_iter()
+        .filter(|o| map.lines().any(|l| !l.starts_with(' ') && l.split_whitespace().next() == Some(*o)))
+        .flat_map(|o| output_inputs(&map, o))
+        .collect();
+    let rec = Command::new("perf")
+        .args(["record", "-q", "-e", "page-faults", "-c", "1", "-d", "-o"])
+        .arg(&data)
+        .arg("--")
+        .arg(&exe)
+        .arg("true")
+        .current_dir("/")
+        .env_clear()
+        .env("LANG", "en_US.UTF-8")
+        .stdout(Stdio::null())
+        .output();
+    let rec = match rec {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&dir);
+            eprintln!("SKIP init_startup_data_accesses_are_in_the_data1_cluster: perf cannot be run ({e}); the fault data addresses need perf");
+            return;
+        }
+    };
+    let err = String::from_utf8_lossy(&rec.stderr).into_owned();
+    if !rec.status.success() && (err.contains("perf_event_paranoid") || err.contains("Permission denied")) {
+        let _ = std::fs::remove_dir_all(&dir);
+        eprintln!("SKIP init_startup_data_accesses_are_in_the_data1_cluster: page-fault events are not permitted here: {}", err.trim());
+        return;
+    }
+    assert!(rec.status.success(), "perf record of `page_faults true` failed: {}", err.trim());
+    let script_out = Command::new("perf").args(["script", "-F", "addr", "-i"]).arg(&data).output().expect("perf script");
+    let _ = std::fs::remove_dir_all(&dir);
+    let addrs: Vec<u64> = String::from_utf8_lossy(&script_out.stdout).split_whitespace().filter_map(|w| u64::from_str_radix(w, 16).ok()).collect();
+    assert!(!addrs.is_empty(), "perf recorded no page fault of `page_faults true`");
+    let (mut touched, mut bad) = (std::collections::BTreeSet::new(), std::collections::BTreeSet::new());
+    for a in addrs {
+        let Some((name, _, size, file)) = inputs.iter().find(|s| s.1 <= a && a < s.1 + s.2) else { continue };
+        touched.insert(format!("{name} ({size} bytes, {file})"));
+        // Only a static in a section of its own is moved by key (D-X.64); a larger one stays where it is.
+        let own = (name.starts_with(".data.") && !name.starts_with(".data.rel.ro")) || name.starts_with(".bss.") || name.starts_with(".lbss.");
+        if own && *size <= 4096 {
+            bad.insert(format!("{name} ({size} bytes, {file})"));
+        }
+    }
+    eprintln!("start-up accesses in .data/.bss/.lbss outside .data1: {touched:#?}");
+    assert!(bad.is_empty(), "STARTUP-DATA-KEYS: start-up touches statics outside the .data1 cluster (stale crates/libc-so/startup-data.keys? regenerate with tools/hottext/regen.sh): {bad:#?}");
 }
 
 /// LAYOUT-DATA-CLUSTERS-4 (D-X.68, D-27.10): every static PIE starts whatever the phase of its data.
