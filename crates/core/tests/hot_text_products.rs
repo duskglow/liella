@@ -927,7 +927,9 @@ fn init_written_startup_objects_are_in_the_data1_cluster() {
         // `<value> <flags> <section>\t<size> [.hidden ]<name>`
         let Some((a, b)) = l.split_once('\t') else { continue };
         let (Some(section), Some(size), Some(name)) = (a.split_whitespace().last(), b.split_whitespace().next().and_then(|z| u64::from_str_radix(z, 16).ok()), b.split_whitespace().last()) else { continue };
-        if !keys.contains(&unhashed_key(name)) {
+        // Only a static in a section of its own (`.data.<symbol>`) can be moved by name; a C object in a
+        // section named otherwise (`__environ` in `.bss.environ`) is out of scope (D-X.64, open).
+        if !keys.contains(&unhashed_key(name)) || !section.contains(name) {
             continue;
         }
         if section == ".data1" {
