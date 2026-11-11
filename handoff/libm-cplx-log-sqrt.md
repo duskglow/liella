@@ -1,11 +1,44 @@
 # LIBM-CPLX-LOG-SQRT handoff: clog/csqrt (and clogf, csqrtf) quick tiers
 
-State: branch task/libm-cplx-log-sqrt-6 (continues -5 .. -1). origin/next 0d0d82e5d merged in run 6 (commit
-c767dc493, clean merge, includes the contracts.tsv line of #4386); code unchanged since 12835f458 otherwise. HEAD in
-handoff/reports/LIBM-CPLX-LOG-SQRT-6.json. Run 6 role keke:~/w/r5 (Zen 1). Decisions in force: D-10.53, D-10.74,
-D-10.55, D-10.25, D-X.56, HOTTEXT-PINNING, rulings #4357, #4347 (LAYOUT-JITTER), #4383 (attribute first).
+State: branch task/libm-cplx-log-sqrt-7 (continues -6 .. -1). HEAD in handoff/reports/LIBM-CPLX-LOG-SQRT-7.json.
+Run 7 role mei:~/w/s1 (Skylake-SP). Math code unchanged since 12835f458. Decisions in force: D-10.53, D-10.74,
+D-10.55, D-10.25, D-X.56, HOTTEXT-PINNING, rulings #4357, #4347 (LAYOUT-JITTER), #4383, #4430.
 
-## Run 6: start-up fault attribution (ruling #4383)
+## Run 7: merged next (after the layout work), hot-text list repaired, gate and plants
+
+* origin/next 07a4db6ac merged (645810174). Only conflict: docs/codemap/symbols.tsv, a generated view: next's copy
+  taken (the train regenerates it).
+* The merge changed inlining again: `Features::detect<CSysImpl<false>>` is out of line once more, so the
+  STARTUP-TEXT-GROUPED contract failed (1 start-up function outside the hot group) with run 5's pruned list. Fix
+  (8cffd5240): next's list, pruned with tools/hottext/prune.py against BOTH profiles' hot-text.matched (fast via
+  `cargo xtask so`, release via `LIELLA_FULL_PROFILE=1 cargo xtask so`): it drops one key only,
+  `variants::each<(), intl::resolve closure>` (its body is still in `intl::translate`, already a key). The branch's
+  list now differs from next by that one line. `cargo xtask so`: all 12 layout contracts hold (start-up text 2
+  windows, nothing outside the hot group; data 1 ro window, 13 written pages).
+* Because hot-text.list differs from next, `cargo xtask affected --run --base origin/next` escalates to FULL
+  by itself (product linker input). Job libm-cplx-log-sqrt-7-gate on mei (code tree 8cffd5240): rc 0, 2047 s,
+  32 suites, 11590 passed / 0 failed / 1260 ignored, conformance 127 / 0, peak 16G (page cache), oom_kill 0.
+  3 SKIPPED lines, none from this branch (dlsym helper and fpu_control dynamic wait for Liella's ld.so;
+  LIELLA_REGEX_CORPUS unset).
+* **LAYOUT-JITTER gone:** every start-up fault bound of hot_text_products passes on the merged head
+  (init_short_programs_stay_within_their_page_fault_bounds, coreutils-shaped, fork child, first float conversion,
+  localtime/mktime, zero-fault clusters/calls). The red of runs 5 and 6 does not reproduce after the layout work.
+* Plants: run 5's file rerun on this head (math code unchanged since run 5), job libm-cplx-log-sqrt-7-plants:
+  14 CAUGHT, 0 SURVIVED, 0 WARN (handoff/LIBM-CPLX-LOG-SQRT-7-plants.txt).
+* Lint on the final code tree: job libm-cplx-log-sqrt-7-lint (clippy --all-features -D warnings, xtask clippy,
+  xtask static): rc 0.
+* No counts rerun: no math code changed since run 5's counts (numbers under "Earlier runs").
+
+## Follow-up story to cut: cexp routed operand (#4432)
+
+cbench_libm's cexp row: 1 of its 256 operands enters the 384-bit route (~115k instructions), +449 instructions per
+call averaged over the row (41% of it). Not fixed here (out of this story). Direction: a ~2^-100 second tier that
+decides such cases before the 384-bit route; separately, a cheaper non-FMA Dekker product (the baseline build costs
++244 per call over FMA). Data below ("cexp 5.34x on Ivy Bridge").
+
+## Run 6 (keke:~/w/r5, Zen 1)
+
+### Run 6: start-up fault attribution (ruling #4383)
 
 Fast products, page_faults.c linked as hot_text_products.rs links it, relay harness (lowest of 6), 19 `pre` and 19
 `cold` pads (the LAYOUT-STABILITY-RETHINK measure tool, trimmed: no layout-check; every perf fault address named by
@@ -65,7 +98,8 @@ bound derivations in complex_fast.rs, the atan2 merge, the route-count table, th
 
 ## Next steps (in order)
 
-1. When LAYOUT-TEXT-PIN / LAYOUT-DATA-CLUSTERS land: merge origin/next, `cargo xtask so`, rerun the gate
-   (`--files` = `git diff --name-only origin/next...HEAD` minus records/ and handoff/; FULL while hot-text.list
-   differs from next). Rerun the plants file of run 5 on that head (math code unchanged since run 5).
-2. Then: csqrt by time (3.41x: dependent sqrt/div chain), cexp (two causes above), clog 1.52x, clog_axis 1.82x.
+1. Done in run 7 (merge, so, gate, plants): see the report json for the verdicts. If a later merge of next
+   changes inlining again, repair the hot-text list as run 7 did (next's list, then prune.py with both profiles'
+   hot-text.matched); never hand-edit it.
+2. Follow-up stories (not this branch): csqrt by time (3.41x: dependent sqrt/div chain), cexp (the routed
+   operand above, #4432, and the non-FMA product), clog 1.52x, clog_axis 1.82x.
