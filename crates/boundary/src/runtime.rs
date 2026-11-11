@@ -172,13 +172,33 @@ fn initial_thread<const PIE: bool>(aux: &Auxv<'_>) -> (start::Program, Option<bo
 /// and their target words lie in `.got` inside RELRO), and nothing after it writes there.
 /// A dynamically linked program's segments are its loader's (phase 14). The range comes from
 /// the one header pass `initial_thread` made (STATIC-RELRO-2: no second walk of the headers or
-/// the auxiliary vector on the start-up path).
+/// the auxiliary vector on the start-up path). A `PT_GNU_RELRO` that spans two writable
+/// segments with an unmapped page between them makes that one call fail (D-27.25): only then
+/// does `relro_by_segment` walk the headers again, so the usual start carries nothing more
+/// than the test of the call's result (the fallback takes no argument: nothing is kept live
+/// across the call for it).
 #[inline(always)]
 fn protect_relro(range: Option<(usize, usize)>) {
     if let Some((addr, len)) = range {
-        // A failure (not seen in practice) leaves the segment writable: the program still runs.
-        let _ = raw::mprotect(addr, len, i32::try_from(PROT_READ).unwrap_or(1));
+        if raw::mprotect(addr, len, i32::try_from(PROT_READ).unwrap_or(1)).is_err() {
+            relro_by_segment();
+        }
     }
+}
+
+/// `PT_GNU_RELRO` made read-only segment by segment (D-27.25), after the single `mprotect` of
+/// the whole range failed: the executable's headers from `AT_PHDR`/`AT_PHNUM` of the saved
+/// auxiliary vector (`process::auxval`), at its bias (`EXE_BIAS`: set by a static PIE's start, 0
+/// for a fixed-address program).
+#[cold]
+#[inline(never)]
+fn relro_by_segment() {
+    let get = |k: u64| process::auxval(k).and_then(|v| usize::try_from(v).ok()).unwrap_or(0);
+    let (phdr, phnum) = (get(AT_PHDR), get(AT_PHNUM));
+    let words = conv::program_headers(phdr, phnum.saturating_mul(start::PHDR_WORDS));
+    let prot = i32::try_from(PROT_READ).unwrap_or(1);
+    // A failure of a piece (not seen in practice) leaves it writable: the program still runs.
+    let _ = start::relro_pieces(words, phnum, process::EXE_BIAS.load(Relaxed), start::PAGE, |a, l| raw::mprotect(a, l, prot));
 }
 
 /// Secure mode: drop the unsafe variables from the initial environment array, in place.
