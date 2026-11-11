@@ -1,7 +1,32 @@
 # STRTO-FENV-FLAGS: float conversions raise inexact, overflow, underflow (D-8.12)
 
-State: branch `task/strto-fenv-flags-2` (continues `task/strto-fenv-flags`), merge of origin/next
-a551cd8c2 at 4f06ee42c; handoff/report commit on top. Ruling #4639. Plan rows: D-8.12, D-12.26.
+State: branch `task/strto-fenv-flags-3` (continues `-2` and `-1`), merge of origin/next at
+25e0bdd9e, plant commit 03af294ad, handoff/report on top. Ruling #4639. Plan rows: D-8.12,
+D-12.26, D-10.95.
+
+## Run -3 (STRTO-FENV-FLAGS-3): CI merge conflict
+- CI's merge of -2 stopped on `crates/core/src/num/parse.rs`: next (LIBM-INVALID-CONVERT-SCAN,
+  D-10.95) put a `RANGE:` comment on `finish()`'s float-based certain-overflow/underflow bounds;
+  this branch had replaced that computation with integer arithmetic (`LOG10_2_E12`, D-8.12).
+  Kept the integer version: no float op (no stray inexact) and no float-to-int cast (nothing to
+  raise invalid, so the `float-casts` static check has nothing to annotate). Comment updated.
+- Lint on the inherited head (`strto-fenv-flags-3-lint0`) and the merged head
+  (`strto-fenv-flags-3-lint`: clippy, static incl. float-casts 13/13, records check) green.
+- New plant `float-range-bounds` (the float multiply back in `finish()`, `black_box`ed so it is
+  not folded): the matrix's exact 27-digit input `1.000...0` must report a stray I.
+- First gate/plants on the merge (`strto-fenv-flags-3-gate` rc 124, ended by me;
+  `strto-fenv-flags-3-plants` rc 2 baseline) failed in `cargo xtask so`: 3 locale hot-text keys
+  (`find_cached`, `attach_charmap` <Files, Glue>, a `find_named` closure of `name::candidates`)
+  match no fast-profile section. locale source and the key files equal next's, and next's own
+  products build (wl_prep on mei, plain `xtask so`), so the cause is codegen: this branch's code in
+  `liella_boundary` (the instantiating crate) changes its inlining. Fix: `tools/hottext/regen.sh .
+  --build --allow-drop` once per profile (job `strto-fenv-flags-3-regen`, rc 0, 12/12 layout
+  contracts); kept only `hot-text.list` (4 named drops incl. intl `record_for`, `builtin` now
+  fast,release), left the rewritten startup-data/probe key files as next has them (commit 4b71ff47f).
+  If a later merge of next re-breaks keys the same way, the same one-shot regen is the fix.
+- Not redone: counts (no product code changed beyond the conflict resolution, which keeps -2's
+  code byte for byte apart from the comment). D-10.95's body still says the strto* converters
+  raise no O/U/I "today"; D-8.12 is that separate change (record text left as it is).
 
 ## What changed (run -1, unchanged in -2)
 - `crates/core/src/num/parse.rs`: `ParsedFloat.inexact`, `Signals` and `ParsedFloat::signals()`;
@@ -47,5 +72,5 @@ ERANGE iff O or U.
 drop-overflow, exact-raises-inexact, drop-underflow, scanf-drops-signals; all must be CAUGHT by the
 flags matrix.
 
-## Next step
+## Next step (run -3)
 None for this story once the jobs are green. Plan rows to read: D-8.12, D-12.26.
