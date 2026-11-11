@@ -1,8 +1,20 @@
 # DL-TLS-SELF-IMAGE: ld.so's own scope entry from its mapped image (ruling #4501, D-27.23)
 
-**State:** branch `task/dl-tls-self-image` (stacked on `task/dl-tls-static`, with origin/next 3b3845dc8 merged
-in), role shiki:~/w/sh2. Decisions in force: D-27.23 (new, amends D-27.20), D-27.20, D-27.18, D-27.17; rulings
-#4501, #4229, #4341.
+**State:** branch `task/dl-tls-self-image-2` (continues `task/dl-tls-self-image`; origin/next 672acd9aa merged in
+by -2, so it now sits on next with DL-TLS-STATIC-2 landed), role shiki:~/w/sh2. Decisions in force: D-27.23 (new,
+amends D-27.20), D-27.20, D-27.18, D-27.17; rulings #4501, #4229, #4341, #4633 (the -1 merge of next: accepted).
+
+## DL-TLS-SELF-IMAGE-2: merge with next (CI conflict in crates/boundary/src/ld.rs)
+* DL-TLS-STATIC-2 landed on next with its own resolution of `link()`: a `kernel_started` argument picked the
+  interpreter's FILE (PT_INTERP path when kernel-started, `/proc/self/exe` for `ld.so PROGRAM`, #4637). Merge
+  126e32bdd keeps next's static TLS as landed and this story's `own_object` (scope entry from the mapped image).
+  Since no file is chosen any more, `link()` drops `kernel_started` and its caller drops `path == 0`; next's
+  `interp` variable name and hooks comment are kept. Nothing else changed.
+* Re-verified on the merged head (labels in handoff/reports/DL-TLS-SELF-IMAGE-2.json): clippy + static
+  (dl-tls-self-image-2-lint), direct tier `affected --run --base origin/next` followed by `cargo xtask so` and the
+  tls target with `--nocapture` (dl-tls-self-image-2-gate: the model matrix and the execute-only-interpreter test,
+  which covers "no /proc" and "PT_INTERP unreadable"), plants handoff/DL-TLS-SELF-IMAGE-plants.txt
+  (dl-tls-self-image-2-plants; both sites still match once).
 
 ## What changed
 * **Merge of origin/next.** The story stacks on DL-TLS-STATIC (not on next) and uses DL-IMAGE-READER-3's
