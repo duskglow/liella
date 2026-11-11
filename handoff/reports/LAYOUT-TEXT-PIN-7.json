@@ -19,8 +19,6 @@
  "next_step": "fault-map tool/locale (perf page-faults -d) branch vs next and fix the +2 by placement; fix the two plants; then the direct gate",
  "report_file": "handoff/LAYOUT-TEXT-PIN-7.md",
  "jobs": [
-  "layout-text-pin-7-lint",
-  "layout-text-pin-7-next",
-  "layout-text-pin-7-check"
+  "layout-text-pin-7-lint"
  ]
 }
