@@ -23,9 +23,9 @@ fn f80(x: f64) -> F80 {
     F80(sign | (e << 64) | m)
 }
 
-fn no_invalid(name: &str, arg: &str, f: impl FnOnce()) {
+fn no_invalid<T>(name: &str, arg: &str, f: impl FnOnce() -> T) {
     feclearexcept(FE_ALL);
-    f();
+    std::hint::black_box(f());
     let raised = fetestexcept(FE_INVALID);
     assert_eq!(raised, 0, "{name}({arg}): invalid raised in hardware for a valid operand");
 }
@@ -36,19 +36,19 @@ fn no_invalid(name: &str, arg: &str, f: impl FnOnce()) {
 fn long_double_arc_kernels_raise_no_invalid_in_hardware() {
     let mut xs: Vec<f64> = (1..512).map(|k| f64::from(k) / 512.0).collect();
     xs.extend((-20..20).map(|e| 2f64.powi(e)));
-    xs.extend([0.7071067811865476, 0.999_999_999, 0.5000000000000001, 1.0e-5, 3.0, 1.0e10]);
+    xs.extend([std::f64::consts::FRAC_1_SQRT_2, 0.999_999_999, 0.5000000000000001, 1.0e-5, 3.0, 1.0e10]);
     let ys: Vec<f64> = xs.iter().flat_map(|&x| [x, -x]).collect();
     for &x in &ys {
         let a = f80(x);
         if x.abs() <= 1.0 {
-            no_invalid("asinl", &format!("{x:e}"), || drop(liella_math::wide::asin::<F80>(a, Rounding::Nearest)));
-            no_invalid("acosl", &format!("{x:e}"), || drop(liella_math::wide::acos::<F80>(a, Rounding::Nearest)));
+            no_invalid("asinl", &format!("{x:e}"), || liella_math::wide::asin::<F80>(a, Rounding::Nearest));
+            no_invalid("acosl", &format!("{x:e}"), || liella_math::wide::acos::<F80>(a, Rounding::Nearest));
         }
-        no_invalid("atanl", &format!("{x:e}"), || drop(liella_math::wide::atan::<F80>(a, Rounding::Nearest)));
+        no_invalid("atanl", &format!("{x:e}"), || liella_math::wide::atan::<F80>(a, Rounding::Nearest));
     }
     for &y in ys.iter().step_by(5) {
         for &x in ys.iter().step_by(7) {
-            no_invalid("atan2l", &format!("{y:e}, {x:e}"), || drop(liella_math::wide::atan2::<F80>(f80(y), f80(x), Rounding::Nearest)));
+            no_invalid("atan2l", &format!("{y:e}, {x:e}"), || liella_math::wide::atan2::<F80>(f80(y), f80(x), Rounding::Nearest));
         }
     }
 }

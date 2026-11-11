@@ -138,9 +138,8 @@ pub fn eval_lgamma(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
     // and an unclamped huge or NaN x would raise invalid in hardware. Every float <= -2^24 is an
     // even integer, as -2^24 is, so the parity read for x < 0 is unchanged.
     #[allow(clippy::manual_clamp)] // max, not clamp: a NaN x becomes -2^24, never NaN
-    let n = x.max(-16_777_216.0).min(0.0);
-
-    Some((r, if x < 0.0 && (n as i32) & 1 == 0 { -1 } else { 1 }))
+    let n = x.max(-16_777_216.0).min(0.0) as i32;
+    Some((r, if x < 0.0 && n & 1 == 0 { -1 } else { 1 }))
 }
 
 /// `tgammaf` by the fast path, or `None` (see [`eval`]).
