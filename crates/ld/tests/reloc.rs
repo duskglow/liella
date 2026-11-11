@@ -871,6 +871,112 @@ fn with_loads(f: &[u8], total: usize) -> Vec<u8> {
     v
 }
 
+/// A program's data in three or more writable `PT_LOAD`s (as conformance
+/// s01_static_pie_multi_writable.c): three small 16 KiB-aligned pointer sections back to back, each
+/// beginning about 16 KiB past the one before, so GNU ld starts a new writable segment for at least
+/// two of them. `{decl}` declares what `{init}` (each section's three pointers) and `{check}` (the
+/// test of one section `s`, true when right) use. Exits 0 when every section is right, else the
+/// section's number (1 `.liella_seg2`, 2 `.data1`, 3 `.liella_seg3`).
+fn multi_writable_src(decl: &str, init: &str, check: &str) -> String {
+    format!(
+        "{decl}
+static int m_a = 1, m_b = 2;
+void *m_seg2[] __attribute__((section(\".liella_seg2\"), aligned(16384))) = {{ {init} }};
+void *m_data1[] __attribute__((section(\".data1\"), aligned(16384))) = {{ {init} }};
+void *m_seg3[] __attribute__((section(\".liella_seg3\"), aligned(16384))) = {{ {init} }};
+static int ok(void **s) {{ return *(int *)s[0] == 1 && *(int *)s[1] == 2 && ({check}); }}
+void _start(void) {{
+  int c = !ok(m_seg2) ? 1 : !ok(m_data1) ? 2 : !ok(m_seg3) ? 3 : 0;
+  __asm__ volatile(\"syscall\" :: \"a\"(231), \"D\"(c)); __builtin_unreachable();
+}}\n"
+    )
+}
+
+/// The number of writable `PT_LOAD`s in the linked file `p`.
+fn writable_loads(p: &Path) -> usize {
+    let f = std::fs::read(p).unwrap();
+    let elf = Elf::parse::<Native>(&f).unwrap();
+    elf.program_headers().filter(|h| h.p_type == 1 && h.flags & 2 != 0).count()
+}
+
+/// Runs `p` as `ld.so PROGRAM`, then `q` (the same program naming `ld` in `PT_INTERP`) started by
+/// the kernel; both must exit 0 (`what` names the case in the messages). Each file must have at
+/// least three writable `PT_LOAD`s, so a linker that stops splitting fails here, not vacuously.
+fn run_multi_writable(ld: &Path, p: &Path, q: &Path, what: &str) {
+    for f in [p, q] {
+        assert!(writable_loads(f) >= 3, "{what}: {} must have three or more writable PT_LOADs", f.display());
+    }
+    let (code, sig, err) = run(Command::new(ld).arg(p));
+    assert_eq!((code, sig), (Some(0), None), "{what}, ld.so PROGRAM: section {code:?} has a wrong pointer; stderr: {err}");
+    let (code, sig, err) = run(&mut Command::new(q));
+    assert_eq!((code, sig), (Some(0), None), "{what}, PT_INTERP: section {code:?} has a wrong pointer; stderr: {err}");
+}
+
+/// s27_1_c_1, D-27.25 (amends D-27.10): a `-nostdlib` PIE without dependencies whose RELATIVE
+/// targets lie in three writable `PT_LOAD`s is relocated by ld.so's self-relocator (`boot::image`,
+/// `relocate_self`) in every segment, as `ld.so PROGRAM` and through `PT_INTERP`. Catches a relocator
+/// that writes only through one writable segment or refuses a target in a later one.
+#[test]
+fn reloc_ldso_program_multi_writable_no_deps() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let d = dir("multiw-self");
+    let src = multi_writable_src("", "&m_a, &m_b, 0", "s[2] == 0");
+    let interp = format!("-Wl,--dynamic-linker={}", ld.display());
+    let p = build(&d, "pself", &src, &["-fPIE", "-pie"]);
+    let q = build(&d, "pself-interp", &src, &["-fPIE", "-pie", &interp]);
+    run_multi_writable(&ld, &p, &q, "no dependencies");
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// no spec clause (D-27.25, D-27.10 refusals): the program of
+/// `reloc_ldso_program_multi_writable_no_deps` with `PF_W` taken off its last writable `PT_LOAD`
+/// (header patch: the segment is mapped read-only, its pointers are then in no writable segment)
+/// is refused by ld.so with status 127 and a message, before any store: neither a fault on the
+/// read-only page nor a run.
+#[test]
+fn reloc_ldso_program_target_outside_writable_refused() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let d = dir("multiw-ro");
+    let p = build(&d, "pself", &multi_writable_src("", "&m_a, &m_b, 0", "s[2] == 0"), &["-fPIE", "-pie"]);
+    let mut f = std::fs::read(&p).unwrap();
+    let (phoff, phnum) = (u64::from_le_bytes(f[32..40].try_into().unwrap()) as usize, usize::from(u16::from_le_bytes([f[56], f[57]])));
+    let at = |i: usize| phoff + i * 56;
+    let rd = |f: &[u8], o: usize| u32::from_le_bytes(f[o..o + 4].try_into().unwrap());
+    let vaddr = |f: &[u8], i: usize| u64::from_le_bytes(f[at(i) + 16..at(i) + 24].try_into().unwrap());
+    let last = (0..phnum).filter(|&i| rd(&f, at(i)) == 1 && rd(&f, at(i) + 4) & 2 != 0).max_by_key(|&i| vaddr(&f, i)).unwrap();
+    let flags = rd(&f, at(last) + 4) & !2;
+    f[at(last) + 4..at(last) + 8].copy_from_slice(&flags.to_le_bytes());
+    // Written under another name and copied by cp(1), as in `without_pt_phdr` (no ETXTBSY window).
+    let (tmp, q) = (d.join("ro.bytes"), d.join("pro"));
+    std::fs::write(&tmp, &f).unwrap();
+    std::fs::set_permissions(&tmp, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    assert!(Command::new("cp").arg(&tmp).arg(&q).status().unwrap().success());
+    let (code, sig, err) = run(Command::new(&ld).arg(&q));
+    assert_eq!((code, sig), (Some(127), None), "a RELATIVE target in a read-only segment must be refused; stderr: {err}");
+    assert!(err.contains("cannot relocate the program"), "the refusal names the cause: {err}");
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// s27_1_c_1, D-27.25: a PIE with a dependency (libb.so) whose targets in three writable `PT_LOAD`s
+/// are RELATIVE and symbol relocations (`b_fn`, `b_data`) is relocated by ld.so's object path
+/// (`link`) in every segment, as `ld.so PROGRAM` and through `PT_INTERP`.
+#[test]
+fn reloc_ldso_program_multi_writable_with_deps() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let d = dir("multiw-link");
+    let b = build(&d, "libb.so", LIBB, &["-fPIC", "-shared"]);
+    let src = multi_writable_src(
+        "extern int b_data; extern int b_fn(void);",
+        "&m_a, &m_b, (void *)b_fn, &b_data",
+        "((int (*)(void))s[2])() == 5 && s[3] == (void *)&b_data && b_data == 7",
+    );
+    let interp = format!("-Wl,--dynamic-linker={}", ld.display());
+    let p = build(&d, "plink", &src, &["-fPIE", "-pie", b.to_str().unwrap()]);
+    let q = build(&d, "plink-interp", &src, &["-fPIE", "-pie", b.to_str().unwrap(), &interp]);
+    run_multi_writable(&ld, &p, &q, "with libb.so");
+    std::fs::remove_dir_all(&d).ok();
+}
+
 /// s27_1_c_1, L14-6 (ruling #4323): a text-relocated program with a dependency runs, started by the
 /// kernel and as `ld.so PROGRAM`, and its text is `r-x` again before any of its code runs.
 #[test]
