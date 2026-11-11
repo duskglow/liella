@@ -21,6 +21,9 @@ pub mod cursors;
 pub mod env_table;
 pub mod environ;
 pub mod exit_handlers;
+// DL-NONSHARED-OPTOUT prototype: test-only, never in a product.
+#[cfg(feature = "selftest")]
+pub mod owner_proto;
 pub mod io_compat;
 pub mod fs_compat;
 pub mod fs_tree;
