@@ -1,12 +1,34 @@
-{"task": "LAYOUT-DATA-CLUSTERS-4B", "model": "opus", "tokens": null,
+{
+ "task": "LAYOUT-DATA-CLUSTERS-4B",
+ "model": "opus",
+ "tokens": null,
  "result": "-4 merged with next (clean); prune.py dropped exactly the two dead hot-text keys; FULL gate green; start-up faults fast -12 / release -13 vs next, with release strings +1 (no-fault test fails on release products, known #4631) and fast float +1",
- "branch": "task/layout-data-clusters-4b", "head": "c5dba2678",
- "gate": {"affected": "11566 passed / 0 failed (FULL escalation, 32 suites; conformance 127/0)", "peak": "16G, oom_kill 0"},
+ "branch": "task/layout-data-clusters-4b",
+ "head": "1e73c5143",
+ "gate": {
+  "affected": "ldc4b-gate-2 pending on 1e73c5143 (FULL); ldc4b-gate on c5dba2678: 11566 passed / 0 failed",
+  "peak": "16G, oom_kill 0 (ldc4b-gate)"
+ },
  "accepted_first_attempt": null,
- "rulings": [{"item": "land with release strings 1 vs 0 (init_first_string_calls_after_printf_take_no_text_fault fails on release products) and fast float 3 vs 2", "recommendation": "land: net -12 (fast) / -13 (release) faults, the gate is green, both rows go to -5 to map"}],
- "informational": ["release strings +1 is -4's open item 2 (#4631), present since -2", "next gained a fast float fault since -3's measurement (3 -> 2); head stays at 3"],
+ "rulings": [
+  {
+   "item": "land with release strings 1 vs 0 (init_first_string_calls_after_printf_take_no_text_fault fails on release products) and fast float 3 vs 2",
+   "recommendation": "land: net -12 (fast) / -13 (release) faults, the gate is green, both rows go to -5 to map"
+  }
+ ],
+ "informational": [
+  "release strings +1 is -4's open item 2 (#4631), present since -2",
+  "next gained a fast float fault since -3's measurement (3 -> 2); head stays at 3",
+  "next moved during the run (28a903a01, HOTTEXT-DEAD-KEY-REPAIR); merged again, one import-line conflict in xtask/src/hottext.rs tests resolved as a union"
+ ],
  "refused": [],
  "improvement": "affected --base origin/next escalates to FULL for any product-key-list change; a 2-line dead-key prune cost a 36-min full gate. HOTTEXT-DEAD-KEY-REPAIR, or a narrower tier for list-only deletions, would avoid that",
  "next_step": "-5: map release strings +1 and fast float +1 (perf page-faults -d, head vs next), then -4 item 1",
  "report_file": "handoff/LAYOUT-DATA-CLUSTERS-4B.md",
- "jobs": ["ldc4b-lint-2", "ldc4b-gate", "ldc4b-counts-head-2", "ldc4b-counts-next"]}
+ "jobs": [
+  "ldc4b-lint-3",
+  "ldc4b-gate-2",
+  "ldc4b-counts-head-3",
+  "ldc4b-counts-next"
+ ]
+}

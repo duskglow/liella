@@ -1,8 +1,11 @@
 # LAYOUT-DATA-CLUSTERS-4B: -4's layout merged with next, two dead hot-text keys pruned
 
 **State (2026-11-11):** branch `task/layout-data-clusters-4b` (on `task/layout-data-clusters-4`). Commits of this run:
-`e24ab3ee7` merge of origin/next `1d8b14190` (clean, no conflicts), `c5dba2678` prune (code head), then this
-handoff/report commit. Role mei:~/w/s1 (Skylake-SP). Decisions in force: -4's D-X.68 (and D-X.64/D-X.67 under it);
+`e24ab3ee7` merge of origin/next `1d8b14190` (clean, no conflicts), `c5dba2678` prune, `8d26806a4` handoff, then
+`1e73c5143` a second merge of origin/next `28a903a01` (next moved during the run: HOTTEXT-DEAD-KEY-REPAIR; one
+conflict, the import line of hottext.rs's test module, resolved as the union of both lists), then this update.
+The table below was measured on c5dba2678; ldc4b-gate-2 and ldc4b-counts-head-3 (queued, see Jobs) re-run the gate
+and the head counts on 1e73c5143. Role mei:~/w/s1 (Skylake-SP). Decisions in force: -4's D-X.68 (and D-X.64/D-X.67 under it);
 none added. Earlier: `handoff/LAYOUT-DATA-CLUSTERS-4.md` (its "Not done" list is still the plan for -5/-6).
 
 ## What was done (mechanical, as briefed)
@@ -43,9 +46,13 @@ none added. Earlier: `handoff/LAYOUT-DATA-CLUSTERS-4.md` (its "Not done" list is
 3. -4's items 1 and 3 (startup-data.keys regeneration with the `data` region; counts table) remain.
 
 ## Jobs (mei)
-JOBS: ldc4b-lint-2, ldc4b-gate, ldc4b-counts-head-2, ldc4b-counts-next.
+JOBS (final code head 1e73c5143): ldc4b-lint-3 (rc 0), ldc4b-gate-2 (FULL, queued), ldc4b-counts-head-3 (queued
+after the gate by `~/work/LAYOUT-DATA-CLUSTERS-4B/after_gate.sh`), ldc4b-counts-next (base, rc 0).
 Superseded: ldc4b-so-pre (diagnostic build that writes the matched files; fast so failed inside on purpose),
-ldc4b-counts-head (its filter missed the strings probe), ldc4b-lint (on c5dba2678, before the handoff commit).
+ldc4b-counts-head (its filter missed the strings probe), ldc4b-lint and ldc4b-lint-2 (older heads), ldc4b-gate and
+ldc4b-counts-head-2 (green / measured on c5dba2678, before next moved).
+counts.sh exits 0 when both product builds succeed: it is a measurement; the release strings test failing inside it
+(test_rc 101) is open item 1, not a job failure.
 
 ## Next step
 -5: map the release `strings` fault and the fast `float` +1 (perf page-faults -d, head vs next, one host), then -4's
