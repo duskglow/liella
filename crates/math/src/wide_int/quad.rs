@@ -384,7 +384,9 @@ struct Reduced {
     kd: u32,
 }
 
-/// Steps 1 and 2 for `|x| = m·2^e`, or `None` for `|d| < 2^-160`.
+/// Steps 1 and 2 for `|x| = m·2^e`, or `None` for `|d| < 2^-160`. Inlined into each caller:
+/// with two callers (`kernel`, `both`) the out-of-line call cost `sinf128` 74 instructions.
+#[inline(always)]
 fn reduce(m: u128, e: i32) -> Option<Reduced> {
     let p = (e + 190) as usize; // bit e - 1 of 2/π; e >= -190
     let (w, r) = (p / 64, (p % 64) as u32);
