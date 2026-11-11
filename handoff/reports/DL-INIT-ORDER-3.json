@@ -1,0 +1,12 @@
+{"task": "DL-INIT-ORDER-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: LAYOUT-JITTER - CI start-up fault red not caused by this branch: next alone reads 17/55/58 (= bounds) on the Skylake-SP host, next+branch 17/55/58, branch base 17/54/57 = branch head; the branch adds 0 bytes of text/rodata to the static programs",
+ "branch": "task/dl-init-order-3", "head": null,
+ "gate": {"affected": "not rerun (code unchanged since dl-init-order-2-gate: 12161 passed / 0 failed); attribution test runs 2 passed / 0 failed in each of 4 trees", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["origin/next aad3df74d sits exactly at TRUE/LOCALE/TOOL bounds (17/55/58) on the Skylake-SP CI host class: any libc.a growth in a train trips them until the layout pinning lands"],
+ "refused": [],
+ "jobs": ["dl-init-order-3-lint0", "dl-init-order-3-attr-head", "dl-init-order-3-attr-mrge", "dl-init-order-3-attr-next", "dl-init-order-3-attr-base"],
+ "improvement": "Attribution needs no merge: when next has not touched a branch's files, next's archive plus the branch's files is the merge tree; the CI red report could print next's own count beside the train's so jitter is visible without a run",
+ "next_step": "After LAYOUT-TEXT-PIN / LAYOUT-DATA-CLUSTERS land: merge next, rerun the direct gate, plants and cbench_startup counts, send to the train",
+ "report_file": "handoff/DL-INIT-ORDER-3.md"}

@@ -1,0 +1,10 @@
+id = "D-10.85"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+story = "LIBM-F128-TRIG-INT"
+date = "2026-11-11"
+body = '''
+**`_Float128` `sinf128`/`cosf128` integer tier: method and proof** (LIBM-F128-TRIG-INT; D-10.52's three-limb kernel; contract D-10.19 unchanged: correctly rounded in every mode). `crates/math/src/wide_int/quad.rs`, reached through `wide_int::sin_cos` for the 113-bit format from `wide::sin`/`wide::cos`; operands it does not decide take the 384-bit route as before. Method: Payne-Hanek reduction (Payne and Hanek, SIGNUM Newsletter 18(1), 1983) on a 448-bit window of the shared `TWO_OVER_PI` table (exact `m·W mod 2^448`, 13 products), Tang's table method (Tang, ARITH 10, 1991) with 64 points `jπ/256` (the x87 tier's 128-bit `SC` table plus a signed third limb, one table for both formats) and fixed-point Horner in 64-, 128- and 192-bit words (Brent and Zimmermann, Modern Computer Arithmetic, 2010, ch. 4): degree 15 for `sin(πd/2)`, 14 for `cos(πd/2)`, `\|d\| <= 1/256`. Proof in the module documentation: within `2^-156` relative; the integer rounding test on the 192-bit significand assumes `2^-152` (about `2^-37` of operands undecided). Operands with `\|d\| < 2^-160` are refused (none among the near multiples of π/2 found by the continued-fraction sweep: closest `\|f\|` about `2^-124`). The kernels are not shared with x87 `long double`: that one needs two limbs, and a three-limb kernel would cost it about half again. Tests: constants pinned against the 384-bit arithmetic, the rounding boundary pinned in four modes, agreement with the 384-bit route (1 200 random operands and the near multiples at every 61st exponent in the unit run; 10^7 operands in four modes and every exponent's near multiple in `tier_agrees_with_the_wide_route_long`). Measurements: `handoff/libm-f128-trig-int.md`.
+'''
