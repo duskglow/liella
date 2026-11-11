@@ -4,6 +4,8 @@
 //! black-box probes recorded in handoff/DL-NONSHARED-OPTOUT.md (P2 cases 1-3) and the edge cases
 //! of the brief. Addresses are model values; the recorder never calls them.
 
+#![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::as_conversions, missing_docs)]
+
 use liella_boundary::heap::KernelPages;
 use liella_boundary::sys::CSys;
 use liella_legacy::exit_handlers::{self, Registry, CXA};
