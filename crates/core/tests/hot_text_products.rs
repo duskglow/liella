@@ -1035,7 +1035,7 @@ fn init_data_clusters_hold_at_every_text_phase() {
 fn isolated_data_script(dir: &Path) -> PathBuf {
     let out = Command::new("ld").arg("--verbose").output().expect("ld --verbose");
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
-    let (mut inside, mut script, mut n) = (false, String::new(), 0);
+    let (mut inside, mut script, mut n) = (false, String::new(), 0_u32);
     for l in text.lines() {
         if l.starts_with("=====") {
             inside = !inside;
