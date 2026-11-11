@@ -162,10 +162,78 @@ pub fn view() -> &'static LocaleView {
     if !crate::thread::owned() {
         return foreign_view();
     }
+    owned_view()
+}
+
+/// `f` of the calling thread's current locale view ([`view`]), for an entry whose whole result is
+/// one use of the view (`iswalpha`, `towupper`, `wcwidth`, `MB_CUR_MAX`, ...). The foreign case
+/// (D-X.58) is a tail call to [`foreign_with_view`], which takes `f` along, so the owned path
+/// stays frameless: with [`view`] the cold call returns into the entry's own code and costs every
+/// call a `push`/`pop` for the call's stack alignment (ruling #4828). Give `f` its arguments by
+/// value (`move`): a closure of at most two words travels in registers, so the call stays a jump.
+#[inline(always)]
+pub fn with_view<R>(f: impl FnOnce(&'static LocaleView) -> R) -> R {
+    if !crate::thread::owned() {
+        return foreign_with_view(f);
+    }
+    f(owned_view())
+}
+
+/// `iswalpha(wc)` and its siblings: class `mask` of `wc` in the calling thread's locale. Not
+/// through [`with_view`]: its closure would be one function shared by the twelve entries, which
+/// the compiler then calls instead of inlining; the foreign case is the same tail call.
+#[inline(always)]
+pub fn isw_int(wc: u32, mask: Class) -> i32 {
+    if !crate::thread::owned() {
+        return foreign_isw_int(wc, mask);
+    }
+    owned_view().isw_int(wc, mask)
+}
+
+/// [`isw_int`] in a process the runtime did not start (D-X.58).
+#[cold]
+#[inline(never)]
+fn foreign_isw_int(wc: u32, mask: Class) -> i32 {
+    foreign_view().isw_int(wc, mask)
+}
+
+/// `towupper(wc)` (`upper`) or `towlower(wc)` in the calling thread's locale (shaped as
+/// [`isw_int`]).
+#[inline(always)]
+pub fn wtrans(wc: u32, upper: bool) -> u32 {
+    if !crate::thread::owned() {
+        return foreign_wtrans(wc, upper);
+    }
+    owned_view().wtrans(wc, upper)
+}
+
+/// [`wtrans`] in a process the runtime did not start (D-X.58).
+#[cold]
+#[inline(never)]
+fn foreign_wtrans(wc: u32, upper: bool) -> u32 {
+    foreign_view().wtrans(wc, upper)
+}
+
+/// [`with_view`] with the view's locale ([`current`]).
+#[inline(always)]
+pub fn with_current<R>(f: impl FnOnce(&'static Locale) -> R) -> R {
+    with_view(move |v| f(v.locale()))
+}
+
+/// [`view`] in a process the runtime started: the `view` word, else the `uselocale` choice.
+#[inline(always)]
+fn owned_view() -> &'static LocaleView {
     match tb::read::<tb::View>() {
         0 => view_of(tb::read::<tb::Locale>()),
         w => tb::view_at(w),
     }
+}
+
+/// [`with_view`] in a process the runtime did not start (D-X.58).
+#[cold]
+#[inline(never)]
+fn foreign_with_view<R, F: FnOnce(&'static LocaleView) -> R>(f: F) -> R {
+    f(foreign_view())
 }
 
 /// [`view`] in a process the runtime did not start (D-X.58): the thread block's words are not

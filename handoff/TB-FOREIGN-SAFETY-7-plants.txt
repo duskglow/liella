@@ -1,0 +1,5 @@
+# TB-FOREIGN-SAFETY-7 (D-X.58, ruling #4828) plants: the tail-call shaped gates of the locale entries.
+with-view-ungated | crates/boundary/src/locale.rs | perl:s/if !crate::thread::owned\(\) \{(\s*return foreign_with_view\(f\);)/if false {$1/ | cargo test -p liella-boundary --test tb_foreign_words | msg:decoys in the block's words|SIGSEGV|signal
+isw-int-ungated | crates/boundary/src/locale.rs | perl:s/if !crate::thread::owned\(\) \{(\s*return foreign_isw_int\(wc, mask\);)/if false {$1/ | cargo test -p liella-boundary --test tb_foreign_words | msg:decoys in the block's words|SIGSEGV|signal
+wtrans-ungated | crates/boundary/src/locale.rs | perl:s/if !crate::thread::owned\(\) \{(\s*return foreign_wtrans\(wc, upper\);)/if false {$1/ | cargo test -p liella-boundary --test tb_foreign_words | msg:decoys in the block's words|SIGSEGV|signal
+view-ungated | crates/boundary/src/locale.rs | perl:s/if !crate::thread::owned\(\) \{(\s*return foreign_view\(\);)/if false {$1/ | cargo test -p liella-boundary --test tb_foreign_words | msg:decoys in the block's words|SIGSEGV|signal
