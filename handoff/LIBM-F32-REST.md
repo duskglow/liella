@@ -1,4 +1,4 @@
-# LIBM-F32-REST(-3): one-pass inverse trig; lgammaf profiled; merged with next (handoff, one page)
+# LIBM-F32-REST(-4): one-pass inverse trig; lgammaf profiled; merged with next (handoff, one page)
 
 State: branch `task/libm-f32-rest-3` (continues `task/libm-f32-rest-2`, base origin/next), role shiki:~/w/sh1. Run 1
 moved asinf, acosf, atanf, atan2f to the one-pass `float` form (D-10.82; code, proofs and per-call spec as below). Run 2
@@ -45,6 +45,19 @@ negative zeros, |x| < 2^-20) straight to `lgamma_accurate`; the `double` tier (`
   0 WARN (asin-partial-write is caught by `cargo xtask partial-write`'s finding, which names no test).
 - No exhaustive job rerun: the merge changed no line of the one-pass kernels or their exports (only the `pub use`
   line), and next's trig change is next's own (proved on its own branch).
+
+## Run 4 (LIBM-F32-REST-4): merge with next after LAYOUT-TEXT-PIN-11 (coordinator scope 11-10)
+- Branch `task/libm-f32-rest-4`, role keke:~/w/n1. CI red on run 3's head was liella::hot_text_products
+  (coreutils-shaped 60 > 58, startup-only 18 > 17): start-up layout jitter from libm text growth, which
+  LAYOUT-TEXT-PIN fixes. Inherited head `2e8af38fb`: clippy + static ok (job `libm-f32-rest-4-lint0`).
+- Merged origin/next `c0b379b7e` (has LAYOUT-TEXT-PIN-11) cleanly as `8c3abce43`; no product code changed.
+  `libm-f32-rest-4-hottext` (`cargo xtask so` + `cargo test -p liella --test hot_text_products`): 21 passed,
+  0 failed; coreutils-shaped tool 54 faults (bound 58). No section moved, no bound touched.
+- Head `cdd3d267f` (plants file handoff/LIBM-F32-REST-4-plants.txt = run 3's seven plants): gate
+  `libm-f32-rest-4-gate` (so, clippy, static, affected --run --base origin/next): rc 0, 4165 passed / 0 failed,
+  conformance 20/20, peak 11G, oom_kill 0 (2 SKIPPED lines: tool or capability absent). Plants
+  `libm-f32-rest-4-plants`: rc 0, 7 CAUGHT, 0 SURVIVED, 0 WARN (WARN-DEV-SHM only: copy under /dev/shm).
+  The f32 inverse-trig work is verified on the merged head; the branch should land.
 
 ## Next step (a new story the coordinator queues after this lands; not this branch)
 1. lgammaf: in `lgamma_core`, replace the near-zero `None` (and gamma_core's |x| < 2^-20 refusal) by a `#[cold]`
