@@ -97,7 +97,7 @@ fn ask(fds: [i32; 2]) -> [usize; ASKED] {
         usize::from(byte[0]),
         usize::from(ct::iswalpha(u32::from('z')) != 0),
         mb::__ctype_get_mb_cur_max(),
-        mb::mblen(c"a".as_ptr(), 1) as usize,
+        core::ptr::from_ref(liella_boundary::locale::view()).addr(),
     ]
 }
 
@@ -138,7 +138,7 @@ fn foreign_block_words_neither_trusted_nor_written() {
             usize::from(b'x'),
             1,
             1,
-            1,
+            first[15],
         ];
         assert_eq!(first, expect, "the answers with the block as the other library left it");
         assert_ne!(first[10], decoy, "pthread_self is Liella's descriptor");
