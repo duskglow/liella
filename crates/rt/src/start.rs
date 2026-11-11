@@ -20,6 +20,7 @@ use liella_kernel::uapi::O_RDWR;
 
 use crate::tls::TlsImage;
 
+const PT_LOAD: u64 = 1;
 const PT_PHDR: u64 = 6;
 const PT_TLS: u64 = 7;
 const PT_GNU_RELRO: u64 = 0x6474_e552;
@@ -44,11 +45,22 @@ pub const PAGE: usize = 4096;
 /// Read `phnum` program headers from `words` (the headers at runtime address `phdr_addr`), in
 /// one pass (STATIC-RELRO-2: start-up reads them once). The bias comes from `PT_PHDR`; without
 /// one the executable is taken as non-PIE. The first header of each type counts.
+///
+/// Every start pays this loop once per header (LAYOUT-DATA-CLUSTERS-4C, D-X.64's aligned clusters
+/// add a `PT_LOAD`), so it keeps one bound and leaves a `PT_LOAD`, most of any program's headers,
+/// after one compare: the table is cut to `phnum` whole headers first (`chunks_exact` then has the
+/// only bound; `take` was a second counter per header).
 pub fn program(words: &[u64], phnum: usize, phdr_addr: usize) -> Program {
     let field = |h: &[u64], i: usize| h.get(i).copied().map_or(0, |v| usize::try_from(v).unwrap_or(usize::MAX));
     let (mut phdr, mut tls, mut relro) = (None, None, None);
-    for h in words.chunks_exact(PHDR_WORDS).take(phnum) {
-        match h.first().map_or(0, |w| w & 0xffff_ffff) {
+    // At most `words.len()`: the product cannot wrap.
+    let table = words.get(..phnum.min(words.len() / PHDR_WORDS).wrapping_mul(PHDR_WORDS)).unwrap_or_default();
+    for h in table.chunks_exact(PHDR_WORDS) {
+        let ty = h.first().map_or(0, |w| w & 0xffff_ffff);
+        if ty == PT_LOAD {
+            continue;
+        }
+        match ty {
             PT_PHDR if phdr.is_none() => phdr = Some(h),
             PT_TLS if tls.is_none() => tls = Some(h),
             PT_GNU_RELRO if relro.is_none() => relro = Some(h),
@@ -209,6 +221,92 @@ pub fn open_std_fds<S: Sys>(sys: &S) -> KResult<()> {
     Ok(())
 }
 
+/// The data half of the private start interface between `ld.so` and `libc.so.6` (version node
+/// `LIELLA_PRIVATE`, plan/ph14/design.md §14, L14-10, R14-12, D-27.22): the names, the build tag
+/// both products carry and [`private::StartInfo`]. Never in a public header. It lives here, beside
+/// [`bias`], because both products use it: the C library defines the tag and reads `StartInfo`,
+/// the loader (`liella_ld::start::private`) checks the tag and builds `StartInfo`; keeping it out
+/// of the loader crate keeps the C library's code independent of the loader's.
+pub mod private {
+    /// The version node of the private interface.
+    pub const NODE: &[u8] = b"LIELLA_PRIVATE";
+    /// `__liella_libc_early_init(const StartInfo *)`: libc's start steps 3 and 4, called by `ld.so`
+    /// after relocation and before any constructor (`.preinit_array` included).
+    pub const EARLY_INIT: &[u8] = b"__liella_libc_early_init";
+    /// `__liella_build_tag`: [`TAG_LEN`] bytes, [`TAG_PREFIX`] then the build's identity.
+    pub const BUILD_TAG: &[u8] = b"__liella_build_tag";
+    /// The tag's first bytes (a test finds the tag in a file by them).
+    pub const TAG_PREFIX: &[u8] = b"LIELLA-BUILD-TAG:";
+    /// The tag's size in bytes.
+    pub const TAG_LEN: usize = 64;
+    /// A build's tag from its identity: each product passes `option_env!("LIELLA_BUILD_TAG")` (a hash
+    /// of the product sources `cargo xtask so` sets for both), so a loader and a C library from
+    /// different builds carry different tags. The variable is read only by the two crates holding a
+    /// tag (the loader and the boundary), never here: a crate reading it is rebuilt with all its
+    /// dependants whenever any product source changes.
+    #[must_use]
+    pub const fn tag(id: Option<&str>) -> [u8; TAG_LEN] {
+        tag_bytes(match id {
+            Some(t) => t.as_bytes(),
+            None => b"unversioned",
+        })
+    }
+
+    /// [`TAG_PREFIX`] then `id`, cut at [`TAG_LEN`] bytes, zero-filled.
+    const fn tag_bytes(id: &[u8]) -> [u8; TAG_LEN] {
+        let mut out = [0u8; TAG_LEN];
+        let mut dst: &mut [u8] = &mut out;
+        let (mut first, mut second) = (TAG_PREFIX, id);
+        loop {
+            let b = if let Some((&b, rest)) = first.split_first() {
+                first = rest;
+                b
+            } else if let Some((&b, rest)) = second.split_first() {
+                second = rest;
+                b
+            } else {
+                break;
+            };
+            let Some((d, rest)) = dst.split_first_mut() else { break };
+            *d = b;
+            dst = rest;
+        }
+        out
+    }
+
+    /// What `ld.so` passes to [`EARLY_INIT`]: the initial stack as the program sees it.
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    pub struct StartInfo {
+        /// `argc`.
+        pub argc: usize,
+        /// `argv` (the address of `argv[0]`).
+        pub argv: usize,
+        /// `envp` (after secure-mode clearing).
+        pub envp: usize,
+        /// The auxiliary vector.
+        pub auxv: usize,
+        /// The stack end (`__libc_stack_end`): the initial stack pointer.
+        pub stack_end: usize,
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// no spec clause (D-27.22): the tag is the prefix then the identity, zero-filled, cut at its size.
+        #[test]
+        fn private_tag_layout() {
+            assert!(tag(None).starts_with(b"LIELLA-BUILD-TAG:unversioned\0"));
+            let t = tag(Some("abc"));
+            let (head, rest) = t.split_at(TAG_PREFIX.len() + 3);
+            assert_eq!(head, b"LIELLA-BUILD-TAG:abc");
+            assert!(rest.iter().all(|&b| b == 0));
+            assert_eq!(tag_bytes(&[b'x'; 100]).last(), Some(&b'x'));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
@@ -233,6 +331,9 @@ mod tests {
         assert_eq!(p.tls.unwrap().addr, 0x5555_2000);
         assert_eq!(program(&w, 1, 0).tls, None, "phnum limits the headers read");
         assert_eq!(program(&w[..10], 2, 0).tls, None, "a truncated header is ignored");
+        // `phnum` above the whole headers in the table: the cut keeps those (here the PT_PHDR
+        // that gives the bias) rather than dropping the table.
+        assert_eq!(program(&pie[..10], 2, 0x5555_0040), Program { tls: None, bias: 0x5555_0000, relro: None }, "the whole headers before a truncated one are read");
     }
 
     // Spec §12.6 (D-12.4, D-27.12): the `%n` check tests the segments where they were loaded,

@@ -1,0 +1,11 @@
+{"task": "DL-LIBC-EARLY-2", "model": "opus", "tokens": null,
+ "result": "Gate red fixed: libc-side code no longer names liella_ld (private start data moved to liella_rt::start::private; build-tag env read only in ld and boundary); export moves and rseq publishing not done",
+ "branch": "task/dl-libc-early-2", "head": "6d41f220d",
+ "gate": {"affected": "pending: dl-libc-early-2-gate2", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The build tag (hash of all product sources) rebuilds ld and boundary in product builds after any source edit; keeping option_env out of liella-rt keeps liella-math out of that set"],
+ "refused": [],
+ "improvement": "A static check that libc-side boundary modules never name liella_ld:: would catch this edge in seconds instead of a full gate",
+ "next_step": "DL-LIBC-EARLY-3: export moves (__libc_stack_end, __rseq_* to ld.so; libc.so.6 linked against ld.so) and rseq publishing, per handoff/DL-LIBC-EARLY.md",
+ "report_file": "handoff/DL-LIBC-EARLY-2-report.md",
+ "jobs": ["dl-libc-early-2-lint", "dl-libc-early-2-gate2", "dl-libc-early-2-plants2", "dl-libc-early-2-startup2"]}

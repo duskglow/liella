@@ -1,0 +1,5 @@
+# XTASK-AFFECTED-LOADER: plants on the feature-aware dependency closure of `cargo xtask affected`.
+# Run: cargo xtask plants <this file> --dir <new-directory>
+xaload-narrowing-removed | xtask/src/affected.rs | lit:            namers.is_empty() || namers.iter().any(|n| n.root || !off(&n.name)) ==>             true | cargo test -p xtask --bin xtask a_loader_change_does_not_select | msg:a_loader_change_does_not_select_the_math_suites.*(FAILED|panicked)
+xaload-any-gate-unread | xtask/src/affected.rs | lit:            let inner = c.strip_prefix("any(").and_then(|r| r.strip_suffix(')')).unwrap_or(c); ==>             let inner = c; | cargo test -p xtask --bin xtask a_loader_change_does_not_select | msg:a_loader_change_does_not_select_the_math_suites.*(FAILED|panicked)
+xaload-run-features-widened | xtask/src/affected.rs | lit:const RUN_FEATURES: &[(&str, &[&str])] = &[("liella-boundary", &["export", "selftest"])]; ==> const RUN_FEATURES: &[(&str, &[&str])] = &[("liella-boundary", &["export", "selftest", "ld"])]; | cargo test -p xtask --bin xtask a_loader_change_does_not_select | msg:a_loader_change_does_not_select_the_math_suites.*(FAILED|panicked)

@@ -1,0 +1,6 @@
+# LAYOUT-TEXT-PIN-8 plants (cargo xtask plants; docs/plants.md). Replaces LAYOUT-TEXT-PIN-7-plants.txt:
+# ltp8-realign-all brings back the -5 defect (every grouped section that heads no cluster realigned to 64), which
+# compiles (-7's `*h != 0` on &u64 did not); ltp8-real-label runs the whole affected test module (-7's single
+# test survived: it is not the test that read the scan.S name in hottext.rs).
+ltp8-realign-all | xtask/src/hottext.rs | perl:s/heads\.get\(&\(m\.clone\(\), n\.clone\(\)\)\)/heads.get(&(m.clone(), n.clone())).or(Some(&64))/ | cargo test -p xtask --bin xtask hottext::tests::sections_keep_their_own_alignment_unless_they_head_a_cluster | msg:sections_keep_their_own_alignment_unless_they_head_a_cluster.*(FAILED|panicked)|assertion .*left == right
+ltp8-real-label | xtask/src/hottext.rs | perl:s/fixture_set_entry\\tstartup/liella_machine_fill_avx2_entry\\tstartup/ | cargo test -p xtask --bin xtask affected::tests | msg:affected::tests::\w+.*(FAILED|panicked)|is named by
