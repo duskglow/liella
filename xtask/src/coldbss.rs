@@ -125,9 +125,16 @@ fn state_sections(listing: &str) -> Result<BTreeMap<String, Vec<String>>, String
         }
         let Some(name) = l.split_once("] ").and_then(|(_, r)| r.split_whitespace().next()) else { continue };
         let Some(sym) = name.strip_prefix(".data.").or_else(|| name.strip_prefix(".bss.")) else { continue };
+        let digits = |n: &str| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit());
+        // ThinLTO promotes a static another unit uses (`.llvm.<hash>`), after any part number
+        // (`.data.<symbol>.0.llvm.<hash>`, the `fast` profile's `sys::SYSINFO_EHDR`).
+        let sym = match sym.rsplit_once(".llvm.") {
+            Some((s, h)) if digits(h) => s,
+            _ => sym,
+        };
         // LLVM may split a static and number the part (`.data.<symbol>.0`).
         let sym = match sym.rsplit_once('.') {
-            Some((s, n)) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) && !s.ends_with(".llvm") => s,
+            Some((s, n)) if digits(n) => s,
             _ => sym,
         };
         let k = crate::hottext::key(sym);
@@ -186,7 +193,12 @@ mod tests {
         // section is picked whatever its crate hash and ThinLTO suffix; a missing one is an error.
         let mut listing = String::from("\nFile: libc.a(a.o)\n");
         for (i, s) in STATE_KEY_SUFFIXES.iter().enumerate() {
-            let (kind, tail) = if i % 2 == 0 { (".bss", ".llvm.42") } else { (".data", ".0") };
+            // A part number and a ThinLTO suffix together (`.0.llvm.<hash>`) as well as each alone.
+            let (kind, tail) = match i % 3 {
+                0 => (".bss", ".llvm.42"),
+                1 => (".data", ".0"),
+                _ => (".data", ".0.llvm.2119765843273679154"),
+            };
             listing.push_str(&format!("  [{i}] {kind}._RNvNtCsAbC12_{s}{tail}  NOBITS 0 0 8 00 WA 0 0 8\n"));
             if i == 2 {
                 listing.push_str("\nFile: libc.a(b.o)\n  [9] .data._RNvNtCsX_15liella_boundary3cpu8NOT_USED PROGBITS 0 0 8 00 WA 0 0 8\n");
