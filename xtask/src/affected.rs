@@ -1748,7 +1748,8 @@ const XTASK_TOOLS: &[(&str, &str)] = &[
 ];
 
 /// XTASK-AFFECTED-XTASK: the uses of an [`XTASK_TOOLS`] module from a module that escalates to FULL, each a call that
-/// only a check of `cargo xtask static` makes: (user, tool module, why).
+/// only a check of `cargo xtask static` makes: (user, tool module, why). Read by the unit test only.
+#[cfg(test)]
 const XTASK_TOOL_USES: &[(&str, &str, &str)] = &[
     ("math", "kernel_index", "`math::run_tables` ends with the kernel index (KERNELS.md, a view), which static runs as tables-fresh"),
     ("math", "records", "the same call's `records::in_place_env` switch"),
