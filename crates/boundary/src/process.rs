@@ -51,22 +51,9 @@ pub(crate) static EXE_BIAS: AtomicUsize = AtomicUsize::new(0);
 /// (`is_read_only`), `dl_iterate_phdr`, `_dl_find_object` and the backtrace (D-27.12).
 pub(crate) fn exe_bias(words: &[u64], phnum: usize, phdr: usize) -> usize {
     match EXE_BIAS.load(Acquire) {
-        0 => liella_rt::start::bias(words, phnum, phdr, liella_rt::start::PAGE, exe_header).unwrap_or(0),
+        0 => liella_rt::start::bias(words, phnum, phdr, liella_rt::start::PAGE, crate::runtime::exe_header).unwrap_or(0),
         b => b,
     }
-}
-
-/// The first 64 bytes of the page at `at`, which holds the executable's program headers: the
-/// candidate ELF header [`liella_rt::start::bias`] checks when the program has no `PT_PHDR`.
-fn exe_header(at: usize) -> [u8; 64] {
-    let mut out = [0u8; 64];
-    // UNSAFE(slice): the start of the mapped page holding the executable's program headers.
-    #[allow(unsafe_code)]
-    // SAFETY: `at` is `AT_PHDR` rounded down to its 4096-byte page (⚑ KERN); the kernel maps the
-    // headers readable in that page, and the 64 bytes from its start lie inside it.
-    let page = unsafe { crate::conv::bytes_at(at, out.len()) };
-    out.copy_from_slice(page);
-    out
 }
 
 fn w(x: usize) -> u64 {
