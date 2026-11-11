@@ -102,50 +102,50 @@ fn ln64(v: f64) -> f64 {
 ///   for the rounding test: refused, as are the poles and |x| < 2^-20.
 #[inline(always)]
 pub(super) fn lgamma_core(x: f32) -> Option<(f64, u64)> {
+    let (y, d, _) = lgamma_core_signed(x)?;
+    Some((y, d))
+}
+
+/// [`lgamma_core`] and whether Γ(x) < 0. Only the last branch sees x < 0, and there the sign of
+/// [`gamma_core`]'s Γ(x) is exact: every factor x + j is exact and nonzero (a pole is refused) and
+/// P > 0. The other branches have x > 0. So no operand is converted to an integer to find the
+/// parity of its integer part (D-10.95), and the positive path computes no parity at all.
+#[inline(always)]
+fn lgamma_core_signed(x: f32) -> Option<(f64, u64, bool)> {
     let xd = f64::from(x);
     let z = xd - 1.0;
     if crate::dd::abs(z) <= 0.125 {
-        return Some((z * horner(&LG, z), LGAMMA_DELTA));
+        return Some((z * horner(&LG, z), LGAMMA_DELTA, false));
     }
     let z = xd - 2.0;
     if crate::dd::abs(z) <= 0.125 {
-        return Some((log1p_core(z as f32)? + z * horner(&LG, z), LGAMMA_DELTA));
+        return Some((log1p_core(z as f32)? + z * horner(&LG, z), LGAMMA_DELTA, false));
     }
     if xd >= STIRLING_X {
         let lx = log_core(x)?;
         let w = 1.0 / xd;
         let w2 = w * w;
         let s = w * (1.0 / 12.0 + w2 * (-1.0 / 360.0 + w2 * (1.0 / 1260.0)));
-        return Some(((xd - 0.5) * (lx - 1.0) + (HALF_LN_2PI_M_HALF + s), LGAMMA_DELTA));
+        return Some(((xd - 0.5) * (lx - 1.0) + (HALF_LN_2PI_M_HALF + s), LGAMMA_DELTA, false));
     }
-    let y = ln64(crate::dd::abs(gamma_core(xd)?));
+    let g = gamma_core(xd)?;
+    let y = ln64(crate::dd::abs(g));
     let a = crate::dd::abs(y);
     if a >= 1.0 {
-        Some((y, LGAMMA_DELTA))
+        Some((y, LGAMMA_DELTA, g < 0.0))
     } else if a >= 1.0 / 256.0 {
-        Some((y, LGAMMA_SMALL_DELTA))
+        Some((y, LGAMMA_SMALL_DELTA, g < 0.0))
     } else {
         None
     }
 }
 
-/// `lgammaf` by the fast path with the sign of Γ(x) (`signgam`), or `None` (see [`eval`]). Γ(x) < 0
-/// exactly for x in (-1, 0), (-3, -2), ...: x < 0 with an even integer part.
+/// `lgammaf` by the fast path with the sign of Γ(x) (`signgam`), or `None` (see [`eval`]): the
+/// value as `eval(Fast::Lgamma, ..)`, the sign from Γ(x) itself ([`lgamma_core_signed`]).
 #[inline(always)]
 pub fn eval_lgamma(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
-    let r = eval(Fast::Lgamma, x, mode)?;
-    Some((r, if x < 0.0 && !trunc_is_odd(x) { -1 } else { 1 }))
-}
-
-/// Whether `trunc(x)` is odd, read from the bits (D-10.95): no float-to-integer conversion, which
-/// the compiler may hoist above the `x < 0` test and which raises invalid in hardware for a huge or
-/// NaN `x`. `|x| < 1` truncates to 0, and every float with `|x| >= 2^24` (inf, NaN) reads as even.
-#[inline(always)]
-fn trunc_is_odd(x: f32) -> bool {
-    let b = x.to_bits();
-    let e = (b >> 23) & 0xff; // biased exponent: |x| in [2^(e-127), 2^(e-126))
-    let m = (b & 0x7f_ffff) | 0x80_0000;
-    (127..=150).contains(&e) && (m >> (150 - e)) & 1 != 0
+    let (y, d, neg) = lgamma_core_signed(x)?;
+    Some((super::finish(x, y, d, mode, "lgammaf")?, if neg { -1 } else { 1 }))
 }
 
 /// `tgammaf` by the fast path, or `None` (see [`eval`]).
