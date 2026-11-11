@@ -75,7 +75,8 @@ def symbols(exe):
             continue
         start, size = int(a, 16), int(s, 16)
         if t in DATA_TYPES:
-            data.append((start, start + max(size, 1), n))
+            # The 4th field: nm gave a size (a linker marker such as __bss_start or _edata has none).
+            data.append((start, start + max(size, 1), n, size > 0))
         elif t in "tTwWiI":
             funcs.setdefault(K.key(n), []).append((start, start + max(size, 1)))
     return sorted(data), funcs
@@ -121,12 +122,17 @@ def resolve(addrs, data, secs, writable_only=False):
         hit = [o for o in data if o[0] <= a < o[1]]
         if not hit:
             continue
-        name = min(hit, key=lambda o: o[1] - o[0])[2]
-        if name.startswith(("anon.", ".L")):
-            # A compiler-numbered constant has no build-stable name: the layout check finds it at check time
-            # through the start-up functions' operands, which address it.
-            continue
-        out.setdefault(K.key(name), "rw" if sec[3] else "ro")
+        # The smallest object holding the address, by every name it has: a linker marker of no size
+        # (__bss_start at the first .bss object) never stands in for the object, and each alias is
+        # keyed (__progname and program_invocation_name: the move matches whichever names the section).
+        sized = [o for o in hit if o[3]] or hit
+        least = min(o[1] - o[0] for o in sized)
+        for o in sized:
+            if o[1] - o[0] != least or o[2].startswith(("anon.", ".L")):
+                # A compiler-numbered constant has no build-stable name: the layout check finds it at check time
+                # through the start-up functions' operands, which address it.
+                continue
+            out.setdefault(K.key(o[2]), "rw" if sec[3] else "ro")
     return out
 
 
