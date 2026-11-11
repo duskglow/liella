@@ -73,6 +73,12 @@
 //!    `liella-mathtools` source, what a coefficient file selects, and `cargo xtask tables --check` / `kernel-index
 //!    --check`. In every tier but `--tier full`; the other files under `fits/` (the `.py` table scripts, subdirectories),
 //!    other generated files and anything else of rule 1 still escalate.
+//! 9. XTASK-AFFECTED-LAYOUT, in addition to every rule above and in every tier: a change that can reach `libc.a`
+//!    (`Repo::reaches_image`: a source, data file, manifest or build script of a crate the libc product links through
+//!    normal dependencies, outside modules compiled only for tests or only under a feature the product does not
+//!    enable; csys sources and headers; `crates/libc-so/`; the image tools) selects the start-up layout tests
+//!    (`LAYOUT_TESTS`). Their programs link statically against `libc.a`, so growth anywhere in it can move start-up
+//!    pages. Not selected for `ld.so`-only code (boundary's `ld` feature), other crates, tests and docs.
 //!
 //! TIERS (GATE-TIER, coordinator ruling 10-11): `--tier direct` (the DEFAULT, per-fix gates) applies rule 4 to EVERY
 //! crate's non-root module through `Selection::narrow_direct`: the changed module, its one-hop users, the targets
@@ -116,6 +122,23 @@ const STATIC_CHECKERS: &[&str] = &["xtask/src/classed.rs", "xtask/src/jcc.rs"];
 /// them in its unit tests. A csys symbol named here selects `cargo xtask layout-check` on fresh products, not FULL.
 const LAYOUT_CONSUMERS: &[&str] = &["layout/contracts.tsv", "xtask/src/layout.rs"];
 const LAYOUT_CHECK: &str = "layout-check";
+
+/// XTASK-AFFECTED-LAYOUT: the libc product. The programs of [`LAYOUT_TESTS`] link `-static -nostdlib` against
+/// `liella-crt1.o` and `libc.a` only (never `ld.so` or `libm.a`), so what this manifest links is what they measure.
+const IMAGE_MANIFEST: &str = "crates/libc-so/Cargo.toml";
+
+/// XTASK-AFFECTED-LAYOUT: the test targets that measure the linked image of a static program rather than one
+/// function: the start-up and short-program page-fault bounds, the hot-text range and the start-up `.rodata1` /
+/// `.data1` sections (`hot_text_products`), the first allocation's text and metadata pages (`heap_meta_products`)
+/// and the `.lbss` placement of `libc.a`'s large tables (`cold_bss_products`). Code or data growth anywhere in
+/// `libc.a` can move start-up pages (CI trains 582/583: a libm change pushed two fault bounds over), so every change
+/// that reaches the image selects them. They need the products, so `cargo xtask so` runs first, and its end runs
+/// every layout contract (`layout::check_products`, D-X.48/D-X.49) as well.
+const LAYOUT_TESTS: &[(&str, &str)] = &[("liella", "hot_text_products"), ("liella", "heap_meta_products"), ("liella", "cold_bss_products")];
+
+/// XTASK-AFFECTED-LAYOUT: xtask sources that shape the image itself (the hot-text grouping, the start-up state
+/// move, the archive build). They escalate to FULL anyway; named so the rule says what it covers.
+const IMAGE_TOOLS: &[&str] = &["xtask/src/hottext.rs", "xtask/src/coldbss.rs", "xtask/src/so.rs"];
 
 // ---------------------------------------------------------------------------------------------
 // The repository model
@@ -228,6 +251,8 @@ pub struct Repo {
     /// `.changed.xtask` a sync may write). `None`: no diff, so a changed xtask source cannot be shown to touch only
     /// its test module (FULL, as before).
     xtask_diff: Option<String>,
+    /// XTASK-AFFECTED-LAYOUT: what `libc.a` links (`image_of`, from the manifests and crate roots).
+    image: Image,
 }
 
 /// The symbols an assembly source of csys defines: the `.globl`/`.global`/`.weak` names and every
@@ -678,7 +703,156 @@ fn test_only_modules(nodes: &[Node]) -> BTreeSet<(String, String)> {
     out
 }
 
+/// XTASK-AFFECTED-LAYOUT: what `libc.a` links.
+#[derive(Default)]
+struct Image {
+    /// The directories of the crates linked into `libc.a`: the normal dependencies of [`IMAGE_MANIFEST`], transitively
+    /// (dev and build dependencies never reach the archive).
+    dirs: BTreeSet<String>,
+    /// `(crate, module)` that a crate root declares only under `#[cfg(feature = "X")]` for a feature the libc
+    /// product does not enable (boundary's `ld` modules: the interpreter's start, built into `ld.so` only).
+    off: BTreeSet<(String, String)>,
+}
+
+/// The normal dependencies of a manifest (`[dependencies]`, `[target.*.dependencies]`; not dev or build) and the
+/// features each edge enables: `Some` for an inline `features = [...]` or none, `None` when the edge can enable
+/// features this reading does not see (`workspace = true`, a `[dependencies.<name>]` table).
+fn link_deps(text: &str) -> BTreeMap<String, Option<BTreeSet<String>>> {
+    let mut out: BTreeMap<String, Option<BTreeSet<String>>> = BTreeMap::new();
+    let mut section = String::new();
+    for line in text.lines() {
+        let l = line.trim();
+        if let Some(h) = l.strip_prefix('[') {
+            section = h.trim_end_matches(']').trim_matches('[').to_string();
+            if let Some(d) = section.strip_prefix("dependencies.") {
+                out.insert(d.to_string(), None);
+            }
+            continue;
+        }
+        if !(section == "dependencies" || (section.starts_with("target.") && section.ends_with(".dependencies"))) {
+            continue;
+        }
+        let Some((key, value)) = l.split_once('=') else { continue };
+        let key = key.trim();
+        if key.is_empty() || key.starts_with('#') || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') {
+            continue;
+        }
+        let name = match value.split_once("package") {
+            Some((_, p)) if p.trim_start().starts_with('=') => p.split('\u{22}').nth(1).unwrap_or(key).to_string(),
+            _ => key.to_string(),
+        };
+        let list = value.match_indices("features").find_map(|(i, _)| value[i + "features".len()..].trim_start().strip_prefix('=')?.trim_start().strip_prefix('[')?.split_once(']').map(|(l, _)| l));
+        let feats: Option<BTreeSet<String>> = if value.contains("workspace") { None } else { Some(list.unwrap_or_default().split('\u{22}').skip(1).step_by(2).map(String::from).collect()) };
+        let slot = out.entry(name).or_insert_with(|| Some(BTreeSet::new()));
+        match (slot.as_mut(), feats) {
+            (Some(s), Some(f)) => s.extend(f),
+            _ => *slot = None,
+        }
+    }
+    out
+}
+
+/// The features a manifest's `[features]` table turns on for `enabled` (plus `default`), followed through the table;
+/// another crate's features (`crate/feature`, `dep:`) are left out.
+fn features_on(manifest: &str, enabled: &BTreeSet<String>) -> BTreeSet<String> {
+    let mut table: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut section = "";
+    for l in manifest.lines().map(str::trim) {
+        if l.starts_with('[') {
+            section = l;
+            continue;
+        }
+        if section == "[features]" {
+            if let Some((k, v)) = l.split_once('=') {
+                table.insert(k.trim().to_string(), v.split('\u{22}').skip(1).step_by(2).map(String::from).collect());
+            }
+        }
+    }
+    let mut on: BTreeSet<String> = enabled.iter().cloned().chain(std::iter::once("default".to_string())).collect();
+    let mut stack: Vec<String> = on.iter().cloned().collect();
+    while let Some(f) = stack.pop() {
+        for g in table.get(&f).into_iter().flatten().filter(|g| !g.contains('/') && !g.starts_with("dep:")) {
+            if on.insert(g.clone()) {
+                stack.push(g.clone());
+            }
+        }
+    }
+    on
+}
+
+/// The modules a crate root declares under exactly `#[cfg(feature = "X")]`, `(X, module)`. Any other cfg (`any(..)`,
+/// stacked attributes) is not read: the module counts as linked.
+fn feature_gated_modules(root_text: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut gate: Option<&str> = None;
+    for l in root_text.lines().map(str::trim) {
+        if let Some(rest) = l.strip_prefix("#[cfg(feature = \u{22}") {
+            gate = if gate.is_none() { rest.strip_suffix("\u{22})]") } else { None };
+            continue;
+        }
+        if l.starts_with("#[cfg") {
+            gate = None;
+            continue;
+        }
+        if l.starts_with("#[") || l.starts_with("//") || l.is_empty() {
+            continue;
+        }
+        if let Some(f) = gate {
+            if let Some(m) = l.strip_prefix("pub ").unwrap_or(l).strip_prefix("mod ") {
+                out.push((f.to_string(), m.trim_end_matches([';', '{', ' ']).to_string()));
+            }
+        }
+        gate = None;
+    }
+    out
+}
+
+/// XTASK-AFFECTED-LAYOUT: the crates `libc.a` links and their modules left out by feature (`Image`).
+fn image_of(root: &Path, crates: &[Crate], nodes: &[Node]) -> Image {
+    let mut img = Image::default();
+    let mut feats: BTreeMap<String, Option<BTreeSet<String>>> = BTreeMap::new();
+    let mut stack: Vec<(String, Option<BTreeSet<String>>)> = link_deps(&read(&root.join(IMAGE_MANIFEST))).into_iter().collect();
+    while let Some((name, f)) = stack.pop() {
+        let Some(c) = crates.iter().find(|c| c.name == name) else { continue };
+        let slot = feats.entry(name.clone()).or_insert_with(|| Some(BTreeSet::new()));
+        match (slot.as_mut(), f) {
+            (Some(s), Some(f)) => s.extend(f),
+            _ => *slot = None,
+        }
+        if img.dirs.insert(c.dir.clone()) {
+            stack.extend(link_deps(&read(&root.join(&c.dir).join("Cargo.toml"))));
+        }
+    }
+    for c in crates.iter().filter(|c| img.dirs.contains(&c.dir)) {
+        let Some(Some(enabled)) = feats.get(&c.name) else { continue };
+        let on = features_on(&read(&root.join(&c.dir).join("Cargo.toml")), enabled);
+        for n in nodes.iter().filter(|n| n.root && n.krate == c.name) {
+            img.off.extend(feature_gated_modules(&n.text).into_iter().filter(|(x, _)| !on.contains(x)).map(|(_, m)| (c.name.clone(), m)));
+        }
+    }
+    img
+}
+
 impl Repo {
+    /// XTASK-AFFECTED-LAYOUT: can a change to `f` change what a static program links from `libc.a`? A source,
+    /// data file or build script of a crate the libc product links (not a module compiled only for tests or only
+    /// under a feature the product does not enable), a C or assembly source or header of csys (boundary's build
+    /// script compiles it), the libc product crate itself (its hot-text list included) and the image tools.
+    fn reaches_image(&self, f: &str) -> bool {
+        if f.starts_with("csys/src/") || f.starts_with("csys/include/") || f.starts_with("crates/libc-so/") || IMAGE_TOOLS.contains(&f) {
+            return true;
+        }
+        let Some(c) = self.crate_of(f).filter(|c| self.image.dirs.contains(&c.dir)) else { return false };
+        let inner = &f[c.dir.len() + 1..];
+        if inner == "build.rs" || inner == "Cargo.toml" {
+            return true;
+        }
+        let Some(src) = inner.strip_prefix("src/") else { return false };
+        let top = src.split('/').next().unwrap_or(src);
+        let key = (c.name.clone(), top.split('.').next().unwrap_or(top).to_string());
+        !self.test_only.contains(&key) && !self.image.off.contains(&key)
+    }
+
     /// Is `krate::module` declared only under a test cfg?
     #[cfg(test)]
     pub fn test_only_has(&self, krate: &str, module: &str) -> bool {
@@ -868,6 +1042,7 @@ impl Repo {
         let names = |x: &Node, y: &Node| x.refs.contains(&(Some(y.krate.clone()), y.name.clone())) || (x.krate == y.krate && x.refs.contains(&(None, y.name.clone())));
         let hubs = (0..nodes.len()).filter(|&y| nodes.iter().filter(|x| names(x, &nodes[y])).count() * 6 >= nodes.len()).collect();
         let test_only = test_only_modules(&nodes);
+        let image = image_of(root, &crates, &nodes);
         let mut xs = Vec::new();
         files_under(&root.join("xtask/src"), &["rs"], &mut xs);
         let xtask_texts = xs
@@ -878,7 +1053,7 @@ impl Repo {
                 (rel(p), text)
             })
             .collect();
-        Repo { crates, support_texts, closure, nodes, targets, conf, hubs, test_only, csys, entries, entry_hubs, csys_refs, hdr_diff: fs::read_to_string(root.join(".changed.hdr")).ok(), fits: fit_files(root), xtask_texts, xtask_diff: fs::read_to_string(root.join(".changed.xtask")).ok() }
+        Repo { crates, support_texts, closure, nodes, targets, conf, hubs, test_only, image,csys, entries, entry_hubs, csys_refs, hdr_diff: fs::read_to_string(root.join(".changed.hdr")).ok(), fits: fit_files(root), xtask_texts, xtask_diff: fs::read_to_string(root.join(".changed.xtask")).ok() }
     }
 
     /// The module of the graph a source path belongs to, `(crate, module)`, as `classify_path` names it.
@@ -992,6 +1167,16 @@ impl Selection {
         }
     }
 
+    /// XTASK-AFFECTED-LAYOUT: the start-up layout tests ([`LAYOUT_TESTS`]) for a change that reaches `libc.a`.
+    fn layout_tests(&mut self, repo: &Repo, f: &str) {
+        let why = format!("{f}: linked into libc.a, whose whole static image the start-up layout tests measure");
+        for (k, t) in LAYOUT_TESTS {
+            if repo.targets.iter().any(|x| x.krate == *k && x.name == *t) {
+                add(&mut self.tests, (k.to_string(), t.to_string()), &why);
+            }
+        }
+    }
+
     fn all_conf(&mut self, repo: &Repo, why: &str) {
         for c in &repo.conf {
             add(&mut self.conf, c.name.clone(), why);
@@ -1044,6 +1229,8 @@ impl Selection {
         }
         self.math_exports(repo, &format!("{f}: generated coefficients"));
         self.xtask_cmds.insert("tables --check".to_string());
+        // XTASK-AFFECTED-LAYOUT: the coefficients are linked into libc.a; a fit or the generator selects what they do.
+        self.layout_tests(repo, f);
     }
 
     /// A change in module `name` of crate `krate`.
@@ -1647,6 +1834,10 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
         }
         if f == "crates/boundary/src/ffi.rs" || f.starts_with("csys/include/") || f.starts_with("csys/src/machine/") {
             sel.k5 = true;
+        }
+        // XTASK-AFFECTED-LAYOUT: whatever else the file selects, a change linked into libc.a can move start-up pages.
+        if repo.reaches_image(f) {
+            sel.layout_tests(repo, f);
         }
         if f.starts_with("csys/include/") && f.ends_with(".h") && header_map(repo, f, &mut sel) {
             continue;
@@ -3903,6 +4094,55 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
         s.tests.keys().any(|(_, t)| t == name)
     }
 
+    // XTASK-AFFECTED-LAYOUT, no spec clause: the start-up layout tests measure the whole static image, so every change
+    // linked into libc.a selects them in the direct and wide tiers (a libm change moved start-up pages and its own
+    // gate never ran them, CI trains 582/583); code built only into ld.so, a docs change and another crate's test do not.
+    #[test]
+    fn image_changes_select_the_start_up_layout_tests() {
+        let state = |s: &Selection| LAYOUT_TESTS.iter().map(|(k, t)| s.tests.contains_key(&(k.to_string(), t.to_string()))).collect::<Vec<_>>();
+        for tier in [Tier::Direct, Tier::Wide] {
+            for f in ["crates/math/src/classify.rs", "crates/math/src/coeffs/trig.rs", "crates/ld/src/map.rs", "crates/kernel/src/fd.rs", "csys/src/machine/barrier.S", "crates/boundary/src/posix/s10_math.tsv"] {
+                let s = select_tier(repo(), &[f.to_string()], tier);
+                assert!(state(&s).iter().all(|&b| b), "{f} ({tier:?}) is linked into libc.a: the start-up layout tests must run: {:?}", s.tests.keys().collect::<Vec<_>>());
+            }
+        }
+        // The direct tier (the default gate, and CI's attribution): the wide tier's own rule 4 still selects every
+        // target that carries no section, the layout tests among them, for any boundary change.
+        {
+            let tier = Tier::Direct;
+            for f in ["crates/boundary/src/ld.rs", "crates/boundary/src/arch/mod.rs", "docs/benchmarks.md", "crates/math/tests/fast64.rs", "crates/native/src/aio.rs"] {
+                let s = select_tier(repo(), &[f.to_string()], tier);
+                assert!(state(&s).iter().all(|&b| !b), "{f} ({tier:?}) cannot reach libc.a: no start-up layout test: {:?}", state(&s));
+            }
+        }
+    }
+
+    // XTASK-AFFECTED-LAYOUT, no spec clause: the image model follows the manifests (normal dependencies only, the
+    // libc product's features), and the list of layout tests names real targets and every products test that counts
+    // a static program's page faults (a new fault bound left out of the list would go unselected again).
+    #[test]
+    fn image_model_and_layout_test_list_follow_the_tree() {
+        let r = repo();
+        for d in ["crates/boundary", "crates/math", "crates/ld", "crates/core", "crates/kernel", "crates/mem"] {
+            assert!(r.image.dirs.contains(d), "{d} is linked into libc.a: {:?}", r.image.dirs);
+        }
+        for d in ["crates/native", "crates/thread-db", "crates/mathtools", "crates/spectest", "xtask"] {
+            assert!(!r.image.dirs.contains(d), "{d} is not linked into libc.a");
+        }
+        assert!(r.image.off.contains(&("liella-boundary".into(), "ld".into())) && !r.image.off.contains(&("liella-boundary".into(), "runtime".into())), "{:?}", r.image.off);
+        for (k, t) in LAYOUT_TESTS {
+            assert!(r.targets.iter().any(|x| x.krate == *k && x.name == *t && x.products), "{k}::{t} is no products test target");
+        }
+        for t in r.targets.iter().filter(|t| t.products && t.text[..t.own].contains("minflt") && t.text[..t.own].contains("-static")) {
+            assert!(LAYOUT_TESTS.contains(&(t.krate.as_str(), t.name.as_str())), "{}::{} counts a static program's faults: add it to LAYOUT_TESTS", t.krate, t.name);
+        }
+        let deps = link_deps("[dependencies]\na = { path = \"../a\", default-features = false, features = [\"x\", \"y\"] }\nb = { workspace = true }\n[dev-dependencies]\nc = \"1\"\n[target.'cfg(unix)'.dependencies]\nd = \"1\"\n");
+        assert_eq!(deps.get("a"), Some(&Some(["x".to_string(), "y".to_string()].into())));
+        assert_eq!((deps.get("b"), deps.contains_key("c"), deps.contains_key("d")), (Some(&None), false, true));
+        assert_eq!(features_on("[features]\nruntime = [\"export\"]\nselftest = [\"liella/selftest\"]\n", &["runtime".to_string()].into()), ["default", "export", "runtime"].iter().map(|s| s.to_string()).collect());
+        assert_eq!(feature_gated_modules("#[cfg(feature = \"ld\")]\npub mod ld;\n#[cfg(any(feature = \"ld\"))]\nmod a;\nmod b;\n"), vec![("ld".to_string(), "ld".to_string())]);
+    }
+
     #[test]
     fn model_has_the_workspace() {
         let repo = repo();
@@ -4326,7 +4566,8 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
     #[test]
     fn csys_change_is_full() {
         let (_, s) = sel(&["csys/src/machine/x.S"]);
-        assert!(!s.full.is_empty() && s.tests.is_empty());
+        // FULL runs everything; the only targets named are the start-up layout tests (rule 9: csys is in libc.a).
+        assert!(!s.full.is_empty() && s.tests.keys().all(|(k, t)| LAYOUT_TESTS.contains(&(k.as_str(), t.as_str()))), "{s:?}");
     }
 
     #[test]
