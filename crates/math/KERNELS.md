@@ -12,7 +12,7 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast32/bessel.rs:80` `fn horner_f(c: &[f64; 11], t: f64) -> f64` — bound: undocumented
 - `fast32/bessel.rs:102` `fn hankel_core(f: usize, x: f64) -> Option<(f64, f64)>` — bound: undocumented — doc: Hankel's form for x in [24, 2^19): f = √(2/(πx))·(P cos ω ∓ ...), ω = x - νπ/2 - π/4, written with s = sin x, c = cos x: J0 = A·(P(c + s) - Q(s - c)), Y0 = A·(P…
 - `fast32/bessel.rs:123` `pub(super) fn bessel_core(f: usize, x: f32) -> Option<(f64, f64)>` — bound: undocumented — doc: J0 (f = 0), J1 (1), Y0 (2), Y1 (3) of a `float` x as (y, e) with |y - f| ≤ e, or `None` (x outside [2^-20, 2^19) in magnitude, x ≤ 0 for Y, NaN).
-- `fast32/bessel.rs:176` `pub(super) fn bessel_finish(x: f32, (y, e): (f64, f64), mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test for an absolute bound e: margin e/ulp(y) < e·2^53/|y| (ulp(y) > |y|·2^-53), refused at or beyond 2^26 (the test's mask is 2^28; y near a zero …
+- `fast32/bessel.rs:177` `pub(super) fn bessel_finish(x: f32, (y, e): (f64, f64), mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test for an absolute bound e: margin e/ulp(y) < e·2^53/|y| (ulp(y) > |y|·2^-53), refused at or beyond 2^26 (the test's mask is 2^28; y near a zero …
 
 ## fast32/cexp.rs (f32 cexp)
 
@@ -62,8 +62,9 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast32/gamma.rs:48` `pub(super) fn gamma_core(xd: f64) -> Option<f64>` — bound: undocumented — doc: Γ(x) as a `double` with relative error ≤ 55.1u (u = 2^-53), for 2^-20 ≤ |x|, -42 < x < 36, x not a negative integer (`None` outside).
 - `fast32/gamma.rs:79` `fn ln64(v: f64) -> f64` — bound: undocumented — doc: ln v for a positive normal `double` v in [2^-181, 2^181], absolute error ≤ (1.45 + 2|y|)u.
 - `fast32/gamma.rs:104` `pub(super) fn lgamma_core(x: f32) -> Option<(f64, u64)>` — bound: undocumented — doc: lnΓ(x) = ln|Γ(x)| as a `double` y and its margin (ulp of y), piecewise, for a finite x: * |x - 1| ≤ 1/8: y = z·q(z), z = x - 1 exact.
-- `fast32/gamma.rs:135` `pub fn eval_lgamma(x: f32, mode: Rounding) -> Option<((f32, Status), i32)>` — bound: undocumented — doc: `lgammaf` by the fast path with the sign of Γ(x) (`signgam`), or `None` (see [`eval`]).
-- `fast32/gamma.rs:142` `pub fn eval_tgamma(x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `tgammaf` by the fast path, or `None` (see [`eval`]).
+- `fast32/gamma.rs:115` `fn lgamma_core_signed(x: f32) -> Option<(f64, u64, i32)>` — bound: undocumented — doc: [`lgamma_core`] and the sign of Γ(x) (1 or -1).
+- `fast32/gamma.rs:147` `pub fn eval_lgamma(x: f32, mode: Rounding) -> Option<((f32, Status), i32)>` — bound: undocumented — doc: `lgammaf` by the fast path with the sign of Γ(x) (`signgam`), or `None` (see [`eval`]): the value as `eval(Fast::Lgamma, ..)`, the sign from Γ(x) itself ([`lgam…
+- `fast32/gamma.rs:154` `pub fn eval_tgamma(x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `tgammaf` by the fast path, or `None` (see [`eval`]).
 
 ## fast32/hyperbolic.rs (f32 hyperbolic)
 
@@ -362,15 +363,15 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast_bessel_n.rs:149` `fn base(x: f64) -> Option<[(Dd, f64); 4]>` — bound: undocumented — doc: `[J0, J1, Y0, Y1]` at `x` with their bounds.
 - `fast_bessel_n.rs:160` `pub fn yn_kernel(n: u64, x: f64) -> Option<(Dd, f64)>` — bound: undocumented — doc: `Y_n(x)` as `(y, eps)` for `n >= 2`, `XMIN <= x <= XMAX`.
 - `fast_bessel_n.rs:180` `pub fn jn_kernel(n: u64, x: f64) -> Option<(Dd, f64, i32)>` — bound: undocumented — doc: `J_n(x)` as `(y, eps, e)` (value `y·2^e`, bound `eps·2^e`) for `n >= 2`, `XMIN <= x <= XMAX`.
-- `fast_bessel_n.rs:210` `fn miller(x: f64, r: Dd, n: u64, m: u64) -> Option<(Dd, i32, f64)>` — bound: undocumented — doc: `v_n/v_m` as `(q, e, rel)` (`q·2^e`, relative bound `rel`) by the backward recurrence from `N` (module doc), `x < m + 1 <= n`.
-- `fast_bessel_n.rs:249` `fn series(n: u64, x: f64) -> (Dd, f64, i32)` — bound: undocumented — doc: `J_n(x)` for `x² <= n + 1` by the power series (module doc), as in [`jn_kernel`].
-- `fast_bessel_n.rs:288` `pub fn near64(y: Dd, eps: f64, e: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `(y ± eps)·2^e` correctly rounded to `double` in `mode`, or `None`: the rounding test.
-- `fast_bessel_n.rs:306` `pub fn near32(y: Dd, eps: f64, e: i32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `(y ± eps)·2^e` correctly rounded to a normal `float` in `mode`, or `None`.
-- `fast_bessel_n.rs:327` `fn order(n: i32) -> (u64, bool)` — bound: undocumented — doc: The order's magnitude and whether `(−1)^n` flips the sign for `n < 0`.
-- `fast_bessel_n.rs:333` `pub fn jn(n: i32, x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `jn(n, x)` (`J_{−n} = (−1)^n·J_n`, `J_n(−x) = (−1)^n·J_n(x)`), or `None`.
-- `fast_bessel_n.rs:354` `pub fn yn(n: i32, x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `yn(n, x)` for `x > 0` (`Y_{−n} = (−1)^n·Y_n`), or `None`.
-- `fast_bessel_n.rs:374` `pub fn jnf(n: i32, x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `jnf(n, x)` through the `double` kernels, or `None` (zero, subnormal and non-finite `x`).
-- `fast_bessel_n.rs:391` `pub fn ynf(n: i32, x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `ynf(n, x)` through the `double` kernels, or `None`.
+- `fast_bessel_n.rs:212` `fn miller(x: f64, r: Dd, n: u64, m: u64) -> Option<(Dd, i32, f64)>` — bound: undocumented — doc: `v_n/v_m` as `(q, e, rel)` (`q·2^e`, relative bound `rel`) by the backward recurrence from `N` (module doc), `x < m + 1 <= n`.
+- `fast_bessel_n.rs:251` `fn series(n: u64, x: f64) -> (Dd, f64, i32)` — bound: undocumented — doc: `J_n(x)` for `x² <= n + 1` by the power series (module doc), as in [`jn_kernel`].
+- `fast_bessel_n.rs:290` `pub fn near64(y: Dd, eps: f64, e: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `(y ± eps)·2^e` correctly rounded to `double` in `mode`, or `None`: the rounding test.
+- `fast_bessel_n.rs:308` `pub fn near32(y: Dd, eps: f64, e: i32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `(y ± eps)·2^e` correctly rounded to a normal `float` in `mode`, or `None`.
+- `fast_bessel_n.rs:330` `fn order(n: i32) -> (u64, bool)` — bound: undocumented — doc: The order's magnitude and whether `(−1)^n` flips the sign for `n < 0`.
+- `fast_bessel_n.rs:336` `pub fn jn(n: i32, x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `jn(n, x)` (`J_{−n} = (−1)^n·J_n`, `J_n(−x) = (−1)^n·J_n(x)`), or `None`.
+- `fast_bessel_n.rs:357` `pub fn yn(n: i32, x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `yn(n, x)` for `x > 0` (`Y_{−n} = (−1)^n·Y_n`), or `None`.
+- `fast_bessel_n.rs:377` `pub fn jnf(n: i32, x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `jnf(n, x)` through the `double` kernels, or `None` (zero, subnormal and non-finite `x`).
+- `fast_bessel_n.rs:394` `pub fn ynf(n: i32, x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `ynf(n, x)` through the `double` kernels, or `None`.
 
 ## fast_gamma.rs (fast_gamma)
 
