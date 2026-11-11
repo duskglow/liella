@@ -1,7 +1,20 @@
 # DL-TLS-STATIC (phase 14 DL-12): static TLS of the initially loaded objects, final thread block
 
-**State:** branch `task/dl-tls-static` (cut from origin/next f1f5358d5), role mei:~/w/s2. Decisions in force: D-27.20
-(new, this story), R14-4, R14-8, D-27.17, D-27.11, D-4.15, D-22.10, D-5.11 safety note. Full report: this file.
+**State:** branch `task/dl-tls-static-2` (DL-TLS-STATIC-2, merge-only continuation), merge commit 0e1b04f9f
+(origin/next b601a80b9 merged in), role kanon:~/w/kn1. Decisions in force: D-27.20 (this story), R14-4, R14-8,
+D-27.17, D-27.18, D-27.11, D-4.15, D-22.10, D-5.11 safety note; rulings #4501 and #4502 ACCEPTED. Full report: this file.
+
+## DL-TLS-STATIC-2: merge with next (DL-INIT-ORDER-3, DL-LIBC-START-BIAS-4)
+* Conflict only in `crates/boundary/src/ld.rs`. Kept: next's image-mode program read (`image_view`, D-27.18), its
+  DT_NEEDED edges and init/fini hooks, `enter(sp, entry, fini)` (0 for a program alone), plus this story's static TLS
+  on both paths. The interpreter-as-object index is now `interp` (next uses `own` for the image-view copies); it gets
+  a DT_NEEDED edge like any dependency and NO init/fini hooks (it ran its own start). `link` takes
+  `kernel_started` (from `path == 0`) because it no longer receives the program path; the own-file read itself is
+  unchanged (#4501; folded later by DL-TLS-SELF-IMAGE). Nothing else changed.
+* Jobs on 0e1b04f9f (kanon): dl-tls-static-2-clippy1 (rc 0, pre-commit tree, same content), dl-tls-static-2-static,
+  dl-tls-static-2-tls (`xtask so` + LE/IE/GD/LD matrix), dl-tls-static-2-gate (affected --base origin/next),
+  dl-tls-static-2-plants (the 6 plants in DL-TLS-STATIC-plants.txt). Results in the report json.
+* Next step: none for this story; DL-LIBC-EARLY (DL-13) and DL-TLS-SELF-IMAGE stack on it.
 
 ## What is in
 * `liella_ld::arch`: TLS rows of the table (`TLS_VARIANT`, `TCB_SIZE`, `TCB_ALIGN`, `SELF_SLOT`, `DTV_SLOT`,

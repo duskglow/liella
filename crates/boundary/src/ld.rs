@@ -717,7 +717,7 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
     let mut q = 0usize;
     // The interpreter itself, when an object names it (`__tls_get_addr`): already relocated, in the
     // scope with its exports, never relocated again (D-27.20); read from its memory image.
-    let mut own: Option<usize> = None;
+    let mut interp: Option<usize> = None;
     // The DT_NEEDED links (dependent, dependency) in the order each object names them (DL-11).
     let mut edges = [(0u8, 0u8); EDGES_MAX];
     let mut ne = 0usize;
@@ -741,7 +741,7 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
                 }
                 objs[n] = own_object(name, own_views);
                 edge(q, n, name);
-                own = Some(n);
+                interp = Some(n);
                 n += 1;
                 continue;
             }
@@ -775,7 +775,7 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
     // Static TLS of the initially loaded objects (design §7, R14-4, D-27.20).
     let mut mods: [Option<Module>; OBJECTS_MAX] = [None; OBJECTS_MAX];
     for (k, (m, o)) in mods.iter_mut().zip(&objs[..n]).enumerate() {
-        if Some(k) == own {
+        if Some(k) == interp {
             continue;
         }
         *m = o.elf.find(liella_ld::elf::pt::TLS).map(|ph| Module::of(&ph));
@@ -812,7 +812,7 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
     let set = Objects { objs, syms: &syms[..n], global: &global[..n] };
     let mut unique = reloc::UniqueTable::<64, 4096>::default();
     // Reverse load order (L14-8), the interpreter left out: it relocated itself at its start.
-    let relocated = (0..n).rev().filter(|&k| Some(k) != own).try_for_each(|k| reloc::relocate::<Native, _>(&set, k, &mut ProcImage, page, &mut unique).map_err(|error| reloc::Failure { obj: k, error }));
+    let relocated = (0..n).rev().filter(|&k| Some(k) != interp).try_for_each(|k| reloc::relocate::<Native, _>(&set, k, &mut ProcImage, page, &mut unique).map_err(|error| reloc::Failure { obj: k, error }));
     if let Err(f) = relocated {
         let name = objs.get(f.obj).map_or(&b"?"[..], |o| o.name);
         match f.error {
@@ -826,8 +826,8 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
     // The images are copied after relocation: a `.tdata` word may hold a relocated address.
     let biases: [u64; OBJECTS_MAX] = core::array::from_fn(|k| objs.get(k).map_or(0, |o| o.bias));
     install_tls(&mods[..n], &biases[..n], &placed[..n], &area);
-    // The interpreter's initialisers are its own business (its start ran them, or it has none).
-    let hooks: [init::Hooks; OBJECTS_MAX] = core::array::from_fn(|i| objs.get(i).filter(|_| Some(i) != own).map_or_else(init::Hooks::default, |o| init::hooks(&o.dynm, o.bias, i == 0)));
+    // The interpreter, when in the list, ran its own start already: no hooks of its own here.
+    let hooks: [init::Hooks; OBJECTS_MAX] = core::array::from_fn(|i| objs.get(i).filter(|_| Some(i) != interp).map_or_else(init::Hooks::default, |o| init::hooks(&o.dynm, o.bias, i == 0)));
     for &(at, len) in maps[1..n].iter().chain(&views).filter(|m| m.1 != 0) {
         let _ = raw::munmap(at, len);
     }

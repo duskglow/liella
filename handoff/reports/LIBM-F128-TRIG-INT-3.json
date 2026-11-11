@@ -1,0 +1,18 @@
+{"task": "LIBM-F128-TRIG-INT-3", "model": "opus", "tokens": null,
+ "result": "COMPLETE: sinf128/cosf128 1332 -> 1253 instructions (<= 1257 ratchet), tanf128 1749 -> 1704, sincosf128 1831 -> 1785; cause: core::array::from_fn window and helpers left out of line once reduce had three callers; -2 re-verified first; inverse functions not started (LIBM-F128-TRIG-INT-4)",
+ "branch": "task/libm-f128-trig-int-3", "head": "b5adfde0f",
+ "gate": {"affected": "889 passed / 0 failed (4 suites, direct tier, --base origin/next)", "peak": "1.3G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "Step 0 on -2's head 0ae8e05fd: sweep 2x10^8 calls 0 undecided worst 2^-158.26, plants 6/6 CAUGHT, percall as -2 reported (keke libm-f128-trig-int-3-s0-sweep, -s0-plants, -s0-percall)",
+  "hot_text_products ran on this branch's head (14 passed), not on a merge with next: the rules allow no merge; the train runs the merged head",
+  "Timing ns glibc/Liella: Ivy Bridge sinf128 1828.3/383.4, cosf128 1810.4/376.1, sincosf128 2237.7/492.7, tanf128 2264.6/515.3; N100 sinf128 1395.5/314.5, cosf128 1385.7/309.0, sincosf128 1719.2/410.3, tanf128 1669.5/406.8 (all faster than -2's)",
+  "Negative results recorded in D-10.92 and the handoff, no saturation record (no SR id reserved): inline pins alone 1375, window fix alone 1325",
+  "wl_trace.sh cannot trace a base revision outside a git tree (role dir or ~/wl/src copy refused, rc 2): the base was compared by objdump of its products"
+ ],
+ "refused": [],
+ "improvement": "wl_trace.sh could accept --base <sha> with primed products (as wl_percall does), so a ratchet regression can be traced on both sides in one job instead of disassembling the base by hand",
+ "next_step": "LIBM-F128-TRIG-INT-4: atanf128, atan2f128, asinf128, acosf128 on the binary128 integer tier (profile atanf128 per call first; div3 is the quotient, a three-limb Newton root is needed for asin/acos)",
+ "report_file": "handoff/libm-f128-trig-int-3.md",
+ "jobs": ["keke:libm-f128-trig-int-3-lint", "keke:libm-f128-trig-int-3-hottext", "keke:libm-f128-trig-int-3-gate", "keke:libm-f128-trig-int-3-plants", "keke:libm-f128-trig-int-3-sweep", "keke:libm-f128-trig-int-3-percall", "keke:libm-f128-trig-int-3-stage", "kotori:libm-f128-trig-int-3-ivb", "nozomi:libm-f128-trig-int-3-n100"]}

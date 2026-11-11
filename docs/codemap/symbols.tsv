@@ -483,6 +483,7 @@ __sysconf	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:211	ret::sysconf
 __sysctl	GLIBC_2.2.5	crates/boundary/src/posix/s29_legacy.rs:555	ret::zero
 __syslog_chk		csys/src/adapter/variadic.c:254	
 __sysv_signal	GLIBC_2.2.5	crates/boundary/src/posix/s20_signals.rs:70	ret::handler
+__tls_get_addr		crates/boundary/src/ld.rs:456	crate::tb::read32
 __toascii_l	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:395	ctype_tables::toascii
 __tolower_l	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:420	locale::case_map_l
 __toupper_l	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:455	locale::case_map_l
@@ -2294,7 +2295,7 @@ liella_j1l_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3500	mr
 liella_jnf128_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3515	mret::elem
 liella_jnf64x_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3535	mret::elem
 liella_jnl_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3540	mret::elem
-liella_ld_start		crates/boundary/src/ld.rs:166	crate::bootstrap::relocate_image
+liella_ld_start		crates/boundary/src/ld.rs:186	crate::bootstrap::relocate_image
 liella_ldexpf128_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3557	mret::ret
 liella_ldexpf64x_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3580	mret::ret
 liella_ldexpl_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3585	mret::ret
@@ -3627,7 +3628,7 @@ strrchr	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:471	ret::found
 strsep	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:882	ret::ptr
 strsignal	GLIBC_2.2.5	crates/boundary/src/posix/s20_signals.rs:285	ret::ptr
 strspn	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:537	ret::must
-strstr	GLIBC_2.2.5	csys/src/machine/scan.S:7677	liella_machine_strpair
+strstr	GLIBC_2.2.5	csys/src/machine/scan.S:7690	liella_machine_strpair_avx_run
 strtod	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:710	ret::with_errno
 strtod_l	GLIBC_2.3	crates/boundary/src/posix/s08_numeric.rs:728	ret::with_errno
 strtof	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:762	ret::with_errno
