@@ -125,55 +125,6 @@ impl Pages for KernelPages {
 /// heap fast paths pay nothing for the foreign case). Everything else is [`KernelPages`]'s.
 pub struct OwnPages;
 
-impl Pages for OwnPages {
-    #[inline(always)]
-    fn map(&self, len: usize, align: usize, node: Option<u32>) -> Option<usize> {
-        KernelPages.map(len, align, node)
-    }
-    #[inline(always)]
-    fn unmap(&self, addr: usize, len: usize) {
-        KernelPages.unmap(addr, len);
-    }
-    #[inline(always)]
-    fn discard(&self, addr: usize, len: usize) {
-        KernelPages.discard(addr, len);
-    }
-    #[inline(always)]
-    fn remap(&self, addr: usize, old_len: usize, new_len: usize) -> Option<usize> {
-        KernelPages.remap(addr, old_len, new_len)
-    }
-    #[inline(always)]
-    fn wipe(&self, addr: usize, len: usize) {
-        KernelPages.wipe(addr, len);
-    }
-    #[inline(always)]
-    fn exclude_from_dumps(&self, addr: usize, len: usize) {
-        KernelPages.exclude_from_dumps(addr, len);
-    }
-    #[inline(always)]
-    fn shard(&self) -> usize {
-        KernelPages.shard()
-    }
-    #[inline(always)]
-    fn cache_slot(&self) -> Option<&AtomicUsize> {
-        KernelPages.cache_slot()
-    }
-    #[inline(always)]
-    fn cache_word(&self) -> usize {
-        // HEAP-CUTS2 C4: one `%fs`-relative load (plan S2 category tb-field); the block is
-        // Liella's (see the type).
-        crate::tb::read::<crate::tb::HeapCache>()
-    }
-    #[inline(always)]
-    fn address_limit(&self) -> Option<usize> {
-        KernelPages.address_limit()
-    }
-    #[inline(always)]
-    fn words(&self, addr: usize, n: usize) -> &[AtomicU64] {
-        KernelPages.words(addr, n)
-    }
-}
-
 /// `len` bytes at a multiple of `align` without mapping `len + align` first (T14): the kernel
 /// picks where `len` bytes go; if that is not aligned, the aligned addresses just above and just
 /// below are tried with `MAP_FIXED_NOREPLACE` (never replacing a mapping).
@@ -764,9 +715,6 @@ struct Caller {
 }
 
 impl Caller {
-    // Its own function, as on next: the hot-text list places it (startup tier); the debug paths'
-    // other changes (D-X.60) had made it inline into their three callers.
-    #[inline(never)]
     fn new(f: u32) -> Caller {
         let mut c = Caller { buf: [0; 256], len: 0 };
         if f & malloc_debug::TRACE != 0 {
@@ -1008,4 +956,55 @@ pub(crate) fn alloc_words(n: usize) -> Option<usize> {
 /// Release a block [`alloc_words`] returned.
 pub(crate) fn free_words(addr: usize) {
     checked("freelocale", liella_legacy::malloc_compat::free(&CTX, addr));
+}
+
+// The last impl of the module on purpose: the mangled names of a module's impls number them in
+// source order, and the hot-text list keys the functions of the impls above by those numbers.
+impl Pages for OwnPages {
+    #[inline(always)]
+    fn map(&self, len: usize, align: usize, node: Option<u32>) -> Option<usize> {
+        KernelPages.map(len, align, node)
+    }
+    #[inline(always)]
+    fn unmap(&self, addr: usize, len: usize) {
+        KernelPages.unmap(addr, len);
+    }
+    #[inline(always)]
+    fn discard(&self, addr: usize, len: usize) {
+        KernelPages.discard(addr, len);
+    }
+    #[inline(always)]
+    fn remap(&self, addr: usize, old_len: usize, new_len: usize) -> Option<usize> {
+        KernelPages.remap(addr, old_len, new_len)
+    }
+    #[inline(always)]
+    fn wipe(&self, addr: usize, len: usize) {
+        KernelPages.wipe(addr, len);
+    }
+    #[inline(always)]
+    fn exclude_from_dumps(&self, addr: usize, len: usize) {
+        KernelPages.exclude_from_dumps(addr, len);
+    }
+    #[inline(always)]
+    fn shard(&self) -> usize {
+        KernelPages.shard()
+    }
+    #[inline(always)]
+    fn cache_slot(&self) -> Option<&AtomicUsize> {
+        KernelPages.cache_slot()
+    }
+    #[inline(always)]
+    fn cache_word(&self) -> usize {
+        // HEAP-CUTS2 C4: one `%fs`-relative load (plan S2 category tb-field); the block is
+        // Liella's (see the type).
+        crate::tb::read::<crate::tb::HeapCache>()
+    }
+    #[inline(always)]
+    fn address_limit(&self) -> Option<usize> {
+        KernelPages.address_limit()
+    }
+    #[inline(always)]
+    fn words(&self, addr: usize, n: usize) -> &[AtomicU64] {
+        KernelPages.words(addr, n)
+    }
 }
