@@ -1,0 +1,13 @@
+id = "D-NEW"
+series = "D-27"
+section = "s26-29"
+spec = "§27.1"
+ann = "—"
+status = "active"
+story = "DL-LIBC-START-6"
+date = "2026-11-11"
+amends = ["D-27.11"]
+tests = ["crates/ld/tests/symbols.rs::versions_bind_like_the_reference", "crates/boundary/tests/s10_math_symbols.rs::sym___fpu_control"]
+body = '''
+**A relocation's versioned reference accepts a base definition (amends D-27.11; DL-LIBC-START-6).** `liella_ld::symbols::Want::Reference(version)` is what `Object::reference_want` now gives for a reference whose `versym` index names a version: the definition of exactly that version (hidden or not), else a base (index 1) definition, so an unversioned definition earlier in the scope interposes on a versioned reference; an exact definition later in the same object's chain still wins over a base one. `Want::Version` (`dlvsym`, the start-up handshake) keeps D-27.11's rule that a base definition never matches a name. Probe-settled (spec/behaviour/dynlink.md "Symbol binding", black box against glibc 2.39): `libv.so`'s own `f@@VER_1` `JUMP_SLOT` binds to an unversioned `f` in the program and in an `LD_PRELOAD` object, both with `versym`. This is how a program's `__fpu_control` reaches `libc.so.6`'s `GLOB_DAT` reference (D-10.5): before it, Liella's ld.so bound libc's reference to libc's own definition and a dynamic program's x87 control word stayed 0x037f. Proof: the `Reference` rows of `versions_bind_like_the_reference`, `sym___fpu_control` (dynamic, under Liella's ld.so); plants handoff/DL-LIBC-START-6-plants.txt.
+'''

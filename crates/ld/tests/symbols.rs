@@ -193,7 +193,13 @@ fn hash_functions_match_the_linker() {
 fn versions_bind_like_the_reference() {
     // s27_1_g_0, s27_1_c_3: spec/behaviour/dynlink.md "Symbol binding", every hash style.
     let Some(c) = corpus() else { return };
-    let rows: [(&str, Want<'_>, &str); 20] = [
+    // A relocation's versioned reference (`Reference`) binds that version, else a base definition
+    // (the probe in "Symbol binding": an unversioned definition interposes on `f@VER_1`).
+    let rows: [(&str, Want<'_>, &str); 24] = [
+        ("f", Want::Reference(b"VER_1"), "VER_1"),
+        ("h", Want::Reference(b"VER_2"), "VER_2"),
+        ("f", Want::Reference(b"VER_9"), "-"),
+        ("b", Want::Reference(b"VER_1"), "<base>"),
         ("f", Want::Oldest, "VER_1"),
         ("h", Want::Oldest, "VER_1"),
         ("b", Want::Oldest, "<base>"),

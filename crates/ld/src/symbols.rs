@@ -95,6 +95,12 @@ pub enum Want<'n> {
     /// exactly that version, hidden or not. A base (index 1) definition never matches a name. In an
     /// object without `versym` every definition matches.
     Version(&'n [u8]),
+    /// A relocation's reference with a version (its `versym` index names one): the definition of exactly
+    /// that version, hidden or not, or else a base (index 1) definition, so an unversioned definition
+    /// earlier in the scope (the program's, a preloaded object's) interposes on a versioned reference
+    /// (probe-settled; spec/behaviour/dynlink.md "Symbol binding"). In an object without `versym` every
+    /// definition matches.
+    Reference(&'n [u8]),
 }
 
 /// One symbol request: a name and the definitions it accepts. The hashes are computed once per request
@@ -225,8 +231,8 @@ impl<'a> Object<'a> {
     }
 
     /// What this object's reference through symbol `sym` accepts: [`Want::Oldest`] without a version,
-    /// else the version its `versym` index names (a requirement's `vna_other`, or one of the object's own
-    /// definitions).
+    /// else [`Want::Reference`] to the version its `versym` index names (a requirement's `vna_other`, or
+    /// one of the object's own definitions).
     ///
     /// # Errors
     ///
@@ -238,9 +244,9 @@ impl<'a> Object<'a> {
             return Ok(Want::Oldest);
         }
         if let Some(name) = self.needed_version_name(index)? {
-            return Ok(Want::Version(name));
+            return Ok(Want::Reference(name));
         }
-        self.version_name(index)?.map(Want::Version).ok_or(LookupError::UnknownVersion { sym, index })
+        self.version_name(index)?.map(Want::Reference).ok_or(LookupError::UnknownVersion { sym, index })
     }
 
     /// The name of version index `index` among this object's requirements (the `vna_other` of a
@@ -351,6 +357,18 @@ impl<'a> Object<'a> {
                         best = Some(def);
                     }
                     Ok(ok)
+                }
+                Want::Reference(name) => {
+                    let exact = self.versym.is_none()
+                        || (version > VER_NDX_GLOBAL
+                            && self.def_version_name(version)?.ok_or(LookupError::UnknownVersion { sym: i, index: version })? == name);
+                    if exact {
+                        best = Some(def);
+                    } else if version == VER_NDX_GLOBAL && best.is_none() {
+                        // A base definition matches, but an exact one later in the chain wins.
+                        best = Some(def);
+                    }
+                    Ok(exact)
                 }
             }
         })?;
