@@ -1,7 +1,7 @@
 # DL-MULTI-WRITABLE: the self-relocator and ld.so accept any number of writable PT_LOADs
 
-State: branch `task/dl-multi-writable-3` (run 3; continues `task/dl-multi-writable-2`, which continued
-`task/dl-multi-writable`), head: see handoff/reports/DL-MULTI-WRITABLE-3.json. Brief: `~/state/briefs/DL-MULTI-WRITABLE.md`
+State: branch `task/dl-multi-writable-4` (run 4; continues `task/dl-multi-writable-3`, `-2` and `task/dl-multi-writable`),
+head: see handoff/reports/DL-MULTI-WRITABLE-4.json. COMPLETE: ready to land. Brief: `~/state/briefs/DL-MULTI-WRITABLE.md`
 ("The change"). Decision: D-27.25 (amends D-27.10, `ann = SEC`; also records RELRO across segments; lists every test below).
 Plants: handoff/DL-MULTI-WRITABLE-2-plants.txt (unit level, 5 plants) and handoff/DL-MULTI-WRITABLE-3-plants.txt (the
 end-to-end tests, 3 plants).
@@ -46,12 +46,23 @@ end-to-end tests, 3 plants).
 - Run 3 used one `sed -i` (adding a test name to records/decisions/D-27/D-27.25.toml) and one python heredoc for the same
   file, against the Edit-tool rule; the result was checked (`grep -c`) and is in the commit.
 
-## Not done (next run, in order)
-1. `liella::hot_text_products` on the merged head (the coordinator's merge; not run here).
+- Run 4 (held until LAYOUT-DATA-CLUSTERS-4C landed; CI train 604 had read STARTUP-DATA-WINDOWS ro 4 > 3): merged
+  origin/next 07a4db6ac (clean, no conflicts; merge commit 45c7c1946). On the merged head, shiki role sh2 (Haswell-EP):
+  lint on the inherited head rc 0 (dl-multi-writable-4-lint0); `cargo xtask so` prints `STARTUP-DATA-WINDOWS ok: 1
+  read-only start-up data windows of 65536 bytes (ro-budget-fast 1), 12 written pages (rw-budget-fast 20); 46 of 46`,
+  `hot_text_products` 21 passed (dl-multi-writable-4-so-hot); direct-tier gate 9 suites, 4855 passed / 0 failed, 450
+  ignored, conformance 22 passed, peak 13G (dl-multi-writable-4-gate); `bench --compare --counters cbench_startup`
+  startup_instr_c 2148 (limit 2150), setloc 67888, printf 71683, wctype 68913 (dl-multi-writable-4-startup); plants: both
+  files rerun on the merged head, all CAUGHT (handoff/DL-MULTI-WRITABLE-4-plants.txt). No code change was needed.
+  Not measured here: origin/next's own startup_instr_c on this host (LAYOUT-DATA-CLUSTERS-4C reported 2146 on another
+  host), so the 2148 is checked against the limit, not compared like for like.
+
+## Not done
+Nothing for this story. Optional: an end-to-end test of the static start's RELRO fallback (above).
 
 ## Do not redo
 - GNU ld 2.42 cannot split RELRO across PT_LOADs by source attributes or an INSERT script (run 1); a single 16 KiB-aligned
   section does not reliably split from libc.a's `.data` (run 2).
 - The start-up counter question (run 3, above): measured like for like, cause found and fixed.
 
-## Jobs (kanon, role kn1): see handoff/reports/DL-MULTI-WRITABLE-3.json `jobs`.
+## Jobs: run 3 on kanon (handoff/reports/DL-MULTI-WRITABLE-3.json); run 4 on shiki (handoff/reports/DL-MULTI-WRITABLE-4.json).
