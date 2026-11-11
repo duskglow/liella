@@ -1,7 +1,7 @@
 //! Page faults of short static programs (PAGEFAULTS-2): `tests/oracle/page_faults.c` linked
 //! statically against the products reports its own minor-fault count (getrusage ru_minflt). The
 //! library's startup, stdio, printf and setlocale functions are grouped into `.text.hot.*`
-//! (`crates/libc-so/hot-text.list`, xtask/src/hottext.rs); scattered, the setlocale + printf
+//! (`crates/libc-so/hot-text-<profile>.list`, xtask/src/hottext.rs); scattered, the setlocale + printf
 //! program touched ~34 separate 64 KiB text windows, one fault each. The bounds below hold the
 //! grouped counts with headroom for layout-only deltas and fail when the grouping is lost; the
 //! program runs without address-space randomisation, so a build gives the same count every run.
@@ -428,7 +428,7 @@ fn init_cold_startup_functions_are_grouped() {
     ] {
         assert!(
             grouped.iter().any(|s| s.split_once('.').is_some_and(|(_, name)| name == f || name.ends_with(f))),
-            "{f}: not in the hot group of libc.a (its own section? listed in crates/libc-so/hot-text.list?)"
+            "{f}: not in the hot group of libc.a (its own section? listed in crates/libc-so/hot-text-<profile>.list?)"
         );
     }
     // HOTTEXT-STARTUP-COMPLETE: the first Rust function of start-up (generic since the run-path
@@ -465,7 +465,7 @@ fn init_cold_startup_functions_are_grouped() {
     let mut seen = 0;
     for f in ["7NsCache11region_path", "7NsCache6attach", "6Memory10map_shared", "5Table11stamp_files", "5Table3get"] {
         for s in text.iter().filter(|s| s.contains(f)) {
-            assert!(s.starts_with("sorted.h"), "{f}: section .text.{s} is not in the hot group of libc.a (listed in crates/libc-so/hot-text.list?)");
+            assert!(s.starts_with("sorted.h"), "{f}: section .text.{s} is not in the hot group of libc.a (listed in crates/libc-so/hot-text-<profile>.list?)");
             seen += 1;
         }
     }
@@ -729,7 +729,10 @@ fn init_no_library_text_precedes_the_hot_group() {
 /// The 0-fault clusters of `crates/libc-so/hot-text.clusters`: (name, first, last list position).
 fn clusters() -> Vec<(String, usize, usize)> {
     let dir = root().join("crates/libc-so");
-    let list = std::fs::read_to_string(dir.join("hot-text.list")).expect("hot-text.list");
+    // HOTTEXT-REGEN-HOSTS-2: the list of the profile the products were built in.
+    let profile = std::fs::read_to_string(root().join("target/liella/.profile")).expect("target/liella/.profile");
+    let name = format!("hot-text-{}.list", profile.trim());
+    let list = std::fs::read_to_string(dir.join(&name)).expect("hot-text-<profile>.list");
     let mut pos = std::collections::BTreeMap::new();
     for (i, l) in list.lines().filter(|l| !l.trim().is_empty() && !l.starts_with('#')).enumerate() {
         pos.entry(l.split('\t').next().unwrap_or("").trim().to_string()).or_insert(i);

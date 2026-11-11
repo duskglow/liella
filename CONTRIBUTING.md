@@ -115,7 +115,7 @@ against `next`; the maintainers run the lab steps (counts, the merge queue) for 
 
 **Planned (owner ruling 2026-10-11, not implemented yet):** the direct tier will drop the
 serialized `*_products` tests and the interposed re-run, and will map exported assembly labels
-(and `crates/libc-so/hot-text.list`) to the tests that reach them, so a change to a `.S` kernel selects its
+(and `crates/libc-so/hot-text-<profile>.list`) to the tests that reach them, so a change to a `.S` kernel selects its
 tests directly. The CI FULL gate stays the exhaustive run.
 
 ## Tests and how decisions are recorded

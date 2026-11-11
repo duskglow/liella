@@ -536,7 +536,7 @@ fn startup_keys(text: &str, profile: &str) -> Result<Vec<String>, String> {
             continue;
         }
         match l.split('\t').collect::<Vec<_>>().as_slice() {
-            [k, _tier, profiles] => {
+            [k, _tier, profiles] | [k, _tier, profiles, _] => {
                 if profiles.split(',').any(|p| p == profile) {
                     out.push(k.to_string());
                 }
@@ -628,7 +628,7 @@ fn startup_verdict(c: &Contract, t: &StartupText, window: u64, budget: u64, grou
     if !grouped.is_empty() {
         let what = format!("STARTUP-TEXT-GROUPED: {} start-up functions of libc.a outside the hot group 0x{lo:x}-0x{hi:x}: {}", grouped.len(), grouped.join(", "));
         if grouped_error {
-            bad.push(c.broken(&what, "add their keys to crates/libc-so/hot-text.list (tools/hottext/regen.sh)"));
+            bad.push(c.broken(&what, "add their keys to crates/libc-so/hot-text-<profile>.list (tools/hottext/regen.sh)"));
         } else {
             summary += &format!("\nlayout: {} WARNING {what}", c.id);
         }

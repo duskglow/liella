@@ -855,7 +855,7 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
     let copies = crate::copies::direct_internal_copies(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("copies-work"))?;
     // (done in the archive as rustc built it, so `libc.so.6` and the weakened `libc.a` both get it)
     // The functions short programs run, grouped into `.text.hot.*` (PAGEFAULTS-2: fewer text faults).
-    let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &root.join("crates/libc-so/hot-text.list"), &product.join("hot-work"), rustflags.is_none().then(|| profile.name()))?;
+    let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &crate::hottext::list_path(root, profile.name()), &product.join("hot-work"), rustflags.is_none().then(|| profile.name()))?;
     println!("so: {hot} function sections grouped as hot text");
     // The read-only data start-up reads, after the grouping (it places STARTUP_NAMES), in one aligned section (D-X.62).
     let (ro, ro_bytes) = crate::startup_ro::place(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, root, &product.join("startup-ro-work"))?;

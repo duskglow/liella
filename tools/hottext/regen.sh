@@ -1,12 +1,14 @@
 #!/bin/bash
-# Regenerate the hot-text list (PAGEFAULTS-2, crates/libc-so/hot-text.list) on a Linux host with gdb.
+# Regenerate the hot-text list (PAGEFAULTS-2, crates/libc-so/hot-text-<profile>.list for the profile of the
+# products in <tree>: one list per profile, HOTTEXT-REGEN-HOSTS-2) on a Linux host with gdb.
 # usage: tools/hottext/regen.sh <tree with built products> [--replace] [--build] [--allow-drop] ['<static program> <args>'...]
 #   Traces the startup / stdio / setlocale+printf probes, the `locale` and `tool` modes of
 #   crates/core/tests/oracle/page_faults.c (always: LAYOUT-TEXT-PIN-9), and any extra static programs linked
 #   against <tree>/target/liella/libc.a) with trace_gdb.py, keeps the names that are function
 #   sections of libc.a, and merges their keys into the list (--replace: start from an empty list).
 #   Run it once per profile (`cargo xtask so` = fast, LIELLA_FULL_PROFILE=1 = release): inlining
-#   differs, and the list is the union. Liella binaries only; never trace a glibc-linked program.
+#   and first-touch order differ, so each profile has its own list; run it on every host class the gates use (HOTTEXT-REGEN-HOSTS,
+#   D-X.61: a key leaves the list only when no traced host class reaches it). Liella binaries only; never trace a glibc-linked program.
 #   HOTTEXT-STARTUP-COMPLETE: each line is `<key>\t<tier>\t<profiles>`: the tier of the first probe
 #   that touched it (startup p_true, fork p_fork, stdio p_puts/p_cat/p_fmt, strings p_str, locale
 #   p_loc, tool p_locuse/p_nss and the extra programs, extra anything else) and the profiles whose
@@ -26,7 +28,6 @@
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 T=$(cd "$1" && pwd); shift
-list=$here/../../crates/libc-so/hot-text.list
 replace=0
 build=0
 allow_drop=0
@@ -39,6 +40,17 @@ if [ $build = 1 ]; then
 fi
 profile=$(cat "$T/target/liella/.profile" 2>/dev/null || true)
 case $profile in fast|release) ;; *) echo "regen: $T/target/liella/.profile: want fast or release, got '$profile' (build the products first)" >&2; exit 1;; esac
+# HOTTEXT-REGEN-HOSTS-2 (D-X.61): one list per profile. The list is a layout order (first touch in this
+# profile's trace), and one shared order cannot be both profiles' first-touch order: a fast regen
+# reordered the release layout and broke its STARTUP-TEXT-WINDOWS budget. This run rewrites only its
+# own profile's list, and only a build in that profile reads it (xtask/src/hottext.rs list_path).
+list=$here/../../crates/libc-so/hot-text-$profile.list
+# HOTTEXT-REGEN-HOSTS (D-X.61): the trace is the whole truth only for this (profile, host class);
+# merge.py keeps the keys other host classes reached. The class is the CPU's vendor-family-model
+# (dispatch differs by CPU: fill_erms needs ERMS, which Zen 1 lacks); HOTTEXT_HOST_CLASS overrides it.
+host_class=${HOTTEXT_HOST_CLASS:-$(awk -F': *' '/^vendor_id/ && !v { v = $2 } /^cpu family/ && !f { f = $2 }
+    /^model[ \t]*:/ && !m { m = $2 } END { sub(/^Genuine/, "", v); sub(/^Authentic/, "", v); printf "%s-%s-%s", tolower(v), f, m }' /proc/cpuinfo)}
+case $host_class in ""|-*|*[!a-z0-9-]*) echo "regen: bad host class '$host_class' (set HOTTEXT_HOST_CLASS=[a-z0-9-]+)" >&2; exit 1;; esac
 work=$(mktemp -d "${TMPDIR:-/tmp}/hottext.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 cp "$here"/probes/*.c "$work"/
@@ -56,7 +68,10 @@ trace() { # <tier> <LANG> <program> <args...>
     local tier=$1 lang=$2; shift 2
     n=$((n + 1))
     printf '%s=%s\n' "$tier" "$work/names.$n" >> "$work/tagged"
-    LANG=$lang LC_ALL= HOT_TEXT_OUT=$work/names.$n HOT_TEXT_STDIN=${stdin:-$work/in.txt} HOT_TEXT_FOLLOW_FORK=${follow:-} timeout 900 \
+    # HEAP-FIRST-USE-5: a clean environment with LANG only, as hot_text_products runs the probes; an
+    # inherited LC_CTYPE (ssh forwards LC_*, often C.UTF-8) made setlocale(LC_ALL, "") skip the locale
+    # file's LC_CTYPE path, and the list lost its keys.
+    env -i PATH="$PATH" HOME="$HOME" LANG="$lang" HOT_TEXT_OUT="$work/names.$n" HOT_TEXT_STDIN="${stdin:-$work/in.txt}" HOT_TEXT_FOLLOW_FORK="${follow:-}" timeout 900 \
         gdb -nx -batch -x "$here/trace_gdb.py" --args "$@" > "$work/gdb.$n.log" 2>&1 || { tail -5 "$work/gdb.$n.log"; exit 1; }
 }
 # Startup (p_true) first, then the probes from the most common calls to the rarer ones (printf before
@@ -119,7 +134,7 @@ done
 # STARTUP-TEXT-WINDOWS (D-X.49): the functions `page_faults true` runs (the probe whose start-up faults
 # crates/core/tests/hot_text_products.rs bounds, linked as that test links it), first-touch order, into
 # crates/libc-so/startup-text.keys; the layout check of layout/contracts.tsv counts their 64 KiB windows.
-LANG=C LC_ALL= HOT_TEXT_OUT=$work/startup.names HOT_TEXT_STDIN=$work/in.txt HOT_TEXT_FOLLOW_FORK= timeout 900 \
+env -i PATH="$PATH" HOME="$HOME" LANG=C HOT_TEXT_OUT="$work/startup.names" HOT_TEXT_STDIN="$work/in.txt" HOT_TEXT_FOLLOW_FORK= timeout 900 \
     gdb -nx -batch -x "$here/trace_gdb.py" --args ./page_faults true > "$work/gdb.startup.log" 2>&1 || { tail -5 "$work/gdb.startup.log"; exit 1; }
 python3 "$here/keys.py" --tagged "startup=$work/startup.names" > "$work/startup.keys"
 skeys=$here/../../crates/libc-so/startup-text.keys
@@ -128,8 +143,8 @@ if [ $replace = 1 ] || [ ! -f "$skeys" ]; then : > "$work/startup.old"; else gre
     echo "# @generated by tools/hottext/regen.sh; do not edit by hand."
     echo "# STARTUP-TEXT-WINDOWS (layout/contracts.tsv, D-X.49): the functions \`page_faults true\` runs (crates/core/tests/oracle/page_faults.c"
     echo "# linked as crates/core/tests/hot_text_products.rs links it): build-stable keys (tools/hottext/keys.py), first-touch order."
-    echo "# <key> TAB startup TAB <profiles traced in>."
-    python3 "$here/merge.py" "$work/startup.old" "$work/startup.keys" "$profile" --dropped "$work/startup.dropped"
+    echo "# <key> TAB startup TAB <profiles traced in> TAB <profile@host class pairs whose trace hit it> (D-X.61)."
+    python3 "$here/merge.py" "$work/startup.old" "$work/startup.keys" "$profile" "$host_class" --dropped "$work/startup.dropped"
 } > "$work/startup.merged"
 # shellcheck disable=SC2046
 python3 "$here/keys.py" --tagged $(cat "$work/tagged") > "$work/hit.keys"
@@ -148,11 +163,11 @@ python3 "$here/keys.py" --aliases "$work/syms" > "$work/alias.keys"
 awk -F'\t' 'NR == FNR { lib[$1]; next } $1 in lib' "$work/lib.keys" "$work/hit.keys" > "$work/new.keys"  # keeps the touch order
 if [ $replace = 1 ] || [ ! -f "$list" ]; then : > "$work/old.keys"; else grep -v '^#' "$list" > "$work/old.keys" || true; fi
 {
-    echo "# Functions grouped as hot text in libc.a (PAGEFAULTS-2), in this order (HOT-ORDER: first touch): build-stable keys, see tools/hottext/keys.py."
-    echo "# Generated by tools/hottext/regen.sh; do not edit by hand."
-    echo "# <key> TAB <tier> TAB <profiles traced in> (HOTTEXT-STARTUP-COMPLETE; tiers startup fork stdio strings locale tool extra)."
+    echo "# Functions grouped as hot text in libc.a (PAGEFAULTS-2) when the products are built in the $profile profile, in this order (HOT-ORDER: first touch): build-stable keys, see tools/hottext/keys.py."
+    echo "# Generated by tools/hottext/regen.sh; do not edit by hand. One list per profile (HOTTEXT-REGEN-HOSTS-2, D-X.61): only a $profile trace rewrites it, only a $profile build reads it."
+    echo "# <key> TAB <tier> TAB <profiles traced in: $profile or -> (HOTTEXT-STARTUP-COMPLETE; tiers startup fork stdio strings locale tool extra) TAB <$profile@host class pairs whose trace hit it> (D-X.61): the union over every host class traced."
     # Ruling #4417 (D-X.63): every STARTUP-TEXT-WINDOWS key (merged above) joins the start-up tier at the head.
-    python3 "$here/merge.py" "$work/old.keys" "$work/new.keys" "$profile" --startup-head "$work/startup.merged" --alias "$work/alias.keys" \
+    python3 "$here/merge.py" "$work/old.keys" "$work/new.keys" "$profile" "$host_class" --startup-head "$work/startup.merged" --alias "$work/alias.keys" \
         --dropped "$work/list.dropped"
 } > "$work/list.merged"
 # LAYOUT-TEXT-PIN-9 (ruling #4539): a key that was on either file and that this trace drops is named here,
@@ -173,9 +188,9 @@ if [ -s "$work/startup.dropped" ] || [ -s "$work/list.dropped" ]; then
     echo "regen: --allow-drop: dropping them" >&2
 fi
 mv "$work/startup.merged" "$skeys"
-echo "startup-text: $(wc -l < "$work/startup.keys") keys traced ($profile), $(grep -vc '^#' "$skeys") in $skeys"
+echo "startup-text: $(wc -l < "$work/startup.keys") keys traced ($profile@$host_class), $(grep -vc '^#' "$skeys") in $skeys"
 mv "$work/list.merged" "$list"
-echo "hot-text: $(wc -l < "$work/new.keys") keys traced ($profile), $(grep -vc '^#' "$list") in $list"
+echo "hot-text: $(wc -l < "$work/new.keys") keys traced ($profile@$host_class), $(grep -vc '^#' "$list") in $list"
 # D-X.62: the functions of the other fault-bounded probe modes that no hot-text tier covers, into
 # crates/libc-so/probe-text.keys (the start-up read-only group takes their read-only data).
 if [ $replace = 1 ]; then bash "$here/probe_text.sh" "$T" --replace; else bash "$here/probe_text.sh" "$T"; fi

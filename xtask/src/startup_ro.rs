@@ -264,7 +264,13 @@ type Inputs = (BTreeSet<String>, BTreeSet<String>, Vec<(String, Member)>);
 fn inputs(archive: &Path, root: &Path) -> Result<Inputs, String> {
     let read = |p: &str| fs::read_to_string(root.join(p)).map_err(|e| format!("{p}: {e}"));
     let mut text_keys = keys(&read("crates/libc-so/startup-text.keys")?, |_| true);
-    text_keys.extend(crate::hottext::parse_list(&read("crates/libc-so/hot-text.list")?)?.into_iter().filter(|e| HOT_TIERS.contains(&e.tier)).map(|e| e.key));
+    // Both profiles' lists (HOTTEXT-REGEN-HOSTS-2 split the shared list): the read-only key set stays
+    // the union it was before the split.
+    for p in crate::hottext::PROFILES {
+        let list = crate::hottext::list_path(Path::new(""), p);
+        let list = list.to_str().ok_or("hot-text list path")?;
+        text_keys.extend(crate::hottext::parse_list(&read(list)?)?.into_iter().filter(|e| HOT_TIERS.contains(&e.tier)).map(|e| e.key));
+    }
     // The fault-bounded probe modes no tier covers (the first localtime_r, + mktime): traced on their own.
     text_keys.extend(keys(&read(PROBE_KEYS)?, |_| true));
     let ro_keys = keys(&read("crates/libc-so/startup-data.keys")?, |k| k == "ro");
