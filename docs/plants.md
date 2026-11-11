@@ -35,7 +35,8 @@ applying the plant and before the command (log `<id>.so.log`; if the mutant does
 on that log and the command is not run). A command is known not to use them only when it is one plain
 `cargo test` whose targets are all named (`--lib`, `--bin <name>`, `--test <name>`) and no named test target
 uses the products by the rule `cargo xtask affected` builds them for (its source or support files name
-`target/liella`, `libc.a`, `liella-crt1` or `conformance`). Such a plant reuses the baseline build; anything
+`target/liella`, `join("liella")` (the ld tests' path to the built `ld.so`), `libc.a`, `liella-crt1` or
+`conformance`). Such a plant reuses the baseline build; anything
 else (shell syntax, `cargo xtask affected`, all targets of a package, an unknown target or option) rebuilds.
 After a plant that rebuilt the products, the next plant that does not use them first rebuilds them unmutated
 (`<id>.so-restore.log`), so no command sees an earlier plant's mutant. The verdict line names the build

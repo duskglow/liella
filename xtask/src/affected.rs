@@ -1088,7 +1088,13 @@ impl Repo {
                         }
                     }
                 }
-                let products = text.contains("target/liella") || text.contains("libc.a") || text.contains("liella-crt1") || text.contains("conformance");
+                // `join("liella")`: the products directory under the target dir, as the ld tests that
+                // run the built `ld.so` name it (`target().join("liella").join(Native::INTERP)`).
+                let products = text.contains("target/liella")
+                    || text.contains("join(\"liella\")")
+                    || text.contains("libc.a")
+                    || text.contains("liella-crt1")
+                    || text.contains("conformance");
                 targets.push(Target { krate: c.name.clone(), sections: sections_of(&name, &text), refs: refs_of(&text, &aliases), name, support, products, text, own });
             }
         }
@@ -4313,6 +4319,11 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
         assert!(r.image.off.contains(&("liella-boundary".into(), "ld".into())) && !r.image.off.contains(&("liella-boundary".into(), "runtime".into())), "{:?}", r.image.off);
         for (k, t) in LAYOUT_TESTS {
             assert!(r.targets.iter().any(|x| x.krate == *k && x.name == *t && x.products), "{k}::{t} is no products test target");
+        }
+        // The ld tests that run the built `ld.so` from the products directory use the products
+        // (TB-FOREIGN-SAFETY-6: a plant in ld.rs was tested against an unmutated `ld.so`).
+        for t in ["tls", "ldso_run", "ldso_link", "init_order", "map", "search_cache"] {
+            assert_eq!(r.test_uses_products(Some("liella-ld"), t), Some(true), "liella-ld::{t} runs the built ld.so");
         }
         for t in r.targets.iter().filter(|t| t.products && t.text[..t.own].contains("minflt") && t.text[..t.own].contains("-static")) {
             assert!(LAYOUT_TESTS.contains(&(t.krate.as_str(), t.name.as_str())), "{}::{} counts a static program's faults: add it to LAYOUT_TESTS", t.krate, t.name);

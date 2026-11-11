@@ -24,6 +24,9 @@
 #   rebuilds with plain `cargo xtask so`, which must pass the check. Nothing else may pass that flag
 #   (`cargo xtask static`). Both profiles: `regen.sh . --build` then `LIELLA_FULL_PROFILE=1 regen.sh . --build`.
 set -eu
+# No __pycache__ in the tree: a compiled module embeds this tree's absolute path, which the
+# private-paths check of `cargo xtask static` rejects in a role tree.
+export PYTHONDONTWRITEBYTECODE=1
 here=$(cd "$(dirname "$0")" && pwd)
 T=$(cd "$1" && pwd); shift
 list=$here/../../crates/libc-so/hot-text.list
