@@ -1,8 +1,20 @@
-# LIBM-INVALID-CONVERT-SCAN (-2 .. -5): handoff
+# LIBM-INVALID-CONVERT-SCAN (-2 .. -6): handoff
 
-State: branch task/libm-invalid-convert-scan-5 (stacked on -4), origin/next 28a903a01 merged (commit 37dd4e4df), head =
-last commit on the branch. Decision in force: D-10.95 (records/decisions/D-10/D-10.95.toml). Full -4 report:
+State: branch task/libm-invalid-convert-scan-6 (from -5's head e0598701e), origin/next 07a4db6ac merged (commit
+400e1397e, clean), head = last commit on the branch. Decision in force: D-10.95 (records/decisions/D-10/D-10.95.toml). Full -4 report:
 handoff/libm-invalid-convert-scan-4-report.md (lgammaf(-2.5) settled: Liella correctly rounded, pinned; sign from Gamma(x)).
+
+## -6 (unheld after LAYOUT-DATA-CLUSTERS-4C; merge and re-verify only, no code change)
+- -5's CI red (train 603, STARTUP-DATA-WINDOWS ro 4 > 3) was the libm-growth layout shift, fixed by
+  LAYOUT-DATA-CLUSTERS-4C. Merged origin/next 07a4db6ac cleanly (400e1397e).
+- keke role n2, head 400e1397e:
+| label | result |
+|---|---|
+| libm-invalid-convert-scan-6-pre | rc 0: xtask clippy, static, so, layout-check (STARTUP-DATA-WINDOWS ok: ro 1 window, budget 1; 12 rw pages, budget 20; STARTUP-TEXT-WINDOWS 2, budget 4), hot_text_products 21 passed |
+| libm-invalid-convert-scan-6-plants | rc 0: 8 of 8 CAUGHT with their messages, 0 WARN; its baseline ran math_kernel_no_invalid (the flags test), float-casts and s10_math_clauses green on the unmutated head |
+| libm-invalid-convert-scan-6-gate | affected --base origin/next escalated to FULL (xtask/src/*.rs changed: float-casts) = `cargo xtask test`; running at hand-back |
+- Not rerun: -5's accuracy2 and counts2 (shiki) passed and were verified by the dispatcher on 04bbff653; the merge
+  touched no math source of this branch.
 
 ## -5 (merge only)
 - Merge: quad.rs conflicted on its `use` line only: kept next's `pub(crate) mod arc;` (binary128 arc kernels,
@@ -27,8 +39,7 @@ chain ran no `cargo xtask so` before it), the first chain (static red on the cas
 -4's counts on its pre-merge head (mei): lgammaf_pos 315.8 -> 314.6, neg 8411.0 -> 8398.1, r_neg 8419.0 -> 8406.1.
 
 ## Next step
-Read -h2-plants, -h2-gate, -h2-accuracy2, -h2-counts2 (lgammaf_pos must be <= base). Green: COMPLETE. hot_text_products
-on built products is in the gate if affected; else run `cargo xtask so` then the test.
+-6 jobs on keke (libm-invalid-convert-scan-6-gate, -plants) green: land. A red: fix the cause only (no reruns to pass).
 
 ## INFORMATIONAL
 - wide_dd's ignored tier sweep fails on this tree: Expm1 operand sig 11193749041240441045 exp -71, error 2^-100 against
