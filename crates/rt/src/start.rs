@@ -209,6 +209,92 @@ pub fn open_std_fds<S: Sys>(sys: &S) -> KResult<()> {
     Ok(())
 }
 
+/// The data half of the private start interface between `ld.so` and `libc.so.6` (version node
+/// `LIELLA_PRIVATE`, plan/ph14/design.md §14, L14-10, R14-12, D-27.22): the names, the build tag
+/// both products carry and [`private::StartInfo`]. Never in a public header. It lives here, beside
+/// [`bias`], because both products use it: the C library defines the tag and reads `StartInfo`,
+/// the loader (`liella_ld::start::private`) checks the tag and builds `StartInfo`; keeping it out
+/// of the loader crate keeps the C library's code independent of the loader's.
+pub mod private {
+    /// The version node of the private interface.
+    pub const NODE: &[u8] = b"LIELLA_PRIVATE";
+    /// `__liella_libc_early_init(const StartInfo *)`: libc's start steps 3 and 4, called by `ld.so`
+    /// after relocation and before any constructor (`.preinit_array` included).
+    pub const EARLY_INIT: &[u8] = b"__liella_libc_early_init";
+    /// `__liella_build_tag`: [`TAG_LEN`] bytes, [`TAG_PREFIX`] then the build's identity.
+    pub const BUILD_TAG: &[u8] = b"__liella_build_tag";
+    /// The tag's first bytes (a test finds the tag in a file by them).
+    pub const TAG_PREFIX: &[u8] = b"LIELLA-BUILD-TAG:";
+    /// The tag's size in bytes.
+    pub const TAG_LEN: usize = 64;
+    /// A build's tag from its identity: each product passes `option_env!("LIELLA_BUILD_TAG")` (a hash
+    /// of the product sources `cargo xtask so` sets for both), so a loader and a C library from
+    /// different builds carry different tags. The variable is read only by the two crates holding a
+    /// tag (the loader and the boundary), never here: a crate reading it is rebuilt with all its
+    /// dependants whenever any product source changes.
+    #[must_use]
+    pub const fn tag(id: Option<&str>) -> [u8; TAG_LEN] {
+        tag_bytes(match id {
+            Some(t) => t.as_bytes(),
+            None => b"unversioned",
+        })
+    }
+
+    /// [`TAG_PREFIX`] then `id`, cut at [`TAG_LEN`] bytes, zero-filled.
+    const fn tag_bytes(id: &[u8]) -> [u8; TAG_LEN] {
+        let mut out = [0u8; TAG_LEN];
+        let mut dst: &mut [u8] = &mut out;
+        let (mut first, mut second) = (TAG_PREFIX, id);
+        loop {
+            let b = if let Some((&b, rest)) = first.split_first() {
+                first = rest;
+                b
+            } else if let Some((&b, rest)) = second.split_first() {
+                second = rest;
+                b
+            } else {
+                break;
+            };
+            let Some((d, rest)) = dst.split_first_mut() else { break };
+            *d = b;
+            dst = rest;
+        }
+        out
+    }
+
+    /// What `ld.so` passes to [`EARLY_INIT`]: the initial stack as the program sees it.
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    pub struct StartInfo {
+        /// `argc`.
+        pub argc: usize,
+        /// `argv` (the address of `argv[0]`).
+        pub argv: usize,
+        /// `envp` (after secure-mode clearing).
+        pub envp: usize,
+        /// The auxiliary vector.
+        pub auxv: usize,
+        /// The stack end (`__libc_stack_end`): the initial stack pointer.
+        pub stack_end: usize,
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// no spec clause (D-27.22): the tag is the prefix then the identity, zero-filled, cut at its size.
+        #[test]
+        fn private_tag_layout() {
+            assert!(tag(None).starts_with(b"LIELLA-BUILD-TAG:unversioned\0"));
+            let t = tag(Some("abc"));
+            let (head, rest) = t.split_at(TAG_PREFIX.len() + 3);
+            assert_eq!(head, b"LIELLA-BUILD-TAG:abc");
+            assert!(rest.iter().all(|&b| b == 0));
+            assert_eq!(tag_bytes(&[b'x'; 100]).last(), Some(&b'x'));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
