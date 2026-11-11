@@ -60,6 +60,9 @@ unsafe extern "C" {
     /// `%fs:0`.
     #[allow(dead_code)] // Rust reads %fs inline since TINY-HOT (tb.rs); the C layer still calls it
     pub(crate) safe fn liella_machine_tp() -> usize;
+    /// `__errno_location` (machine/tp.S, D-X.60): the calling thread's `errno` address; reads
+    /// `liella_machine_owned` and `%fs`, writes nothing.
+    pub(crate) safe fn liella_machine_errno_location() -> *mut core::ffi::c_int;
     /// `rdtsc` (x86_64 only; D-7.12, GETTEXT-6): no arguments, no memory access. Faults (SIGSEGV) only in a process
     /// that disabled the counter with `prctl(PR_SET_TSC)` (a debugger or replay tool; the kernel default allows it).
     #[cfg(target_arch = "x86_64")]

@@ -10,7 +10,7 @@ use core::ffi::c_int;
 use core::sync::atomic::{AtomicU32, AtomicU8, AtomicUsize};
 
 use liella_rt::thread::{Thread, KEYS, SLOT_SIZE};
-use liella_rt::tls::{ThreadBlock, ERRNO_OFFSET};
+use liella_rt::tls::ThreadBlock;
 
 /// The thread pointer (`%fs:0`): the block's self word (`ThreadBlock::tcb`, which holds the
 /// thread pointer in every block, Liella's and glibc's), read with one `%fs`-relative load
@@ -235,14 +235,12 @@ pub fn current() -> &'static ThreadBlock {
 }
 
 /// `__errno_location()`: the address of this thread's `errno` (spec §2.1, D-2.1).
+/// D-X.60: the block's word only in a process the runtime started; elsewhere 0x80 is another
+/// library's word and the thread's `errno` is its registry word (stable for its life). The
+/// test is in assembly (machine/tp.S), which in the products is `__errno_location` itself.
+#[inline(always)]
 pub fn errno_location() -> *mut c_int {
-    // D-X.60: the block's word only in a process the runtime started; elsewhere 0x80 is another
-    // library's word and the thread's `errno` is its registry word (stable for its life).
-    if crate::thread::owned() {
-        core::ptr::with_exposed_provenance_mut(tp().wrapping_add(ERRNO_OFFSET))
-    } else {
-        crate::thread::foreign_errno()
-    }
+    crate::ffi::liella_machine_errno_location()
 }
 
 /// Store `v` in the `errno` cell [`errno_location`] names (D-X.60 tests: the cell Liella's

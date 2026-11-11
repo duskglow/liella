@@ -19,9 +19,18 @@ use crate::ret;
 use crate::strz;
 use crate::tb;
 
-export! { runtime "GLIBC_2.2.5";
+export! { asm "GLIBC_2.2.5";
+/// Defined in machine/tp.S under `LIELLA_EXPORT` and `LIELLA_RUNTIME` (products only: test
+/// processes keep the host's, D-2.1).
 pub extern "C" fn __errno_location() -> *mut c_int {
     tb::errno_location()
+}}
+
+export! { local "liella_errno_rest";
+/// `__errno_location` in a process the runtime did not start (from machine/tp.S, D-X.60): the
+/// calling thread's registry word.
+pub extern "C" fn errno_rest() -> *mut c_int {
+    crate::thread::foreign_errno()
 }}
 
 export! { "GLIBC_2.2.5";

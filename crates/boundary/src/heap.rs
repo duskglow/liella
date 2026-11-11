@@ -118,6 +118,62 @@ impl Pages for KernelPages {
     }
 }
 
+/// D-X.60: [`KernelPages`] for the paths [`DEBUG`]'s word has already cleared: that word holds
+/// [`malloc_debug::FOREIGN`] until the runtime takes the process (`thread::init_initial`), so
+/// a path reached with the word clear runs in a process the runtime started, where 0x90 of the
+/// calling thread's block is Liella's, and the cache word is read with no further test (the
+/// heap fast paths pay nothing for the foreign case). Everything else is [`KernelPages`]'s.
+pub struct OwnPages;
+
+impl Pages for OwnPages {
+    #[inline(always)]
+    fn map(&self, len: usize, align: usize, node: Option<u32>) -> Option<usize> {
+        KernelPages.map(len, align, node)
+    }
+    #[inline(always)]
+    fn unmap(&self, addr: usize, len: usize) {
+        KernelPages.unmap(addr, len);
+    }
+    #[inline(always)]
+    fn discard(&self, addr: usize, len: usize) {
+        KernelPages.discard(addr, len);
+    }
+    #[inline(always)]
+    fn remap(&self, addr: usize, old_len: usize, new_len: usize) -> Option<usize> {
+        KernelPages.remap(addr, old_len, new_len)
+    }
+    #[inline(always)]
+    fn wipe(&self, addr: usize, len: usize) {
+        KernelPages.wipe(addr, len);
+    }
+    #[inline(always)]
+    fn exclude_from_dumps(&self, addr: usize, len: usize) {
+        KernelPages.exclude_from_dumps(addr, len);
+    }
+    #[inline(always)]
+    fn shard(&self) -> usize {
+        KernelPages.shard()
+    }
+    #[inline(always)]
+    fn cache_slot(&self) -> Option<&AtomicUsize> {
+        KernelPages.cache_slot()
+    }
+    #[inline(always)]
+    fn cache_word(&self) -> usize {
+        // HEAP-CUTS2 C4: one `%fs`-relative load (plan S2 category tb-field); the block is
+        // Liella's (see the type).
+        crate::tb::read::<crate::tb::HeapCache>()
+    }
+    #[inline(always)]
+    fn address_limit(&self) -> Option<usize> {
+        KernelPages.address_limit()
+    }
+    #[inline(always)]
+    fn words(&self, addr: usize, n: usize) -> &[AtomicU64] {
+        KernelPages.words(addr, n)
+    }
+}
+
 /// `len` bytes at a multiple of `align` without mapping `len + align` first (T14): the kernel
 /// picks where `len` bytes go; if that is not aligned, the aligned addresses just above and just
 /// below are tried with `MAP_FIXED_NOREPLACE` (never replacing a mapping).
@@ -164,6 +220,9 @@ fn node_hint() -> usize {
 
 /// The heap with its kernel and memory source, as the C-shaped calls take it.
 pub static CTX: Ctx<'static, CSys, KernelPages> = Ctx { heap: &HEAP, sys: &CSys, pages: &KernelPages };
+
+/// [`CTX`] for the plain `c_*` paths, reached only with [`DEBUG`]'s word clear ([`OwnPages`]).
+static OWN_CTX: Ctx<'static, CSys, OwnPages> = Ctx { heap: &HEAP, sys: &CSys, pages: &OwnPages };
 
 /// The block-level misuse C leaves undefined: a diagnostic and abort (S4), in glibc's words.
 pub fn misuse(what: &str, m: Misuse) -> ! {
@@ -376,8 +435,12 @@ fn reserve_free(addr: usize, size: usize) -> bool {
 /// process first, so it is always too late there. A test build (`selftest` without `runtime`:
 /// the host started the process, so [`perturb_from_start`] never ran) starts with `ENVIRON`
 /// as well: its first call through the C family reads [`TEST_PERTURB`] ([`begin`]).
+/// Every build starts with [`malloc_debug::FOREIGN`] (D-X.60): until the runtime takes the
+/// process, the heap words of the thread blocks are not known to be Liella's, so every C entry
+/// takes its general path, whose pages ([`KernelPages`]) ask whose block it is.
 pub(crate) static DEBUG: Debug = Debug::new(
-    (if cfg!(feature = "export") { malloc_debug::VIRGIN } else { 0 })
+    malloc_debug::FOREIGN
+        | (if cfg!(feature = "export") { malloc_debug::VIRGIN } else { 0 })
         | if cfg!(all(feature = "selftest", not(feature = "runtime"))) { malloc_debug::ENVIRON } else { 0 },
 );
 
@@ -504,7 +567,7 @@ pub(crate) fn c_malloc(n: usize) -> KResult<usize> {
     if DEBUG.active() {
         return debug_alloc(n, ALIGN, false);
     }
-    malloc_compat::malloc(&CTX, n)
+    malloc_compat::malloc(&OWN_CTX, n)
 }
 
 /// `malloc`'s entry point (TARC-ALLOC): the heap's fast path inline, everything else (the
@@ -514,7 +577,7 @@ pub(crate) fn c_malloc(n: usize) -> KResult<usize> {
 #[inline(always)]
 pub(crate) fn malloc_entry(n: usize) -> *mut core::ffi::c_void {
     if !DEBUG.active() {
-        if let Some(b) = Heap::alloc_fast(&KernelPages, n, ALIGN) {
+        if let Some(b) = Heap::alloc_fast(&OwnPages, n, ALIGN) {
             return core::ptr::with_exposed_provenance_mut(b.addr);
         }
     }
@@ -529,10 +592,10 @@ fn malloc_general(n: usize) -> *mut core::ffi::c_void {
     if DEBUG.active() {
         return crate::ret::null(debug_alloc(n, ALIGN, false));
     }
-    if let Some(b) = Heap::alloc_group(&KernelPages, n) {
+    if let Some(b) = Heap::alloc_group(&OwnPages, n) {
         return core::ptr::with_exposed_provenance_mut(b.addr);
     }
-    crate::ret::null(HEAP.alloc_slow(&CSys, &KernelPages, n, ALIGN).map(|b| b.addr).ok_or(Errno::ENOMEM))
+    crate::ret::null(HEAP.alloc_slow(&CSys, &OwnPages, n, ALIGN).map(|b| b.addr).ok_or(Errno::ENOMEM))
 }
 
 /// `free`'s entry point (TARC-ALLOC): `free(NULL)` and the heap's fast path inline, the rest in
@@ -540,7 +603,7 @@ fn malloc_general(n: usize) -> *mut core::ffi::c_void {
 /// and four real frees per file). The same effect as `checked("free", c_free(p))`.
 #[inline(always)]
 pub(crate) fn free_entry(p: usize) {
-    if p == 0 || (!DEBUG.active() && Heap::free_hint(&KernelPages, p)) {
+    if p == 0 || (!DEBUG.active() && Heap::free_hint(&OwnPages, p)) {
         return;
     }
     free_general(p);
@@ -552,10 +615,10 @@ pub(crate) fn free_entry(p: usize) {
 fn free_general(p: usize) {
     let r = if DEBUG.active() {
         debug_free(p)
-    } else if Heap::free_seg(&KernelPages, p) {
+    } else if Heap::free_seg(&OwnPages, p) {
         return;
     } else {
-        HEAP.free_slow(&CSys, &KernelPages, p)
+        HEAP.free_slow(&CSys, &OwnPages, p)
     };
     checked("free", r);
 }
@@ -566,7 +629,7 @@ pub(crate) fn c_calloc(k: usize, n: usize) -> KResult<usize> {
     if DEBUG.active() {
         return k.checked_mul(n).ok_or(Errno::ENOMEM).and_then(|t| debug_alloc(t, ALIGN, true));
     }
-    malloc_compat::calloc(&CTX, k, n, zero_fresh)
+    malloc_compat::calloc(&OWN_CTX, k, n, zero_fresh)
 }
 
 /// `realloc`.
@@ -578,9 +641,9 @@ pub(crate) fn c_realloc(p: usize, n: usize) -> Result<KResult<usize>, Misuse> {
     // `realloc(NULL, n)` is `malloc(n)` (s3_1_c_3_1): taken here, before the resize path's
     // larger frame (REALLOC-FUSE; about a fifth of real reallocs).
     if p == 0 {
-        return Ok(malloc_compat::malloc(&CTX, n));
+        return Ok(malloc_compat::malloc(&OWN_CTX, n));
     }
-    malloc_compat::realloc(&CTX, p, n, copy_blocks)
+    malloc_compat::realloc(&OWN_CTX, p, n, copy_blocks)
 }
 
 /// The first test of the resize path for `realloc(p, n)` (REALLOC-FUSE, REALLOC-ONE-LOOKUP):
@@ -593,14 +656,15 @@ pub(crate) fn c_realloc_fit(p: usize, n: usize) -> Fit {
     if p == 0 || DEBUG.active() {
         return Fit::Other;
     }
-    Heap::fit(&KernelPages, p, n)
+    Heap::fit(&OwnPages, p, n)
 }
 
 /// `realloc(p, n)` of the block [`c_realloc_fit`] found as `h`: moved without a second lookup
-/// (or by the general resize path on a miss; misuse is reported as `realloc` does).
+/// (or by the general resize path on a miss; misuse is reported as `realloc` does). A held
+/// block comes only from [`c_realloc_fit`] with [`DEBUG`]'s word clear ([`OwnPages`]).
 #[inline(always)]
 pub(crate) fn c_realloc_held(p: usize, n: usize, h: Held) -> Result<KResult<usize>, Misuse> {
-    Ok(HEAP.resize_held(&CSys, &KernelPages, p, n, h, copy_blocks)?.map(|b| b.addr).ok_or(Errno::ENOMEM))
+    Ok(HEAP.resize_held(&CSys, &OwnPages, p, n, h, copy_blocks)?.map(|b| b.addr).ok_or(Errno::ENOMEM))
 }
 
 /// `reallocarray`.
@@ -625,7 +689,7 @@ pub(crate) fn c_free(p: usize) -> Result<(), Misuse> {
     if DEBUG.active() {
         return debug_free(p);
     }
-    malloc_compat::free(&CTX, p)
+    malloc_compat::free(&OWN_CTX, p)
 }
 
 /// `aligned_alloc` (and the native interface's allocation).
@@ -634,7 +698,7 @@ pub(crate) fn c_aligned_alloc(align: usize, n: usize) -> KResult<usize> {
     if DEBUG.active() {
         return malloc_compat::aligned_request(align).and_then(|a| debug_alloc(n, a, false));
     }
-    malloc_compat::aligned_alloc(&CTX, align, n)
+    malloc_compat::aligned_alloc(&OWN_CTX, align, n)
 }
 
 /// `aligned_alloc` with the block zeroed (the native interface).
@@ -643,7 +707,7 @@ pub(crate) fn c_aligned_calloc(align: usize, n: usize) -> KResult<usize> {
     if DEBUG.active() {
         return malloc_compat::aligned_request(align).and_then(|a| debug_alloc(n, a, true));
     }
-    malloc_compat::aligned_calloc(&CTX, align, n, zero_fresh)
+    malloc_compat::aligned_calloc(&OWN_CTX, align, n, zero_fresh)
 }
 
 /// `memalign`.
@@ -652,7 +716,7 @@ pub(crate) fn c_memalign(align: usize, n: usize) -> KResult<usize> {
     if DEBUG.active() {
         return malloc_compat::memalign_request(align).and_then(|a| debug_alloc(n, a, false));
     }
-    malloc_compat::memalign(&CTX, align, n)
+    malloc_compat::memalign(&OWN_CTX, align, n)
 }
 
 /// `posix_memalign`.
@@ -663,7 +727,7 @@ pub(crate) fn c_posix_memalign(mut out: impl liella_legacy::string_compat::Curso
         out.set(p);
         return Ok(());
     }
-    malloc_compat::posix_memalign(&CTX, out, align, n)
+    malloc_compat::posix_memalign(&OWN_CTX, out, align, n)
 }
 
 /// `valloc`.
@@ -672,7 +736,7 @@ pub(crate) fn c_valloc(n: usize) -> KResult<usize> {
     if DEBUG.active() {
         return debug_alloc(n, PAGE, false);
     }
-    malloc_compat::valloc(&CTX, n)
+    malloc_compat::valloc(&OWN_CTX, n)
 }
 
 /// `pvalloc`.
@@ -681,7 +745,7 @@ pub(crate) fn c_pvalloc(n: usize) -> KResult<usize> {
     if DEBUG.active() {
         return malloc_compat::pvalloc_size(n).and_then(|s| debug_alloc(s, PAGE, false));
     }
-    malloc_compat::pvalloc(&CTX, n)
+    malloc_compat::pvalloc(&OWN_CTX, n)
 }
 
 /// `malloc_usable_size`: a checked block's requested size.

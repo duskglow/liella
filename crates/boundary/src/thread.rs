@@ -181,6 +181,8 @@ pub(crate) fn init_initial(static_program: bool) {
     d.tp.store(tb::tp(), Relaxed);
     OWNED.store(true, Release);
     OWNED_HERE.store(true, Release);
+    // D-X.60: the heap's C entries take their plain paths (no further test of whose block).
+    crate::heap::DEBUG.clear_foreign();
     LOCK_ALONE.store(SINGLE_THREADED.load(Acquire) != 0, Release);
     LIVE.store(1, Release);
     register_kernel_areas(d);
