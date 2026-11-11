@@ -1,0 +1,16 @@
+# LIBM-LD-ARC-CHAIN plants: cargo xtask plants handoff/LIBM-LD-ARC-CHAIN-plants.txt --dir <new RAM dir>
+# The asinl/acosl chain (crates/math/src/wide_int/arc.rs, D-10.75): the index scale from the root's reciprocal,
+# the numerator chosen from a alone, and the scale of x = a; the shared index scale of atan2l.
+# The root's index scale off by a factor 2 (2^-107 for 2^-108): j points at the wrong table row.
+root-ix-scale | crates/math/src/wide_int/arc.rs | lit:let ix = vd * if l == 0 { TWO_M108 } ==> let ix = vd * if l == 0 { TWO_M108 * 2.0 } | cargo test -p liella-math --lib wide_int::arc | msg:arc_tier_agrees_with_the_wide_route.*FAILED
+# a < s decided at a^2 < 1/4 instead of 1/2: a in [1/2, 1/sqrt 2) takes the reflected kernel with y/x > 1.
+below-split | crates/math/src/wide_int/arc.rs | lit:let below = v < 1 << 127; ==> let below = v < 1 << 126; | cargo test -p liella-math --lib wide_int::arc | msg:arc_tier_agrees_with_the_wide_route.*FAILED
+# acosl's reflected kernel (x = a) given the root's scale instead of 1/a.
+acos-scale-wire | crates/math/src/wide_int/arc.rs | lit:} else { atan_le(s, a, ia) }; ==> } else { atan_le(s, a, is) }; | cargo test -p liella-math --lib wide_int::arc | msg:arc_tier_agrees_with_the_wide_route.*FAILED
+# The index scale 256/x halved (atan2l and the 1/a scale).
+inv-top-scale | crates/math/src/wide_int/arc.rs | lit:    256.0 / dbl((x.m >> 75) as u64) ==>     128.0 / dbl((x.m >> 75) as u64) | cargo test -p liella-math --lib wide_int::arc | msg:arc_tier_agrees_with_the_wide_route.*FAILED
+# cargo xtask plants results (4 plants: 4 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# root-ix-scale: CAUGHT, caught by liella_math wide_int::arc::tests::arc_tier_agrees_with_the_wide_route
+# below-split: CAUGHT, caught by liella_math wide_int::arc::tests::arc_tier_agrees_with_the_wide_route
+# acos-scale-wire: CAUGHT, caught by liella_math wide_int::arc::tests::arc_tier_agrees_with_the_wide_route
+# inv-top-scale: CAUGHT, caught by liella_math wide_int::arc::tests::arc_tier_agrees_with_the_wide_route
