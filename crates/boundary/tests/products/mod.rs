@@ -277,9 +277,11 @@ fn libc_by_path(dir: &std::path::Path) -> PathBuf {
 
 /// Self-checking conformance programs linked dynamically by the host's compiler: run on the
 /// host's glibc (the oracle), then the same source linked with the host's start files against
-/// Liella's `libc.so.6` (by path; Liella's `ld.so` as needed, through a `libc.so` script) with
-/// Liella's `ld.so` as its interpreter (design §14, D-27.24; #814): each must exit 0 both ways. The second link names no other C library and the loader
-/// has no search, so the library that runs is Liella's. A program's `RUN-ARGS`, `RUN-ENV` (distinct
+/// Liella's `libc.so.6` (by path, through a `libc.so` script) with Liella's `ld.so` as its
+/// interpreter (design §14, D-27.24; #814): each must exit 0 both ways. Like the start files, the
+/// link-time archive `libc_nonshared.a` (`atexit`, `at_quick_exit`: not in `libc.so.6`'s ABI) is
+/// the host's, as in a program built on the host; Liella has none yet. No other shared C library
+/// is named and the loader has no search, so the library that runs is Liella's. A program's `RUN-ARGS`, `RUN-ENV` (distinct
 /// names) and `EXPECT-EXIT` directives apply as in `conformance/run.sh`; any other directive is
 /// refused, so a program that needs one is never run here without it.
 pub(crate) fn conformance_dynamic(names: &[&str]) {
@@ -288,10 +290,14 @@ pub(crate) fn conformance_dynamic(names: &[&str]) {
     std::fs::create_dir_all(&dir).expect("scratch");
     let ld = root().join("target/liella/ld-linux-x86-64.so.2");
     assert!(ld.exists(), "{} is missing: run `cargo xtask so`", ld.display());
-    // Link the way an installed `libc.so` linker script does: the C library, and the loader for
-    // the symbols the ABI places in it (`__libc_stack_end`, `__tls_get_addr`; R14-12), as needed.
+    // Link the way an installed `libc.so` linker script does: the C library, the link-time archive,
+    // and the loader for the symbols the ABI places in it (`__libc_stack_end`, `__tls_get_addr`;
+    // R14-12), as needed.
+    let nonshared = std::process::Command::new("cc").arg("-print-file-name=libc_nonshared.a").output().expect("cc");
+    let nonshared = String::from_utf8_lossy(&nonshared.stdout).trim().to_string();
+    assert!(std::path::Path::new(&nonshared).is_absolute(), "the host compiler has no libc_nonshared.a ({nonshared:?})");
     let libc = dir.join("libc.so");
-    std::fs::write(&libc, format!("GROUP ( {} AS_NEEDED ( {} ) )\n", libc_by_path(&dir).display(), ld.display())).expect("libc.so script");
+    std::fs::write(&libc, format!("GROUP ( {} {nonshared} AS_NEEDED ( {} ) )\n", libc_by_path(&dir).display(), ld.display())).expect("libc.so script");
     for name in names {
         let src = root().join(format!("conformance/c/{name}.c"));
         let text = std::fs::read_to_string(&src).expect("conformance source");
