@@ -262,14 +262,14 @@ pub(crate) fn dynsym_line(name: &str) -> String {
 /// linked against it names it by path: Liella's `ld.so` has no library search yet (#4537).
 fn libc_by_path(dir: &std::path::Path) -> PathBuf {
     let mut so = std::fs::read(root().join("target/liella/libc.so.6")).expect("libc.so.6");
-    let word = |at: usize, n: usize| so.get(at..at + n).map_or(0, |b| b.iter().rev().fold(0usize, |v, &x| v << 8 | usize::from(x)));
-    let (phoff, phentsize, phnum) = (word(0x20, 8), word(0x36, 2), word(0x38, 2));
+    let word = |so: &[u8], at: usize, n: usize| so.get(at..at.saturating_add(n)).map_or(0, |b| b.iter().rev().fold(0usize, |v, &x| v.wrapping_shl(8) | usize::from(x)));
+    let (phoff, phentsize, phnum) = (word(&so, 0x20, 8), word(&so, 0x36, 2), word(&so, 0x38, 2));
     // PT_DYNAMIC (2): its file offset and size.
-    let ph = (0..phnum).map(|i| phoff + i * phentsize).find(|&p| word(p, 4) == 2).expect("libc.so.6 has PT_DYNAMIC");
-    let (off, len) = (word(ph + 8, 8), word(ph + 32, 8));
+    let ph = (0..phnum).map(|i| phoff.wrapping_add(i.wrapping_mul(phentsize))).find(|&p| word(&so, p, 4) == 2).expect("libc.so.6 has PT_DYNAMIC");
+    let (off, len) = (word(&so, ph.wrapping_add(8), 8), word(&so, ph.wrapping_add(32), 8));
     // DT_SONAME (14) becomes DT_CHECKSUM (0x6ffffdf8).
-    let at = (off..off + len).step_by(16).find(|&o| word(o, 8) == 14).expect("libc.so.6 has a DT_SONAME");
-    so[at..at + 8].copy_from_slice(&0x6fff_fdf8u64.to_le_bytes());
+    let at = (off..off.saturating_add(len)).step_by(16).find(|&o| word(&so, o, 8) == 14).expect("libc.so.6 has a DT_SONAME");
+    so.get_mut(at..at.saturating_add(8)).expect("the DT_SONAME entry").copy_from_slice(&0x6fff_fdf8u64.to_le_bytes());
     let out = dir.join("libc-by-path.so");
     std::fs::write(&out, &so).expect("libc copy");
     out
