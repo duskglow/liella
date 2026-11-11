@@ -374,10 +374,21 @@ pub fn relro_range(o: &Obj<'_>, page: u64) -> Option<(u64, u64)> {
 /// # Errors
 ///
 /// The index of the object whose protection change failed.
+///
+/// Segment by segment (D-27.25): [`relro_range`] meets each `PT_LOAD`'s pages in one piece
+/// (`liella_rt::start::relro_piece`), so a `PT_GNU_RELRO` that spans two writable segments never
+/// changes the reservation pages between them; one segment gives the one range as before.
 pub fn protect_relro<I: Image>(objs: &[Obj<'_>], img: &mut I, page: u64) -> Result<(), usize> {
+    let word = |v: u64| usize::try_from(v).unwrap_or(usize::MAX);
     for (i, o) in objs.iter().enumerate() {
-        if let Some((at, len)) = relro_range(o, page) {
-            img.protect(at, len, PROT_READ).map_err(|()| i)?;
+        let Some((at, len)) = relro_range(o, page) else { continue };
+        let (from, to) = (word(at), word(at.wrapping_add(len)));
+        for s in o.elf.program_headers().filter(|s| s.p_type == pt::LOAD) {
+            let piece = liella_rt::start::relro_piece(from, to, word(o.bias.wrapping_add(s.vaddr)), word(s.memsz), word(page));
+            if let Some((a, n)) = piece {
+                let (a, n) = (u64::try_from(a).map_err(|_| i)?, u64::try_from(n).map_err(|_| i)?);
+                img.protect(a, n, PROT_READ).map_err(|()| i)?;
+            }
         }
     }
     Ok(())

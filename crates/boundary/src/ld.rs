@@ -349,10 +349,9 @@ fn run(sp: usize, prog: &start::Program, bias: usize, page: u64, path: usize) ->
         }
     }
     let page = usize::try_from(page).unwrap_or(usize::MAX);
-    if let Some((addr, len)) = liella_rt::start::relro_at(headers, prog.phnum, bias, page) {
-        if crate::raw::mprotect(addr, len, map::PROT_READ).is_err() {
-            refuse(b"ld.so: cannot protect the program's RELRO segment\n");
-        }
+    // Segment by segment (D-27.25): a reservation page between two writable segments stays as mapped.
+    if liella_rt::start::relro_pieces(headers, prog.phnum, bias, page, |addr, len| crate::raw::mprotect(addr, len, map::PROT_READ)).is_err() {
+        refuse(b"ld.so: cannot protect the program's RELRO segment\n");
     }
     // The program alone: its own TLS block (if any) and the final thread block (DL-12).
     let one = [program_tls(headers, prog.phnum)];

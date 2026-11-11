@@ -497,6 +497,84 @@ void _start(void) {{ int **pp = r_pp(); int c = *pp == &r_x ? 0 : 3; if ({}) *pp
     std::fs::remove_dir_all(&d).ok();
 }
 
+/// s27_1_c_1, design §6 (RELRO last), D-27.25 (amends D-27.10): a dependency whose `PT_GNU_RELRO`
+/// spans two writable `PT_LOAD`s (GNU ld keeps RELRO inside one segment, so `split_relro_load`
+/// rewrites the linked object's program headers) is relocated in both segments and its RELRO pages
+/// in each segment are read-only afterwards: reading both ends exits 0, writing either dies with
+/// SIGSEGV. Catches RELRO protected through only one segment's range.
+#[test]
+fn reloc_ldso_relro_across_segments() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let d = dir("relro-split");
+    // 1100 relocated pointers in .data.rel.ro: RELRO covers at least two whole pages.
+    let src = "int r_x = 1; int *const r_p[1100] = { [0 ... 1099] = &r_x };
+int **r_first(void) { return (int **)&r_p[0]; } int **r_last(void) { return (int **)&r_p[1099]; }\n";
+    let r = build(&d, "libr.so", src, &["-fPIC", "-shared"]);
+    let (file, at) = split_relro_load(&std::fs::read(&r).unwrap());
+    let p = sym_value(&file, b"r_p");
+    assert!(p < at && p + 1099 * 8 >= at, "r_p[0] ({p:#x}) must lie in the first segment and r_p[1099] in the second (split at {at:#x})");
+    // Written under another name and copied over the linked object by cp(1) (no ETXTBSY window).
+    let tmp = d.join("libr.bytes");
+    std::fs::write(&tmp, &file).unwrap();
+    assert!(Command::new("cp").arg(&tmp).arg(&r).status().unwrap().success());
+    let prog = |name: &str, write: &str| {
+        let s = format!(
+            "extern int **r_first(void); extern int **r_last(void); extern int r_x;
+void _start(void) {{ int **f = r_first(), **l = r_last(); int c = *f == &r_x && *l == &r_x ? 0 : 3; {write}
+__asm__ volatile(\"syscall\" :: \"a\"(231), \"D\"(c)); }}\n"
+        );
+        build(&d, name, &s, &["-fPIE", "-pie", r.to_str().unwrap()])
+    };
+    let (code, sig, err) = run(Command::new(&ld).arg(prog("pread", "")));
+    assert_eq!((code, sig), (Some(0), None), "reading RELRO in both segments: {err}");
+    for (name, write) in [("pfirst", "*f = 0;"), ("plast", "*l = 0;")] {
+        let (code, sig, _) = run(Command::new(&ld).arg(prog(name, write)));
+        assert_eq!((code, sig), (None, Some(11)), "{name}: writing RELRO in that segment after relocation must fault");
+    }
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// `f` with the writable `PT_LOAD` holding `PT_GNU_RELRO`'s last whole page split in two at that
+/// page (`at`, returned): the same bytes at the same addresses, now two adjacent segments, so RELRO
+/// spans a segment boundary. The table keeps its size: the `PT_NOTE` header (unused by the loader)
+/// gives its slot, and the second half follows the first so the `PT_LOAD`s stay in address order.
+fn split_relro_load(f: &[u8]) -> (Vec<u8>, u64) {
+    const PAGE: u64 = 4096;
+    let rd = |o: usize| u64::from_le_bytes(f[o..o + 8].try_into().unwrap());
+    let (phoff, phnum) = (rd(32) as usize, usize::from(u16::from_le_bytes([f[56], f[57]])));
+    let hs: Vec<&[u8]> = (0..phnum).map(|i| &f[phoff + i * 56..phoff + i * 56 + 56]).collect();
+    let ty = |h: &[u8]| u32::from_le_bytes(h[..4].try_into().unwrap());
+    let word = |h: &[u8], i: usize| u64::from_le_bytes(h[8 * i..8 * i + 8].try_into().unwrap());
+    let relro = hs.iter().find(|h| ty(h) == 0x6474_e552).expect("PT_GNU_RELRO");
+    let (r, m) = (word(relro, 2), word(relro, 5));
+    let at = ((r + m) & !(PAGE - 1)) - PAGE;
+    assert!(at > r & !(PAGE - 1), "RELRO must cover two whole pages");
+    let load = hs.iter().position(|h| ty(h) == 1 && word(h, 2) < at && at < word(h, 2) + word(h, 4)).expect("the PT_LOAD holding RELRO");
+    let note = hs.iter().position(|h| ty(h) == 4).expect("a PT_NOTE slot to reuse");
+    let set = |h: &[u8], o: u64, v: u64, fsz: u64, msz: u64, align: u64| {
+        let mut n = h[..8].to_vec();
+        for w in [o, v, v, fsz, msz, align] {
+            n.extend(w.to_le_bytes());
+        }
+        n
+    };
+    let l = hs[load];
+    let cut = at - word(l, 2);
+    let mut table = Vec::new();
+    for (i, h) in hs.iter().enumerate() {
+        if i == load {
+            table.push(set(l, word(l, 1), word(l, 2), cut, cut, word(l, 6)));
+            table.push(set(l, word(l, 1) + cut, at, word(l, 4) - cut, word(l, 5) - cut, PAGE));
+        } else if i != note {
+            table.push(h.to_vec());
+        }
+    }
+    assert_eq!(table.len(), phnum);
+    let mut v = f.to_vec();
+    v[phoff..phoff + 56 * phnum].copy_from_slice(&table.concat());
+    (v, at)
+}
+
 // ------------------------------------------------------------------ (4) the program's memory image
 
 /// A program (TEXTREL with `-Wl,-z,notext`) with one dependency that copies nothing: exits 0 when the
