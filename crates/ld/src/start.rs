@@ -193,63 +193,10 @@ pub mod private {
     use crate::reloc::Obj;
     use crate::symbols::{Object, Request, Want};
 
-    /// The version node of the private interface.
-    pub const NODE: &[u8] = b"LIELLA_PRIVATE";
-    /// `__liella_libc_early_init(const StartInfo *)`: libc's start steps 3 and 4, called by `ld.so`
-    /// after relocation and before any constructor (`.preinit_array` included).
-    pub const EARLY_INIT: &[u8] = b"__liella_libc_early_init";
-    /// `__liella_build_tag`: [`TAG_LEN`] bytes, [`TAG_PREFIX`] then the build's identity.
-    pub const BUILD_TAG: &[u8] = b"__liella_build_tag";
-    /// The tag's first bytes (a test finds the tag in a file by them).
-    pub const TAG_PREFIX: &[u8] = b"LIELLA-BUILD-TAG:";
-    /// The tag's size in bytes.
-    pub const TAG_LEN: usize = 64;
+    pub use liella_rt::start::private::{BUILD_TAG, EARLY_INIT, NODE, StartInfo, TAG, TAG_LEN, TAG_PREFIX};
+
     /// [`TAG_LEN`] as a symbol size.
     const TAG_SIZE: u64 = 64;
-    /// This build's tag: `cargo xtask so` sets `LIELLA_BUILD_TAG` (the commit) for both products, so a
-    /// loader and a C library from different commits carry different tags.
-    pub const TAG: [u8; TAG_LEN] = tag(match option_env!("LIELLA_BUILD_TAG") {
-        Some(t) => t.as_bytes(),
-        None => b"unversioned",
-    });
-
-    /// [`TAG_PREFIX`] then `id`, cut at [`TAG_LEN`] bytes, zero-filled.
-    const fn tag(id: &[u8]) -> [u8; TAG_LEN] {
-        let mut out = [0u8; TAG_LEN];
-        let mut dst: &mut [u8] = &mut out;
-        let (mut first, mut second) = (TAG_PREFIX, id);
-        loop {
-            let b = if let Some((&b, rest)) = first.split_first() {
-                first = rest;
-                b
-            } else if let Some((&b, rest)) = second.split_first() {
-                second = rest;
-                b
-            } else {
-                break;
-            };
-            let Some((d, rest)) = dst.split_first_mut() else { break };
-            *d = b;
-            dst = rest;
-        }
-        out
-    }
-
-    /// What `ld.so` passes to [`EARLY_INIT`]: the initial stack as the program sees it.
-    #[repr(C)]
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-    pub struct StartInfo {
-        /// `argc`.
-        pub argc: usize,
-        /// `argv` (the address of `argv[0]`).
-        pub argv: usize,
-        /// `envp` (after secure-mode clearing).
-        pub envp: usize,
-        /// The auxiliary vector.
-        pub auxv: usize,
-        /// The stack end (`__libc_stack_end`): the initial stack pointer.
-        pub stack_end: usize,
-    }
 
     /// The C library's early-init entry found among the loaded objects.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -306,21 +253,5 @@ pub mod private {
             return Ok(Some(Found { obj: k, early_init: o.bias.wrapping_add(def.st.value) }));
         }
         Ok(None)
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-
-        /// no spec clause (D-27.22): the tag is the prefix then the identity, zero-filled, cut at its size.
-        #[test]
-        fn private_tag_layout() {
-            assert!(TAG.starts_with(TAG_PREFIX));
-            let t = tag(b"abc");
-            let (head, rest) = t.split_at(TAG_PREFIX.len() + 3);
-            assert_eq!(head, b"LIELLA-BUILD-TAG:abc");
-            assert!(rest.iter().all(|&b| b == 0));
-            assert_eq!(tag(&[b'x'; 100]).last(), Some(&b'x'));
-        }
     }
 }

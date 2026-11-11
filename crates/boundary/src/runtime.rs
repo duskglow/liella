@@ -313,7 +313,7 @@ pub fn early_init(info: usize) {
     #[allow(unsafe_code)]
     // SAFETY: `ld.so` passes the address of a live, aligned `StartInfo` on its stack for the call
     // (design §14); NULL is ignored.
-    let Some(info) = (unsafe { core::ptr::with_exposed_provenance::<liella_ld::start::private::StartInfo>(info).as_ref() }) else { return };
+    let Some(info) = (unsafe { core::ptr::with_exposed_provenance::<liella_rt::start::private::StartInfo>(info).as_ref() }) else { return };
     let auxv_words = count_auxv(info.auxv);
     process::AUXV_WORDS.store(auxv_words, Release);
     process::AUXV_ADDR.store(info.auxv, Release);
