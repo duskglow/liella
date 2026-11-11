@@ -144,7 +144,7 @@ fn fast32_delta() -> u64 {
 /// The 10^7-operand sweep per type (`cargo test --release -p liella-math --lib -- --ignored
 /// cexp_quick_tier_sweep`): the comparison above on 8 threads, 2·10^6 operands per regime.
 #[test]
-#[ignore = "long sweep, run as a job"]
+#[ignore = "long sweep: cargo xtask long-sweeps runs it in release (nightly and release runs)"]
 fn cexp_quick_tier_sweep() {
     // Clauses: s10_5_c_0, s10_0_f_0.
     let threads: Vec<_> = (0..8u64).map(|i| std::thread::spawn(move || compare(250_000, 0x9e37_79b9_7f4a_7c15 ^ (i + 1).wrapping_mul(0xd1b5_4a32_d192_ed03)))).collect();
