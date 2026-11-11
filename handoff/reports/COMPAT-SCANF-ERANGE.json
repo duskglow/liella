@@ -1,0 +1,12 @@
+{"task": "COMPAT-SCANF-ERANGE", "model": "opus", "tokens": null,
+ "result": "Registered COMPAT-21 (scanf range error at end of input, D-12.26) and named it in the differences row; no code",
+ "branch": "task/compat-scanf-erange", "head": "5eb19eb0d",
+ "gate": {"affected": "static + records check rc 0 (no code changed)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["D-12.26 record body still says 'No compatibility option'; left untouched per brief scope, a one-line correction naming COMPAT-21 could follow"],
+ "refused": [],
+ "improvement": "A records-only story could be checked by the dispatcher's records check alone; the brief's reserved id sits at the very end of a long brief and is easy to miss",
+ "next_step": "none; implement COMPAT-21 only if a flag test proves free on the default path",
+ "report_file": "handoff/compat-scanf-erange.md",
+ "jobs": ["compat-scanf-erange-static"]}
