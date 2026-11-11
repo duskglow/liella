@@ -1,0 +1,12 @@
+{"task": "DL-TLS-STATIC-2", "model": "opus", "tokens": null,
+ "result": "Merged origin/next b601a80b9 into DL-TLS-STATIC: ld.rs conflict resolved keeping image-mode program read, init/fini order (edges + hooks, interpreter-as-object gets no hooks), enter fini argument and static TLS; clippy, static, TLS matrix 4/4 green",
+ "branch": "task/dl-tls-static-2", "head": "0e1b04f9f",
+ "gate": {"affected": "dl-tls-static-2-gate (affected --base origin/next) on kanon, see jobs.tsv", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["link() gained a kernel_started argument (it no longer receives the program path after D-27.18); the interpreter object, when named, gets a DT_NEEDED edge and default (empty) init/fini hooks"],
+ "refused": [],
+ "improvement": "plants on ld.so code rebuild the whole product set per mutant (~4.5 min each on a Broadwell host); a plants mode that rebuilds only libld/ld.so would cut the 6-plant run from ~30 to a few minutes",
+ "next_step": "none for this story; DL-LIBC-EARLY (DL-13) and DL-TLS-SELF-IMAGE stack on it",
+ "report_file": "handoff/DL-TLS-STATIC.md",
+ "jobs": ["kanon:dl-tls-static-2-static", "kanon:dl-tls-static-2-tls", "kanon:dl-tls-static-2-gate", "kanon:dl-tls-static-2-plants"]}
