@@ -879,7 +879,20 @@ fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<
         while stack_word(auxv) != 0 {
             auxv = auxv.wrapping_add(8);
         }
-        let info = start::private::StartInfo { argc: usize::try_from(argc).unwrap_or(0), argv, envp, auxv: auxv.wrapping_add(8), stack_end: sp };
+        // The program's own DT_INIT and DT_INIT_ARRAY go to its C library's start (design §14,
+        // D-27.24): `__libc_start_main` runs them after every shared object's initialisation.
+        let prog = hooks.first().copied().unwrap_or_default();
+        let w = |v: u64| usize::try_from(v).unwrap_or(0);
+        let info = start::private::StartInfo {
+            argc: usize::try_from(argc).unwrap_or(0),
+            argv,
+            envp,
+            auxv: auxv.wrapping_add(8),
+            stack_end: sp,
+            init: w(prog.init),
+            init_array: w(prog.init_array.addr),
+            init_array_len: w(prog.init_array.len),
+        };
         let at = core::ptr::from_ref(&info).expose_provenance();
         let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), args(at), 0, 0);
     }

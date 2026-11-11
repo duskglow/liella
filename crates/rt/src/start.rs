@@ -276,6 +276,13 @@ pub mod private {
         pub auxv: usize,
         /// The stack end (`__libc_stack_end`): the initial stack pointer.
         pub stack_end: usize,
+        /// The program's `DT_INIT` (relocated address, 0: none). `ld.so` leaves the program's
+        /// own initialisation to `__libc_start_main` (design §14, D-27.24).
+        pub init: usize,
+        /// The program's `DT_INIT_ARRAY` (relocated address, 0: none).
+        pub init_array: usize,
+        /// Entries in the program's `DT_INIT_ARRAY`.
+        pub init_array_len: usize,
     }
 
     #[cfg(test)]

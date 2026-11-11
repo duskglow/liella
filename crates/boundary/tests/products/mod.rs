@@ -258,24 +258,47 @@ pub(crate) fn dynsym_line(name: &str) -> String {
     String::from_utf8_lossy(&o.stdout).lines().find(|l| l.contains(&format!(" {name}@"))).map(str::to_string).unwrap_or_default()
 }
 
-/// Self-checking conformance programs linked dynamically by the host's compiler and run on the
-/// host's glibc (the oracle): each must exit 0.
-///
-/// The same programs on Liella's `libc.so.6` wait for Liella's own `ld.so` (phase 14, ruling
-/// #814): the host's program interpreter cannot run Liella's `libc.so.6` in place of glibc's
-/// (exit 127). The caller reports that run as a skip (`skip_note::skipped`), never a silent
-/// pass; phase 14 adds it here (run under Liella's interpreter, check Liella's library was the
-/// one loaded). (`skip_note` is not declared here: test binaries that declare it themselves
-/// would load it twice, `clippy::duplicate_mod`.)
+/// A copy of `libc.so.6` in `dir` whose `DT_SONAME` tag is retagged `DT_CHECKSUM`, so a program
+/// linked against it names it by path: Liella's `ld.so` has no library search yet (#4537).
+fn libc_by_path(dir: &std::path::Path) -> PathBuf {
+    let mut so = std::fs::read(root().join("target/liella/libc.so.6")).expect("libc.so.6");
+    let word = |at: usize, n: usize| so.get(at..at + n).map_or(0, |b| b.iter().rev().fold(0usize, |v, &x| v << 8 | usize::from(x)));
+    let (phoff, phentsize, phnum) = (word(0x20, 8), word(0x36, 2), word(0x38, 2));
+    // PT_DYNAMIC (2): its file offset and size.
+    let ph = (0..phnum).map(|i| phoff + i * phentsize).find(|&p| word(p, 4) == 2).expect("libc.so.6 has PT_DYNAMIC");
+    let (off, len) = (word(ph + 8, 8), word(ph + 32, 8));
+    // DT_SONAME (14) becomes DT_CHECKSUM (0x6ffffdf8).
+    let at = (off..off + len).step_by(16).find(|&o| word(o, 8) == 14).expect("libc.so.6 has a DT_SONAME");
+    so[at..at + 8].copy_from_slice(&0x6fff_fdf8u64.to_le_bytes());
+    let out = dir.join("libc-by-path.so");
+    std::fs::write(&out, &so).expect("libc copy");
+    out
+}
+
+/// Self-checking conformance programs linked dynamically by the host's compiler: run on the
+/// host's glibc (the oracle), then the same source linked with the host's start files against
+/// Liella's `libc.so.6` (by path) with Liella's `ld.so` as its interpreter (design §14, D-27.24;
+/// #814): each must exit 0 both ways. The second link names no other C library and the loader
+/// has no search, so the library that runs is Liella's.
 pub(crate) fn conformance_dynamic(names: &[&str]) {
     require_products();
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("dynamic-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("scratch");
+    let ld = root().join("target/liella/ld-linux-x86-64.so.2");
+    assert!(ld.exists(), "{} is missing: run `cargo xtask so`", ld.display());
+    let libc = libc_by_path(&dir);
     for name in names {
+        let src = root().join(format!("conformance/c/{name}.c"));
         let exe = dir.join(name);
-        let cc = std::process::Command::new("cc").args(["-std=c17", "-O1"]).arg(root().join(format!("conformance/c/{name}.c"))).arg("-o").arg(&exe).output().expect("cc");
+        let cc = std::process::Command::new("cc").args(["-std=c17", "-O1"]).arg(&src).arg("-o").arg(&exe).output().expect("cc");
         assert!(cc.status.success(), "{name}: {}", String::from_utf8_lossy(&cc.stderr));
         let o = std::process::Command::new(&exe).env_clear().output().expect("run");
-        assert!(o.status.success(), "{name} dynamic on glibc: {:?} {}", o.status, String::from_utf8_lossy(&o.stderr));    }
+        assert!(o.status.success(), "{name} dynamic on glibc: {:?} {}", o.status, String::from_utf8_lossy(&o.stderr));
+        let exe = dir.join(format!("{name}-liella"));
+        let cc = std::process::Command::new("cc").args(["-std=c17", "-O1", "-nodefaultlibs"]).arg(format!("-Wl,--dynamic-linker={}", ld.display())).arg(&src).arg(&libc).arg("-lgcc").arg("-o").arg(&exe).output().expect("cc");
+        assert!(cc.status.success(), "{name} against Liella's libc.so.6: {}", String::from_utf8_lossy(&cc.stderr));
+        let o = std::process::Command::new(&exe).env_clear().output().expect("run");
+        assert!(o.status.success(), "{name} dynamic on Liella: {:?} {}", o.status, String::from_utf8_lossy(&o.stderr));
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -814,6 +814,97 @@ fn reloc_libc_bias_without_pt_phdr() {
     std::fs::remove_dir_all(&d).ok();
 }
 
+/// The C hello world of [`reloc_libc_start_hello_world`]. Its `.preinit_array` function (run by
+/// `ld.so`, after libc's early init) records `p` and sets a variable; its constructor records `c`;
+/// with `OLD_CRT1` its own `_start` passes `old_init` (records `i`, then runs the constructors, as
+/// the pre-2.34 `__libc_csu_init` did) and `old_fini`. `main` prints through stdio (flushed at
+/// exit); the destructor and `old_fini` write directly, so they come first in the output.
+const HELLO_PROG: &str = "#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+static char order[8];
+static int args_ok = 1;
+static void add(char c) { size_t n = strlen(order); if (n + 1 < sizeof order) order[n] = c; }
+static void check(int argc, char **argv, char **envp) {
+  if (argc != 2 || strcmp(argv[1], \"arg\") != 0 || argv[2] != 0 || envp != argv + 3) args_ok = 0;
+}
+static void pre(int argc, char **argv, char **envp) { check(argc, argv, envp); add('p'); setenv(\"LIELLA_START_PRE\", \"kept\", 1); }
+__attribute__((section(\".preinit_array\"), used)) static void (*pre_entry)(int, char **, char **) = pre;
+static void ctor(int argc, char **argv, char **envp) { check(argc, argv, envp); add('c'); }
+__attribute__((section(\".init_array\"), used)) static void (*ctor_entry)(int, char **, char **) = ctor;
+__attribute__((destructor)) static void dtor(void) { static const char m[] = \"destructor\\n\"; write(1, m, sizeof m - 1); }
+#ifdef OLD_CRT1
+extern void (*__init_array_start[])(int, char **, char **) __attribute__((visibility(\"hidden\")));
+extern void (*__init_array_end[])(int, char **, char **) __attribute__((visibility(\"hidden\")));
+void old_init(int argc, char **argv, char **envp) {
+  check(argc, argv, envp);
+  add('i');
+  for (void (**f)(int, char **, char **) = __init_array_start; f < __init_array_end; f++) (*f)(argc, argv, envp);
+}
+void old_fini(void) { static const char m[] = \"old fini\\n\"; write(1, m, sizeof m - 1); }
+int main(int, char **);
+__asm__(\".globl _start\\n_start:\\n xor %ebp, %ebp\\n mov %rdx, %r9\\n pop %rsi\\n mov %rsp, %rdx\\n and $-16, %rsp\\n push %rax\\n push %rsp\\n\"
+        \" lea old_init(%rip), %rcx\\n lea old_fini(%rip), %r8\\n lea main(%rip), %rdi\\n call *__libc_start_main@GOTPCREL(%rip)\\n hlt\\n\");
+#endif
+int main(int argc, char **argv) {
+  const char *e = getenv(\"LIELLA_START_PRE\");
+  printf(\"hello, world: order %s, args %s, preinit setenv %s, argc %d\\n\", order, args_ok ? \"ok\" : \"wrong\", e ? e : \"lost\", argc);
+  return 0;
+}
+";
+
+/// The output of [`HELLO_PROG`] with a 2.34+ start object: the same text as the host's C library
+/// gives the program linked the usual way (the oracle run in the test).
+const HELLO_OUT: &str = "destructor\nhello, world: order pc, args ok, preinit setenv kept, argc 2\n";
+
+/// s1_1_c_1, s1_1_c_2, s1_1_c_4, s1_1_c_5, s1_1_c_6, design §14, D-27.24: a C hello world linked
+/// against `libc.so.6` (by path) runs under Liella's `ld.so`, started by the kernel and as
+/// `ld.so PROGRAM`, with each start object: `liella-crt1.o` and the host's 2.34+ start files (`init`
+/// and `fini` NULL: libc runs the program's `DT_INIT`/`DT_INIT_ARRAY` after `ld.so` ran the
+/// `.preinit_array`, and `rtld_fini` runs the destructor at exit), and an old-style `_start`
+/// passing `init`/`fini` (libc calls `init(argc, argv, envp)` and registers `fini`). The
+/// `.preinit_array` function's `setenv` reaches `main`: `__libc_start_main` does not publish the
+/// initial environment a second time (start steps 1-4 run once, in libc's early init).
+#[test]
+fn reloc_libc_start_hello_world() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let lib = target().join("liella");
+    let crt1 = lib.join("liella-crt1.o");
+    if !crt1.exists() || !lib.join("libc.so.6").exists() {
+        eprintln!("SKIP: liella-crt1.o or libc.so.6 not built (run cargo xtask so)");
+        return;
+    }
+    let d = std::fs::canonicalize(dir("libcstart")).unwrap();
+    let libc = libc_by_path(&lib, &d, "libc-start.so", |_| {});
+    let c = d.join("hello.c");
+    std::fs::write(&c, HELLO_PROG).unwrap();
+    let interp = format!("-Wl,--dynamic-linker={}", ld.display());
+    let cc = |out: &str, flags: &[&str], objs: &[&Path]| {
+        let o = d.join(out);
+        let r = Command::new("cc").args(["-O1", "-fno-builtin", "-fPIE", "-pie", "-D_FORTIFY_SOURCE=0"]).args(flags).arg("-o").arg(&o).arg(&c).args(objs).output().unwrap();
+        assert!(r.status.success(), "{out}: {}", String::from_utf8_lossy(&r.stderr));
+        o
+    };
+    // The oracle: the host's C library, linked the usual way.
+    let oracle = Command::new(cc("oracle", &[], &[])).arg("arg").output().unwrap();
+    assert_eq!(String::from_utf8_lossy(&oracle.stdout), HELLO_OUT, "the host's C library gives another output");
+    let variants = [
+        ("liella-crt1.o", cc("new", &["-nostdlib", &interp], &[&crt1, &libc, Path::new("-lgcc")]), HELLO_OUT.to_string()),
+        ("host start files", cc("host", &["-nodefaultlibs", &interp], &[&libc, Path::new("-lgcc")]), HELLO_OUT.to_string()),
+        ("old-style _start", cc("old", &["-nostdlib", "-DOLD_CRT1", &interp], &[&libc, Path::new("-lgcc")]), HELLO_OUT.replace("destructor\n", "old fini\ndestructor\n").replace("order pc", "order pic")),
+    ];
+    for (start, p, want) in &variants {
+        for (how, mut cmd) in [("kernel-started", Command::new(p)), ("ld.so PROGRAM", { let mut c = Command::new(&ld); c.arg(p); c })] {
+            let o = cmd.arg("arg").output().unwrap();
+            let (out, err) = (String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
+            assert!(o.status.success() && err.is_empty(), "hello world, {start}, {how}: {:?}; stderr: {err}", o.status);
+            assert_eq!(out, *want, "hello world, {start}, {how}: wrong output (start steps, constructors or destructors)");
+        }
+    }
+    std::fs::remove_dir_all(&d).ok();
+}
+
 /// s27_1_c_1, D-27.15, D-27.18: a program with dependencies and 300 `PT_LOAD`s (no count bound) runs
 /// as `ld.so PROGRAM`. `link` reads it through the image reader, whose span list
 /// holds one span per `PT_LOAD` (the `-nostdlib` 300-segment program of the map tests never links).
