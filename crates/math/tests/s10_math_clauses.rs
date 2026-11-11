@@ -1063,10 +1063,22 @@ fn s10_3_c_r4() {
         let (r, st) = f(f64::NEG_INFINITY, n);
         assert!(r.is_nan() && st.error == MathError::Domain && st.flags == Flags::INVALID);
     }
-    // sincos: both at once, each as the single function computes it.
-    for x in [0.5f64, -3.0, 1e22, 7.0e-12] {
-        let ((s, c), _) = trig::sincos(x, n);
-        assert_eq!((s.to_bits(), c.to_bits()), (trig::sin(x, n).0.to_bits(), trig::cos(x, n).0.to_bits()));
+    // sincos: both at once from one reduction (LIBM-SINCOS-SHARED, D-10.89), each result and
+    // the flags as the single functions give them, in every mode: the fast tier's operands, the
+    // double-double path's (|x| above the fast limit, and `float`, which has no fast tier here),
+    // the tiny ones and the specials.
+    let modes = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
+    for m in modes {
+        for x in [0.5f64, -3.0, 1e22, -2.5e300, 7.0e-12, 1e-300, 0.0, -0.0, f64::INFINITY, f64::NAN] {
+            let ((s, c), st) = trig::sincos(x, m);
+            let ((ws, wt), (wc, wu)) = (trig::sin(x, m), trig::cos(x, m));
+            assert_eq!((s.to_bits(), c.to_bits(), st), (ws.to_bits(), wc.to_bits(), wt.and(wu)), "sincos({x:e}) {m:?}");
+        }
+        for x in [0.5f32, -3.0, 1e22, -3.0e38, 7.0e-12, 1e-40, 0.0, f32::INFINITY] {
+            let ((s, c), st) = trig::sincos(x, m);
+            let ((ws, wt), (wc, wu)) = (trig::sin(x, m), trig::cos(x, m));
+            assert_eq!((s.to_bits(), c.to_bits(), st), (ws.to_bits(), wc.to_bits(), wt.and(wu)), "sincos({x:e}) {m:?}");
+        }
     }
     // atan2: the signed-zero and infinity quadrants of Annex F.
     let (pi, half, quarter) = (std::f64::consts::PI, std::f64::consts::FRAC_PI_2, std::f64::consts::FRAC_PI_4);

@@ -104,9 +104,51 @@ pub(crate) fn sin_cos<F: Float>(n: &Num, cos: bool, mode: Rounding) -> Option<(F
     round::<F>(neg, m, e, mode)
 }
 
+/// `(sin x, cos x)` as [`sin_cos`] gives each (the same operations on the same values, so the
+/// same result or refusal), from one reduction and one evaluation of each series (`sincos`,
+/// LIBM-SINCOS-SHARED, D-10.89). Same precondition on `n`.
+pub(crate) fn sin_cos_pair<F: Float>(n: &Num, mode: Rounding) -> (Option<(F, Status)>, Option<(F, Status)>) {
+    if F::PREC != 64 || !F::EXPLICIT {
+        return (sin_cos::<F>(n, false, mode), sin_cos::<F>(n, true, mode));
+    }
+    let Some(r) = reduced(n) else {
+        return (None, None);
+    };
+    let (sd, c) = (mulhi(r.d, sin_poly(r.u, r.u1)), cos_poly(r.u, r.u1));
+    let ys = place(&r, n.neg, false, || sd, || c);
+    let yc = place(&r, n.neg, true, || sd, || c);
+    (round::<F>(ys.0, ys.1, ys.2, mode), round::<F>(yc.0, yc.1, yc.2, mode))
+}
+
 /// `(sign, M, E)` with `M` in `[2^127, 2^128)` and `±M·2^E` within `2^-94` (relative) of `sin x`
 /// (`cos x`), or `None` outside the range of step 1 or for `|d| < 2^-92` (step 2).
 fn kernel(n: &Num, cos: bool) -> Option<(bool, u128, i32)> {
+    let r = reduced(n)?;
+    Some(place(&r, n.neg, cos, || mulhi(r.d, sin_poly(r.u, r.u1)), || cos_poly(r.u, r.u1)))
+}
+
+/// Steps 1 and 2 for `|x|`, shared by sine and cosine: the quadrant and table index, `|d|`
+/// normalised and `d²`.
+struct Reduced {
+    /// `q mod 4`.
+    q: u32,
+    /// `f < 0`.
+    negf: bool,
+    /// `j = round(128|f|)`, in `[0, 64]`.
+    j: usize,
+    /// `d < 0`.
+    sd: bool,
+    /// `|d| = d·2^(-128-kd)`, `7 <= kd <= 91`.
+    kd: u32,
+    d: u128,
+    /// `d²`, units `2^-142`, and its high word (units `2^-78`).
+    u: u128,
+    u1: u64,
+}
+
+/// [`Reduced`] for `|x|`, or `None` outside the range of step 1 or for `|d| < 2^-92`.
+#[inline(always)]
+fn reduced(n: &Num) -> Option<Reduced> {
     if n.kind != Kind::Finite || n.sig == 0 || n.sig >> 64 != 0 {
         return None;
     }
@@ -117,10 +159,6 @@ fn kernel(n: &Num, cos: bool) -> Option<(bool, u128, i32)> {
         return None;
     }
     let (q, negf, gh, gl) = reduce(m, e);
-    // sin|x| = sin(qπ/2 + a), cos|x| = sin((q + 1)π/2 + a); an odd quadrant takes cos a.
-    let k = q + u32::from(cos);
-    let odd = k & 1 != 0;
-    let neg = (!cos && n.neg) ^ (k & 2 != 0) ^ (!odd && negf);
     // j = round(128|f|), d = |f| - j/128 (256 bits; the high word as a signed value).
     let j = ((gh + (1 << 120)) >> 121) as usize; // gh <= 2^127: j <= 64
     let dh = gh.wrapping_sub((j as u128) << 121);
@@ -137,29 +175,41 @@ fn kernel(n: &Num, cos: bool) -> Option<(bool, u128, i32)> {
     let d = (dh << kd) | (dl >> (128 - kd)); // |d| = d·2^(-128-kd)
     let u = mulhi(d, d).checked_shr(2 * kd - 14).unwrap_or(0); // d², units 2^-142
     let u1 = (u >> 64) as u64; // units 2^-78
-    if j == 0 {
-        return Some(if odd {
-            let c = cos_poly(u, u1); // units 2^-127
+    Some(Reduced { q, negf, j, sd, kd, d, u, u1 })
+}
+
+/// Step 3 for sine (`cos` false) or cosine of `x` (sign `xneg`) from `r`: `(sign, M, E)` as
+/// [`kernel`]. `sd()` is `mulhi(d, sin_poly(u, u1))`, `c()` is `cos_poly(u, u1)`; each is called
+/// at most once, and only where the result needs it.
+#[inline(always)]
+fn place(r: &Reduced, xneg: bool, cos: bool, sd: impl FnOnce() -> u128, c: impl FnOnce() -> u128) -> (bool, u128, i32) {
+    // sin|x| = sin(qπ/2 + a), cos|x| = sin((q + 1)π/2 + a); an odd quadrant takes cos a.
+    let k = r.q + u32::from(cos);
+    let odd = k & 1 != 0;
+    let neg = (!cos && xneg) ^ (k & 2 != 0) ^ (!odd && r.negf);
+    if r.j == 0 {
+        return if odd {
+            let c = c(); // units 2^-127
             let l = c.leading_zeros();
             (neg, c << l, -127 - l as i32)
         } else {
-            let s = mulhi(d, sin_poly(u, u1)); // s·2^(-126-kd)
+            let s = sd(); // s·2^(-126-kd)
             let l = s.leading_zeros();
-            (neg, s << l, -126 - kd as i32 - l as i32)
-        });
+            (neg, s << l, -126 - r.kd as i32 - l as i32)
+        };
     }
-    let s = mulhi(d, sin_poly(u, u1)) >> (kd - 7); // S(|d|), units 2^-133
-    let c = cos_poly(u, u1); // C(d), units 2^-127
-    let [sj, cj] = SC[j - 1];
-    let r = if odd {
+    let s = sd() >> (r.kd - 7); // S(|d|), units 2^-133
+    let c = c(); // C(d), units 2^-127
+    let [sj, cj] = SC[r.j - 1];
+    let v = if odd {
         let (a, b) = (mulhi(cj, c), mulhi(sj, s) >> 6);
-        if sd { a + b } else { a - b }
+        if r.sd { a + b } else { a - b }
     } else {
         let (a, b) = (mulhi(sj, c), mulhi(cj, s) >> 6);
-        if sd { a - b } else { a + b }
+        if r.sd { a - b } else { a + b }
     }; // units 2^-127, at least sin(π/512)
-    let l = r.leading_zeros();
-    Some((neg, r << l, -127 - l as i32))
+    let l = v.leading_zeros();
+    (neg, v << l, -127 - l as i32)
 }
 
 /// Word `i` of the bits of `2/π` behind two zero words (bit `j` of `2/π` at bit `j + 127`).

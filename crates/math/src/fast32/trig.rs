@@ -129,6 +129,15 @@ pub fn tan_nearest_widen(x: f32, widen: impl Fn(f32) -> f64) -> Option<f32> {
     round(s / c, TAN_DELTA, Rounding::Nearest)
 }
 
+/// [`sin_nearest_widen`] and [`cos_nearest_widen`] from one [`trig_core_with`] call (the
+/// `sincosf` fast path, LIBM-SINCOS-SHARED, D-10.89): both results, each the one its own function
+/// gives, or `None` when either fails its rounding test.
+#[inline(always)]
+pub fn sincos_nearest_widen(x: f32, widen: impl Fn(f32) -> f64) -> Option<(f32, f32)> {
+    let (s, c) = trig_core_with(x, widen)?;
+    Some((round(s, TRIG_DELTA, Rounding::Nearest)?, round(c, TRIG_DELTA, Rounding::Nearest)?))
+}
+
 /// `sincosf`: one reduction for both results; each one that fails its rounding test is computed
 /// by the accurate path, so the pair and the flags are those of `sinf` and `cosf`.
 pub fn sincos(x: f32, mode: Rounding) -> ((f32, f32), Status) {

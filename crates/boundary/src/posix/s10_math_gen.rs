@@ -4867,7 +4867,7 @@ pub extern "C" fn sincos(x: f64, y: Option<&mut f64>, z: Option<&mut f64>) {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn sincosf(x: f32, y: Option<&mut f32>, z: Option<&mut f32>) {
-    mret::sincos(x, mret::Unit::Sse, math::real::Real::sincos, y, z)
+    mret::sincos_fast::<{ math::Status::HW_ANY.0 }, _>(x, crate::hot::sincosf_nearest, math::real::Real::sincos, y, z)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4877,7 +4877,7 @@ pub extern "C" fn liella_sincosf128_bits(x: F128Bits, y: Option<&mut F128Bits>, 
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn sincosf32(x: f32, y: Option<&mut f32>, z: Option<&mut f32>) {
-    mret::sincos(x, mret::Unit::Sse, math::real::Real::sincos, y, z)
+    mret::sincos_fast::<{ math::Status::HW_ANY.0 }, _>(x, crate::hot::sincosf_nearest, math::real::Real::sincos, y, z)
 }}
 
 export! { libm "GLIBC_2.27";
