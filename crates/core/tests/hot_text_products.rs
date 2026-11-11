@@ -85,8 +85,11 @@ use liella_kernel::uapi::{ADDR_NO_RANDOMIZE, PERSONALITY_QUERY};
 /// LAYOUT-DATA-CLUSTERS-9 (the first setlocale's global_locale counters, query statics and
 /// `process::SECURE` declared in the `.data1` cluster): Skylake-SP host, fast products, every run
 /// identical: setlocale + printf 51, tool 55 (next: 52, 55). LOCALE_BOUND 55 -> 52, TOOL_BOUND 58 -> 56.
+/// LAYOUT-DATA-CLUSTERS-11 (`_nl_msg_cat_cntr` declared: after next's merge it was the first setlocale's
+/// only write on the last `.bss` page): Skylake-SP host, fast products, every run identical: startup only
+/// 11, setlocale + printf 50, tool 54. LOCALE_BOUND 52 -> 51.
 const TRUE_BOUND: u64 = 17;
-const LOCALE_BOUND: u64 = 52;
+const LOCALE_BOUND: u64 = 51;
 /// "tool" mode: a coreutils-shaped program (setlocale, bindtextdomain, atexit, getenv, strtoimax,
 /// printf), see `init_coreutils_shaped_program_stays_within_its_page_fault_bound`.
 /// PERF-READDIR-ENTRY-4 (layout-only delta, owner rule): CI read tool 69 (bound 68) for the readdir

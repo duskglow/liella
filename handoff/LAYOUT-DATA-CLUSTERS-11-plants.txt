@@ -1,0 +1,11 @@
+# LAYOUT-DATA-CLUSTERS-11 plants (cargo xtask plants; docs/plants.md). Fast products (the gate's profile).
+# ldc9-locale-set: the first setlocale's global_locale statics dropped from the declared list: they land on the last
+# `.bss` page start-up leaves untouched, and the first setlocale pays that page's read and write faults again
+# (Skylake-SP: setlocale + printf 50 -> 52, LOCALE_BOUND 51). Before -11 the plant read 51 -> 52 (survived, bound 52):
+# `_nl_msg_cat_cntr` already cost that page's one fault.
+# ldc11-msg-cat-cntr: `_nl_msg_cat_cntr` dropped: the first setlocale writes it on that same page (50 -> 51), one
+# fault, inside the count-plus-1 slack every fault bound in hot_text_products keeps (see hand-back).
+# ldc8-time-compat (-8's change): time_compat's HEAD dropped: release-only level, see the reason.
+ldc9-locale-set | crates/libc-so/startup-state.list | perl:s/\nliella_legacy::global_locale::MAPS\n.*?liella_boundary::process::SECURE\n/\n/s | cargo test -p liella --test hot_text_products -- init_short_programs init_coreutils_shaped | msg:setlocale \+ printf program: [0-9]+ page faults > 51
+ldc11-msg-cat-cntr | crates/libc-so/startup-state.list | perl:s/\nsymbol _nl_msg_cat_cntr\n/\n/ | cargo test -p liella --test hot_text_products -- init_short_programs | equivalent:one fault (setlocale + printf 50 -> 51) inside the count-plus-1 slack of LOCALE_BOUND (51); no bound test can see a single-fault loss, ldc9-locale-set shows the bound catches the page's read and write faults
+ldc8-time-compat | crates/libc-so/startup-state.list | perl:s/\nliella_legacy::time_compat::HEAD\n/\n/ | cargo test -p liella --test hot_text_products -- init_first_localtime_r | equivalent:release-only level (localtime 17 vs 18); the fast gate profile reads 19 either way and LOCALTIME_BOUND (20) is the larger profile's count plus 1
