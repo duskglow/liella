@@ -8,7 +8,7 @@
                    "the IVB runs started while booking 171 was settling on an already idle host (0 jobs, load 0.00-0.40)",
                    "B's cycle estimates are NOT VERIFIED by a prototype; LIBM-LD-ARC-DIRECT makes the prototype its go/no-go step 2"],
  "refused": [],
- "jobs": ["shiki:libm-ld-arc-rethink-2-lint", "shiki:libm-ld-arc-rethink-2-build2", "nico:libm-ld-arc-rethink-2-ivb", "nico:libm-ld-arc-rethink-2-ms"],
+ "jobs": ["shiki:libm-ld-arc-rethink-2-lint2","shiki:libm-ld-arc-rethink-2-build2", "nico:libm-ld-arc-rethink-2-ivb", "nico:libm-ld-arc-rethink-2-ms"],
  "improvement": "instrumented product builds should not have to pass the start-up layout checks: a probe profile (or the coldbss suffix fix) would have saved a build cycle",
  "next_step": "submit handoff/libm-ld-arc-rethink/LIBM-LD-ARC-DIRECT.md (stall removal, then the direct kernel prototype with go/no-go)",
  "report_file": "handoff/libm-ld-arc-rethink/report.md"}
