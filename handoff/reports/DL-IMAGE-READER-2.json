@@ -1,0 +1,17 @@
+{"task": "DL-IMAGE-READER-2", "model": "opus", "tokens": null,
+ "result": "CI red fixed (no-/proc test used chroot(8) outside CI's PATH; now unshare --root); ld.so finds the program's load bias without PT_PHDR from its ELF header (#4371), RELRO at that bias; test + plants",
+ "branch": "task/dl-image-reader-2", "head": "837633ebe",
+ "gate": {"affected": "1874 passed / 0 failed (head 83faf4a7d); final head gate2 pending", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "libc's own start for a dynamic program (boundary/src/process.rs:53, runtime.rs:87) still takes the bias from PT_PHDR (0 without it); follow-up candidate: use liella_ld::start::bias or ld.so's bias there",
+   "no startup count row runs a dynamic program through Liella's ld.so; cbench_startup rows are static and this branch changes no static start code",
+   "a python one-shot in this run was fed by a heredoc (rule says files instead); no effect on the tree"
+ ],
+ "refused": [],
+ "improvement": "plants on ld.so code rebuild the products per plant (7-8 min each); a plants option to rebuild only the ld.so product would cut a 4-plant run from ~35 to a few minutes",
+ "next_step": "land; follow-ups: libc-side bias without PT_PHDR, a dynamic start-up count row",
+ "report_file": "handoff/DL-IMAGE-READER.md",
+ "jobs": ["dl-image-reader-2-t3", "dl-image-reader-2-gate2", "dl-image-reader-2-plants2"],
+ "superseded": ["dl-image-reader-2-lint0 (inherited head)", "dl-image-reader-2-t1 (static red, fixed)", "dl-image-reader-2-t2 (older head)", "dl-image-reader-2-gate (green, head 83faf4a7d)", "dl-image-reader-2-plants (1 SURVIVED, test added)", "dl-image-reader-2-counts (green, head 83faf4a7d; final head changes only a test file)"]}

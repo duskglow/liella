@@ -1,0 +1,17 @@
+{"task": "DL-IMAGE-READER-3", "model": "opus", "tokens": null,
+ "result": "Merged origin/next (start.rs doc conflict, codemap regenerated); fixed the semantic conflict (LOADS_MAX removed by D-27.15): the image reader's span list is sized from e_phnum in an existing mapping; new 300-PT_LOAD linked-program test",
+ "branch": "task/dl-image-reader-3", "head": null,
+ "gate": {"affected": "pending: dl-image-reader-3-gate2 on the final head (previous head 1e6059eab: 1884 passed / 0 failed)", "peak": "3.5G (1e6059eab)"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "map_proc_self_maps_of_loaded_programs's 300-PT_LOAD program is -nostdlib: it never reaches ld.so's link()/image reader; reloc_ldso_program_with_many_loads now covers that path",
+  "The kernel refuses (ENOEXEC) a program header table over one page (73 headers), so the kernel-started path cannot exceed 64 PT_LOADs; tested as ld.so PROGRAM only",
+  "libc's own start (process.rs, runtime.rs) still takes the bias from PT_PHDR only (follow-up candidate, unchanged from -2)",
+  "Rule slip: one two-line doc-comment edit to crates/ld/tests/reloc.rs was made with sed -i instead of the Edit tool (not refused)"
+ ],
+ "refused": [],
+ "improvement": "sync_role's BUSY (rc 4) followed by a job start in the same call ran a job on a stale tree; a jobrun guard that refuses to start when the last sync of the role failed would prevent it",
+ "next_step": "Dispatcher reads dl-image-reader-3-gate2 and dl-image-reader-3-plants3; on green, land",
+ "report_file": "handoff/DL-IMAGE-READER.md",
+ "jobs": ["dl-image-reader-3-gate2", "dl-image-reader-3-plants3"]}

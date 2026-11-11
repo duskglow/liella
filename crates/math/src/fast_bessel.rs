@@ -238,3 +238,7 @@ pub fn y1(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     let (y, eps) = kernel(3, x)?;
     round(y, eps, mode)
 }
+
+/// `jn`, `yn` and their `float` forms for orders `|n| >= 2` (LIBM-F64-BESSEL-N).
+#[path = "fast_bessel_n.rs"]
+pub mod n;

@@ -1,0 +1,56 @@
+cpu: Intel(R) Xeon(R) CPU E3-1220L V2 @ 2.30GHz load: 0.06 0.08 0.03
+== asinl idq.ms_uops
+    87.45%  [.] liella_machine_mxcsr_get                                                                                                              
+     2.87%  [.] _RINvNtCs4pgSFPbmIG7_15liella_boundary7mathret4elemNtNtCsYtZRjMuXkm_11liella_math5float3F80BM_NCNvNtNtB4_5posix12s10_math_gen20liella_
+     2.22%  [.] liella_machine_mxcsr_set                                                                                                              
+     1.92%  [.] liella_asinl_bits                                                                                                                     
+     1.63%  [.] asinl                                                                                                                                 
+     1.45%  [.] _RNvNtCs4pgSFPbmIG7_15liella_boundary7mathret4exit.llvm.5058826139943042032                                                           
+     0.65%  [.] main                                                                                                                                  
+     0.56%  [k] 0xffffffffb9c00ba0                                                                                                                    
+== asinl cycles
+    40.84%  [.] _RNvNtNtCsYtZRjMuXkm_11liella_math8wide_int3arc7atan_le                                                                               
+    23.86%  [.] _RINvNtNtCsYtZRjMuXkm_11liella_math8wide_int3arc6finishNtNtB6_5float3F80NCINvB2_4asinBQ_NvNtCs4pgSFPbmIG7_15liella_boundary3hot6sqrtsd
+    11.42%  [.] liella_machine_mxcsr_get                                                                                                              
+     5.62%  [.] _RINvNtCsYtZRjMuXkm_11liella_math4wide9asin_sqrtNtNtB4_5float3F80NvNtCs4pgSFPbmIG7_15liella_boundary3hot6sqrtsdEB14_                  
+     4.94%  [.] asinl                                                                                                                                 
+     3.41%  [.] liella_asinl_bits                                                                                                                     
+     2.95%  [.] _RINvNtCs4pgSFPbmIG7_15liella_boundary7mathret4elemNtNtCsYtZRjMuXkm_11liella_math5float3F80BM_NCNvNtNtB4_5posix12s10_math_gen20liella_
+     1.73%  [.] _RNvNtCs4pgSFPbmIG7_15liella_boundary7mathret4exit.llvm.5058826139943042032                                                           
+== asinl cycle_activity.cycles_no_execute
+    36.03%  [.] liella_machine_mxcsr_get                                                                                                              
+    24.92%  [.] _RINvNtNtCsYtZRjMuXkm_11liella_math8wide_int3arc6finishNtNtB6_5float3F80NCINvB2_4asinBQ_NvNtCs4pgSFPbmIG7_15liella_boundary3hot6sqrtsd
+    24.61%  [.] _RNvNtNtCsYtZRjMuXkm_11liella_math8wide_int3arc7atan_le                                                                               
+     4.50%  [.] _RINvNtCs4pgSFPbmIG7_15liella_boundary7mathret4elemNtNtCsYtZRjMuXkm_11liella_math5float3F80BM_NCNvNtNtB4_5posix12s10_math_gen20liella_
+     3.87%  [.] liella_machine_x87_cw_get                                                                                                             
+     1.63%  [.] asinl                                                                                                                                 
+     1.18%  [.] _RINvNtCsYtZRjMuXkm_11liella_math4wide9asin_sqrtNtNtB4_5float3F80NvNtCs4pgSFPbmIG7_15liella_boundary3hot6sqrtsdEB14_                  
+     0.91%  [.] liella_asinl_bits                                                                                                                     
+== atan2l_as idq.ms_uops
+    41.63%  [.] liella_atan2l_bits                                                                                                                    
+    27.22%  [.] atan2l                                                                                                                                
+    13.07%  [.] _RINvNtCs4pgSFPbmIG7_15liella_boundary7mathret4elemTNtNtCsYtZRjMuXkm_11liella_math5float3F80BN_EBN_NCNvNtNtB4_5posix12s10_math_gen21li
+    12.59%  [.] main                                                                                                                                  
+     1.13%  [.] _RNvNtNtCsYtZRjMuXkm_11liella_math8wide_int3arc7atan_le                                                                               
+     0.87%  [.] _RNvNtCs4pgSFPbmIG7_15liella_boundary7mathret4exit.llvm.5058826139943042032                                                           
+     0.87%  [k] 0xffffffffb9c00ba0                                                                                                                    
+     0.74%  [k] 0xffffffffb9c00f30                                                                                                                    
+== atan2l_as cycles
+    29.90%  [.] _RNvNtNtCsYtZRjMuXkm_11liella_math8wide_int3arc7atan_le                                                                               
+    17.94%  [.] atan2l                                                                                                                                
+    15.39%  [.] _RINvNtCsYtZRjMuXkm_11liella_math4wide5atan2NtNtB4_5float3F80EB4_                                                                     
+     9.94%  [.] _RNvNtNtCsYtZRjMuXkm_11liella_math8wide_int3arc12atan2_approx                                                                         
+     6.51%  [.] _RINvNtCs4pgSFPbmIG7_15liella_boundary7mathret4elemTNtNtCsYtZRjMuXkm_11liella_math5float3F80BN_EBN_NCNvNtNtB4_5posix12s10_math_gen21li
+     6.25%  [.] liella_atan2l_bits                                                                                                                    
+     4.80%  [.] main                                                                                                                                  
+     3.43%  [.] _RINvNtCsYtZRjMuXkm_11liella_math5fused15nan_operands_byNtNtB4_5float3F80BR_EB4_                                                      
+== atan2l_as cycle_activity.cycles_no_execute
+    66.59%  [.] _RNvNtNtCsYtZRjMuXkm_11liella_math8wide_int3arc7atan_le                                                                               
+    14.41%  [.] _RINvNtCsYtZRjMuXkm_11liella_math4wide5atan2NtNtB4_5float3F80EB4_                                                                     
+     5.85%  [.] _RNvNtNtCsYtZRjMuXkm_11liella_math8wide_int3arc12atan2_approx                                                                         
+     3.93%  [.] _RINvNtCs4pgSFPbmIG7_15liella_boundary7mathret4elemTNtNtCsYtZRjMuXkm_11liella_math5float3F80BN_EBN_NCNvNtNtB4_5posix12s10_math_gen21li
+     2.44%  [.] liella_machine_x87_cw_get                                                                                                             
+     1.96%  [.] liella_machine_mxcsr_get                                                                                                              
+     1.41%  [.] atan2l                                                                                                                                
+     0.70%  [.] main                                                                                                                                  
+load at end: 0.14 0.09 0.04

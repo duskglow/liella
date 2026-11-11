@@ -4,8 +4,9 @@
 //! every value within `2^-92` of the approximation rounds alike in the caller's direction, that
 //! rounding is the correctly rounded result; the four directions are four integer roundings (no
 //! MXCSR or x87 control-word traffic, so directed modes cost the same). Otherwise (about `2^-26`
-//! of the operands) the caller takes the 384-bit route of [`crate::wide`]. Only the format with a
-//! 64-bit significand uses the tier; the integer kernel is the one `_Float128` extends by a limb.
+//! of the operands) the caller takes the 384-bit route of [`crate::wide`]. The format with a
+//! 64-bit significand uses this kernel; `_Float128` uses [`quad`], the same method on three limbs
+//! (D-10.85), which shares the `2/π` table, the `SC` table and the products here.
 //!
 //! Method. Payne-Hanek reduction (M. Payne, R. Hanek, "Radian reduction for trigonometric
 //! functions", SIGNUM Newsletter 18(1), 1983) for every operand, Tang's table method (P. T. P.
@@ -60,6 +61,9 @@
     clippy::unreadable_literal
 )] // fixed-point words, exponents and table indices of bounded range (each noted where it is formed)
 
+pub(crate) mod arc;
+pub(crate) mod quad;
+
 use crate::coeffs::tables as t;
 use crate::float::{Float, Kind, Num};
 use crate::status::{Flags, Rounding, Status};
@@ -90,6 +94,9 @@ const C1: u128 = 0x4ef4f326_f9177969_2b71366c_c0460d64; // (π/2)^2/2!, units 2^
 /// sends the caller to the 384-bit route. `n` is finite, nonzero and at least `2^-34` in
 /// magnitude (smaller operands are settled by the caller).
 pub(crate) fn sin_cos<F: Float>(n: &Num, cos: bool, mode: Rounding) -> Option<(F, Status)> {
+    if F::PREC == 113 {
+        return quad::sin_cos::<F>(n, cos, mode);
+    }
     if F::PREC != 64 || !F::EXPLICIT {
         return None;
     }
@@ -330,7 +337,7 @@ mod tests {
     use crate::float::{self, Exact, F80};
     use crate::mp::{self, Mp};
 
-    const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
+    pub(super) const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
 
     /// `v·2^units` rounded to the nearest integer (these values are irrational: no ties).
     fn fixed(v: Mp, units: i64) -> u128 {
@@ -475,10 +482,10 @@ mod tests {
         }
     }
 
-    struct Rng(u64);
+    pub(super) struct Rng(pub(super) u64);
 
     impl Rng {
-        fn next(&mut self) -> u64 {
+        pub(super) fn next(&mut self) -> u64 {
             let mut x = self.0;
             x ^= x << 13;
             x ^= x >> 7;
@@ -497,11 +504,11 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct Tally {
-        calls: u64,
-        undecided: u64,
-        refused: u64,
-        worst: f64,
+    pub(super) struct Tally {
+        pub(super) calls: u64,
+        pub(super) undecided: u64,
+        pub(super) refused: u64,
+        pub(super) worst: f64,
     }
 
     /// The tier on `n` against the 384-bit route in the four modes, and the kernel's error against
@@ -540,7 +547,7 @@ mod tests {
     /// `frac(2^e·2/π)` gives (Muller, Elementary Functions, 3rd ed. 2016, ch. 11): the last
     /// convergent denominator below 2^62 (as far as the 127-bit expansion's convergents are the
     /// number's own).
-    fn near_multiple(e: i32) -> Option<Num> {
+    pub(super) fn near_multiple(e: i32) -> Option<Num> {
         let (mut num, mut den) = (alpha(e), 1u128 << 127);
         let (mut q2, mut q1) = (1u128, 0u128);
         let mut best = None;

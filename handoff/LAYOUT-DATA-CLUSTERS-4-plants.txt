@@ -1,0 +1,4 @@
+# LAYOUT-DATA-CLUSTERS-4 plants (cargo xtask plants; docs/plants.md): the static-PIE start object's 4 KiB .data1 cap (D-X.68).
+# (A second plant, rcrt1 relro start 4096 -> 65536, SURVIVED in ldc4-plants: that cap was removed as untested.)
+# Anchored to the label before the cluster block (liella_machine_ld_enter), as docs/plants.md requires for a .S file.
+ldc4-data1 | csys/src/machine/entry.S | perl:s/(liella_machine_ld_enter:.*?)#define LIELLA_DATA1_ALIGN 4096/$1#define LIELLA_DATA1_ALIGN 16384/s | cargo xtask so && cargo test -p liella --test hot_text_products init_static_pie_keeps_one_writable_segment_at_every_data_phase | msg:writable PT_LOAD segments

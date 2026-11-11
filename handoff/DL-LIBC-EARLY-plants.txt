@@ -1,0 +1,3 @@
+# DL-LIBC-EARLY plants (cargo xtask plants; docs/plants.md)
+early-after-preinit | crates/boundary/src/ld.rs | perl:s/(    if let Some\(f\) = early \{\n.*?\n    \}\n)(    \/\/ Only the program's preinit array.*?\n    \}\n)/$2$1/s | cargo xtask so && cargo test -p liella-ld --test reloc reloc_libc_early | msg:reloc_libc_early_init_before_preinit.*(FAILED|panicked)|check number Some\(1\) failed
+tag-check-skipped | crates/ld/src/start.rs | lit:if theirs != TAG { ==> if theirs != TAG && theirs.is_empty() { | cargo xtask so && cargo test -p liella-ld --test reloc reloc_libc_build_tag | msg:reloc_libc_build_tag_mismatch_refused.*(FAILED|panicked)|a libc from another build ran

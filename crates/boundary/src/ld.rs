@@ -15,19 +15,20 @@ use core::alloc::{GlobalAlloc, Layout};
 #[cfg(not(feature = "export"))]
 use core::ffi::c_int;
 use core::ffi::c_void;
-use core::sync::atomic::AtomicUsize;
-use core::sync::atomic::Ordering::Relaxed;
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
+use core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
 
 use liella::config::Tunables;
 use liella_kernel::auxv::Auxv;
-use liella_kernel::uapi::{AT_ENTRY, AT_EXECFN, AT_SYSINFO_EHDR, O_CLOEXEC, O_RDONLY, SEEK_END};
+use liella_kernel::uapi::{AT_ENTRY, AT_EXECFN, AT_RANDOM, AT_SYSINFO_EHDR, O_CLOEXEC, O_RDONLY, SEEK_END};
 use liella_ld::arch::{Arch, Native};
 use liella_ld::program::{self, Action};
 use liella_ld::cache::Cache;
 use liella_ld::search::{self, Ctx, PathBuf, Scope};
-use liella_ld::{boot, elf, map, start};
+use liella_ld::{boot, elf, init, map, start};
+use liella_ld::tls::{self as ltls, Area, Module, Placed};
 use liella_legacy::search_c::CWords;
-use liella_rt::tls::ThreadBlock;
+use liella_rt::tls::{ThreadBlock, FLAG_OWN};
 
 use crate::{conv, raw};
 use crate::ffi_sys::{liella_sys_exit_group, liella_sys_write};
@@ -42,6 +43,25 @@ const TB_WORDS: usize = core::mem::size_of::<ThreadBlock>().div_ceil(8);
 struct Provisional([AtomicUsize; TB_WORDS]);
 
 static PROVISIONAL: Provisional = Provisional([const { AtomicUsize::new(0) }; TB_WORDS]);
+
+/// The run-time address of the interpreter's own ELF header (its load bias: `ld.so` is linked at 0),
+/// stored once its image is relocated.
+static OWN_BASE: AtomicUsize = AtomicUsize::new(0);
+
+/// The TLS generation (design §7): the dtv of every thread was built for it; loading or unloading a
+/// module with TLS after start (DL-15/DL-16) moves it on. 0 for the initially loaded objects.
+static GENERATION: AtomicU64 = AtomicU64::new(0);
+
+// The thread-block slots the arch table names are the fields of Liella's block (D-4.15).
+#[allow(clippy::as_conversions)] // const context: no `try_from`; the values are small offsets
+const _: () = {
+    assert!(ltls::DTV_HEADER == 2);
+    assert!(Native::TCB_SIZE as usize == core::mem::size_of::<ThreadBlock>());
+    assert!(Native::DTV_SLOT as usize == core::mem::offset_of!(ThreadBlock, dtv));
+    assert!(matches!(Native::SELF_SLOT, Some(0)));
+    assert!(matches!(Native::STACK_GUARD_SLOT, Some(s) if s as usize == core::mem::offset_of!(ThreadBlock, stack_guard)));
+    assert!(matches!(Native::POINTER_GUARD_SLOT, Some(s) if s as usize == core::mem::offset_of!(ThreadBlock, pointer_guard)));
+};
 
 /// The longest argument read (an option is short; a longer argument is only echoed, cut here).
 const ARG_MAX_READ: usize = 4096;
@@ -187,6 +207,24 @@ pub extern "C" fn liella_ld_start(sp: usize, ehdr: usize) -> ! {
     let mut auxv = envp.wrapping_add(envc.wrapping_add(1).wrapping_mul(8));
     let mut copy = [0u64; AUXV_WORDS_MAX];
     let Some(words) = read_auxv(auxv, &mut copy) else { refuse(b"ld.so: the auxiliary vector is too long\n") };
+    OWN_BASE.store(ehdr, Relaxed);
+    // The canary and the pointer guard from AT_RANDOM (spec §1.1), kept in the provisional block's
+    // slots; the final thread block takes them from there (DL-12).
+    if let Some(r) = Auxv::from_words(copy.get(..words).unwrap_or(&[])).get(AT_RANDOM).and_then(|a| usize::try_from(a).ok()).filter(|&a| a != 0) {
+        // UNSAFE(slice): the 16 AT_RANDOM bytes.
+        #[allow(unsafe_code)]
+        // SAFETY: the kernel put 16 random bytes at AT_RANDOM on the initial stack (⚑ KERN, execve),
+        // live for the process's lifetime.
+        let bytes = unsafe { conv::bytes_at(r, 16) };
+        let mut random = [0u8; 16];
+        random.copy_from_slice(bytes);
+        let (canary, pointer) = liella_rt::tls::guards(&random);
+        for (slot, v) in [(Native::STACK_GUARD_SLOT, canary), (Native::POINTER_GUARD_SLOT, pointer)] {
+            if let Some(w) = slot.and_then(|s| PROVISIONAL.0.get(usize::try_from(s / 8).unwrap_or(usize::MAX))) {
+                w.store(v, Relaxed);
+            }
+        }
+    }
     // 4. Secure mode, decided once (AT_SECURE only); the UNSECURE names leave the environment before
     // anything below reads an LD_* name (threat model rule 1). The vector then moves down to follow
     // the shorter environment, so the program finds it where the kernel's layout puts it.
@@ -221,7 +259,16 @@ pub extern "C" fn liella_ld_start(sp: usize, ehdr: usize) -> ! {
             list(&list_env, if execfn == 0 { b"" } else { c_string(execfn) }, false)
         }
         let prog = start::program(&aux).unwrap_or_else(|e| refuse(e.message()));
-        let bias = liella_rt::start::program(program_headers(&prog), prog.phnum, prog.phdr).bias;
+        // The bias from PT_PHDR or, without one, the ELF header in the page holding the program
+        // headers (ruling #4371, D-27.18).
+        let page_bytes = usize::try_from(page).unwrap_or(usize::MAX);
+        let header = |at: usize| {
+            let mut out = [0u8; 64];
+            read_image(at, &mut out);
+            out
+        };
+        let bias = start::bias(program_headers(&prog), prog.phnum, prog.phdr, page_bytes, header)
+            .unwrap_or_else(|| refuse(b"ld.so: cannot find the program's load bias (no PT_PHDR, and no ELF header before its program headers)\n"));
         run(sp, &prog, bias, page, 0)
     }
     let arg = |i: usize| usize::try_from(stack_word(argv.wrapping_add(i.wrapping_mul(8)))).unwrap_or(0);
@@ -291,8 +338,10 @@ fn run(sp: usize, prog: &start::Program, bias: usize, page: u64, path: usize) ->
         // in the mapped program.
         let dyn_words = unsafe { conv::words_at(dynamic, usize::try_from(img.dynamic.1).unwrap_or(0) / 8) };
         if start::needs_objects(dyn_words) {
-            link(prog, bias, page, path);
-            crate::arch::enter(sp, prog.entry)
+            // The program's name in messages: its path (`ld.so PROGRAM`), else argv[0].
+            let at = if path != 0 { path } else { usize::try_from(stack_word(sp.wrapping_add(8))).unwrap_or(0) };
+            let fini = link(prog, bias, page, if at != 0 { c_string(at) } else { b"the program" }, sp);
+            crate::arch::enter(sp, prog.entry, fini)
         }
         let ehdr = bias.wrapping_add(usize::try_from(img.header).unwrap_or(0));
         if crate::bootstrap::relocate_self(prog.phdr, prog.phnum, ehdr).is_err() {
@@ -300,12 +349,135 @@ fn run(sp: usize, prog: &start::Program, bias: usize, page: u64, path: usize) ->
         }
     }
     let page = usize::try_from(page).unwrap_or(usize::MAX);
-    if let Some((addr, len)) = liella_rt::start::relro(headers, prog.phnum, prog.phdr, page) {
+    if let Some((addr, len)) = liella_rt::start::relro_at(headers, prog.phnum, bias, page) {
         if crate::raw::mprotect(addr, len, map::PROT_READ).is_err() {
             refuse(b"ld.so: cannot protect the program's RELRO segment\n");
         }
     }
-    crate::arch::enter(sp, prog.entry)
+    // The program alone: its own TLS block (if any) and the final thread block (DL-12).
+    let one = [program_tls(headers, prog.phnum)];
+    let mut placed = [None];
+    let area = ltls::layout::<Native>(&one, &mut placed, Native::TCB_SIZE, ltls::SURPLUS).unwrap_or_else(|_| refuse(b"ld.so: the program's TLS segment is malformed\n"));
+    install_tls(&one, &[u64::try_from(bias).unwrap_or(0)], &placed, &area);
+    crate::arch::enter(sp, prog.entry, 0)
+}
+
+/// The program's `PT_TLS` from its header words, refused unless its image lies in the file part of a
+/// `PT_LOAD` (word 0 of a header holds `p_type`; words 2, 4, 5, 6 `p_vaddr`, `p_filesz`, `p_memsz`,
+/// `p_align`).
+fn program_tls(headers: &[u64], phnum: usize) -> Option<Module> {
+    let hs = || headers.chunks_exact(PHDR_WORDS).take(phnum);
+    let w = |h: &[u64], i: usize| h.get(i).copied().unwrap_or(0);
+    let t = hs().find(|h| lo32(w(h, 0)) == liella_ld::elf::pt::TLS)?;
+    let m = Module { vaddr: w(t, 2), filesz: w(t, 4), memsz: w(t, 5), align: w(t, 6) };
+    let end = m.vaddr.checked_add(m.filesz);
+    let inside = hs().any(|h| lo32(w(h, 0)) == liella_ld::elf::pt::LOAD && w(h, 2) <= m.vaddr && end.is_some_and(|e| e <= w(h, 2).saturating_add(w(h, 4))));
+    if !inside {
+        refuse(b"ld.so: the program's TLS image lies outside its segments\n");
+    }
+    Some(m)
+}
+
+/// Build the initial thread's area (design §7, D-27.20): map `area`, copy each placed module's
+/// initialisation image from its loaded (and relocated) object (`biases[i]` + `p_vaddr`, `p_filesz`
+/// bytes; the rest of the block stays zero), fill the thread block (self, dtv, the canary and pointer
+/// guard from the provisional block, `FLAG_OWN`) and the dtv, and make it the thread pointer.
+fn install_tls(mods: &[Option<Module>], biases: &[u64], placed: &[Option<Placed>], area: &Area) {
+    let fail = || -> ! { refuse(b"ld.so: cannot set up the initial thread's TLS\n") };
+    let (Ok(len), Ok(align)) = (usize::try_from(area.len), usize::try_from(area.align)) else { fail() };
+    let prot = i32::try_from(liella_kernel::uapi::PROT_READ | liella_kernel::uapi::PROT_WRITE).unwrap_or(0);
+    let flags = i32::try_from(liella_kernel::uapi::MAP_PRIVATE | liella_kernel::uapi::MAP_ANONYMOUS).unwrap_or(0);
+    let Some(map_len) = len.checked_add(align) else { fail() };
+    let Ok(raw_base) = raw::mmap(0, map_len, prot, flags, -1, 0) else { fail() };
+    let Some(base) = raw_base.checked_next_multiple_of(align) else { fail() };
+    let tp = base.wrapping_add(usize::try_from(area.tp).unwrap_or(0));
+    let tp64 = u64::try_from(tp).unwrap_or(0);
+    for ((m, p), b) in mods.iter().zip(placed).zip(biases) {
+        let (Some(m), Some(p)) = (m, p) else { continue };
+        let (Ok(src), Ok(n), Ok(dst)) = (usize::try_from(b.wrapping_add(m.vaddr)), usize::try_from(m.filesz), usize::try_from(tp64.wrapping_add_signed(p.tp_offset))) else { fail() };
+        if n == 0 {
+            continue;
+        }
+        // UNSAFE(slice): a module's TLS initialisation image in its loaded object.
+        #[allow(unsafe_code)]
+        // SAFETY: `ltls::image_in_load` / `program_tls` checked that [p_vaddr, p_vaddr + p_filesz) lies
+        // in the file part of one of the object's PT_LOADs, mapped readable at bias + p_vaddr.
+        let image = unsafe { conv::bytes_at(src, n) };
+        // UNSAFE(slice): the module's block in the area mapped above.
+        #[allow(unsafe_code)]
+        // SAFETY: `ltls::layout` placed the block's `p_memsz` >= `p_filesz` bytes inside the area's
+        // `len` bytes from `base`, mapped read-write above and not otherwise referenced yet.
+        unsafe { conv::bytes_at_mut(dst, n) }.copy_from_slice(image);
+    }
+    let dtv_at = base.wrapping_add(usize::try_from(area.dtv).unwrap_or(0));
+    // DTV_HEADER (2, asserted above) words, then a slot per object.
+    let mut dtv = [0u64; 2 + OBJECTS_MAX];
+    let Some(dtv) = dtv.get_mut(..usize::try_from(area.dtv_words).unwrap_or(usize::MAX)) else { fail() };
+    ltls::fill_dtv(dtv, GENERATION.load(Relaxed), tp64, placed);
+    // UNSAFE(slice): the dtv in the area mapped above.
+    #[allow(unsafe_code)]
+    // SAFETY: `ltls::layout` reserved `dtv_words` words at `area.dtv` (8-aligned) inside the area.
+    let out = unsafe { conv::bytes_at_mut(dtv_at, dtv.len().wrapping_mul(8)) };
+    for (o, w) in out.chunks_exact_mut(8).zip(dtv.iter()) {
+        o.copy_from_slice(&w.to_ne_bytes());
+    }
+    // UNSAFE(slice): the thread block at the new thread pointer.
+    #[allow(unsafe_code)]
+    // SAFETY: `ltls::layout` keeps `TCB_SIZE` bytes from `area.tp` for the block, inside the area
+    // mapped above (zero-filled, 64-aligned as `area.align` >= `TCB_ALIGN`).
+    let tb = unsafe { conv::bytes_at_mut(tp, core::mem::size_of::<ThreadBlock>()) };
+    let mut put = |off: Option<u64>, v: u64| {
+        if let Some(w) = off.and_then(|o| usize::try_from(o).ok()).and_then(|o| tb.get_mut(o..o.wrapping_add(8))) {
+            w.copy_from_slice(&v.to_ne_bytes());
+        }
+    };
+    let provisional = |slot: Option<u64>| slot.and_then(|s| PROVISIONAL.0.get(usize::try_from(s / 8).unwrap_or(usize::MAX))).map_or(0, |w| w.load(Relaxed));
+    put(Native::SELF_SLOT, tp64);
+    put(u64::try_from(core::mem::offset_of!(ThreadBlock, self_ptr)).ok(), tp64);
+    put(Some(Native::DTV_SLOT), u64::try_from(dtv_at).unwrap_or(0));
+    put(Native::STACK_GUARD_SLOT, u64::try_from(provisional(Native::STACK_GUARD_SLOT)).unwrap_or(0));
+    put(Native::POINTER_GUARD_SLOT, u64::try_from(provisional(Native::POINTER_GUARD_SLOT)).unwrap_or(0));
+    let flags_at = core::mem::offset_of!(ThreadBlock, flags);
+    if let Some(w) = tb.get_mut(flags_at..flags_at.wrapping_add(4)) {
+        w.copy_from_slice(&FLAG_OWN.to_ne_bytes());
+    }
+    if crate::arch::set_thread_pointer(tp).is_err() {
+        fail()
+    }
+}
+
+/// `__tls_get_addr` (spec §22.6, s22_6_c_4; exported by `ld.so` at `GLIBC_2.3`): the address of
+/// `ti->offset` in module `ti->module`'s block for the calling thread. `ti` points at a `tls_index`
+/// (two words: module ID, offset; x86-64 psABI §3.4.6). DL-12: static modules only; any other answer
+/// is a failure (the dlopen family, DL-15/DL-16, adds the slow path).
+// UNSAFE(export): the exported `__tls_get_addr` of the ld.so product.
+#[unsafe(no_mangle)]
+#[allow(unsafe_code)]
+pub extern "C" fn __tls_get_addr(ti: usize) -> usize {
+    // Only a block this loader made has its dtv word (D-5.11 safety, design §7): never read the
+    // word of a block another loader made as a pointer.
+    if crate::tb::read32::<crate::tb::Flags>() & FLAG_OWN == 0 {
+        refuse(b"ld.so: __tls_get_addr called on a thread block this loader did not make\n");
+    }
+    let dtv = crate::tb::read::<crate::tb::Dtv>();
+    // UNSAFE(slice): the caller's `tls_index`.
+    #[allow(unsafe_code)]
+    // SAFETY: the psABI caller passes the address of a two-word `tls_index` in its GOT (⚑ ABI).
+    let index = unsafe { conv::words_at(ti, 2) };
+    let (module, offset) = (index.first().copied().unwrap_or(0), index.get(1).copied().unwrap_or(0));
+    let word = |i: u64| -> u64 {
+        let at = dtv.wrapping_add(usize::try_from(i).unwrap_or(0).wrapping_mul(8));
+        // UNSAFE(slice): one word of the calling thread's dtv.
+        #[allow(unsafe_code)]
+        // SAFETY: the thread block is this loader's (FLAG_OWN, checked above), so its dtv word points at
+        // the vector `install_tls` built: `DTV_HEADER` + slot-count words; `ltls::lookup` reads a slot
+        // only after checking it against the count in word 1.
+        unsafe { conv::words_at(at, 1) }.first().copied().unwrap_or(0)
+    };
+    match ltls::lookup::<Native>(word, GENERATION.load(Relaxed), module, offset).and_then(|a| usize::try_from(a).ok()) {
+        Some(a) => a,
+        None => refuse(b"ld.so: __tls_get_addr: no TLS block for this module in this thread\n"),
+    }
 }
 
 /// The low 32 bits of `w`.
@@ -353,37 +525,224 @@ fn open_file(path: usize) -> Option<(i32, usize, &'static [u8], FileId)> {
     Some((fd32, at, unsafe { conv::bytes_at(at, len) }, (st.dev, st.ino)))
 }
 
+/// A new private anonymous read-write mapping of `len` (> 0) bytes: (address, bytes).
+fn scratch(len: usize, name: &[u8]) -> (usize, &'static mut [u8]) {
+    let Ok(at) = raw::mmap(0, len, map::PROT_READ | map::PROT_WRITE, MAP_PRIVATE_I32 | MAP_ANONYMOUS_I32, -1, 0) else {
+        fail_with(&[name, b": out of memory for the program's tables\n"], program::FAILURE)
+    };
+    // UNSAFE(slice): a fresh anonymous mapping, owned by the caller.
+    #[allow(unsafe_code)]
+    // SAFETY: `len` bytes from `at` were just mapped private, readable and writable; nothing else
+    // refers to them, and the caller unmaps them only after the last use of the slice.
+    (at, unsafe { conv::bytes_at_mut(at, len) })
+}
+
+/// Copy `out.len()` bytes of the mapped program at run-time address `at` into `out` (D-27.18).
+fn read_image(at: usize, out: &mut [u8]) {
+    // UNSAFE(slice): bytes of the mapped program, copied before any relocation store.
+    #[allow(unsafe_code)]
+    // SAFETY: [at, at + len) is the program header table (`AT_PHDR`, ⚑ KERN), the start of its (whole, readable)
+    // page, or the file-backed part of one readable `PT_LOAD` mapped by the kernel, `load`, or (ld.so's own ELF
+    // header, D-27.23) its first PT_LOAD; the slice lives only for this copy, and nothing stores meanwhile.
+    out.copy_from_slice(unsafe { conv::bytes_at(at, out.len()) });
+}
+
+/// The `len` file-backed bytes at run-time address `at` of a program `PT_LOAD` that
+/// [`liella_ld::elf::Elf::image_span_kind`] calls [`liella_ld::elf::SpanKind::Live`], read in place.
+fn live_segment(at: usize, len: usize) -> &'static [u8] {
+    // UNSAFE(slice): a PT_LOAD of the program read in place (SpanKind::Live).
+    #[allow(unsafe_code)]
+    // SAFETY: the caller checked the range is the file-backed part of a readable PT_LOAD, mapped for the
+    // process's lifetime. Live means: not writable, the program is not text-relocated, and no segment the
+    // relocator may store into overlaps it; the relocator stores only inside writable segments of such an
+    // object (reloc `inside`; ld.so's own image not at all), so the bytes do not change until `link` ends.
+    unsafe { conv::bytes_at(at, len) }
+}
+
+/// `n` empty spans laid over `bytes` (the unique borrow of a fresh scratch mapping's tail, consumed
+/// here): the image reader's span list, sized from the program's header count, since the number of
+/// `PT_LOAD`s has no bound (D-27.15).
+fn span_slots(bytes: &'static mut [u8], n: usize, name: &[u8]) -> &'static mut [liella_ld::elf::Span<'static>] {
+    use liella_ld::elf::Span;
+    let p = bytes.as_mut_ptr().cast::<Span<'static>>();
+    if !p.is_aligned() || n.checked_mul(size_of::<Span<'static>>()).is_none_or(|need| need > bytes.len()) {
+        fail_with(&[name, b": malformed program headers\n"], program::FAILURE)
+    }
+    for i in 0..n {
+        let slot = p.wrapping_add(i);
+        // UNSAFE(slice): one slot of the span list, initialised before the list is formed (D-27.18).
+        #[allow(unsafe_code)]
+        // SAFETY: `bytes` is the only reference to its memory and is consumed here; `slot` is aligned for `Span`
+        // and inside it (`i < n`, and `n` spans fit: checked above).
+        unsafe {
+            slot.write(Span { vaddr: 0, bytes: &[] });
+        }
+    }
+    // UNSAFE(slice): the span list, in a fresh anonymous mapping (D-27.18).
+    #[allow(unsafe_code)]
+    // SAFETY: `p` is aligned, `n` spans fit and every one holds a valid empty span (written above); nothing
+    // else refers to the memory, and the mapping is unmapped only at the end of `link`, after the last use.
+    unsafe {
+        core::slice::from_raw_parts_mut(p, n)
+    }
+}
+
+/// The program as the reader sees it, read from its memory image (ruling #4229, D-27.18): its program
+/// header table and `PT_DYNAMIC` copied into one anonymous mapping, each `PT_LOAD` whose bytes cannot
+/// change during loading sliced in place, and each that can change and holds a table copied into a
+/// second one, all before the first relocation store. The span list lives in the first mapping, after
+/// the table. Returns the table and the spans; each mapping made is stored in `maps`.
+// The span index stays below `spans.len()` (checked before each store).
+#[allow(clippy::indexing_slicing)]
+fn image_view(
+    prog: &start::Program,
+    bias: usize,
+    name: &[u8],
+    maps: &mut [(usize, usize)],
+) -> (&'static [u8], &'static [liella_ld::elf::Span<'static>]) {
+    use liella_ld::elf::{pt, Elf, Span, SpanKind, PHDR_SIZE};
+    let bad = |what: &[u8]| -> ! { fail_with(&[name, what], program::FAILURE) };
+    let table = prog.phnum.saturating_mul(PHDR_SIZE);
+    // Pass 1: the header table alone, to find PT_DYNAMIC and size the first mapping. One span per
+    // PT_LOAD and one for PT_DYNAMIC's copy: at most phnum (PT_DYNAMIC, required below, is a header
+    // that is not a PT_LOAD), in the same mapping after the table (a multiple of 8 bytes from a page
+    // boundary, so aligned for them). Any number of PT_LOADs (D-27.15).
+    let whole = prog.phnum.saturating_mul(size_of::<Span<'static>>()).saturating_add(table);
+    let (at, buf) = scratch(whole, name);
+    let (buf, tail) = buf.split_at_mut(table);
+    read_image(prog.phdr, buf);
+    let head: &'static [u8] = buf;
+    let spans = span_slots(tail, prog.phnum, name);
+    let probe = Elf::from_image::<Native>(head, &[]).unwrap_or_else(|_| bad(b": malformed program headers\n"));
+    let loads = || probe.program_headers().filter(|p| p.p_type == pt::LOAD);
+    let run_at = |vaddr: u64| bias.wrapping_add(usize::try_from(vaddr).unwrap_or(usize::MAX));
+    // A range is read from memory only when it lies in the file-backed part of one readable PT_LOAD.
+    let mapped = |vaddr: u64, len: u64| {
+        loads().any(|p| p.flags & 4 != 0 && p.vaddr <= vaddr && vaddr.checked_add(len).is_some_and(|e| p.vaddr.checked_add(p.filesz).is_some_and(|f| e <= f)))
+    };
+    let dynph = probe.find(pt::DYNAMIC).unwrap_or_else(|| bad(b": no valid dynamic section\n"));
+    let dlen = usize::try_from(dynph.filesz).unwrap_or(usize::MAX);
+    if !mapped(dynph.vaddr, dynph.filesz) || dlen == 0 {
+        bad(b": no valid dynamic section\n");
+    }
+    maps[0] = (at, whole);
+    let (at, buf) = scratch(dlen, name);
+    read_image(run_at(dynph.vaddr), buf);
+    maps[1] = (at, dlen);
+    let dynamic: &'static [u8] = buf;
+    // Pass 2: the PT_LOADs that change and hold a table, copied into one mapping.
+    let copy_len = loads().filter(|p| probe.image_span_kind(p, dynamic) == SpanKind::Copy).fold(0usize, |a, p| a.saturating_add(usize::try_from(p.filesz).unwrap_or(usize::MAX)));
+    let mut copies: &'static mut [u8] = &mut [];
+    if copy_len != 0 {
+        let (at, buf) = scratch(copy_len, name);
+        maps[2] = (at, copy_len);
+        copies = buf;
+    }
+    let mut k = 0usize;
+    for kind in [SpanKind::Copy, SpanKind::Live] {
+        for p in loads().filter(|p| probe.image_span_kind(p, dynamic) == kind) {
+            let len = usize::try_from(p.filesz).unwrap_or(usize::MAX);
+            if !mapped(p.vaddr, p.filesz) || k == spans.len() {
+                bad(b": malformed program headers\n");
+            }
+            let bytes: &'static [u8] = if kind == SpanKind::Copy {
+                let (now, rest) = core::mem::take(&mut copies).split_at_mut(len);
+                read_image(run_at(p.vaddr), now);
+                copies = rest;
+                now
+            } else {
+                live_segment(run_at(p.vaddr), len)
+            };
+            spans[k] = Span { vaddr: p.vaddr, bytes };
+            k = k.saturating_add(1);
+        }
+        if kind == SpanKind::Copy {
+            // After the whole-segment copies, before the live slices: PT_DYNAMIC's own copy.
+            if k == spans.len() {
+                bad(b": malformed program headers\n");
+            }
+            spans[k] = Span { vaddr: dynph.vaddr, bytes: dynamic };
+            k = k.saturating_add(1);
+        }
+    }
+    let spans: &'static [Span<'static>] = spans;
+    (head, &spans[..k])
+}
+
+/// A dependency's mapped `file` as the relocator sees it (load bias `bias`). Its `name` may come from
+/// the program's string table (an image span), so any lifetime.
+fn parse<'a>(file: &'static [u8], name: &'a [u8], bias: u64) -> liella_ld::reloc::Obj<'a> {
+    let elf = liella_ld::elf::Elf::parse::<Native>(file).unwrap_or_else(|_| fail_with(&[name, b": not a valid ELF file for this machine\n"], program::FAILURE));
+    let dynm = elf.dynamic().ok().flatten().unwrap_or_else(|| fail_with(&[name, b": no valid dynamic section\n"], program::FAILURE));
+    liella_ld::reloc::Obj { elf, dynm, bias, name, tls: None }
+}
+
+/// The interpreter as an object of the scope (D-27.20), read from its own memory image like the
+/// program ([`image_view`], D-27.23): its ELF header at [`OWN_BASE`] (the first bytes of its first
+/// `PT_LOAD`) gives its program header table; no file is opened. It relocated itself at its start,
+/// so its writable segments already hold their final values and the reader copies those holding a
+/// table before the relocator runs, as for the program. The scratch mappings go to `maps`.
+fn own_object(name: &'static [u8], maps: &mut [(usize, usize)]) -> liella_ld::reloc::Obj<'static> {
+    let base = OWN_BASE.load(Relaxed);
+    let mut header = [0u8; liella_ld::elf::EHDR_SIZE];
+    read_image(base, &mut header);
+    let Some((phoff, phnum)) = boot::own_headers(&header) else { fail_with(&[name, b": malformed program headers\n"], program::FAILURE) };
+    let me = start::Program { phdr: base.wrapping_add(usize::try_from(phoff).unwrap_or(usize::MAX)), phnum, entry: 0 };
+    let (head, view) = image_view(&me, base, name, maps);
+    let elf = liella_ld::elf::Elf::from_image::<Native>(head, view).unwrap_or_else(|_| fail_with(&[name, b": malformed program headers\n"], program::FAILURE));
+    let dynm = elf.dynamic().ok().flatten().unwrap_or_else(|| fail_with(&[name, b": no valid dynamic section\n"], program::FAILURE));
+    liella_ld::reloc::Obj { elf, dynm, bias: u64::try_from(base).unwrap_or(0), name, tls: None }
+}
+
 /// Load the program's dependencies (by path; DL-8 adds the search), check their versions, relocate
-/// everything and protect the RELRO pages (DL-10, design §6, D-27.17). `path` is the program's
-/// NUL-terminated path (`ld.so PROGRAM`), or 0 when the kernel started the program (then
-/// `/proc/self/exe` gives its file).
+/// everything and protect the RELRO pages (DL-10, design §6, D-27.17). The program is read from its
+/// memory image ([`image_view`], ruling #4229, D-27.18), never from its file; `name` names it in
+/// messages (its path for `ld.so PROGRAM`, else `argv[0]`).
 // Indices stay below `n`, which never passes OBJECTS_MAX (checked before each store).
 #[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
-fn link(prog: &start::Program, bias: usize, page: u64, path: usize) {
-    let _ = prog;
+fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: usize) -> usize {
     use liella_ld::reloc::{self, Obj, Objects};
-    const SELF_EXE: &[u8] = b"/proc/self/exe\0";
-    let path = if path == 0 { SELF_EXE.as_ptr().expose_provenance() } else { path };
-    let Some((fd, at, file, id)) = open_file(path) else { fail_with(&[c_string(path), b": cannot read the program's file\n"], program::FAILURE) };
-    let _ = crate::ffi_sys::liella_sys_close(i64::from(fd));
     let mut maps = [(0usize, 0usize); OBJECTS_MAX];
-    maps[0] = (at, file.len());
-    let mut ids: [FileId; OBJECTS_MAX] = [(0, 0); OBJECTS_MAX];
-    ids[0] = id;
-    let parse = |file: &'static [u8], name: &'static [u8], bias: u64| -> Obj<'static> {
-        let elf = liella_ld::elf::Elf::parse::<Native>(file).unwrap_or_else(|_| fail_with(&[name, b": not a valid ELF file for this machine\n"], program::FAILURE));
-        let dynm = elf.dynamic().ok().flatten().unwrap_or_else(|| fail_with(&[name, b": no valid dynamic section\n"], program::FAILURE));
-        Obj { elf, dynm, bias, name }
-    };
-    let first = parse(file, c_string(path), u64::try_from(bias).unwrap_or(0));
+    // The scratch mappings of the two image views: the program's, then the interpreter's own.
+    let mut views = [(0usize, 0usize); 6];
+    let (prog_views, own_views) = views.split_at_mut(3);
+    let (head, view) = image_view(prog, bias, name, prog_views);
+    // The program's own file is not known (no file is read): (dev, ino) that no file has.
+    let mut ids: [FileId; OBJECTS_MAX] = [(u64::MAX, u64::MAX); OBJECTS_MAX];
+    let image = liella_ld::elf::Elf::from_image::<Native>(head, view).unwrap_or_else(|_| fail_with(&[name, b": malformed program headers\n"], program::FAILURE));
+    let dynm = image.dynamic().ok().flatten().unwrap_or_else(|| fail_with(&[name, b": no valid dynamic section\n"], program::FAILURE));
+    let first = Obj { elf: image, dynm, bias: u64::try_from(bias).unwrap_or(0), name, tls: None };
     let mut objs = [first; OBJECTS_MAX];
     let mut n = 1usize;
     let mut q = 0usize;
+    // The interpreter itself, when an object names it (`__tls_get_addr`): already relocated, in the
+    // scope with its exports, never relocated again (D-27.20); read from its memory image.
+    let mut interp: Option<usize> = None;
+    // The DT_NEEDED links (dependent, dependency) in the order each object names them (DL-11).
+    let mut edges = [(0u8, 0u8); EDGES_MAX];
+    let mut ne = 0usize;
+    let mut edge = |from: usize, to: usize, name: &[u8]| {
+        let (Ok(a), Ok(b)) = (u8::try_from(from), u8::try_from(to)) else { fail_with(&[name, b": too many objects\n"], program::FAILURE) };
+        let Some(slot) = edges.get_mut(ne) else { fail_with(&[name, b": too many DT_NEEDED entries\n"], program::FAILURE) };
+        *slot = (a, b);
+        ne += 1;
+    };
     while q < n {
         let needed = objs[q].dynm;
         for name in needed.needed() {
             let name = name.unwrap_or_else(|_| fail_with(&[objs[q].name, b": malformed DT_NEEDED\n"], program::FAILURE));
-            if objs[..n].iter().any(|o| o.name == name) {
+            if let Some(j) = objs[..n].iter().position(|o| o.name == name) {
+                edge(q, j, name);
+                continue;
+            }
+            if name == Native::INTERP.as_bytes() {
+                if n == OBJECTS_MAX {
+                    fail_with(&[name, b": too many objects\n"], program::FAILURE);
+                }
+                objs[n] = own_object(name, own_views);
+                edge(q, n, name);
+                interp = Some(n);
+                n += 1;
                 continue;
             }
             if !name.contains(&b'/') {
@@ -396,9 +755,10 @@ fn link(prog: &start::Program, bias: usize, page: u64, path: usize) {
             let cpath = name.as_ptr().expose_provenance();
             let Some((fd, at, file, id)) = open_file(cpath) else { fail_with(&[name, b": cannot open shared object file\n"], program::FAILURE) };
             // Another path to an object already loaded (L14-4): the same object, loaded once.
-            if ids[..n].contains(&id) {
+            if let Some(j) = ids[..n].iter().position(|x| *x == id) {
                 let _ = crate::ffi_sys::liella_sys_close(i64::from(fd));
                 let _ = raw::munmap(at, file.len());
+                edge(q, j, name);
                 continue;
             }
             let loaded = map::load::<Native, _>(&mut SysMapper { fd }, file, page);
@@ -407,9 +767,32 @@ fn link(prog: &start::Program, bias: usize, page: u64, path: usize) {
             maps[n] = (at, file.len());
             ids[n] = id;
             objs[n] = parse(file, name, loaded.bias);
+            edge(q, n, name);
             n += 1;
         }
         q += 1;
+    }
+    // Static TLS of the initially loaded objects (design §7, R14-4, D-27.20).
+    let mut mods: [Option<Module>; OBJECTS_MAX] = [None; OBJECTS_MAX];
+    for (k, (m, o)) in mods.iter_mut().zip(&objs[..n]).enumerate() {
+        if Some(k) == interp {
+            continue;
+        }
+        *m = o.elf.find(liella_ld::elf::pt::TLS).map(|ph| Module::of(&ph));
+        if m.is_some_and(|m| !ltls::image_in_load(&o.elf, &m)) {
+            fail_with(&[o.name, b": the TLS image lies outside the object's segments\n"], program::FAILURE);
+        }
+    }
+    let mut placed: [Option<Placed>; OBJECTS_MAX] = [None; OBJECTS_MAX];
+    let area = ltls::layout::<Native>(&mods[..n], &mut placed[..n], Native::TCB_SIZE, ltls::SURPLUS).unwrap_or_else(|e| {
+        let at = match e {
+            ltls::TlsError::Align(k) | ltls::TlsError::Size(k) => k,
+            _ => 0,
+        };
+        fail_with(&[objs.get(at).map_or(&b"?"[..], |o| o.name), b": malformed or too large TLS segment\n"], program::FAILURE)
+    });
+    for (o, p) in objs[..n].iter_mut().zip(&placed[..n]) {
+        o.tls = *p;
     }
     let objs = &objs[..n];
     if let Err(e) = reloc::check_versions(objs) {
@@ -425,10 +808,18 @@ fn link(prog: &start::Program, bias: usize, page: u64, path: usize) {
     for (s, o) in syms.iter_mut().zip(objs).skip(1) {
         *s = liella_ld::symbols::Object::new(o.dynm).unwrap_or_else(|_| fail_with(&[o.name, b": malformed symbol tables\n"], program::FAILURE));
     }
+    // The C library's private interface (LIELLA_PRIVATE, L14-10, D-27.22): a library from another
+    // build is refused before any of its code runs or any relocation is applied.
+    let early = start::private::find(objs, &syms[..n], interp, |at, out| read_image(usize::try_from(at).unwrap_or(0), out)).unwrap_or_else(|e| {
+        let (start::private::PrivateError::Mismatch(k) | start::private::PrivateError::Malformed(k)) = e;
+        fail_with(&[objs.get(k).map_or(&b"?"[..], |o| o.name), e.message()], program::FAILURE)
+    });
     let global: [usize; OBJECTS_MAX] = core::array::from_fn(|i| i);
     let set = Objects { objs, syms: &syms[..n], global: &global[..n] };
     let mut unique = reloc::UniqueTable::<64, 4096>::default();
-    if let Err(f) = reloc::relocate_all::<Native, _>(&set, &mut ProcImage, page, &mut unique) {
+    // Reverse load order (L14-8), the interpreter left out: it relocated itself at its start.
+    let relocated = (0..n).rev().filter(|&k| Some(k) != interp).try_for_each(|k| reloc::relocate::<Native, _>(&set, k, &mut ProcImage, page, &mut unique).map_err(|error| reloc::Failure { obj: k, error }));
+    if let Err(f) = relocated {
         let name = objs.get(f.obj).map_or(&b"?"[..], |o| o.name);
         match f.error {
             reloc::RelocError::Undefined(sym) => fail_with(&[name, b": ", f.error.message(), sym, b"\n"], program::FAILURE),
@@ -438,8 +829,100 @@ fn link(prog: &start::Program, bias: usize, page: u64, path: usize) {
     if let Err(i) = reloc::protect_relro(objs, &mut ProcImage, page) {
         fail_with(&[objs.get(i).map_or(&b"?"[..], |o| o.name), b": cannot protect the RELRO segment\n"], program::FAILURE);
     }
-    for &(at, len) in &maps[..n] {
+    // The images are copied after relocation: a `.tdata` word may hold a relocated address.
+    let biases: [u64; OBJECTS_MAX] = core::array::from_fn(|k| objs.get(k).map_or(0, |o| o.bias));
+    install_tls(&mods[..n], &biases[..n], &placed[..n], &area);
+    // The interpreter, when in the list, ran its own start already: no hooks of its own here.
+    let hooks: [init::Hooks; OBJECTS_MAX] = core::array::from_fn(|i| objs.get(i).filter(|_| Some(i) != interp).map_or_else(init::Hooks::default, |o| init::hooks(&o.dynm, o.bias, i == 0)));
+    for &(at, len) in maps[1..n].iter().chain(&views).filter(|m| m.1 != 0) {
         let _ = raw::munmap(at, len);
+    }
+    run_init(&hooks[..n], &edges[..ne], sp, early.map(|f| f.early_init))
+}
+
+/// Most `DT_NEEDED` links over all objects of one start.
+const EDGES_MAX: usize = 1024;
+
+/// The words of a function array in a mapped, relocated object.
+fn array_words(a: init::Array) -> &'static [u64] {
+    let (Ok(addr), Ok(len)) = (usize::try_from(a.addr), usize::try_from(a.len)) else { return &[] };
+    // UNSAFE(slice): an object's DT_PREINIT_ARRAY, DT_INIT_ARRAY or DT_FINI_ARRAY, read only.
+    #[allow(unsafe_code)]
+    // SAFETY: `addr` is bias + the array's link-time address in an object mapped for the process's
+    // lifetime (the loader never unmaps an object at start), `len` its size tag / 8, both from the
+    // object's dynamic array as the static linker wrote them; relocation already ran.
+    unsafe {
+        conv::words_at(addr, len)
+    }
+}
+
+/// The objects' termination hooks in finalisation order (DL-11): `[DT_FINI_ARRAY address, entries,
+/// DT_FINI]` per object, written once before the program is entered, read by [`fini_all`].
+static FINI_HOOKS: [[AtomicU64; 3]; OBJECTS_MAX] = [const { [const { AtomicU64::new(0) }; 3] }; OBJECTS_MAX];
+static FINI_LEN: AtomicUsize = AtomicUsize::new(0);
+static FINI_DONE: AtomicBool = AtomicBool::new(false);
+
+/// Run the initialisation functions after relocation (design §9, D-27.19): the program's
+/// `DT_PREINIT_ARRAY`, then each other object's `DT_INIT` and `DT_INIT_ARRAY` in
+/// [`init::init_order`], each called with `(argc, argv, envp)` from the initial stack at `sp`. The
+/// program's own `DT_INIT`/`DT_INIT_ARRAY` are its C library's start (probe: the reference loader
+/// runs neither). Records the finalisation order for [`fini_all`] and returns its address, the
+/// termination function the program gets in `%rdx`. First of all, `early` (the C library's
+/// `__liella_libc_early_init`, design §14, D-27.22) gets the initial stack, so every constructor,
+/// `.preinit_array` included, sees an initialised C library.
+fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<u64>) -> usize {
+    let mut order = [0u8; OBJECTS_MAX];
+    let mut fini_order = [0u8; OBJECTS_MAX];
+    let (Ok(len), Ok(fini_len)) = (init::init_order(hooks.len(), edges, &mut order), init::fini_order(hooks.len(), edges, &mut fini_order)) else {
+        refuse(b"ld.so: cannot order the objects' initialisation\n")
+    };
+    let argc = stack_word(sp);
+    let argv = sp.wrapping_add(8);
+    let envp = argv.wrapping_add(usize::try_from(argc).unwrap_or(0).wrapping_add(1).wrapping_mul(8));
+    let args = |v: usize| i64::from_ne_bytes(u64::try_from(v).unwrap_or(0).to_ne_bytes());
+    let (a, b, c) = (i64::from_ne_bytes(argc.to_ne_bytes()), args(argv), args(envp));
+    let call = |f: u64| {
+        let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), a, b, c);
+    };
+    if let Some(f) = early {
+        let mut auxv = envp;
+        while stack_word(auxv) != 0 {
+            auxv = auxv.wrapping_add(8);
+        }
+        let info = start::private::StartInfo { argc: usize::try_from(argc).unwrap_or(0), argv, envp, auxv: auxv.wrapping_add(8), stack_end: sp };
+        let at = core::ptr::from_ref(&info).expose_provenance();
+        let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), args(at), 0, 0);
+    }
+    // Only the program's preinit array is non-empty (`init::hooks` drops a shared object's).
+    for h in hooks {
+        init::init_calls(0, array_words(h.preinit)).for_each(call);
+    }
+    for &i in order.get(..len).unwrap_or(&[]) {
+        let Some(h) = hooks.get(usize::from(i)).filter(|_| i != 0) else { continue };
+        init::init_calls(h.init, array_words(h.init_array)).for_each(call);
+    }
+    for (slot, &i) in FINI_HOOKS.iter().zip(fini_order.get(..fini_len).unwrap_or(&[])) {
+        let h = hooks.get(usize::from(i)).copied().unwrap_or_default();
+        for (w, v) in slot.iter().zip([h.fini_array.addr, h.fini_array.len, h.fini]) {
+            w.store(v, Relaxed);
+        }
+    }
+    FINI_LEN.store(fini_len, Release);
+    #[allow(clippy::as_conversions)] // a function's address has no conversion other than `as`
+    (fini_all as *const ()).expose_provenance()
+}
+
+/// The termination function passed to the program (`rtld_fini`): each object's `DT_FINI_ARRAY` in
+/// reverse, then its `DT_FINI`, the objects in [`init::fini_order`], the program first. Runs once.
+extern "C" fn fini_all() {
+    if FINI_DONE.swap(true, AcqRel) {
+        return;
+    }
+    for slot in FINI_HOOKS.iter().take(FINI_LEN.load(Acquire)) {
+        let [addr, len, fini] = [0, 1, 2].map(|k| slot.get(k).map_or(0, |w| w.load(Relaxed)));
+        for f in init::fini_calls(fini, array_words(init::Array { addr, len })) {
+            let _ = crate::ffi::liella_machine_call0(usize::try_from(f).unwrap_or(0));
+        }
     }
 }
 

@@ -1,0 +1,12 @@
+{"task": "LIBM-LD-TRIG-INVERSE-INT-2", "model": "opus", "tokens": null,
+ "result": "x87 atanl/atan2l/asinl/acosl/tanl integer tier verified (10^7 x 4 modes, 0 mismatches; 7/7 plants caught); asinl/acosl root seeded by boundary sqrtsd; instructions per call 160k-178k -> 657-1066 (tanl 769 vs reference 1080); D-10.75 written",
+ "branch": "task/libm-ld-trig-inverse-int-2", "head": null,
+ "gate": {"affected": "running at hand-back (shiki:libm-ld-trig-inverse-int-2-gate, head 76b7b092a code)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["atanl rose 607 -> 657 instructions (atanl_big 480 -> 530) between e476091b4 and 76b7b092a with its path unchanged; likely inlining, not profiled", "timing in cycles not measured (x87 rows are judged in cycles)", "unit4 failure cause: test sent a caller-handled atan2 tiny-ratio pair to the kernel's approximation (0/0 error), not a kernel defect"],
+ "refused": [],
+ "improvement": "the plants format uses | as its separator, so a lit: pattern containing | is refused only when the job runs; a local syntax check (cargo xtask plants --check) before queueing would save a queue cycle",
+ "next_step": "profile atanl's +50 instructions and pin the inlining if that is the cause; then book Ivy Bridge and N100 timing for the five cbench_libm rows",
+ "report_file": "handoff/libm-ld-trig-inverse-int.md",
+ "jobs": ["libm-ld-trig-inverse-int-2-gate", "libm-ld-trig-inverse-int-2-plants2", "libm-ld-trig-inverse-int-2-check3", "libm-ld-trig-inverse-int-2-sweep", "libm-ld-trig-inverse-int-2-count2"]}
