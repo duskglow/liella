@@ -180,21 +180,97 @@ fn cexp_quick_tier_declines_the_bench_box_only_when_forced() {
             continue;
         }
         declined += 1;
-        let p = parts(x, y);
-        assert!(p.is_some(), "({x:e}, {y:e}) is inside the tier's range");
-        let Some((pp, m)) = p else { continue };
+        assert!(parts(x, y).is_some(), "({x:e}, {y:e}) is inside the tier's range");
         let (s, c) = mp::sin_cos_f64(y);
-        let e = mp::exp(Mp::from_f64(x)).ldexp(-i64::from(m));
-        // Distance of each exact part from the nearest midpoint of the `double` grid around it.
-        let forced = pp.into_iter().zip([c, s]).any(|((_, eps), t)| {
-            let v = e.mul(t);
+        // Distance of each exact part from the nearest midpoint of the `double` grid around it,
+        // against the middle tier's bound (the last tier before the route).
+        let forced = [(Part::Re, c), (Part::Im, s)].into_iter().any(|(part, t)| {
+            let Some((_, eps, m)) = middle_part(x, y, part) else { return true };
+            let v = mp::exp(Mp::from_f64(x)).ldexp(-i64::from(m)).mul(t);
             let r = v.to_f64();
             let half = (f64::from_bits(r.to_bits() + 1) - r).abs() / 2.0;
             // The midpoints `r ± half` are not `double`s: formed in 384 bits.
             let d = [-half, half].map(|h| v.sub(Mp::from_f64(r).add(Mp::from_f64(h))).to_f64().abs());
+            std::println!(
+                "declined ({x:e}, {y:e}) = ({:#x}, {:#x}): part {r:e} m={m} midpoint distance 2^{:.2} rel, bound 2^{:.2} rel",
+                x.to_bits(),
+                y.to_bits(),
+                (d[0].min(d[1]) / r.abs()).log2(),
+                (eps / r.abs()).log2()
+            );
             d[0].min(d[1]) <= 2.0 * eps
         });
         assert!(forced, "the tier declined ({x:e}, {y:e}) although no part is within its bound of a rounding boundary");
     }
     std::println!("cexp quick tier: {declined} of 256 bench operands declined, each a hard case");
+}
+
+/// The operand of cbench_libm's set that the quick tier cannot decide (its real part lies
+/// `2^-70.3` relative from a midpoint, the bound is `2^-66.3`).
+const BENCH_HARD: (u64, u64) = (0xbff9_c127_e0e2_1690, 0xbffe_c14d_45bc_5e2d);
+
+#[test]
+fn cexp_middle_tier_decides_the_bench_hard_case() {
+    // Clauses: s10_0_f_0. The quick test declines the real part, the middle tier answers it,
+    // and in every mode the answer is the 384-bit route's (value bits and status).
+    let (x, y) = (f64::from_bits(BENCH_HARD.0), f64::from_bits(BENCH_HARD.1));
+    let Some(([(re, er), _], m)) = parts(x, y) else { panic!("inside the quick tier's range") };
+    assert!(round(re, er, m, Rounding::Nearest).is_none(), "the quick test no longer declines the bench operand");
+    for mode in MODES {
+        let w = cexp_route(x, y, mode);
+        let got = cexp(x, y, mode);
+        assert!(got.is_some(), "the middle tier declined the bench operand in {mode:?}");
+        let Some(((a, b), st)) = got else { continue };
+        assert_eq!((a.to_bits(), b.to_bits(), st), (w.0 .0.to_bits(), w.0 .1.to_bits(), w.1), "cexp middle tier differs in {mode:?}");
+    }
+    let n = cexp_nearest(x, y).map(|(a, b)| (a.to_bits(), b.to_bits()));
+    let w = cexp_route(x, y, Rounding::Nearest).0;
+    assert_eq!(n, Some((w.0.to_bits(), w.1.to_bits())), "cexp middle tier differs in place");
+}
+
+#[test]
+fn cexp_middle_tier_bound_covers_the_error() {
+    // Clauses: s10_0_f_0. `sin_or_cos` within TRIG_ABS and each part within its `eps` of the
+    // 384-bit values, over the quick tier's regimes, y next to π/2 + kπ and |y| up to 2^20.
+    let mut st = 0x9e37_79b9_7f4a_7c15u64;
+    let mut tight = 0usize;
+    for i in 0..6000 {
+        let (x, y) = match i % 3 {
+            0 => operand(&mut st, i % 5),
+            1 => (uniform(&mut st, -3.0, 3.0), near_half_pi(&mut st)),
+            _ => (uniform(&mut st, -1.0, 1.0), uniform(&mut st, -1_048_575.0, 1_048_575.0)),
+        };
+        if parts(x, y).is_none() {
+            continue;
+        }
+        let (s, c) = mp::sin_cos_f64(y);
+        for (part, t) in [(Part::Re, c), (Part::Im, s)] {
+            let d = sin_or_cos(y, part);
+            let terr = t.sub(Mp::from_f64(d.hi).add(Mp::from_f64(d.lo))).to_f64().abs();
+            assert!(terr <= TRIG_ABS, "y = {y:e}: trig error {terr:e} above the bound");
+            let Some((p, eps, m)) = middle_part(x, y, part) else { continue };
+            let e = mp::exp(Mp::from_f64(x)).ldexp(-i64::from(m));
+            let err = e.mul(t).sub(Mp::from_f64(p.hi).add(Mp::from_f64(p.lo))).to_f64().abs();
+            assert!(err <= eps, "x = {x:e}, y = {y:e}: middle error {err:e} above the bound {eps:e}");
+            // Worst-case analysis against typical double-double errors near 2^-105: within 2^12.
+            if err > eps / 4096.0 {
+                tight += 1;
+            }
+        }
+    }
+    assert!(tight > 0, "every middle error far below its bound");
+}
+
+#[test]
+fn cexp_middle_tier_declines_next_to_a_boundary() {
+    // no spec clause (the middle tier's rounding test): an interval holding a midpoint declines
+    // to nearest, one holding a `double` declines in the directed modes; clear of both it answers.
+    let eps = MID_EPS;
+    let midpoint = Dd { hi: 1.0, lo: f64::from_bits(0x3ca0_0000_0000_0000) };
+    assert_eq!(middle_round(midpoint, eps, 0, Rounding::Nearest), None, "the middle tier answered next to a boundary");
+    let on_double = Dd { hi: 1.0, lo: f64::from_bits(0x3af0_0000_0000_0000) };
+    for mode in [Rounding::Down, Rounding::Up, Rounding::Zero] {
+        assert_eq!(middle_round(on_double, eps * 1.0e10, 0, mode), None, "the middle tier answered next to a boundary in {mode:?}");
+    }
+    assert_eq!(middle_round(on_double, eps, 3, Rounding::Nearest), Some(8.0), "a clear part is answered and scaled");
 }
