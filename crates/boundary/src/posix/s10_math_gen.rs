@@ -189,7 +189,7 @@ pub extern "C" fn acosf(x: f32) -> f32 {
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_acosf128_bits(x: F128Bits) -> F128Bits {
-    mret::elem(mret::f128(x), mret::Unit::Sse, math::real::Real::acos)
+    mret::elem(mret::f128(x), mret::Unit::Sse, |v, m| math::wide::acos_sqrt(v, m, crate::hot::sqrtsd))
 }}
 
 export! { libm "GLIBC_2.27";
@@ -269,7 +269,7 @@ pub extern "C" fn asinf(x: f32) -> f32 {
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_asinf128_bits(x: F128Bits) -> F128Bits {
-    mret::elem(mret::f128(x), mret::Unit::Sse, math::real::Real::asin)
+    mret::elem(mret::f128(x), mret::Unit::Sse, |v, m| math::wide::asin_sqrt(v, m, crate::hot::sqrtsd))
 }}
 
 export! { libm "GLIBC_2.27";
