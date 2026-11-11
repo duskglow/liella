@@ -41,6 +41,7 @@
 //! | `fuzz`         | The fuzz harnesses of `fuzz/` (a workspace of its own, nightly, libFuzzer through `cargo fuzz`): `--list`; `<target> --time <minutes>` (or `--all`) runs in chunks resuming from the corpus outside the repository (`~/liella-fuzz-corpus`); `--repro`, `--tmin <file>`, `--cmin` for triage (implementation-plan.md §4.5). |
 //! | `bench-rows`   | The bench rows a change can move plus the sentinel rows (`bench/sentinels.tsv`), for a TARGETED bench (`benchrows.rs`, BENCH-AFF): `--base <ref>` / `--range <a>..<b>` / `--files <p>,...`, `--out <file>` for `bench --rows-file`. `bench --affected <base>` selects and times only those rows (`bench/c/cbench_rows.h`). FULL for build, link, allocator, startup and harness changes. The full bench on main stays the safety net. |
 //! | `sweep`        | The timing sweep (`sweep.rs`, SWEEP-RUN-TOOL): `run --out <dir> [--only a,b]` in a staged tree runs `bench --no-build --staged --counters` and exits 0 when every selected row was measured and `<dir>/sweep.tsv` written, flagged rows or not (nonzero: the measurement did not finish); `compare --new <class>=<sweep.tsv>... (--old <class>=<sweep.tsv>... \| --old-table <results.md>)` prints the report sections against the previous sweep. |
+//! | `long-sweeps`  | The `#[ignore]`d accuracy sweeps of liella-math (`longsweeps.rs`, TEST-LONG-SWEEPS-RUN): `[--group long\|exhaustive\|count\|all] [--list]` (default `long`) runs each once in release by its exact name and fails naming each that failed or ran no test. `test` runs the `long` group when `LIELLA_NO_VERDICT_CACHE=1` (nightly and release). `static` checks that every ignored test of `crates/math` is a row of the runner or of its `NOT_SWEEPS` list. |
 //! | `fuzz-check`  | Type-check every fuzz target on the pinned nightly (`cargo check --bins` in `fuzz/`; no fuzzer runtime). Part of `test` and of `affected` when `crates/` or `fuzz/` sources change: the harnesses are a workspace of their own and a library signature change breaks them silently (HYGIENE-1). |
 //! | `locks`        | The tracked lock files (`Cargo.lock`, `crates/Cargo.lock`, `fuzz/Cargo.lock`) against their manifests (`locks.rs`, FUZZ-LOCK-FRESH): `--check` runs `cargo metadata --locked` per workspace and fails naming each lock cargo would rewrite (a `static` check, `lock-fresh`; a stale lock rewritten by a build made `affected --base` escalate to FULL); `--update` lets cargo rewrite them, to commit. |
 //! | `rust-dylib`   | The Rust dylib `libliella_rust.so.<abi>` (D-X.10) of a version in `spec/abi/rust-abi.toml` (default: the current one): builds it with that version's pinned rustup toolchain (failing if it is absent), after checking that toolchain's `rustc -vV` against the definition; builds it and a program against it in `target/liella/rust/<abi>`, checks soname, note, `LIELLA_RUST_ABI` and `DT_NEEDED` with `readelf`; builds a synthetic second version beside it and checks that both coexist. |
@@ -90,6 +91,7 @@ mod steptime;
 mod symcov;
 mod symgap;
 mod sweep;
+mod longsweeps;
 mod trace;
 mod unicode;
 mod compat_ids;
@@ -180,6 +182,7 @@ fn main() -> ExitCode {
         "affected" => return affected::main(&root, &args[1..]),
         "bench-rows" => benchrows::run(&root, &args[1..]),
         "sweep" => sweep::run(&root, &args[1..]),
+        "long-sweeps" => longsweeps::run(&root, &args[1..]),
         "so" => hottext::regen_mode(&args[1..]).and_then(|_| so::run_so(&root)),
         "repro" => repro::run(&root, &args[1..]),
         "native" => native_examples::run_native(&root),
@@ -229,8 +232,8 @@ fn arch_tools() -> arch::Tools {
 /// on Zen 1 host before a long gate. `~/bin/static-checks` on the VMs is the same list.
 fn static_checks(root: &Path) -> Result<(), String> {
     type Check = fn(&Path) -> Result<(), String>;
-    let checks: [(&str, Check); 33] =
-        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("classed-xref", classed::static_check), ("jcc-check", jcc::static_check), ("layout", layout::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("records", records::check), ("records-gen", records::fresh_check), ("register", register::check), ("compat-ids", compat_ids::check), ("lab-names", labnames::check), ("private-paths", privpaths::check), ("reexec-audit", policy::reexec_audit), ("tables-fresh", |r| math::run_tables(r, &["--check".to_string()])), ("lock-fresh", locks::static_check), ("hottext", hottext::static_check), ("codemap", |r| codemap::run(r, true, false)), ("partial-write", partial_write::static_check)];
+    let checks: [(&str, Check); 34] =
+        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("classed-xref", classed::static_check), ("jcc-check", jcc::static_check), ("layout", layout::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("records", records::check), ("records-gen", records::fresh_check), ("register", register::check), ("compat-ids", compat_ids::check), ("lab-names", labnames::check), ("private-paths", privpaths::check), ("reexec-audit", policy::reexec_audit), ("tables-fresh", |r| math::run_tables(r, &["--check".to_string()])), ("lock-fresh", locks::static_check), ("hottext", hottext::static_check), ("codemap", |r| codemap::run(r, true, false)), ("partial-write", partial_write::static_check), ("long-sweeps", longsweeps::static_check)];
     let failed: Vec<&str> = checks.iter().filter(|(name, f)| f(root).map_err(|e| eprintln!("static: {name} FAILED: {e}")).is_err()).map(|(name, _)| *name).collect();
     if failed.is_empty() { Ok(()) } else { Err(format!("failed: {}", failed.join(", "))) }
 }
@@ -287,6 +290,11 @@ fn test_steps(root: &Path, extra: &[String], t: &mut steptime::Steps) -> Result<
     // on Liella's own `malloc` and `memcpy`, so a recursion in their paths crashes the run. Not
     // with `runtime`: a test process must keep the host C library's start and exit.
     workspace_tests(root, &cargo, Some("liella-boundary/export,liella-boundary/selftest"), extra, t, "tests-interposed")?;
+    // The nightly and release runs (`LIELLA_NO_VERDICT_CACHE=1`, every accuracy shard) also run the ignored long
+    // sweeps of liella-math in release (`longsweeps.rs`, TEST-LONG-SWEEPS-RUN); the ordinary gate leaves them out.
+    if std::env::var("LIELLA_NO_VERDICT_CACHE").as_deref() == Ok("1") {
+        t.time("long-sweeps", || longsweeps::run_groups(root, &[longsweeps::Group::Long]))?;
+    }
     t.time("conformance", || ctest(root))?;
     // The native Rust interface's examples, on the products built above (D-X.10).
     t.time("native-examples", || native_examples::run_native(root))?;

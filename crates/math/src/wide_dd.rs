@@ -763,9 +763,9 @@ mod tests {
         assert!(refused < 300, "refused {refused}");
     }
 
-    /// The accuracy job's sweep (release build): more operands, every mode.
+    /// The long sweep (`cargo xtask long-sweeps`, release build): more operands, every mode.
     #[test]
-    #[ignore = "long: the accuracy job runs it in release"]
+    #[ignore = "long: cargo xtask long-sweeps runs it in release (nightly and release runs)"]
     fn tier_agrees_with_the_wide_route_long() {
         let refused = sweep(40_000, 0x2545_f491_4f6c_dd1d);
         println!("refused {refused}");

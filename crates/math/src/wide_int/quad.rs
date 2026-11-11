@@ -921,7 +921,7 @@ mod tests {
     /// multiples of π/2 at every exponent.
     /// `cargo test --release -p liella-math --lib wide_int::quad -- --ignored`.
     #[test]
-    #[ignore = "10^7 operands against the 384-bit route: run in release as a job"]
+    #[ignore = "10^7 operands against the 384-bit route: cargo xtask long-sweeps runs it in release (nightly and release runs)"]
     fn tier_agrees_with_the_wide_route_long() {
         const TOTAL: usize = 10_000_000;
         let threads = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
