@@ -11,4 +11,5 @@
  "improvement": "the train should run regen.sh (or at least the dead-key check) on the merged train head before the gate, so a generated list made stale by other landings fails in seconds with the regen command instead of as a story red",
  "next_step": "fault-map the merged head against next aad3df74d on one host to find the windows of the +1 tool and +1 locale fault",
  "report_file": "handoff/LAYOUT-TEXT-PIN-10.md",
- "jobs": ["shiki:layout-text-pin-10-lint1", "shiki:layout-text-pin-10-regen-both2", "shiki:layout-text-pin-10-next-ref"]}
+ "jobs": ["shiki:layout-text-pin-10-lint1", "shiki:layout-text-pin-10-next-ref"],
+ "evidence_jobs": ["shiki:layout-text-pin-10-regen-both2 (rc 101: the regen and xtask so passed; the two hot_text_products bound tests failed, 59 > 58 and 56 > 55; it is the INCOMPLETE evidence, not a pass)"]}
