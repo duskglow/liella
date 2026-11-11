@@ -20,7 +20,7 @@
 //! 1. ESCALATE TO FULL (everything: the workspace clippy and `cargo xtask test`): `csys/` (but
 //!    the assembly sources, rule 6), `crates/abi`, build scripts, `Cargo.toml`/`Cargo.lock` (but `fuzz/`'s own
 //!    workspace, which selects only `fuzz-check`), the
-//!    toolchain file, `xtask/` (but this module and the audit modules, rule 7, and xtask test code: `xtask/tests/`
+//!    toolchain file, `xtask/` (but this module, the audit and tool modules, rule 7, and xtask test code: `xtask/tests/`
 //!    or a source whose base diff stays inside its trailing `#[cfg(test)]` module, D-X.41), the generated tables and their inputs (`spec/clauses.tsv`, `symbols.tsv`,
 //!    `primitives.tsv`, `spec/abi`, `spec/unicode`, `*_gen.rs`, `tables.rs`, `builtin_items.rs`,
 //!    `include/`; but the math wiring, coefficients, fits and tables generator, rule 8), the product crates, linker and export lists,
@@ -67,6 +67,10 @@
 //!    xtask, or no user at all.
 //! 7. An xtask audit/report module (`XTASK_AUDITS`: policy, symgap, status, schedule, plants): the
 //!    xtask unit tests, clippy, the policy checks and the module's own command.
+//!    XTASK-AFFECTED-XTASK (#4684): an xtask tool module off the product path (`XTASK_TOOLS`: the records and view
+//!    tools, the source checks of `cargo xtask static`, the bench and report commands): the xtask unit tests, clippy
+//!    and `cargo xtask static`. The product build, its image tools, the generators, the test runners and `main.rs` stay
+//!    FULL (a `hottext.rs` change also selects the start-up layout tests).
 //! 8. XTASK-AFFECTED-MATH (ruling #3188): the math export wiring (`crates/boundary/src/posix/s10_math.tsv`,
 //!    `s10_math_gen.rs`, `csys/src/adapter/math_*.c`) selects the math export tests (`Selection::math_exports`: the
 //!    `s10_math_gen` module as if changed, every `liella-math` target, every target whose own source names `s10_math`
@@ -1610,6 +1614,8 @@ enum Class {
     /// XTASK-AFFECTED-XTASK-TESTS: xtask test code only (`xtask/tests/`, or a source whose diff stays inside its
     /// trailing `#[cfg(test)]` module): the xtask unit tests, clippy and `cargo xtask static`, not FULL.
     XtaskTestCode,
+    /// XTASK-AFFECTED-XTASK: a module of [`XTASK_TOOLS`]: the xtask unit tests, clippy and `cargo xtask static`.
+    XtaskTool,
     /// XTASK-AFFECTED-MATH: the math export wiring (`s10_math.tsv`, `s10_math_gen.rs`, `csys/src/adapter/math_*.c`).
     MathWiring,
     /// XTASK-AFFECTED-MATH: a generated coefficient file `crates/math/src/coeffs/<family>.rs`.
@@ -1712,6 +1718,52 @@ const XTASK_AUDITS: &[(&str, &[&str])] = &[
     ("xtask/src/schedule.rs", &["status"]),
 ];
 
+/// XTASK-AFFECTED-XTASK: xtask modules (a file `xtask/src/<m>.rs` or a directory `xtask/src/<m>/`) that neither build
+/// the products, nor generate their sources, nor run the test suites: the record and view tools, the source checks of
+/// `cargo xtask static`, and the bench and report commands no gate step runs. A change to one selects the xtask unit
+/// tests, the xtask clippy and `cargo xtask static` (which runs every check that uses it), not FULL. Each must be
+/// named only by `main.rs`, this command, another module of this table or [`XTASK_AUDITS`], or a use listed in
+/// [`XTASK_TOOL_USES`] (the unit test `tool_modules_stay_off_the_product_path` checks it, and that the full gate's
+/// own steps call none of them outside `cargo xtask static`). Every other xtask module still escalates to FULL: the
+/// product build (`so`, `hottext`, `coldbss`, `layout`, ...), the generators, the test runners and `main.rs`.
+const XTASK_TOOLS: &[(&str, &str)] = &[
+    ("records", "the decision, compat and saturation records and their views (static: records, records-gen)"),
+    ("kernel_index", "the generated KERNELS.md view (static: tables-fresh)"),
+    ("register", "the saturation register check (static: register)"),
+    ("compat_ids", "the compat id check (static: compat-ids)"),
+    ("codemap", "the code map view (static: codemap)"),
+    ("compat_plan", "the compat dispatch table check (static: compat-plan)"),
+    ("compatprobe", "the compat probe list check (static: compat-probes)"),
+    ("privpaths", "the private paths check (static: private-paths)"),
+    ("locks", "the lock file freshness check (static: lock-fresh)"),
+    ("fuzz", "the fuzz harness build check (static: fuzz-check)"),
+    ("arch", "the architecture seam audit (static: arch-audit); `arch-check` is not a gate step"),
+    ("bench", "`cargo xtask bench`, not a gate step"),
+    ("benchrows", "`cargo xtask bench-rows`, not a gate step"),
+    ("benchstage", "`cargo xtask bench --stage`, not a gate step"),
+    ("abbench", "the A/B bench driver of `cargo xtask bench`, not a gate step"),
+    ("sweep", "`cargo xtask sweep`, not a gate step"),
+    ("repro", "`cargo xtask repro`, not a gate step"),
+    ("symcov", "`cargo xtask symcov`, a report, not a gate step"),
+];
+
+/// XTASK-AFFECTED-XTASK: the uses of an [`XTASK_TOOLS`] module from a module that escalates to FULL, each a call that
+/// only a check of `cargo xtask static` makes: (user, tool module, why).
+const XTASK_TOOL_USES: &[(&str, &str, &str)] = &[
+    ("math", "kernel_index", "`math::run_tables` ends with the kernel index (KERNELS.md, a view), which static runs as tables-fresh"),
+    ("math", "records", "the same call's `records::in_place_env` switch"),
+    ("trace", "records", "`trace::run` reads the decision ids; static runs trace"),
+];
+
+/// The xtask module a source path belongs to: `xtask/src/<m>.rs` or `xtask/src/<m>/...` gives `<m>`.
+fn xtask_module(path: &str) -> Option<&str> {
+    let rest = path.strip_prefix("xtask/src/")?;
+    match rest.split_once('/') {
+        Some((m, _)) => Some(m),
+        None => rest.strip_suffix(".rs"),
+    }
+}
+
 /// GATE-VALIDATION-SH-TESTS (D-X.54): the self-tests of the workload scripts under `validation/`. Each runs as
 /// `bash <path>` from the tree root, needs no build, and ends 0 with a pass line or 1 (`wl_mtmem_test.sh` runs a real
 /// `strace` of a threaded `sort` and exits 0 with SKIP when either is absent). Seconds each (measured on an 8-thread
@@ -1797,6 +1849,10 @@ fn classify(path: &str) -> Option<Class> {
     // step executes them.
     if path.starts_with("xtask/tests/") {
         return Some(Class::XtaskTestCode);
+    }
+    // XTASK-AFFECTED-XTASK: a tool module off the product path (the table's unit test keeps it so).
+    if path.ends_with(".rs") && xtask_module(path).is_some_and(|m| XTASK_TOOLS.iter().any(|(t, _)| *t == m)) {
+        return Some(Class::XtaskTool);
     }
     if path.starts_with("xtask/") {
         return full("xtask (its commands are part of the gate)");
@@ -1969,6 +2025,13 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
                 add(&mut sel.clippy, "xtask".to_string(), &format!("{f} changed"));
                 sel.xtask_cmds.insert("static".to_string());
                 sel.notes.push(format!("{f}: xtask test code only (xtask unit tests, clippy, `cargo xtask static`; not FULL)"));
+            }
+            Some(Class::XtaskTool) => {
+                sel.xtask_tests = true;
+                add(&mut sel.clippy, "xtask".to_string(), &format!("{f} changed"));
+                sel.xtask_cmds.insert("static".to_string());
+                let why = xtask_module(f).and_then(|m| XTASK_TOOLS.iter().find(|(t, _)| *t == m)).map_or("", |(_, w)| *w);
+                sel.notes.push(format!("{f}: an xtask tool module off the product path, {why} (xtask unit tests, clippy, `cargo xtask static`; not FULL)"));
             }
             Some(Class::Full(why)) => {
                 if f.starts_with("xtask/") {
@@ -5002,6 +5065,85 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
                 let stem = m.trim_start_matches("xtask/src/").trim_end_matches(".rs");
                 assert!(!text.contains(&format!("{stem}::")), "{rel} uses the audit module {stem}: it is no longer a leaf, take it out of XTASK_AUDITS");
             }
+        }
+    }
+
+    #[test]
+    fn a_records_only_change_selects_the_xtask_checks_not_full() {
+        // no spec clause: XTASK-AFFECTED-XTASK (#4684). The records tool builds no product and runs no suite: the
+        // xtask unit tests, the xtask clippy and `cargo xtask static` (records, records-gen, register, ...) cover it.
+        for f in ["xtask/src/records/mod.rs", "xtask/src/records/check.rs", "xtask/src/kernel_index.rs", "xtask/src/bench.rs"] {
+            let (_, s) = sel(&[f]);
+            assert!(s.full.is_empty(), "{f} is an xtask tool module off the product path, not FULL: {:?}", s.full);
+            assert!(s.xtask_tests && s.xtask_cmds.contains("static") && s.tests.is_empty() && s.conf.is_empty(), "{f}: {s:?}");
+            assert!(s.clippy.len() == 1 && s.clippy.contains_key("xtask"), "{f}: only the xtask clippy: {s:?}");
+        }
+        // `--tier full` still means everything.
+        assert!(!select_tier(repo(), &["xtask/src/records/mod.rs".to_string()], Tier::Full).full.is_empty());
+    }
+
+    #[test]
+    fn a_product_build_path_change_still_selects_full() {
+        // no spec clause: XTASK-AFFECTED-XTASK. The product build, its image tools, the generators, the test runners and
+        // the dispatcher can change any product or test outcome.
+        for f in ["xtask/src/so.rs", "xtask/src/hottext.rs", "xtask/src/coldbss.rs", "xtask/src/layout.rs", "xtask/src/csys.rs", "xtask/src/csys/veneer.rs", "xtask/src/math.rs", "xtask/src/nextest.rs", "xtask/src/spec.rs", "xtask/src/trace.rs", "xtask/src/main.rs", "xtask/src/labnames.rs", "xtask/src/new_module.rs", "xtask/Cargo.toml"] {
+            assert!(!sel(&[f]).1.full.is_empty(), "{f} takes part in building or checking the products: FULL");
+        }
+    }
+
+    #[test]
+    fn a_hottext_change_selects_the_layout_tests() {
+        // no spec clause: XTASK-AFFECTED-XTASK, XTASK-AFFECTED-LAYOUT. hottext.rs groups libc.a's hot text: the
+        // start-up layout tests measure it (and the change stays FULL: the products change).
+        let (_, s) = sel(&["xtask/src/hottext.rs"]);
+        for (k, t) in LAYOUT_TESTS {
+            assert!(s.tests.contains_key(&(k.to_string(), t.to_string())), "hottext.rs must select {k}/{t}: {:?}", s.tests.keys().collect::<Vec<_>>());
+        }
+        assert!(!s.full.is_empty());
+    }
+
+    /// Does xtask source `text` name module `m` (`m::` after `crate::`, `super::` or a non-path character, or `m`
+    /// inside a `crate::{...}` import)? `liella_ld::arch::` is another crate's module, not xtask's `arch`.
+    fn names_xtask_module(text: &str, m: &str) -> bool {
+        let pat = format!("{m}::");
+        let path_use = text.match_indices(&pat).any(|(i, _)| {
+            let before = &text[..i];
+            before.ends_with("crate::") || before.ends_with("super::") || !before.chars().next_back().is_some_and(|c| c.is_alphanumeric() || c == '_' || c == ':')
+        });
+        let import = text.split("crate::{").skip(1).any(|g| g.split('}').next().unwrap_or_default().split(|c: char| !(c.is_alphanumeric() || c == '_')).any(|w| w == m));
+        path_use || import
+    }
+
+    #[test]
+    fn tool_modules_stay_off_the_product_path() {
+        // no spec clause: XTASK-AFFECTED-XTASK. A module of XTASK_TOOLS is named only by main.rs, this command, other
+        // tool or audit modules, or an XTASK_TOOL_USES row; and the full gate's steps call it only where
+        // `cargo xtask static` calls it too.
+        let audits: Vec<&str> = XTASK_AUDITS.iter().filter_map(|(p, _)| xtask_module(p)).collect();
+        let tools: Vec<&str> = XTASK_TOOLS.iter().map(|(m, _)| *m).collect();
+        let mut files = Vec::new();
+        files_under(&root().join("xtask/src"), &["rs"], &mut files);
+        let files: Vec<(String, String)> = files.iter().map(|p| (p.strip_prefix(root()).unwrap_or(p).to_string_lossy().replace('\\', "/"), read(p))).collect();
+        for m in &tools {
+            assert!(files.iter().any(|(r, _)| xtask_module(r) == Some(*m)), "XTASK_TOOLS names {m}, which has no source under xtask/src");
+            for (rel, text) in &files {
+                let user = xtask_module(rel).unwrap_or_default();
+                if user == *m || user == "main" || user == "affected" || tools.contains(&user) || audits.contains(&user) || !names_xtask_module(text, m) {
+                    continue;
+                }
+                assert!(XTASK_TOOL_USES.iter().any(|(u, t, _)| *u == user && t == m), "{rel} names the tool module {m}: it is on the product path now; take {m} out of XTASK_TOOLS or, if the use is a check of `cargo xtask static` only, add an XTASK_TOOL_USES row");
+            }
+        }
+        let main = read(&root().join("xtask/src/main.rs"));
+        let body = |name: &str| main.split(&format!("\nfn {name}(")).nth(1).and_then(|b| b.split("\n}\n").next()).unwrap_or_default().to_string();
+        let (steps, checks) = (body("test_steps"), body("static_checks"));
+        assert!(steps.contains("so::run_so") && checks.contains("records::check"), "main.rs's test_steps / static_checks not found");
+        for m in &tools {
+            assert!(!names_xtask_module(&steps, m) || names_xtask_module(&checks, m), "the full gate's steps call the tool module {m}, which `cargo xtask static` does not: take it out of XTASK_TOOLS");
+        }
+        // The rows of XTASK_TOOL_USES are real uses (a stale row would hide a later one).
+        for (u, t, _) in XTASK_TOOL_USES {
+            assert!(files.iter().any(|(r, text)| xtask_module(r) == Some(*u) && names_xtask_module(text, t)), "XTASK_TOOL_USES: {u} no longer names {t}: remove the row");
         }
     }
 
