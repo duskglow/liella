@@ -4,7 +4,7 @@
  "tokens": null,
  "result": "INCOMPLETE: LAYOUT-JITTER: STARTUP-DATA-WINDOWS 21 > 20 on the story head vs 17 on origin/next f1f5358d5; no written-data section changes size, only rustc's emission order of boundary-crate .lbss/.data.rel.ro objects; .lbss phase alone moves next 17-20 and the head 18-21",
  "branch": "task/libm-f32-powf-3",
- "head": null,
+ "head": "a65afdcca",
  "gate": {
   "affected": "not run (xtask so stops at the layout contract; no code change in this run)",
   "peak": null
@@ -28,6 +28,7 @@
  "jobs": [
   "libm-f32-powf-3-lint2",
   "libm-f32-powf-3-nextso",
+  "libm-f32-powf-3-padhead2",
   "libm-f32-powf-3-padnext2"
  ]
 }
