@@ -1,0 +1,12 @@
+{"task": "DL-TLS-SELF-IMAGE-2", "model": "opus", "tokens": null,
+ "result": "origin/next merged (DL-TLS-STATIC-2's link() resolution): static TLS kept as landed, ld.so's scope entry still from its mapped image; link() drops the now-unused kernel_started argument; gate, TLS matrix, execute-only-interpreter test and plants green on the merged head",
+ "branch": "task/dl-tls-self-image-2", "head": "126e32bdd",
+ "gate": {"affected": "397 passed / 0 failed (direct tier, --base origin/next); tls 5 passed / 0 failed after cargo xtask so", "peak": "2.0G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["A dependency naming ld.so's file by path (not soname) loads a second copy: the interpreter's (dev, ino) is not known without reading its file; same case as ruling #4341 (unchanged from -1)"],
+ "refused": [],
+ "improvement": "When a stacked story's base lands with its own resolution of a shared function, the coordinator could cut the continuation brief with the landed signature named (here #4637's kernel_started) so the merge needs no investigation",
+ "next_step": "none required; optional: share one scratch mapping for the header table and PT_DYNAMIC copy in image_view",
+ "report_file": "handoff/DL-TLS-SELF-IMAGE.md",
+ "jobs": ["dl-tls-self-image-2-lint", "dl-tls-self-image-2-gate", "dl-tls-self-image-2-plants"]}

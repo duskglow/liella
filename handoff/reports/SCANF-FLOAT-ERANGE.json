@@ -1,0 +1,12 @@
+{"task": "SCANF-FLOAT-ERANGE", "model": "opus", "tokens": null,
+ "result": "scanf floating conversions set ERANGE on overflow and tiny inexact results, matching the reference; values and counts unchanged; one recorded difference (D-12.26)",
+ "branch": "task/scanf-float-erange", "head": null,
+ "gate": {"affected": "1976 passed / 0 failed on 1424c78 (static red on record newline, fixed); final-tree gate2 pending", "peak": "1.6G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "No compat option for the D-12.26 difference (range error stays reported when a later directive meets end of input)", "recommendation": "none; reason recorded in the differences row"}],
+ "informational": ["Empty input with %lf: the reference sets errno to 0 whatever errno was on entry; Liella leaves errno unchanged (out of scope, untouched)"],
+ "refused": [],
+ "improvement": "the probe tool's cache JSON holds stdout base64-encoded; a --show-stdout option would save decode round trips and context",
+ "next_step": "land after scanf-float-erange-gate2 is green",
+ "report_file": "handoff/scanf-float-erange.md",
+ "jobs": ["scanf-float-erange-gate2", "scanf-float-erange-lint2", "scanf-float-erange-plants"]}

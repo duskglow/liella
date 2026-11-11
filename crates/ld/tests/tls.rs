@@ -210,3 +210,35 @@ fn tls_model_matrix_over_initially_loaded_objects() {
     }
     std::fs::remove_dir_all(&d).ok();
 }
+
+/// s27_3_c_0 (ruling #4229, D-27.23): `__tls_get_addr` binds to the interpreter's own scope entry,
+/// which `ld.so` takes from its mapped image: it never reads its own file. The interpreter here may
+/// be executed but not read (mode 0111), so neither its `PT_INTERP` path nor `/proc/self/exe` can be
+/// opened; the GD/LD libraries of the matrix still run, started by the kernel and as `ld.so PROGRAM`.
+#[test]
+fn tls_interpreter_scope_entry_without_reading_its_file() {
+    use std::os::unix::fs::PermissionsExt;
+    let (true, Some(ld)) = (tools_ok(), product()) else { return };
+    let d = target().join(format!("ld-tls-noread-{}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    let own = d.join(Native::INTERP);
+    std::fs::copy(&ld, &own).unwrap();
+    std::fs::set_permissions(&own, std::fs::Permissions::from_mode(0o111)).unwrap();
+    if std::fs::File::open(&own).is_ok() {
+        eprintln!("SKIP: an execute-only file is still readable here (the tests run with file-permission override)");
+        std::fs::remove_dir_all(&d).ok();
+        return;
+    }
+    // Linked against the readable product (same soname); started through the execute-only copy.
+    let lds = ld.to_str().unwrap();
+    let b = build(&d, "libb.so", LIBB, &["-fPIC", "-shared", lds]);
+    let bs = b.to_str().unwrap();
+    let a = build(&d, "liba.so", LIBA, &["-fPIC", "-shared", bs, lds]);
+    let interp = format!("-Wl,--dynamic-linker={}", own.display());
+    let p = build(&d, "prog", PROG, &["-fPIE", "-pie", a.to_str().unwrap(), bs, lds, &interp]);
+    for (how, o) in [("PT_INTERP", Command::new(&p).output()), ("ld.so PROGRAM", Command::new(&own).arg(&p).output())] {
+        let o = o.unwrap();
+        assert_eq!(o.status.code(), Some(0), "{how} with an unreadable interpreter: TLS check number {:?} failed; stderr: {}", o.status.code(), String::from_utf8_lossy(&o.stderr));
+    }
+    std::fs::remove_dir_all(&d).ok();
+}
