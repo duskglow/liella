@@ -73,7 +73,7 @@ fn put(b: &ThreadBlock, v: &[usize; WORDS]) {
 }
 
 /// What the test asks Liella, each as one word, with no allocation.
-const ASKED: usize = 15;
+const ASKED: usize = 16;
 fn ask(fds: [i32; 2]) -> [usize; ASKED] {
     let tp = tb::tp();
     let outside = |a: usize| usize::from(!(tp..tp + BLOCK_SIZE).contains(&a));
@@ -97,6 +97,7 @@ fn ask(fds: [i32; 2]) -> [usize; ASKED] {
         usize::from(byte[0]),
         usize::from(ct::iswalpha(u32::from('z')) != 0),
         mb::__ctype_get_mb_cur_max(),
+        mb::mblen(b"a\0".as_ptr().cast(), 1) as usize,
     ]
 }
 
@@ -135,6 +136,7 @@ fn foreign_block_words_neither_trusted_nor_written() {
             first[10],
             1 << 8 | 1,
             usize::from(b'x'),
+            1,
             1,
             1,
         ];
