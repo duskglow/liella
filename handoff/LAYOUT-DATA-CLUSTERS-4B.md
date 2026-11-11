@@ -41,8 +41,8 @@ none added. Earlier: `handoff/LAYOUT-DATA-CLUSTERS-4.md` (its "Not done" list is
 1. **release `strings` 1 vs 0**: `init_first_string_calls_after_printf_take_no_text_fault` FAILS on release
    products (test_rc 101 inside ldc4b-counts-head-2; the job itself exits 0 since it only measures). It is -4's open
    item 2 (#4631), seen since -2 (ldc3-map). The gate builds fast products, where it passes.
-2. **fast `float` 3 vs 2**: next has gained one fault since -3's measurement (next 3 then, 2 now); head is still at
-   3. Not mapped.
+2. **fast `float` 3 vs 2**: next improved by one fault since -3 measured it (next 3 then, 2 now); head is still
+   at 3. Not mapped.
 3. -4's items 1 and 3 (startup-data.keys regeneration with the `data` region; counts table) remain.
 
 ## Jobs (mei)

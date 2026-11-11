@@ -18,7 +18,7 @@
  ],
  "informational": [
   "release strings +1 is -4's open item 2 (#4631), present since -2",
-  "next gained a fast float fault since -3's measurement (3 -> 2); head stays at 3",
+  "next improved fast float since -3 measured it (3 -> 2 faults); head stays at 3",
   "next moved during the run (28a903a01, HOTTEXT-DEAD-KEY-REPAIR); merged again, one import-line conflict in xtask/src/hottext.rs tests resolved as a union"
  ],
  "refused": [],
