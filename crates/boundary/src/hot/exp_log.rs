@@ -15,6 +15,20 @@ pub(crate) fn exp_nearest(x: f64) -> Option<f64> {
     liella_math::fast64::quick::exp_tiered(x)
 }
 
+/// The `double` `exp` quick phase in the caller's directed rounding direction (D-10.94) in its
+/// build chosen at startup (as [`exp_nearest`]): `e^x` rounded in `mode`, or `None` (the entry then
+/// switches). `mode` is the caller's direction, never round to nearest.
+#[inline(always)]
+pub(crate) fn exp_directed(x: f64, mode: liella_math::Rounding) -> Option<f64> {
+    let h = if matches!(mode, liella_math::Rounding::Up) { -0.5 } else { 0.5 };
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::quick::fused::exp_directed(x, h) };
+    }
+    liella_math::fast64::quick::exp_directed(x, h)
+}
+
 /// The `double` `exp` quick phase alone (LIBM-F64-EXP-QUICK, D-10.51) in its build chosen at
 /// startup (as [`exp_nearest`]): the correctly rounded result, or `None` when the rounding test
 /// fails (bound and count tests).

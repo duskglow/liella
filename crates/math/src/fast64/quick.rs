@@ -54,6 +54,37 @@
 //! The `bounds` tests recompute every term from the constants. Expected fallback `≈ c − 1`: SSE2
 //! 0.565%, FMA 0.0076%.
 //!
+//! **Directed rounding** (LIBM-DIRECTED-INPLACE, D-10.94): [`exp_directed`] runs the same
+//! reduction and kernel in the caller's direction (down, up or toward zero; the entry has checked
+//! that the rest of MXCSR is the default word), so every rounding below may err by up to one ulp
+//! (`2u = 2^-52` relative) instead of half of one:
+//! * Reduction: `t = RN(x·INV + h + SHIFT)` would round directed, leaving `|x·128/ln2 − k| < 1`,
+//!   which doubles `R` and breaks `r1`'s exactness for `|x| < 2^-9`. The entry passes `h = +1/2`
+//!   when the sum rounds down (down, toward zero: the sum is positive) and `h = −1/2` when it
+//!   rounds up, so `t = ∘(∘(x·INV + h) + SHIFT)` is `x·128/ln2` rounded to nearest within the
+//!   roundings of `x·INV` and `+ h` (each below `2^-36` for `|x·INV| < 2^17`): `|x·128/ln2 − k| <=
+//!   1/2 + 2^-34`, so `R` and `|k| <= 130743` keep their values (to `2^-34`) and `r1` is exact
+//!   by the same grid argument (`k != 0` forces `|x| >= 0.0027 > 2^-9`; Sterbenz's lemma and the
+//!   exact `kd·L1` hold in any direction). `kd = t − SHIFT` is exact in any direction.
+//! * The kernel: bound terms 1-4 and 6 are rounding errors, each linear in `u`, so they double
+//!   (`rl` grows to `|rl| <= ulp(rh) <= 2^-61`); terms 5 and the table's `2^-105` are not
+//!   roundings and stay. Fast2Sum is no longer error-free: its first difference is exact
+//!   (Sterbenz: the two heads are within a factor 2), and the error term is that exact difference
+//!   rounded once, `<= 2u·ulp(head)`, `2^-103·th` for each of the two (Boldo, Graillat & Muller,
+//!   "On the robustness of the 2Sum and Fast2Sum algorithms", ACM TOMS 44(1), 2017); the products'
+//!   low parts (`th·rh − u` by FMA) stay exact, a product's error being representable in any
+//!   direction. Totals over `|zh|/th >= e^-R·(1 − 2^-50)`: SSE2 `2^-60.50`, FMA `2^-66.84`;
+//!   stated `RHO_DIR_SSE2 = 1.5·2^-61` (`2^-60.415`), `RHO_DIR_FMA = 1.25·2^-67` (`2^-66.678`).
+//! * Rounding test: with `e = ∘(zh·rho)`, `lo = ∘(zh + ∘(zl − e))` and `hi = ∘(zh + ∘(zl + e))`
+//!   in the caller's direction `∘`: the inner roundings (`<= 2^-103·zh`) and `e`'s (`2^-52·e`)
+//!   fit in the margin between the totals and the stated `rho`, so `zh + ∘(zl − e) <= y <= zh +
+//!   ∘(zl + e)` for the exact `y = e^x/2^m`; `∘` is monotone, so `lo == hi` means `∘(y) = lo`. The test is sound in every direction and needs no property of
+//!   `e^x` (no midpoint or exactness argument). `lo·2^m` is exact: `lo >= 1.48` when `m = −1022`
+//!   (`j >= 73` there) and `e^708 < 2^1022`. Expected fallback `≈ 2·rho/ulp`: SSE2 about 1.1%,
+//!   FMA 0.02%; a decline goes to the switched path (the caller's word restored on exit, so the
+//!   attempt's inexact flag is dropped with it). The arithmetic raises inexact only, as in round
+//!   to nearest (the magnitudes are those of the nearest proof).
+//!
 //! **exp2 and exp10** (LIBM-F64-EXP-FAMILY-QUICK, D-10.64): the same kernel (`T_j` on, above)
 //! fed by their own reductions, so `2^x` or `10^x` is `2^(k/128)·e^r` with `r = rh + rl`:
 //! * exp2, `2^-60 <= |x| < 1021`: `t = RN(x·128 + SHIFT)` (`x·128` exact, so `|x·128 − k| <=
@@ -201,6 +232,13 @@ pub const RHO_SSE2: f64 = f64::from_bits(0x3c17_0000_0000_0000);
 pub const RHO_FMA: f64 = f64::from_bits(0x3bb4_0000_0000_0000);
 pub(crate) const C_SSE2: f64 = f64::from_bits(0x3ff0_1721_3fcb_b4d5);
 pub(crate) const C_FMA: f64 = f64::from_bits(0x3ff0_0050_0190_07d1);
+/// exp's stated bounds in a directed rounding direction (module doc, "Directed rounding"): the
+/// half-width of [`exp_directed`]'s interval relative to `zh`, `1.5·2^-61` (SSE2) and
+/// `1.25·2^-67` (FMA), checked against the recomputed terms by the `directed_bounds` test.
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub const RHO_DIR_SSE2: f64 = f64::from_bits(0x3c28_0000_0000_0000);
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub const RHO_DIR_FMA: f64 = f64::from_bits(0x3bc4_0000_0000_0000);
 
 // exp2 and exp10 on the same kernel (LIBM-F64-EXP-FAMILY-QUICK, D-10.64): their own reductions
 // feed `kernel` a `(rh, rl)` with the bound of the exp2/exp10 section of the module doc.
@@ -298,7 +336,7 @@ fn dekker_lo(a: f64, b: f64, p: f64) -> f64 {
 // `$lo` the low part of `th·rh` (0, or exact by one FMA), `$lox` that low part exactly (Dekker's
 // product, or the FMA) for expm1, `$c` the rounding test's multiplier.
 macro_rules! quick {
-    ($(#[$a:meta])*; $(#[$i:meta])*; $ma:path; $lo:path; $lox:path; $c:expr; $cf:expr) => {
+    ($(#[$a:meta])*; $(#[$i:meta])*; $ma:path; $lo:path; $lox:path; $c:expr; $cf:expr; $cd:expr) => {
 /// `e^x = (zh + zl)·sc` within `rho·|zh|·sc` for `2^-60 <= |x| < 708`, else `None` (module doc).
 $(#[$a])*
 $(#[$i])*
@@ -314,6 +352,30 @@ pub fn exp_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
     let rh = $ma(kd, NL2, r1);
     let rl = $ma(kd, NL2, r1 - rh);
     Some(kernel::<false>(kb, rh, rl))
+}
+
+/// `e^x` rounded in the caller's direction (down, up or toward zero, read by nothing here: the
+/// arithmetic runs in it) for `2^-60 <= |x| < 708` when the directed test decides it, else `None`
+/// (module doc, "Directed rounding", D-10.94). `h` is `−1/2` when the caller rounds up and `+1/2`
+/// when it rounds down or toward zero, so that `k` is `x·128/ln2` rounded to nearest within `2^-34`
+/// whatever the direction. Not for round to nearest (`h = ±1/2` there breaks the reduction).
+$(#[$a])*
+$(#[$i])*
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub fn exp_directed(x: f64, h: f64) -> Option<f64> {
+    if (x.to_bits() & ABS).wrapping_sub(LO_BITS) >= SPAN {
+        return None;
+    }
+    let tt = $ma(x, INV, h) + SHIFT;
+    let kd = tt - SHIFT;
+    let kb = tt.to_bits().wrapping_sub(KBIAS);
+    let r1 = $ma(kd, NL1, x);
+    let rh = $ma(kd, NL2, r1);
+    let rl = $ma(kd, NL2, r1 - rh);
+    let (zh, zl, sc) = kernel::<false>(kb, rh, rl);
+    let e = zh * $cd;
+    let lo = zh + (zl - e);
+    if lo == zh + (zl + e) { Some(lo * sc) } else { None }
 }
 
 /// `2^x = (zh + zl)·sc` within `RHO_FAM_*·|zh|·sc` for `2^-60 <= |x| < 1021`, else `None`
@@ -753,7 +815,7 @@ fn tier2(x: f64) -> Option<f64> {
     super::exp_nearest(x)
 }
 
-quick!(; #[inline(always)]; ma; no_lo; dekker_lo; C_SSE2; C_FAM_SSE2);
+quick!(; #[inline(always)]; ma; no_lo; dekker_lo; C_SSE2; C_FAM_SSE2; RHO_DIR_SSE2);
 
 /// The quick phase's FMA build (D-10.25, D-10.50): callable only on a CPU with FMA whose AVX state
 /// the OS saves; the boundary chooses it once at startup (`dispatch::fma`).
@@ -761,7 +823,7 @@ quick!(; #[inline(always)]; ma; no_lo; dekker_lo; C_SSE2; C_FAM_SSE2);
 #[cfg(target_arch = "x86_64")]
 pub mod fused {
     use super::{
-        t, ABS, C3, C4, C5, C6, C7, C8, C9, C_FAM_FMA, C_FMA, C_M1, INV, INV10, KBIAS, LN10H, LN10L, LN2H, LN2L, LO_BITS, MASK27, NE0, NE1, NE2,
+        t, ABS, C3, C4, C5, C6, C7, C8, C9, C_FAM_FMA, C_FMA, C_M1, RHO_DIR_FMA, INV, INV10, KBIAS, LN10H, LN10L, LN2H, LN2L, LO_BITS, MASK27, NE0, NE1, NE2,
         NEG37_BITS, NL1, NL2, ONE_BITS, SHIFT, SMALL_M1, SPAN, SPAN10, SPAN2, SPAN_EXACT10, SINH_POLY, HYP_BIG,
         TANH_SPAN, TANH_POLY, T3, T5, T7, T9,
     };
@@ -848,7 +910,7 @@ pub mod fused {
         #[doc = "# Safety"]
         #[doc = ""]
         #[doc = "The CPU must support FMA and the OS must save the AVX state (the `#[target_feature]` contract)."]
-        #[target_feature(enable = "fma")]; #[inline]; ma; lo; lo; C_FMA; C_FAM_FMA
+        #[target_feature(enable = "fma")]; #[inline]; ma; lo; lo; C_FMA; C_FAM_FMA; RHO_DIR_FMA
     );
 }
 
