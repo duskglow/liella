@@ -93,15 +93,12 @@ liella_machine_ld_enter:
 #ifdef LIELLA_STATIC_PIE
 	/* LAYOUT-DATA-CLUSTERS-4 (D-X.68): a static PIE relocates itself with exactly one writable
 	 * PT_LOAD (crates/ld/src/boot.rs `image`). The linker starts a new segment where the gap before
-	 * a section reaches a whole page, so a writable section after the segment's first one (`.data1`
-	 * after `.data`; `.data.rel.ro` after a program's `.tdata` or `.init_array`) must not start on
-	 * a boundary above 4 KiB: a 16 KiB `.data1` left a 3-page gap and a second writable segment,
-	 * and the start refused the executable (exit 127). At 4 KiB the gap stays under a page, and
-	 * the written cluster still takes ceil(size / 4 KiB) pages. */
+	 * a section reaches a whole page: a 16 KiB `.data1` after `.data` left a 3-page gap and a
+	 * second writable segment, and the start refused the executable (exit 127). At 4 KiB the gap
+	 * stays under a page, and the written cluster still takes ceil(size / 4 KiB) pages. (The relro
+	 * alignment kept one segment in the same test, `.tdata` and `.init_array` ahead of it.) */
 #undef LIELLA_DATA1_ALIGN
 #define LIELLA_DATA1_ALIGN 4096
-#undef LIELLA_RELRO_ALIGN
-#define LIELLA_RELRO_ALIGN 4096
 #endif
 	.section .rodata1,"a",@progbits
 	.balign LIELLA_RODATA1_ALIGN
