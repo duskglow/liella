@@ -1,4 +1,4 @@
-# The written start-up state: what `cargo xtask so` moves into the `.data1` cluster (xtask/src/coldbss.rs
+# The written start-up state (and the state every fork child reads): what `cargo xtask so` moves into the `.data1` cluster (xtask/src/coldbss.rs
 # `move_startup_state`; D-X.64, LAYOUT-DATA-CLUSTERS-6). Declared by hand, never generated: placement follows
 # this list, not a trace of the current layout, so it is the same in every profile and every build. The check
 # is a test: hot_text_products `init_startup_data_accesses_are_in_the_data1_cluster` traces `page_faults true`
@@ -57,8 +57,61 @@ liella_boundary::thread::TLS_IMAGE
 symbol __rseq_offset
 symbol __rseq_size
 symbol __libc_single_threaded
-# The fork child reads it (fork::child_reset); on a page start-up never touched it cost the child a fault.
+# The fork child's state: fork::fork and fork::child_reset (with the after_fork_child steps it calls) read
+# these in every child, written or not. fork copies no page-table entry for a page of `.data` or `.bss` the
+# parent never touched, so each such page cost the child a read fault (timer::EPOLL alone: LAYOUT-DATA-CLUSTERS-5;
+# the rest, LAYOUT-DATA-CLUSTERS-7: release fork child 7, and 8 at the `data 0x3000` pad, against 6 on next).
+# On the cluster's pages, which start-up touches, the child reads them without a fault at every pad.
 liella_boundary::timer::EPOLL
+liella_boundary::timer::HEAD
+liella_boundary::timer::LOCK
+liella_boundary::timer::OTHERS
+liella_boundary::timer::RETRYING
+liella_boundary::timer::WAKE
+liella_boundary::fork::ATFORK_LOCK
+liella_boundary::fork::FIRST
+liella_boundary::fork::USED
+liella_boundary::mqueue::FIRST
+liella_boundary::mqueue::LOCK
+liella_boundary::mqueue::SOCKET
+liella_boundary::gai_async::HEAD
+liella_boundary::gai_async::IDLE
+liella_boundary::gai_async::LEN
+liella_boundary::gai_async::LOCK
+liella_boundary::gai_async::WORKERS
+liella_boundary::aio::DEAD
+liella_boundary::aio::ENGINE
+liella_boundary::aio::IDLE
+liella_boundary::aio::INFLIGHT
+liella_boundary::aio::LIST_WAITERS
+liella_boundary::aio::LOCK
+liella_boundary::aio::OWNER
+liella_boundary::aio::PENDING
+liella_boundary::aio::READY
+liella_boundary::aio::RETRIES
+liella_boundary::aio::WAITERS
+liella_boundary::aio::WAITING
+liella_boundary::aio::WORKERS
+liella_boundary::aio::WREADY
+liella_boundary::spawn::POPEN_LOCK
+liella_boundary::spawn::SHELL_LOCK
+liella_boundary::spawn::SHELL_SAVED
+liella_boundary::spawn::SHELL_USERS
+liella_boundary::stacks::COUNT
+liella_boundary::stacks::LOCK
+liella_boundary::stacks::OCCUPANTS
+liella_boundary::stacks::QUEUE_HEAD
+liella_boundary::stacks::QUEUE_TAIL
+liella_boundary::stacks::SERVICE
+liella_boundary::stacks::WORK
+liella_boundary::thread::CACHE
+liella_boundary::thread::CACHE_BYTES
+liella_boundary::thread::DEAD
+liella_boundary::thread::RECYCLE
+liella_boundary::process::ENV_LOCK
+liella_boundary::setxid::SERIAL
+liella_legacy::log_compat::GLOBAL
+liella_legacy::time_compat::LOCK
 # stdio: the standard streams and the stream list (printf, exit flush).
 liella_boundary::stdio::FREE
 liella_boundary::stdio::SLOTS
