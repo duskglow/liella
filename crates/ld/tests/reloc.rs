@@ -882,7 +882,9 @@ const HELLO_OLD_OUT: &str = "destructor\nhello, world: order pic, args ok, prein
 /// passing `init`/`fini` (libc calls `init(argc, argv, envp)`; `fini` is not called). Start steps
 /// 1-4 run once, in libc's early init; `__libc_start_main` publishes the initial environment and
 /// program names again before the program's initialisation, so the `.preinit_array` function's
-/// changes are undone and the constructor's `setenv` stays. The expected outputs are stated
+/// changes are undone and the constructor's `setenv` stays. `program_invocation_name` reaches the
+/// PIE by a `COPY` relocation: libc's own references bind to the program's copy by the version the
+/// program needs (a definition whose `versym` index names a requirement). The expected outputs are stated
 /// ([`HELLO_OUT`], [`HELLO_OLD_OUT`]); the host's C library run is only a note when it differs.
 #[test]
 fn reloc_libc_start_hello_world() {

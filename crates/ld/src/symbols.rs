@@ -237,17 +237,38 @@ impl<'a> Object<'a> {
         if index <= VER_NDX_GLOBAL {
             return Ok(Want::Oldest);
         }
+        if let Some(name) = self.needed_version_name(index)? {
+            return Ok(Want::Version(name));
+        }
+        self.version_name(index)?.map(Want::Version).ok_or(LookupError::UnknownVersion { sym, index })
+    }
+
+    /// The name of version index `index` among this object's requirements (the `vna_other` of a
+    /// `DT_VERNEED` entry), `None` when no requirement has it.
+    fn needed_version_name(&self, index: u16) -> Result<Option<&'a [u8]>, LookupError> {
         if let Some(needs) = self.dynm.verneed()? {
             for n in needs {
                 for a in n?.auxes() {
                     let a = a?;
                     if a.other & !VERSYM_HIDDEN == index {
-                        return Ok(Want::Version(a.name));
+                        return Ok(Some(a.name));
                     }
                 }
             }
         }
-        self.version_name(index)?.map(Want::Version).ok_or(LookupError::UnknownVersion { sym, index })
+        Ok(None)
+    }
+
+    /// The version name of a definition's `versym` index: one of the object's own definitions, else
+    /// a requirement. A program's `COPY` relocation defines the copied symbol in the program with the
+    /// index of the version it needs from the provider, and the provider's own references bind to
+    /// that copy by that version (index space shared by `DT_VERDEF` and `DT_VERNEED`).
+    fn def_version_name(&self, index: u16) -> Result<Option<&'a [u8]>, LookupError> {
+        match self.version_name(index)? {
+            Some(name) => Ok(Some(name)),
+            None if index > VER_NDX_GLOBAL => self.needed_version_name(index),
+            None => Ok(None),
+        }
     }
 
     /// The candidates for `req` in the hash chain, as symbol indices (one error ends the walk).
@@ -325,7 +346,7 @@ impl<'a> Object<'a> {
                     // check (D-27.11).
                     let ok = self.versym.is_none()
                         || (version > VER_NDX_GLOBAL
-                            && self.version_name(version)?.ok_or(LookupError::UnknownVersion { sym: i, index: version })? == name);
+                            && self.def_version_name(version)?.ok_or(LookupError::UnknownVersion { sym: i, index: version })? == name);
                     if ok {
                         best = Some(def);
                     }
@@ -419,7 +440,7 @@ pub fn lookup(objects: &[Object<'_>], scope: Scope<'_>, req: &Request<'_>, uniqu
         let Some(def) = obj.lookup(req)? else { continue };
         let found = Found { obj: o, def };
         if def.st.bind() == STB_GNU_UNIQUE {
-            let version = obj.version_name(def.version)?.unwrap_or(&[]);
+            let version = obj.def_version_name(def.version)?.unwrap_or(&[]);
             if let Some(first) = unique.find(req.name, version) {
                 return Ok(Some(first));
             }
