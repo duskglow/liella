@@ -1,45 +1,49 @@
-# LIBM-INVALID-CONVERT-SCAN (-2): handoff
+# LIBM-INVALID-CONVERT-SCAN (-2, -3): handoff
 
-State: branch task/libm-invalid-convert-scan-2 (stacked on task/libm-invalid-convert-scan, base origin/next bb9130ed9), head =
-last commit on the branch. Decision in force: D-10.95 (records/decisions/D-10/D-10.95.toml, written in -2).
-LIBM-LD-ARC-DIRECT had NOT landed on next when -2 ran (11-11 06:20): merge origin/next once it does (allowed) and keep one fix
-per arc.rs site (its own path removed the root's as-u64 stall; big_u64 may then be dead at that site).
+State: branch task/libm-invalid-convert-scan-3 (stacked on -2; origin/next 672acd9aa merged in -3, LIBM-LD-ARC-DIRECT
+included), head = last commit on the branch. Decision in force: D-10.95 (records/decisions/D-10/D-10.95.toml).
+Verdict of -3: INCOMPLETE. One count row is still above base (lgammaf, below); everything else is done and measured.
 
-## Scan (done by type, not by text)
-Inventory: `cargo clippy -p liella-math -p liella --lib -- -A clippy::all --force-warn clippy::cast_possible_truncation
---force-warn clippy::cast_sign_loss`; the `float-casts` static check runs it and now reports 15 casts in scope, each with a range.
-
-| site | function | operand range | raises? |
+## Sites (scan by type: the `float-casts` static check, 14 casts in scope, each with a range)
+| site | function | operand range | fix |
 |---|---|---|---|
-| wide_int/arc.rs root_seed `(r*2^37) as u64` | asinl, acosl | [2^63, 2^64] every call | yes, every call: fixed (big_u64) |
-| wide_int/arc.rs sqrt `vd as u64` | asinl, acosl | (2^63, 2^64] every call | yes: fixed (big_u64) |
-| wide_int/arc.rs div `(2^115/dh') as u64` | atan2l, asinl, acosl | (2^62, 2^63] | at power-of-two divisors: fixed (big_u64) |
-| wide_int/arc.rs soft_sqrt, atan_le_in | internal, atan | small | no (RANGE:) |
-| fast32/gamma.rs eval_lgamma `as i32` | lgammaf sign | any f32 unclamped | clamped to [-2^24, 0] (NaN -> -2^24) |
-| dd.rs, fast32/bessel.rs, fast_bessel_n.rs, mp.rs, special.rs | various | guarded | no (RANGE:) |
-| core/num/parse.rs finish max10/min10 `as i64` (#4627) | strto* long path | abs < 5000 | no invalid (RANGE:); see strto* flags below |
+| wide_int/arc.rs root_seed, sqrt | asinl, acosl | [2^63, 2^64] every call | `wide_int::big_u64` (ARC-DIRECT landed the same helper; one helper kept) |
+| wide_int/arc.rs div | atan2l, asinl, acosl | (2^62, 2^63] | big_u64 |
+| wide_int/arc.rs soft_sqrt | internal | [2^52, 2^54) | big_u64 |
+| wide_int/quad.rs div3 (new on next, found by float-casts in -3) | tanf128 | (2^62, 2^63], 2^63 when the divisor's top word < 2^63+2^11 | big_u64 (moved to wide_int.rs) |
+| fast32/gamma.rs eval_lgamma sign | lgammaf, lgammaf_r | any float | parity of trunc(x) from the bits (`trunc_is_odd`, -3) |
+| core/num/parse.rs finish (#4627) | strto* | abs < 5000 | RANGE: (no invalid possible) |
+| dd.rs, fast32/bessel.rs, fast_bessel_n.rs, mp.rs, special.rs | various | guarded | RANGE: |
 
-## strto* flags (probe a7fa43af9749, settled; #4627 answer)
-The two parse.rs casts cannot raise invalid. But the float product and truncation around them are the ONLY source of the
-inexact flag in Liella's strto*: with them replaced by integer arithmetic (tried in -2, reverted), strtof("1") stops raising
-inexact (matches the reference) and strtof("0.1") stops raising it too (the reference raises it). Today Liella raises inexact
-on every strtof/strtold call and strtod calls off the short path, exact or not, and never overflow or underflow; the reference
-raises inexact iff inexact, overflow on overflow, underflow on tiny inexact (IEEE 754 §7). `float::Rounded` already carries
-inexact/overflow/underflow: the fix is to raise them from the boundary's strto*/wcsto* wrappers (one feraiseexcept-like op
-after rounding) and then drop the float arithmetic in `finish` (`trunc(e*30103/10^5)` equals the float result at every
-format's limits). Its own story: RULING NEEDED / brief recommendation STRTO-FENV-FLAGS.
+## Results on keke (-3)
+- lint2 (head 56b7003): clippy, static, records, flags test (2 tests) green. lint3 (head 1e36c93): workspace clippy green,
+  float-casts green; static red on records only (a bare `|` in D-10.95's body), fixed in the handoff commit, NOT re-run.
+- Accuracy (keke:libm-invalid-convert-scan-3-accuracy, release, 10^7 operands x 4 modes): arc atan/asin/acos/atan2/tan
+  0 refused, undecided 0/4/16/0/0, worst 2^-103.38/-103.13/-103.20/-103.38/-96.85; quad (tanf128 etc.) 2*10^8 calls,
+  0 undecided, worst 2^-158.26. lgammaf: the value path is unchanged (only the sign is computed differently) and the
+  sign equals the old conversion's parity for every float (proof in D-10.95), so no 4*2^32 exhaustive run.
+- Counts (wl_percall vs base 672acd9aa = next, instructions/call): atan2l 863.3->860.3, acosl 770.6->767.6, asinl
+  742.5->739.5, atanl 622.7->619.7, tanl 768.7->765.7 (all -3), tanf128 1703.5->1702.5 (-1), sin/cos/sincosf128 equal.
+  lgammaf (new spec validation/percall/lgammaf.c): -2's clamp measured pos 315.8->328.8 (+13), neg +1; -3's bit read
+  pos 315.8->318.8 (+3), neg 8411.0->8413.1, lgammaf_r_neg 8419.0->8421.2 (+2). STILL ABOVE BASE: next step 1.
+- Plants (handoff/LIBM-INVALID-CONVERT-SCAN-plants.txt, \d replaced by [0-9]+): plants-1 (stale head, stopped) showed
+  seed-as-u64-flags, seed-as-u64-static, div-as-u64-flags CAUGHT with their messages. plants2 and gate2 on head
+  1e36c93 were still running at hand-back (keke labels libm-invalid-convert-scan-3-plants2, -gate2): read them.
 
-## Done in -2
-- gate3 red cause: clippy in math_kernel_no_invalid.rs (drop of Copy, approx FRAC_1_SQRT_2): closures return through black_box.
-- static red: gamma.rs cast sat 6 lines below its RANGE: comment (window 5): cast moved into the clamp line.
-- float-casts scope extended to crates/core/src/num/parse.rs (SCOPE list in xtask/src/float_casts.rs).
-- D-10.95 written. Plants file: handoff/LIBM-INVALID-CONVERT-SCAN-plants.txt (4 plants: seed as-u64 x2, gamma and parse RANGE
-  comments dropped).
-- Jobs on keke (role n1): libm-invalid-convert-scan-2-gate (records check + affected --base origin/next),
-  libm-invalid-convert-scan-2-plants. lint1..lint5 were development runs (lint5 green: clippy, static, flags test).
+## Next steps (in order)
+1. lgammaf +3/+2: the parity bits are if-converted and run before `x < 0` on every call. Try computing the sign only in
+   the negative branch the fast path already takes (look in `eval` for where x < 0 is known, e.g. the reflection
+   step) or a form LLVM keeps under the branch; re-count with `wl_percall.sh --spec validation/percall/lgammaf.c`
+   until every row is at or below base. Then re-run gate, plants (gamma-parity-shift is the gamma plant), lint.
+2. Disassembly check: ~/work/libm-invalid-convert-scan-3/disasm.sh on keke (lists per function the truncating
+   conversions and the unsigned-64 sequence, cvtt*2si beside `sar 0x3f`) after `cargo xtask so`; expect none in the
+   five fixed functions. Script also in the -3 scratch; not run.
+3. liella::hot_text_products on the merged head; booked Ivy Bridge cycles for asinl/acosl/atan2l (the root-seed stall
+   was ARC-DIRECT's to time, #4614; this branch changes 1-3 instructions per row, so the periodic sweep may suffice:
+   coordinator's call).
 
-## Not done (next steps, in order)
-1. Disassembly: `objdump -d` libm.so.6, list cvttsd2si/cvttss2si per function; confirm lgammaf and fast_bessel_n.
-2. 10^7 accuracy jobs for asinl/acosl/atan2l/atanl/lgammaf; liella::hot_text_products on the merged head.
-3. Counts before/after (base products: job libm-invalid-convert-scan-so-base on kanon) and booked Ivy Bridge cycles; say
-   whether the ~240 fenced cycles shared by x87 functions came from this.
+## INFORMATIONAL
+- wl_percall's check column reads MISMATCH for lgammaf(-2.5) (`%.9g` of the value) against the reference; the value
+  path is not touched by this story (base had the same code). lgammaf on negative operands is 21x the reference by
+  instructions (8411 vs 395): a performance story of its own.
+- strto* flags gap: STRTO-FENV-FLAGS (#4639), not this story.
