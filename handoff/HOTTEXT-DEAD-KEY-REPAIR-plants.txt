@@ -1,0 +1,7 @@
+# HOTTEXT-DEAD-KEY-REPAIR plants (cargo xtask plants; docs/plants.md). Direct test: the xtask hottext unit tests.
+# 1. The repair drops a live key (one only one profile matches: inlined in the other).
+repair-drops-live-key | xtask/src/hottext.rs | lit:let gone: BTreeSet<&str> = entries.iter().filter(|e| !matched.iter().any( ==> let gone: BTreeSet<&str> = entries.iter().filter(|e| !matched.iter().all( | cargo test -p xtask --bin xtask hottext | msg:repair_drops_dead_keys[a-z_]*' panicked at xtask/src/hottext.rs:[0-9]+
+# 2. The repair records an absent line for a key the contract already allows (traced in the other profile only).
+repair-records-allowed-key | xtask/src/hottext.rs | lit:if !m.contains(&e.key) && !other_only && ==> if !m.contains(&e.key) && | cargo test -p xtask --bin xtask hottext | msg:repair_drops_dead_keys[a-z_]*' panicked at xtask/src/hottext.rs:[0-9]+
+# 3. The repair keeps an absent line whose key matches again in its profile (stale: the check refuses it).
+repair-keeps-stale-absent | xtask/src/hottext.rs | lit:if is_data(l) && (!kept.contains(k) || matches_now) { ==> if is_data(l) && !kept.contains(k) { | cargo test -p xtask --bin xtask hottext | msg:repair_drops_dead_keys[a-z_]*' panicked at xtask/src/hottext.rs:[0-9]+
