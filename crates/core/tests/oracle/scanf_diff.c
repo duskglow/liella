@@ -103,30 +103,37 @@ static void head(const char *how, int set, const char *in, const char *fmt) {
 
 /* One case through every input kind: string, stream, wide string, wide stream. `alloc` marks
  * the arguments that receive an allocation (%m). */
+static int show_errno; /* print errno after each call (floating grids) */
+static void err(int e) { if (show_errno) { str(" errno="); num(e); } }
+
 static void one(int set, const char *in, const char *fmt, int alloc, int wide) {
     void *a = slot[0], *b = slot[1], *c = slot[2], *d = slot[3];
     clear(); errno = 0;
     int r = S[set](in, fmt, a, b, c, d);
-    head("s", set, in, fmt); str(" -> "); num(r); slots(alloc); ch('\n');
+    int e = errno;
+    head("s", set, in, fmt); str(" -> "); num(r); slots(alloc); err(e); ch('\n');
 
     FILE *f = file_with(in);
-    clear();
+    clear(); errno = 0;
     r = F[set](f, fmt, a, b, c, d);
-    head("f", set, in, fmt); str(" -> "); num(r); slots(alloc);
+    e = errno;
+    head("f", set, in, fmt); str(" -> "); num(r); slots(alloc); err(e);
     str(" pos="); num(ftell(f)); str(" next="); num(fgetc(f)); str(" eof="); num(feof(f)); ch('\n');
     fclose(f);
 
     if (!wide) return;
     wchar_t win[256], wfmt[256];
     if (mbstowcs(win, in, 256) == (size_t)-1 || mbstowcs(wfmt, fmt, 256) == (size_t)-1) return;
-    clear();
+    clear(); errno = 0;
     r = WS[set](win, wfmt, a, b, c, d);
-    head("ws", set, in, fmt); str(" -> "); num(r); slots(alloc); ch('\n');
+    e = errno;
+    head("ws", set, in, fmt); str(" -> "); num(r); slots(alloc); err(e); ch('\n');
 
     f = file_with(in);
-    clear();
+    clear(); errno = 0;
     r = WF[set](f, wfmt, a, b, c, d);
-    head("wf", set, in, fmt); str(" -> "); num(r); slots(alloc);
+    e = errno;
+    head("wf", set, in, fmt); str(" -> "); num(r); slots(alloc); err(e);
     str(" pos="); num(ftell(f)); str(" next="); num((long)(int)fgetwc(f)); ch('\n');
     fclose(f);
 }
@@ -152,7 +159,8 @@ static const char *float_ins[] = {
     "1", "-1.5", "1e10", ".5", "5.", ".", "inf", "INFINITY", "infin", "-inf", "nan",
     "nan(123)", "nan(", "NaN(abc)x", "0x1p3", "0x1.8p-2", "0x", "0xp", "1e400", "1e-400", "-0",
     "3.14159265358979323846264", "1,5", "+.e", "0x1.fffffffffffffp1023", "4.9e-324", "1.5e-45",
-    "  2.5x", "", "e5", "1.e5", "0x.8", "123456789012345678901234567890", NULL,
+    "  2.5x", "", "e5", "1.e5", "0x.8", "123456789012345678901234567890",
+    "1e5000", "-1e-5000", "1e-4940", "1e-310", "0x1p-1074", "0x1.8p-1074", "1e-40", "0x1p-149", "-1e39", NULL,
 };
 /* Widths that end the field on a complete number. */
 static const char *fwidth_fmts[] = { "%5f", "%2lf", "%3Lf", "%4le", NULL };
@@ -238,8 +246,10 @@ int main(void) {
             allocations();
             streams();
         }
+        show_errno = 1; /* floating conversions report a range error as strtod does (D-12.26) */
         grid(float_fmts, float_ins, 1);
         grid(fwidth_fmts, fwidth_ins, 1);
+        show_errno = 0;
         if (strcmp(*l, "C") == 0) { str("== partial\n"); grid(partial_fmts, partial_ins, 1); }
         grid(text_fmts, text_ins, 1);
     }
