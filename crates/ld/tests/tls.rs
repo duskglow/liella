@@ -304,3 +304,30 @@ fn tls_get_addr_refuses_in_a_process_it_did_not_start() {
     assert!(err.contains("__tls_get_addr called in a process this loader did not start"), "stderr: {err}");
     std::fs::remove_dir_all(&d).ok();
 }
+
+/// A `-nostdlib` program under the built `ld.so` that clears its thread block's dtv word (`%fs:8`)
+/// and asks for module 1; exits 4 if the call comes back.
+const NO_DTV: &str = "extern void *__tls_get_addr(unsigned long *);
+static unsigned long ti[2] = {1, 0};
+static void bye(int c) { __asm__ volatile(\"syscall\" :: \"a\"(231), \"D\"(c)); __builtin_unreachable(); }
+void _start(void) {
+  __asm__ volatile(\"movq $0, %%fs:8\" ::: \"memory\");
+  __tls_get_addr(ti);
+  bye(4);
+}
+";
+
+/// s27_3_c_0 (no spec clause for the failure: design §1 "Failure"): in a process the loader started,
+/// a thread block without a dtv word is refused (status 127, its message), never read through.
+#[test]
+fn tls_get_addr_refuses_a_thread_without_a_vector() {
+    let (true, Some(ld)) = (tools_ok(), product()) else { return };
+    let d = target().join(format!("ld-tls-nodtv-{}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    let p = build(&d, "nodtv", NO_DTV, &["-fPIE", "-pie", ld.to_str().unwrap()]);
+    let o = Command::new(&ld).arg(&p).output().unwrap();
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert_eq!(o.status.code(), Some(127), "status; stderr {err}");
+    assert!(err.contains("__tls_get_addr: this thread has no TLS vector"), "stderr: {err}");
+    std::fs::remove_dir_all(&d).ok();
+}
