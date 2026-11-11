@@ -187,6 +187,8 @@ pub fn nearest_int(x: f64) -> f64 {
 /// An integral `f64` of magnitude below 2^31 as `i32`.
 #[inline]
 pub fn to_i32(x: f64) -> i32 {
+    // RANGE: the contract above; every caller passes an exponent multiple below 2^17 (exp, pow and
+    // complex exp kernels, after their range tests) or an index below 2^8 or pow's |p| < 10^6.
     #[allow(clippy::as_conversions, clippy::cast_possible_truncation)] // integral and in range
     let v = x as i32;
     v

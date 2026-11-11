@@ -1,0 +1,6 @@
+# LAYOUT-TEXT-PIN-11 plants (cargo xtask plants; docs/plants.md): init_startup_path_lies_in_the_hot_text_range now
+# holds an optional start-up function to the hot range only when the program references it.
+# ltp11-filter-inverted: the filter must be what lets the unreferenced fast copy of start::program lie in cold text.
+# ltp11-program-outlined: start::program called out of line again (key absent from the list) must fail the test.
+ltp11-filter-inverted | crates/core/tests/hot_text_products.rs | lit:if REQUIRED.contains(f) || referenced(*a) { ==> if REQUIRED.contains(f) || !referenced(*a) { | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_path_lies_in_the_hot_text_range | msg:liella_rt::start::program at 0x[0-9a-f]+: outside the hot text
+ltp11-program-outlined | crates/rt/src/start.rs | lit:pub fn program(words: &[u64], phnum: usize, phdr_addr: usize) -> Program { ==> #[inline(never)] pub fn program(words: &[u64], phnum: usize, phdr_addr: usize) -> Program { | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_path_lies_in_the_hot_text_range | msg:liella_rt::start::program at 0x[0-9a-f]+: outside the hot text

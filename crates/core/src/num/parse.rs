@@ -634,7 +634,9 @@ fn finish(dexp: i64, used: usize, mut n: Big, nkept: usize, truncated: bool, neg
     }
     // Certain overflow and certain underflow, decided with margin from the format's range.
     // Integer arithmetic only: a floating-point operation here would raise inexact into the
-    // caller's environment (D-8.12). log10(2) to 12 places; truncation toward zero as before.
+    // caller's environment (D-8.12), and there is no float-to-integer conversion to raise
+    // invalid (D-10.95). log10(2) to 12 places; truncation toward zero as before. The products
+    // stay below 2^53 (|emax + 1| <= 16384, |emin - prec| <= 16495, times 3.1e11).
     let max10 = i64::from(fmt.emax + 1) * LOG10_2_E12 / 1_000_000_000_000 + 2;
     let min10 = i64::from(fmt.emin() - fmt.prec as i32) * LOG10_2_E12 / 1_000_000_000_000 - 2;
     if dexp - 1 > max10 {

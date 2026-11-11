@@ -503,8 +503,9 @@ fn hot_text_range(map: &str) -> (u64, u64) {
 /// DL-BOOT-RELOC-7 made `runtime::start` generic, its list key went dead and `start::<false>`
 /// and `apply_irelative` ran from two 64 KiB windows of cold `.text` (two more faults), which
 /// fitted inside the count bounds' slack. Required: `_start`, `__libc_start_main` and
-/// `start::<false>`; `apply_irelative` and `liella_rt::start::program` when the profile keeps
-/// them out of line (release inlines them). No spec clause (layout of the products).
+/// `start::<false>`; `apply_irelative` and `liella_rt::start::program` when the program references
+/// their out-of-line copy (release inlines both; fast inlines `program` at its start-up call but
+/// keeps an unreferenced copy, whose list key regen drops). No spec clause (layout of the products).
 #[test]
 fn init_startup_path_lies_in_the_hot_text_range() {
     let dir = std::env::temp_dir().join(format!("liella-hot-range-{}", std::process::id()));
@@ -513,7 +514,6 @@ fn init_startup_path_lies_in_the_hot_text_range() {
     build_with(&exe, &[&format!("-Wl,-Map={}", map.display())]);
     let (lo, hi) = hot_text_range(&std::fs::read_to_string(&map).expect("link map"));
     let out = Command::new("nm").arg(&exe).output().expect("nm");
-    let _ = std::fs::remove_dir_all(&dir);
     assert!(lo < hi, "no .text.startup / .text.sorted.h* input sections in the link map");
     // A v0 name after its crate hash: `_R<prefix>Cs<hash>_<rest>` -> `<rest>`.
     let path = |name: &str, prefix: &str| name.strip_prefix(prefix).and_then(|r| r.split_once('_')).map(|(_, r)| r.to_string());
@@ -537,11 +537,35 @@ fn init_startup_path_lies_in_the_hot_text_range() {
         found.insert(which, u64::from_str_radix(addr, 16).expect("nm address"));
     }
     eprintln!("hot text {lo:#x}..{hi:#x}; start-up functions {found:x?}");
-    for f in ["_start", "__libc_start_main", "runtime::start::<false>"] {
+    const REQUIRED: [&str; 3] = ["_start", "__libc_start_main", "runtime::start::<false>"];
+    for f in REQUIRED {
         assert!(found.contains_key(f), "{f}: not found in the linked program (renamed? update this test)");
     }
+    // An optional function outside the hot range counts only if an instruction names its address
+    // (a call, a tail jump, a pointer load). The fast profile inlines `start::program` into the
+    // start-up path but keeps an out-of-line copy for other users in its object; with no
+    // reference that copy never runs, so where it lies costs no fault. Disassembled only when
+    // needed (an optional function outside the range).
+    let outside = |a: &u64| !(lo..hi).contains(a);
+    let disasm = if found.iter().any(|(f, a)| !REQUIRED.contains(f) && outside(a)) {
+        let d = Command::new("objdump").args(["-d", "--no-show-raw-insn"]).arg(&exe).output().expect("objdump");
+        assert!(d.status.success(), "objdump -d failed");
+        String::from_utf8_lossy(&d.stdout).into_owned()
+    } else {
+        String::new()
+    };
+    let _ = std::fs::remove_dir_all(&dir);
+    // A label line reads `0000000000764f80 <name>:`; a reference reads `call   764f80 <name>`.
+    let referenced = |a: u64| {
+        let operand = format!(" {a:x} <");
+        disasm.lines().any(|l| l.contains(&operand))
+    };
     for (f, a) in &found {
-        assert!((lo..hi).contains(a), "{f} at {a:#x}: outside the hot text {lo:#x}..{hi:#x} (its hot-text.list key dead or missing? run tools/hottext/regen.sh)");
+        if REQUIRED.contains(f) || referenced(*a) {
+            assert!(!outside(a), "{f} at {a:#x}: outside the hot text {lo:#x}..{hi:#x} (its hot-text.list key dead or missing? run tools/hottext/regen.sh)");
+        } else if outside(a) {
+            eprintln!("{f} at {a:#x}: outside the hot text, but nothing in the program references it (inlined; never runs)");
+        }
     }
 }
 
