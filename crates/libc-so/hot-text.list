@@ -9,6 +9,7 @@ liella_sys_mmap	startup	fast,release
 liella_sys_set_tid_address	startup	fast,release
 _RNvNtC15liella_boundary3cpu4init	startup	fast,release
 _RNvNtC15liella_boundary3cpu9init_with	startup	fast,release
+_RINvMNtC9liella_rt3cpuNtNtC9liella_rt3cpu8Features6detectINtNtC15liella_boundary3sys8CSysImplKb0_EEC15liella_boundary	startup	fast
 liella_machine_cpuid	startup	fast,release
 liella_machine_xgetbv0	startup	fast,release
 liella_machine_set_scan_level	startup	fast,release
