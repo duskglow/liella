@@ -51,7 +51,11 @@ ruling #4347, which LAYOUT-DATA-CLUSTERS-4C (landed next 07a4db6ac) removes by c
 * hot_text_products on the merged head: 21 passed.
 * Start-up instructions vs glibc (keke, same host, next ca8aa835a vs head): instr_c 0.018/0.018 (2144 vs 2142
   user instructions), printf 0.498/0.498, setloc 0.477/0.477, wctype 0.484/0.484; all 12 bench budgets met.
-  Kernel instructions, interleaved runs so far: next 152215, 152565; head 152238 (inside next's range).
+  Kernel instructions (startup_kinstr_c, no budget), runs so far: next 150821, 152215, 152565, 152197; head 154870,
+  152238, 152565, 155056. Two of four head runs sit ~2.5k (1.7%) above next's highest; NOT settled. The static start
+  path's code is unchanged by the branch (`register_kernel_areas` gets the same `RSEQ_OWNED` value), so a real
+  difference would come from layout (a page fault more on some runs), not from new kernel work. The kinstr job's
+  remaining runs and its min/max lines are in ~/logs/dl-libc-early-5-kinstr.log on keke.
 * Pending at hand-back (long; named in JOBS): gate (FULL by escalation), plants (baselines 1-2 ok when handed
   back), kinstr (all runs).
 
