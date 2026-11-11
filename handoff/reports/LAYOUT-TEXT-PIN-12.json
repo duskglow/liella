@@ -1,0 +1,13 @@
+{"task": "LAYOUT-TEXT-PIN-12", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: fork child 7->6 cause found and fix written (unverified); unreferenced-key check done and flags 30 listed keys (regen in both profiles pending); start-up +1 mapped to a fault perf does not see, not removed",
+ "branch": "task/layout-text-pin-12", "head": null,
+ "gate": {"affected": "not run (cargo xtask so fails on the 30 unreferenced keys until regen)", "peak": null},
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["fork child 7 at pre 0x2000-0x5000 and 0xd000 on next a551cd8c2 too: liella_sys_set_robust_list and liella_sys_syscall in different 64 KiB windows",
+                   "start-up +1 vs next is constant over all 17 pre pads and invisible to perf page-fault sampling (one kernel-mode fault in both)"],
+ "refused": [],
+ "improvement": "hot_text_products lacks a per-pad fault map mode; padmap.sh/classify.py (~/work/LAYOUT-TEXT-PIN-12 on shiki) could become tools/hottext/padmap so each layout story stops rewriting it",
+ "next_step": "spot-check the 30 unreferenced keys, regen both profiles with --allow-drop, padmap per pad, affected gate, plants",
+ "report_file": "handoff/LAYOUT-TEXT-PIN-12.md",
+ "jobs": ["layout-text-pin-12-padmap-head", "layout-text-pin-12-padmap-next", "layout-text-pin-12-check"]}
