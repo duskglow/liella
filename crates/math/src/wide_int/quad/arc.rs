@@ -299,6 +299,7 @@ mod tests {
     /// The kernel's error against the proved bound, and the tier against the 384-bit route in
     /// the four modes.
     fn check(want: Mp, approx: Option<Scaled>, neg: bool, tier: impl Fn(Rounding) -> Option<(F128, Status)>, tally: &mut Tally, what: &str) {
+        assert!(approx.is_some(), "{what}: refused by the kernel");
         if let Some((m, e)) = approx {
             // In the 384-bit arithmetic: a far `atan2` quotient lies below the `f64` range.
             let rel = value(neg, m, e).sub(want).div(want).to_f64().abs();
@@ -317,18 +318,18 @@ mod tests {
     fn check_atan(n: &Num, tally: &mut Tally) {
         let a = mp::atan(exact(n).abs()); // the 384-bit atan takes a magnitude
         let want = if n.neg { a.neg() } else { a };
-        let y = mag(n).unwrap();
-        let k = if (y.e, y.m) <= (UNIT.e, UNIT.m) { atan_le(y, UNIT) } else { sub_from(191, atan_le(UNIT, y)) };
-        check(want, Some(k), n.neg, |mode| atan::<F128>(n, mode), tally, &format!("atan {n:?}"));
+        let k = mag(n).map(|y| if (y.e, y.m) <= (UNIT.e, UNIT.m) { atan_le(y, UNIT) } else { sub_from(191, atan_le(UNIT, y)) });
+        check(want, k, n.neg, |mode| atan::<F128>(n, mode), tally, &format!("atan {n:?}"));
     }
 
     fn check_atan2(y: &Num, x: &Num, tally: &mut Tally) {
         let want = mp::atan2(exact(y), exact(x));
-        let (b, a) = (mag(y).unwrap(), mag(x).unwrap());
-        let t = if (b.e, b.m) <= (a.e, a.m) { atan_le(b, a) } else { sub_from(191, atan_le(a, b)) };
-        let k = if x.neg { sub_from(190, t) } else { t };
+        let k = mag(y).zip(mag(x)).map(|(b, a)| {
+            let t = if (b.e, b.m) <= (a.e, a.m) { atan_le(b, a) } else { sub_from(191, atan_le(a, b)) };
+            if x.neg { sub_from(190, t) } else { t }
+        });
         // Results below the normal range are refused by the rounding step: the kernel still meets its bound.
-        check(want, Some(k), y.neg, |mode| atan2::<F128>(y, x, mode), tally, &format!("atan2 {y:?} {x:?}"));
+        check(want, k, y.neg, |mode| atan2::<F128>(y, x, mode), tally, &format!("atan2 {y:?} {x:?}"));
     }
 
     /// The edges of the index and the composition: `|x| = 1` and its neighbours, `t` on a
