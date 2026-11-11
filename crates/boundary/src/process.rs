@@ -51,9 +51,18 @@ pub(crate) static EXE_BIAS: AtomicUsize = AtomicUsize::new(0);
 /// (`is_read_only`), `dl_iterate_phdr`, `_dl_find_object` and the backtrace (D-27.12).
 pub(crate) fn exe_bias(words: &[u64], phnum: usize, phdr: usize) -> usize {
     match EXE_BIAS.load(Acquire) {
-        0 => liella_rt::start::bias(words, phnum, phdr, liella_rt::start::PAGE, crate::runtime::exe_header).unwrap_or(0),
+        0 => liella_rt::start::bias(words, phnum, phdr, liella_rt::start::PAGE, exe_header).unwrap_or(0),
         b => b,
     }
+}
+
+#[cfg(feature = "runtime")]
+use crate::runtime::exe_header;
+/// Without libc's start (no `runtime` feature: the library's own test and fuzz builds) no
+/// executable header is read: a program without `PT_PHDR` is then seen at bias 0.
+#[cfg(not(feature = "runtime"))]
+fn exe_header(_: usize) -> [u8; 64] {
+    [0; 64]
 }
 
 fn w(x: usize) -> u64 {
