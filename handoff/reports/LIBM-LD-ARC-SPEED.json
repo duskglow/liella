@@ -1,0 +1,10 @@
+{"task": "LIBM-LD-ARC-SPEED", "model": "opus", "tokens": null,
+ "result": "asinl/acosl: root reciprocal divsd beside sqrtsd; asinl -25 / acosl -24 instructions, time ratio IVB 6.7->6.5 / 3.27->3.10, N100 4.92->4.82 / 2.84->2.75; targets (2.5x, atanl 607/480) not reached",
+ "branch": "task/libm-ld-arc-speed", "head": null,
+ "gate": {"affected": "184 passed / 0 failed", "peak": "1.2G"}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["asinl/acosl cost ~240 cycles more than atan2l on Skylake-SP at fewer instructions (IPC ~1.0); only ~50 is the root: unexplained, next step is a per-phase cycle split", "atan_small is already inlined on next (LIBM-LD-ARC-CHAIN); the brief's outlined-atan_small premise no longer holds", "wl_trace --list lines in the job log carry no instruction text (symbol name only)"],
+ "refused": [],
+ "improvement": "wl_trace --list should print the instruction text in the job log (it stops after the symbol); a phase-cycle tool (#4517) would have saved ~15 calls of guessing here",
+ "next_step": "split asinl's cycles by phase (rdtscp build on a booked host) to find the ~200 cycles over atan2l; else RETHINK the asin/acos method",
+ "report_file": "handoff/libm-ld-arc-speed.md",
+ "jobs": ["mei:libm-ld-arc-speed-gate", "mei:libm-ld-arc-speed-plants2", "mei:libm-ld-arc-speed-accuracy", "mei:libm-ld-arc-speed-counts", "mei:libm-ld-arc-speed-lint", "kotori:libm-ld-arc-speed-ivb2", "nozomi:libm-ld-arc-speed-n100-2"]}

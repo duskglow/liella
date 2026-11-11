@@ -5,3 +5,6 @@
 root-iw-scale | crates/math/src/wide_int/arc.rs | lit:let iw = TWO90 / wd; ==> let iw = TWO90 / (wd * 2.0); | cargo test -p liella-math --lib wide_int::arc | msg:quotient_and_root_meet_their_bounds.*FAILED|sqrt 0x.*root
 # The reciprocal without the root's factor r: V = 2^90/w' is not 2^127/s0 (wrong by the root's size).
 root-iw-noroot | crates/math/src/wide_int/arc.rs | lit:(s0, r * iw) // 2^90/r ==> (s0, iw * TWO37) // 2^90/r | cargo test -p liella-math --lib wide_int::arc | msg:quotient_and_root_meet_their_bounds.*FAILED|sqrt 0x.*root
+# cargo xtask plants results (mei:libm-ld-arc-speed-plants2; 2 plants: 2 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# root-iw-scale: CAUGHT, caught by liella_math wide_int::arc::tests::quotient_and_root_meet_their_bounds
+# root-iw-noroot: CAUGHT, caught by liella_math wide_int::arc::tests::quotient_and_root_meet_their_bounds
