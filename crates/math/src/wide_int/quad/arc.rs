@@ -59,7 +59,8 @@
 //! while a direct `asin` table (centres with their own Taylor coefficients) needs about 20 terms
 //! of 192 bits per centre and a root above `1/2` anyway.
 //! 7. `1 − a²`. `a = A·2^ea`, `ea <= −113`: `A²` (226 bits) exactly in 256, `a²` in units `2^-254`
-//!    (exact for `a >= 2^-14`, else truncated: below `2^-226` relative to `1 − a² > 1 − 2^-28`),
+//!    (exact for `a >= 2^-14`, else truncated, and at least one unit so that `W < 2^254` when
+//!    `a < 2^-127`: below `2^-226` relative to `1 − a² > 1 − 2^-28`),
 //!    `W = (2^254 − a²)·2^lw` with `lw` even and `W` in `[2^252, 2^254)`. `a < s` exactly when `a² <
 //!    1/2` (exact where it matters; `a² = 1/2` has no solution).
 //! 8. Root ([`root3`]), `wh = ⌊W/2^128⌋`: the seed `s0 = hw(dbl(⌊wh/2^72⌋))·2^36` (`hw` within
@@ -217,6 +218,8 @@ fn root_one_minus_sq(a: Q, hw: impl Fn(f64) -> f64) -> Option<(Scaled, f64, bool
     let sh = -2 * a.e - 254; // a² = A²·2^-(254 + sh), sh >= -28
     let (h, l) = if sh <= 0 { shl256(sq, (-sh) as u32) } else { shr256(sq, sh as u32) };
     let below = h < 1 << 125; // a² < 2^253 units = 1/2
+    // a² truncated to nothing (a < 2^-127) counts as one unit, so W stays below 2^254 (step 7).
+    let l = if h == 0 { l.max(1) } else { l };
     let (wl, b) = 0u128.overflowing_sub(l); // 2^254 − a²: nonzero, below 2^254
     let wh = (1u128 << 126) - h - u128::from(b);
     let lz = if wh != 0 { wh.leading_zeros() } else { 128 + wl.leading_zeros() };

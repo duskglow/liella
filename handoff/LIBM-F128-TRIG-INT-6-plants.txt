@@ -10,3 +10,5 @@ f128-arcsin-neg-composition | crates/math/src/wide_int/quad/arc.rs | lit:Some(if
 f128-arcsin-recip-unrefined | crates/math/src/wide_int/quad/arc.rs | lit:let rr = if d < 0 { (vw << 63) - dr } else { (vw << 63) + dr }; ==> let rr = vw << 63; | cargo test -p liella-math --lib wide_int::quad::arc | msg:a(sin|cos) Num .*error [0-9]+(\.[0-9]+)?e-[0-9]+
 # The index scale of the root not adjusted by the normalising shift: j doubles, |r| leaves the series' range.
 f128-arcsin-index-scale | crates/math/src/wide_int/quad/arc.rs | lit:u64::from(1023 - 107 - l) << 52 ==> u64::from(1023u32 - 107) << 52 | cargo test -p liella-math --lib wide_int::quad::arc | msg:a(sin|cos) Num .*(error [0-9]+(\.[0-9]+)?e-[0-9]+|panicked)
+# a² truncated to nothing not counted as one unit: acos of a < 2^-127 shifts W by a wrapped count (debug: overflow).
+f128-arcsin-tiny-square | crates/math/src/wide_int/quad/arc.rs | lit:let l = if h == 0 { l.max(1) } else { l }; ==> let l = if h == 0 { l } else { l }; | cargo test -p liella-math --test s10_math_clauses s10_3_c_0 | msg:s10_3_c_0.*FAILED|attempt to subtract with overflow
