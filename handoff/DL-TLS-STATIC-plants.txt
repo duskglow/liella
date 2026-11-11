@@ -1,0 +1,9 @@
+# DL-TLS-STATIC (phase 14 DL-12, D-27.20): plants on the TPOFF arithmetic, the surplus, the dtv generation check,
+# the alignment, the image copy and the canary slot. Each command rebuilds the ld.so product first so plants in
+# crates/ld/src and crates/boundary/src/ld.rs reach the matrix test.
+tpoff-bias-dropped | crates/ld/src/arch.rs | lit:RelocKind::TpOff => o.s.wrapping_add(a).wrapping_add(tp), ==> RelocKind::TpOff => o.s.wrapping_add(a), | cargo xtask so && cargo test -p liella-ld --test tls | msg:tls_relocation_arithmetic_from_the_table.*panicked
+surplus-left-out | crates/ld/src/tls.rs | lit:let off = off.checked_add(surplus).ok_or(TlsError::Overflow)?; ==> let off = off.checked_add(0).ok_or(TlsError::Overflow)?; | cargo xtask so && cargo test -p liella-ld --test tls | msg:the surplus lies below the last block
+dtv-generation-unchecked | crates/ld/src/tls.rs | lit:if word(0) != generation || module == 0 ==> if module == 0 | cargo xtask so && cargo test -p liella-ld --test tls | msg:older generation is not current
+alignment-ignored | crates/ld/src/tls.rs | lit:let align = m.align.max(1); ==> let align = 1u64; | cargo xtask so && cargo test -p liella-ld --test tls | msg:tls_layout_variant_ii_offsets_alignment_and_surplus.*panicked
+tdata-not-copied | crates/boundary/src/ld.rs | lit:unsafe { conv::bytes_at_mut(dst, n) }.copy_from_slice(image); ==> let _ = (dst, image); | cargo xtask so && cargo test -p liella-ld --test tls | msg:TLS check number Some\(1\)
+canary-not-installed | crates/boundary/src/ld.rs | lit:put(Native::STACK_GUARD_SLOT, ==> let _ = (Native::STACK_GUARD_SLOT, | cargo xtask so && cargo test -p liella-ld --test tls | msg:TLS check number Some\(14\)
