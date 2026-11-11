@@ -1,41 +1,53 @@
 # DL-LIBC-START: the dynamic path of `__libc_start_main` (phase 14 DL-14)
 
-**State:** branch `task/dl-libc-start` (on `task/dl-libc-early-2`'s head 47fa75c1d; DL-LIBC-EARLY not landed,
-EARLY-4 running), role mei:~/w/s3. INCOMPLETE (context checkpoint): code, tests, D-27.24 and plants file written and
-committed; **`cargo xtask so` fails** (below), so no product was built and no new test has run yet.
+**State:** branch `task/dl-libc-start-2` (DL-LIBC-START-2; on `task/dl-libc-start`'s head e521e6e3e, itself on
+`task/dl-libc-early-2` 47fa75c1d: DL-LIBC-EARLY-2 had NOT landed on next on 11-11, so no merge with next was made).
+Role mei:~/w/s3. INCOMPLETE: `cargo xtask so` is not green yet on this branch (below); budget checkpoint.
 
-**Decisions in force:** D-27.24 (this story, records/decisions/D-27/D-27.24.toml), D-27.22, D-27.19/.20, D-10.5.
+**Decisions in force:** D-27.24 (records/decisions/D-27/D-27.24.toml), D-27.22, D-27.19/.20, D-10.5, D-X.22 (cold
+`.bss`), STARTUP-FAULTS-RESTORE (start-up state `.data1`), STARTUP-DATA-WINDOWS (D-X.50).
 Plan rows: plan/06-phases/17-phase-14-dynamic-linking.md DL-14; plan/ph14/design.md §14.
 
-## What was done (commits on the branch)
-* `liella_rt::start::private::StartInfo` + `init`, `init_array`, `init_array_len` (the program's hooks); ld.so's
-  `run_init` fills them from `hooks[0]` (crates/boundary/src/ld.rs).
-* crates/boundary/src/runtime.rs: `early_init` opens the std fds in secure mode, stores the hooks, sets `EARLY_DONE`
-  last. `start` now does the `ARCH_GET_FS` test FIRST (moved up from after the auxv count: same instructions for a
-  static start, reordered) and calls `start_under_liella_ld` when FS is set and `EARLY_DONE` is set: skips steps 1-4,
-  keeps set_tid_address / forbid / fpu_control / perturb / nscache / init_initial(false) / cancel, registers
-  `rtld_fini` and `fini`, runs `init(argc,argv,envp)` or DT_INIT + DT_INIT_ARRAY, then main.
-* Tests: crates/ld/tests/reloc.rs `reloc_libc_start_hello_world` (glibc oracle output; liella-crt1.o, host start
-  files via `-nodefaultlibs`, old-style `_start` with init/fini; kernel-started and `ld.so PROGRAM`).
-  crates/boundary/tests/products/mod.rs `conformance_dynamic` now also links each program against a by-path libc
-  copy with Liella's ld.so and runs it; the #814 skip in s10_math_symbols.rs `sym___fpu_control` is removed.
-* Plants: handoff/DL-LIBC-START-plants.txt (early-skip removed, rtld_fini not registered, program init not run).
+## Done (DL-LIBC-START, -1 run)
+Dynamic `__libc_start_main` path (crates/boundary/src/runtime.rs `start_under_liella_ld`, `EARLY_DONE`,
+`PROGRAM_INIT`), ld.so passes the program's init hooks (crates/boundary/src/ld.rs), tests
+`reloc_libc_start_hello_world` (crates/ld/tests/reloc.rs) and `conformance_dynamic` (fpu_control_*; #814 skip lifted),
+plants handoff/DL-LIBC-START-plants.txt.
+
+## Done (DL-LIBC-START-2)
+1. **`xtask so` start-up state check (`SYSINFO_EHDR (0 sections)`)** diagnosed: in the `fast` profile LLVM split the
+   static (`.0`) AND ThinLTO promoted it (`.llvm.<hash>`): section `.data.<sym>.0.llvm.<hash>`. The check stripped one
+   suffix or the other, never both. Fixed in xtask/src/coldbss.rs (`section_key`: ThinLTO suffix, then part number);
+   the check is as strict as before (one section per key). SYSINFO_EHDR stays a declared start-up static: the
+   STATIC start writes it too, so "keep it off the static path" did not apply. Unit test extended; plant
+   `state-part-and-thinlto` added. Same parser is on next (unchanged there).
+2. **hot-text.list**: 4 `extra` keys (thread::list_insert, recheck/time_compat select, catalog variants, textdomain)
+   no longer match a function section of the fast libc.a (codegen-unit split moved with runtime.rs). Remedy is
+   `tools/hottext/regen.sh . --build` in both profiles (the list is generated; never hand-edit).
+3. **STARTUP-DATA-WINDOWS** (fast) is the BLOCKER: 21 written start-up pages > budget 20, in regen's
+   `xtask so --hottext-regen` build (so the hot-text list is not regenerated either). Tried and REVERTED (6b3234716):
+   `EARLY_DONE`/`PROGRAM_INIT` renamed `.lbss` -> still 21 pages (FILL_MIN, global_locale::C, __environ, RESERVE_MEM,
+   HEAP, EXIT_HANDLERS each alone on a page) and COLD-BSS-LBSS broke. The new statics are not the cause. Not yet known:
+   whether the base 47fa75c1d (or origin/next) is at 20 or 21 in this role (layout jitter, ruling #4347, applies
+   only to changes that touch no start-up code; this one does).
+4. `cargo xtask native` step 5b (xtask/src/native_examples.rs): native_dynamic linked against a by-path libc copy with
+   Liella's ld.so, run, output must equal the static one's with `linkage dynamic`. Compiles; NOT RUN (no products).
 
 ## Jobs (mei)
-* `dl-libc-start-step1` rc 1: clippy (arithmetic lints in products/mod.rs), fixed.
-* `dl-libc-start-step2` rc 1: clippy green; records check: D-27.24 body had newlines, fixed.
-* `dl-libc-start-step3` rc 1: clippy, records check, static passed; **`cargo xtask so` failed**:
-  `start-up state: want one .data/.bss section each, got: 15liella_boundary3sys12SYSINFO_EHDR (0 sections)`.
-  `readelf -SW target/liella/libc.a` shows no section naming SYSINFO_EHDR. Not diagnosed. Suspects: the moved
-  `ARCH_GET_FS` test or the new path changing how LTO keeps `sys::SYSINFO_EHDR` (inlined into one user and
-  internalised/merged?). Check first: does origin/task/dl-libc-early-2's head (47fa75c1d) pass `xtask so` in this
-  role (it gated green on kanon)? If yes, bisect my three runtime.rs pieces (FS move; `start_under_liella_ld`;
-  early_init additions). Do NOT edit coldbss.rs's key list to make it pass (ALWAYS FORWARD).
+dl-libc-start-2-step0 rc1 (inherited failure reproduced), -step1 rc1 (state check fixed; hot-text keys), -regen
+(stopped by me: script ended in `git diff`, role is not a git tree), -regen2 rc1 (21>20), -step2 rc1 (clippy: doc
+list indentation, fixed), -step3 rc1 (21>20 with the .lbss move, + COLD-BSS-LBSS; reverted). Clippy and static
+passed in step3 on 5db1cf448; the revert restores the coldbss.rs of 07fce60b5 (its unit test passed in step1).
 
 ## Next step
-1. Fix the `xtask so` failure (above). 2. Run ~/work/DL-LIBC-START/step1.sh on mei (clippy, records, static, so, the
-two tests). 3. Plants via `cargo xtask plants handoff/DL-LIBC-START-plants.txt --dir /mnt/zram/claude/DL-LIBC-START/plants-1`.
-4. `affected --run --base origin/next`, hot_text_products, cbench_startup counters head vs next (static unchanged).
-Left for DL-LIBC-START-2: running `native_dynamic` in xtask/src/native_examples.rs (link a by-path variant with
-Liella's interpreter, compare with EXPECTED) and a wider dynamic conformance subset (only fpu_control_* now).
-Records: D-10.5's body still says the dynamic run is a skip; correct it (or `amends`) once the test is green.
+1. Measure the fast-profile STARTUP-DATA-WINDOWS page count of the base 47fa75c1d in the same role
+   (`cargo xtask so`, fast) and of this head; if the base is 20, find which start-up-written object moved
+   (nm of both libc.a, the BROKEN lines) and make the new code fit (ALWAYS FORWARD); never raise the budget.
+   If DL-LIBC-EARLY-2 has landed, merge origin/next first (allowed) and measure on the merge.
+2. Then `bash tools/hottext/regen.sh . --build` and `LIELLA_FULL_PROFILE=1 bash tools/hottext/regen.sh . --build`
+   in the role (script ~/work/DL-LIBC-START-2/step2.sh on mei does lints, regen, so, the dynamic tests, `xtask native`);
+   copy crates/libc-so/hot-text.list back to the worktree and commit it.
+3. Plants: `cargo xtask plants handoff/DL-LIBC-START-plants.txt --dir /mnt/zram/claude/DL-LIBC-START-3/plants-1`;
+   `affected --run --base origin/next`; hot_text_products; cbench_startup counters head vs next (static unchanged).
+4. Wider dynamic conformance subset (only fpu_control_* now); D-10.5's body still says the dynamic run is a skip:
+   correct it with an `amends` record once the test is green.
