@@ -1,0 +1,11 @@
+{"task": "LIBM-LD-ARC-RATCHET", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: base 7a4221395 has no arc tier (atanl 161286 / atanl_big 10691 there), so 607/480 was never a landed level; profiled current atanl; no code change, ruling needed",
+ "branch": "task/libm-ld-arc-ratchet", "head": "24892c866",
+ "gate": {"affected": "not run (no code change)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "Ratchet target 607/480 refers to INVERSE-INT branch commit e476091b4, not a landed revision of next; the brief's base has no tier", "recommendation": "re-cut as an optimisation story after LIBM-LD-ARC-CHAIN lands (same code, 623/487), target <= 607/480, starting from the profile in handoff/libm-ld-arc-ratchet.md (atan_small outlined, 4 call sites, 105 insns per call; round 46)"}],
+ "informational": ["next 7d31b0621 measures atanl 632.0, atanl_big 498.4 (LIBM-LD-ARC-CHAIN's 623/487 not landed yet)", "wl_trace.sh <sha> from a role directory exits 2 (not a git repository); a rev argument needs a git tree"],
+ "refused": [],
+ "improvement": "Check a ratchet brief's base against the source before cutting it: a 'git cat-file -e <base>:<file>' would have shown that the base predates the code",
+ "next_step": "Owner/coordinator ruling on the target; then optimise atan_small's inlining on top of ARC-CHAIN",
+ "report_file": "handoff/libm-ld-arc-ratchet.md",
+ "jobs": ["keke:libm-ld-arc-ratchet-measure1"]}
