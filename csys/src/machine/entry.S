@@ -87,10 +87,19 @@ liella_machine_ld_enter:
 #ifndef LIELLA_DATA1_ALIGN
 #define LIELLA_DATA1_ALIGN 65536
 #endif
+#ifndef LIELLA_RELRO_ALIGN
+#define LIELLA_RELRO_ALIGN 65536
+#endif
 	.section .rodata1,"a",@progbits
 	.balign LIELLA_RODATA1_ALIGN
 	.section .data1,"aw",@progbits
 	.balign LIELLA_DATA1_ALIGN
+	/* LAYOUT-DATA-CLUSTERS-3 (D-X.67): the relro output section starts on the same kind of boundary
+	 * (its size over the archive), so the relro objects start-up reads share one fault-around window
+	 * wherever text and read-only data end (a 28 KiB relro across a 64 KiB boundary cost tool and
+	 * setlocale a second window, release profile). */
+	.section .data.rel.ro,"aw",@progbits
+	.balign LIELLA_RELRO_ALIGN
 	.section .eh_frame,"a",@unwind
 	.globl liella_eh_frame_start
 	.hidden liella_eh_frame_start

@@ -278,7 +278,7 @@ pub fn cluster_aligns(archive: &Path) -> Result<Vec<(&'static str, u64)>, String
 }
 
 fn cluster_aligns_of(listing: &str) -> Vec<(&'static str, u64)> {
-    let mut bytes = [0u64; 2];
+    let mut bytes = [0u64; 3];
     for l in listing.lines() {
         let Some((_, rest)) = l.trim_start().strip_prefix('[').and_then(|r| r.split_once(']')) else { continue };
         let g: Vec<&str> = rest.split_whitespace().collect();
@@ -286,12 +286,15 @@ fn cluster_aligns_of(listing: &str) -> Vec<(&'static str, u64)> {
         let k = match *name {
             SECTION => 0,
             crate::coldbss::STATE_SECTION => 1,
+            // LAYOUT-DATA-CLUSTERS-3 (D-X.67): the whole relro output section (`.data.rel.ro.local*`
+            // and `.data.rel.ro*` inputs, GNU ld's default script), aligned by entry.S's `.data.rel.ro`.
+            n if n.starts_with(".data.rel.ro") => 2,
             _ => continue,
         };
         bytes[k] += size + align.max(1) - 1;
     }
     let pow2 = |b: u64| b.max(4096).next_power_of_two().min(65536);
-    vec![("LIELLA_RODATA1_ALIGN", pow2(bytes[0])), ("LIELLA_DATA1_ALIGN", pow2(bytes[1]))]
+    vec![("LIELLA_RODATA1_ALIGN", pow2(bytes[0])), ("LIELLA_DATA1_ALIGN", pow2(bytes[1])), ("LIELLA_RELRO_ALIGN", pow2(bytes[2]))]
 }
 
 /// The text keys, read-only keys and parsed members of `archive` (`root`: the tree with the key files).
@@ -463,9 +466,11 @@ mod tests {
     fn cluster_alignment_is_the_smallest_power_of_two_window_safe_and_page_sized() {
         // LAYOUT-DATA-CLUSTERS (D-X.64; no spec clause, layout of the products): each cluster's bytes
         // (size + alignment - 1 per input section) rounded up to a power of two, at least 4 KiB, at most
-        // 64 KiB; `.data1` counts only itself (LAYOUT-DATA-CLUSTERS-2: no relro cluster, D-X.64).
+        // 64 KiB; `.data1` counts only itself; the relro section counts every `.data.rel.ro*` input
+        // (LAYOUT-DATA-CLUSTERS-3, D-X.67): 0x10 + 7 and 0x90000 + 7 bytes, capped at one window.
         let l = "  [ 3] .rodata1 PROGBITS 0000000000000000 000040 004e20 00 A 0 0 32\n  [ 4] .rodata1 PROGBITS 0000000000000000 000040 000100 00 A 0 0 1\n  [ 5] .data.rel.ro.local._RNvX PROGBITS 0000000000000000 000040 000010 00 WA 0 0 8\n  [ 6] .data.rel.ro.x PROGBITS 0000000000000000 000040 090000 00 WA 0 0 8\n  [ 7] .data1 PROGBITS 0000000000000000 000040 001001 00 WA 0 0 1\n  [ 8] .data1x PROGBITS 0000000000000000 000040 040000 00 WA 0 0 1\n";
-        assert_eq!(cluster_aligns_of(l), vec![("LIELLA_RODATA1_ALIGN", 32768), ("LIELLA_DATA1_ALIGN", 8192)]);
+        assert_eq!(cluster_aligns_of(l), vec![("LIELLA_RODATA1_ALIGN", 32768), ("LIELLA_DATA1_ALIGN", 8192), ("LIELLA_RELRO_ALIGN", 65536)]);
+        assert_eq!(cluster_aligns_of("  [ 1] .data.rel.ro.local.a PROGBITS 0 0 4e20 00 WA 0 0 8\n")[2], ("LIELLA_RELRO_ALIGN", 32768));
         assert_eq!(cluster_aligns_of("  [ 1] .data1 NOBITS 0 0 90000 00 WA 0 0 8\n")[1], ("LIELLA_DATA1_ALIGN", 65536));
     }
 
