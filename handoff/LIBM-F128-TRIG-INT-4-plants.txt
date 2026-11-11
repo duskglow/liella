@@ -10,5 +10,6 @@ f128-arc-series-term | crates/math/src/wide_int/quad/arc.rs | lit:let a = A17 - 
 f128-arc-index-floor | crates/math/src/wide_int/quad/arc.rs | lit:j = ((h >> k) + 1) >> 1; ==> j = (h >> k) >> 1; | cargo test -p liella-math --lib wide_int::quad::arc | msg:atan[0-9]* .*error [0-9]+(\.[0-9]+)?e-[0-9]+
 # The denominator's carry ignored: x + cy wraps where it reaches 2^128.
 f128-arc-den-carry | crates/math/src/wide_int/quad/arc.rs | lit:    let (den, ld) = if carry { ==>     let (den, ld) = if false { | cargo test -p liella-math --lib wide_int::quad::arc | msg:atan2 .*error [0-9]+(\.[0-9]+)?e[-]?[0-9]+
-# x < 0 composed with pi/2 instead of pi.
-f128-arc-pi-units | crates/math/src/wide_int/quad/arc.rs | lit:let (m, e) = if x.neg { sub_from(190, t) } else { t }; ==> let (m, e) = if x.neg { sub_from(191, t) } else { t }; | cargo test -p liella-math --lib wide_int::quad::arc | msg:atan2 .*error [0-9]+(\.[0-9]+)?e[-]?[0-9]+
+# x < 0 composed with pi/2 instead of pi: the test's kernel check composes on its own, so the rounded results
+# against the 384-bit route catch it.
+f128-arc-pi-units | crates/math/src/wide_int/quad/arc.rs | lit:let (m, e) = if x.neg { sub_from(190, t) } else { t }; ==> let (m, e) = if x.neg { sub_from(191, t) } else { t }; | cargo test -p liella-math --lib wide_int::quad::arc | msg:left == right. failed: atan2 Num .* exp: -?[0-9]+ \} (Nearest|Down|Up|Zero)
