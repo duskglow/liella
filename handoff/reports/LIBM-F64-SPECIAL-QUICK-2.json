@@ -1,0 +1,11 @@
+{"task": "LIBM-F64-SPECIAL-QUICK-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: erf/erfc quick phase moved inside the in-place entries (cold table fallback); erfc MISMATCH explained (Liella correctly rounded, check now %.15g + pinned test); rounding plant CAUGHT via 10 hard cases; SSE2 erf_series 154 vs next 153 (+1) still open",
+ "branch": "task/libm-f64-special-quick-2", "head": "130f3f328",
+ "gate": {"affected": "see libm-f64-special-quick-2-gate3 on mei", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "SSE2 erf_series +1 instruction (153 -> 154) against next while erf_table SSE2 235 -> 148 and FMA erf_series 109 -> 97", "recommendation": "do not accept: a continuation diffs one-call traces of head and next and removes the +1 (handoff step 1)"}],
+ "informational": ["erfc(0x1.b12e88p+0): Liella 0x1.11c9655380463p-6 is correctly rounded (quad oracle: exact value 0.69 ulp above ...462p-6); the percall reference differs in the last bit, also on next"],
+ "refused": [],
+ "improvement": "wl_trace should accept a primed ~/wl/src/<sha> base (or --base) so head-vs-next one-call trace diffs need no git tree; the +1 hunt stalled there",
+ "next_step": "trace SSE2 erf_series on head and next, remove the +1, then booked timing and erfc above 1, then lgamma/tgamma/Bessel",
+ "report_file": "handoff/LIBM-F64-SPECIAL-QUICK.md",
+ "jobs": ["mei:libm-f64-special-quick-2-gate3", "mei:libm-f64-special-quick-2-plants3", "mei:libm-f64-special-quick-2-counts3"]}
