@@ -57,7 +57,11 @@ negative zeros, |x| < 2^-20) straight to `lgamma_accurate`; the `double` tier (`
   `libm-f32-rest-4-gate` (so, clippy, static, affected --run --base origin/next): rc 0, 4165 passed / 0 failed,
   conformance 20/20, peak 11G, oom_kill 0 (2 SKIPPED lines: tool or capability absent). Plants
   `libm-f32-rest-4-plants`: rc 0, 7 CAUGHT, 0 SURVIVED, 0 WARN (WARN-DEV-SHM only: copy under /dev/shm).
-  The f32 inverse-trig work is verified on the merged head; the branch should land.
+  The f32 inverse-trig work is verified on that head.
+- Next moved during the run (`e167f4952`, `sincos_nearest_widen` added to the same `pub use trig` line): merge
+  `de0e27553` keeps both (this branch's inv_trig line, next's trig line). Final-head jobs, detached on keke and named
+  for the dispatcher: `libm-f32-rest-4-gate2` (math-gen reproduces s10_math_gen.rs byte for byte, so, clippy, static,
+  affected --run --base origin/next, hot_text_products) and `libm-f32-rest-4-plants2` (same seven plants).
 
 ## Next step (a new story the coordinator queues after this lands; not this branch)
 1. lgammaf: in `lgamma_core`, replace the near-zero `None` (and gamma_core's |x| < 2^-20 refusal) by a `#[cold]`
