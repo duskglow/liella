@@ -1,0 +1,16 @@
+{"task": "DL-NONSHARED-OPTOUT", "model": "opus", "tokens": null,
+ "result": "Design note + test-only prototype: eager caller-address attribution through the loader's module map with a handler-address net at unload, opt-in carried by a non-default Liella-only symbol version that glibc's loader refuses at load (probed); no product change",
+ "branch": "task/dl-nonshared-optout", "head": "9b07b05eb",
+ "gate": {"affected": "prototype tests 8 passed / 0 failed; clippy and static clean; plants 9/9 caught", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "Opt-in public interface: Liella-only version node (e.g. LIELLA_OWNER_1) as non-default exports of atexit, at_quick_exit, pthread_atfork plus a link-stub directory", "recommendation": "adopt in the phase 14 product story with a decision record and user docs"},
+  {"item": "Deprecation end state of libc_nonshared.a", "recommendation": "keep the archive as the default while two-way compatibility is a default; deprecate it by link warnings and reports for opted-in distributions only"},
+  {"item": "Extend the handler-address net to stub-registered entries", "recommendation": "no for now; if yes it needs a differences row and a COMPAT flag restoring owner-only finalisation"}
+ ],
+ "informational": ["Liella's ld.so has no dlopen/dlclose or runtime module map before phase 14, so costs are modelled and estimated, not counted on a product", "ELF-note and dynamic-tag markers rejected by reasoning (not probed): glibc's loader is not expected to refuse an unknown note or tag"],
+ "refused": [],
+ "improvement": "A first-run clippy failure on test-file lints cost a plants rerun: briefs for prototype stories could name the standard test-file lint allow line",
+ "next_step": "Owner rulings on the opt-in interface and end state; then a phase 14 story builds (a)+(b) on the loader map",
+ "report_file": "handoff/DL-NONSHARED-OPTOUT.md",
+ "jobs": ["dl-nonshared-optout-clippy-2", "dl-nonshared-optout-static", "dl-nonshared-optout-test2", "dl-nonshared-optout-plants-2"]}
