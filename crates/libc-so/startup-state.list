@@ -125,12 +125,9 @@ symbol stderr
 liella_legacy::global_locale::GLOBAL
 liella_legacy::global_locale::LOCK
 liella_legacy::global_locale::C
-# The first setlocale reads, then writes, the name count (LAYOUT-DATA-CLUSTERS-8: on a `.bss` page start-up
-# leaves untouched it cost setlocale + printf and the tool probe a read and a write fault, +1 against next).
-liella_legacy::global_locale::NAME_COUNT
 liella_legacy::nscache::NSCACHE
 # The first zone load (localtime_r, tzset). time_compat's HEAD and CURRENT: the first localtime_r writes both
-# (LAYOUT-DATA-CLUSTERS-8: one fault each on untouched `.bss` pages, release localtime 19 against 17 on next).
+# (LAYOUT-DATA-CLUSTERS-8: one fault each on untouched `.bss` pages; release localtime 19 before, 17 after, as next).
 liella::time::zone::NEXT_ID
 liella_legacy::time_compat::HEAD
 liella_legacy::time_compat::CURRENT

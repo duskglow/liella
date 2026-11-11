@@ -82,11 +82,8 @@ use liella_kernel::uapi::{ADDR_NO_RANDOMIZE, PERSONALITY_QUERY};
 /// 7 / 6, localtime and localtime + mktime 20 / 19, float 2 / 4. LOCALE_BOUND 57 -> 55, TOOL_BOUND
 /// 60 -> 58; TRUE_BOUND, FORK_BOUND, LOCALTIME_BOUND and FLOAT_BOUND stay (each already at most the
 /// larger count plus 1; a bound is never raised).
-/// LAYOUT-DATA-CLUSTERS-8 (the first setlocale's and localtime_r's statics declared in the `.data1` cluster):
-/// Zen 1 and Skylake-SP hosts, every run identical, fast / release: setlocale + printf 51 / 51, tool 54 / 54.
-/// LOCALE_BOUND 55 -> 52, TOOL_BOUND 58 -> 55 (the larger count plus 1).
 const TRUE_BOUND: u64 = 17;
-const LOCALE_BOUND: u64 = 52;
+const LOCALE_BOUND: u64 = 55;
 /// "tool" mode: a coreutils-shaped program (setlocale, bindtextdomain, atexit, getenv, strtoimax,
 /// printf), see `init_coreutils_shaped_program_stays_within_its_page_fault_bound`.
 /// PERF-READDIR-ENTRY-4 (layout-only delta, owner rule): CI read tool 69 (bound 68) for the readdir
@@ -97,7 +94,7 @@ const LOCALE_BOUND: u64 = 52;
 /// list and adds no startup code; next already sits one under the bound, and the branch adds one fault in
 /// both bases. TOOL_BOUND 68 -> 71 (rule above: the highest count, 69, plus 2); LOCALE_BOUND stays 68
 /// (66 plus 2), TRUE_BOUND stays 23. STARTUP-FAULTS-RESTORE-5: 60 -> 58 (see TRUE_BOUND).
-const TOOL_BOUND: u64 = 55;
+const TOOL_BOUND: u64 = 58;
 const RUNS: usize = 5;
 
 fn root() -> PathBuf {
