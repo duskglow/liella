@@ -283,6 +283,9 @@ fn addr0(f: Fn0) -> usize {
 /// Start step 3 for [`early_init`]: `environ`, the arguments (the native interface's), the program
 /// names and `__libc_stack_end`, as [`start`] publishes them (kept apart so the static start's code
 /// and its hot-text keys stay as they are; under Liella's `ld.so`, `start` skips its copy, D-27.24).
+/// [`start_under_liella_ld`] calls it again to undo `.preinit_array` changes (inlined at both
+/// sites: no hot-text key of its own).
+#[inline(always)]
 fn publish(argv_addr: usize, n_args: usize, envp: usize, stack_end: usize) {
     ffi::environ.store(envp, Release);
     process::ARGV.store(argv_addr, Release);
@@ -308,8 +311,9 @@ fn publish(argv_addr: usize, n_args: usize, envp: usize, stack_end: usize) {
 /// constructors see an initialised C library: the auxiliary vector, steps 3 and 4 (`environ`, the
 /// program names, `__libc_stack_end`, the tunables and the CPU paths). The NULL-folding guard is
 /// decided at the first small copy or fill (`dispatch::resolve_fold`). `__libc_start_main` then
-/// skips them ([`start_under_liella_ld`], D-27.24): a constructor's `setenv` or change to the
-/// program names stays.
+/// skips steps 1-4 but publishes `environ` and the program names again ([`start_under_liella_ld`],
+/// D-27.24): a `.preinit_array` function's `setenv` or change to the program names is undone, a
+/// constructor's stays.
 pub fn early_init(info: usize) {
     // UNSAFE(slice): the start description `ld.so` passes.
     #[allow(unsafe_code)]
@@ -354,11 +358,14 @@ static PROGRAM_INIT: [AtomicUsize; 3] = [const { AtomicUsize::new(0) }; 3];
 /// the initial thread (step 1), cleared the environment in secure mode and called [`early_init`]
 /// (steps 2-4) before any constructor; it ran the program's `.preinit_array` and every shared
 /// object's initialisation. Left here: the thread's kernel registrations and the library's own
-/// state, `rtld_fini` (each object's termination, the program's `.fini_array` included), then the
-/// program's own `DT_INIT` and `DT_INIT_ARRAY` (new crt1, `init` NULL) or `init` (old crt1),
-/// each with `(argc, argv, envp)`, then `main`.
+/// state, `rtld_fini` (each object's termination, the program's `.fini_array` included), the
+/// initial `environ` and program names published again (a `.preinit_array` function's changes do
+/// not reach the constructors or `main`), then the program's own `DT_INIT` and `DT_INIT_ARRAY`
+/// (new crt1, `init` NULL) or `init` (old crt1), each with `(argc, argv, envp)`, then `main`. An
+/// old crt1's `fini` is not registered: `rtld_fini` already runs the program's termination, and
+/// running `fini` as well would run its `.fini_array` twice.
 #[inline(never)]
-fn start_under_liella_ld(main: Option<Main>, argc: c_int, argv_addr: usize, init: Option<Fn0>, fini: Option<Fn0>, rtld_fini: Option<Fn0>) -> ! {
+fn start_under_liella_ld(main: Option<Main>, argc: c_int, argv_addr: usize, init: Option<Fn0>, rtld_fini: Option<Fn0>) -> ! {
     let n_args = usize::try_from(argc).unwrap_or(0);
     let envp = argv_addr.wrapping_add(n_args.wrapping_add(1).wrapping_mul(8));
     let t = tb::current();
@@ -384,9 +391,8 @@ fn start_under_liella_ld(main: Option<Main>, argc: c_int, argv_addr: usize, init
     if let Some(f) = rtld_fini {
         process::register(process::entry(ATEXIT, addr0(f), 0, 0));
     }
-    if let Some(f) = fini {
-        process::register(process::entry(ATEXIT, addr0(f), 0, 0));
-    }
+    // The initial environment and names again, before the program's own initialisation.
+    publish(argv_addr, n_args, envp, ffi::__libc_stack_end.load(Acquire));
     let a = |v: usize| i64::from_ne_bytes(v.to_ne_bytes());
     match init {
         // Before 2.34, crt1 passed `__libc_csu_init(argc, argv, envp)`, which runs the arrays.
@@ -418,7 +424,7 @@ pub fn start<const PIE: bool>(main: Option<Main>, argc: c_int, argv: *mut *mut c
     let static_program = CSys.arch_prctl_get(ArchGet::Fs).map_or(true, |fs| fs == 0);
     // Liella's `ld.so` ran steps 1-4 already (D-27.24); a static program never tests the flag.
     if !static_program && EARLY_DONE.load(Acquire) {
-        start_under_liella_ld(main, argc, argv.expose_provenance(), init, fini, rtld_fini)
+        start_under_liella_ld(main, argc, argv.expose_provenance(), init, rtld_fini)
     }
     let n_args = usize::try_from(argc).unwrap_or(0);
     let argv_addr = argv.expose_provenance();
