@@ -7,7 +7,7 @@ exactly which tests a change reaches.
 
 | § | Title | Boundary (C entry points) | Library modules used | Clause tests | Conformance | Decisions | Behaviour records |
 |---|---|---|---|---|---|---|---|
-| 1 | Program startup, termination and the program environment | crates/boundary/src/posix/s01_startup.rs | abi::ctypes, boundary::argp, boundary::conv, boundary::options, boundary::process, boundary::ret, boundary::runtime, boundary::strz, legacy::exit_handlers, legacy::stubs | s01_startup_symbols.rs, crates/core/tests/s01_startup_clauses.rs | s01_abort.c, s01_argp.c, s01_cxa_finalize.c, s01_env.c, s01_envfind.c, s01_envscan.c, s01_exit_order.c, s01_exit_status.c, s01_exit_threads.c, s01_ifunc.c, s01_irelative_relro.c, s01_quick_exit.c, s01_relro.c, s01_secure.c, s01_startup.c, s01_static_pie.c, s01_static_pie_rela.c, s01_streams.c, s01_symbols_options.c, s01_thread_dtors.c, s01_tunables.c | plan/07-decisions/s01-program-startup-termination-and-environment.md | aio.md, argp.md, backtrace.md, catalogs.md, dns.md, env-cache.md, fstree.md, getopt.md, mallocdbg.md, mntent.md, netaddr.md, netdb.md, noproc.md, patterns.md, posixipc.md, process.md, specman.md, syslog.md, terminals.md, timefmt.md, timers.md, users.md, zones.md |
+| 1 | Program startup, termination and the program environment | crates/boundary/src/posix/s01_startup.rs | abi::ctypes, boundary::argp, boundary::conv, boundary::options, boundary::process, boundary::ret, boundary::runtime, boundary::strz, legacy::exit_handlers, legacy::stubs | s01_startup_symbols.rs, crates/core/tests/s01_startup_clauses.rs | s01_abort.c, s01_argp.c, s01_cxa_finalize.c, s01_env.c, s01_envfind.c, s01_envscan.c, s01_exit_order.c, s01_exit_status.c, s01_exit_threads.c, s01_ifunc.c, s01_irelative_relro.c, s01_quick_exit.c, s01_relro.c, s01_secure.c, s01_startup.c, s01_static_pie.c, s01_static_pie_multi_writable.c, s01_static_pie_rela.c, s01_streams.c, s01_symbols_options.c, s01_thread_dtors.c, s01_tunables.c | plan/07-decisions/s01-program-startup-termination-and-environment.md | aio.md, argp.md, backtrace.md, catalogs.md, dns.md, env-cache.md, fstree.md, getopt.md, mallocdbg.md, mntent.md, netaddr.md, netdb.md, noproc.md, patterns.md, posixipc.md, process.md, specman.md, syslog.md, terminals.md, timefmt.md, timers.md, users.md, zones.md |
 | 2 | Error reporting and diagnostics | crates/boundary/src/posix/s02_diagnostics.rs | abi::ctypes, boundary::backtrace, boundary::conv, boundary::fmtmsg, boundary::process, boundary::report, boundary::ret, boundary::strz, boundary::tb | s02_diagnostics_symbols.rs, crates/core/tests/s02_diagnostics_clauses.rs | s02_assert.c, s02_assert_perror.c, s02_backtrace.c, s02_backtrace_static_pie.c, s02_chk_fail.c, s02_report.c, s02_stack_smash.c | plan/07-decisions/s02-error-reporting-and-diagnostics.md | backtrace.md, compat-objects.md, diagnostics.md, fmtmsg.md |
 | 3 | Memory allocation | crates/boundary/src/posix/s03_memory.rs | abi::ctypes, abi::layout, boundary::caller_alloc, boundary::conv, boundary::data, boundary::heap, boundary::raw, boundary::ret, legacy::malloc_compat, legacy::obstack, rt::heap | s03_memory_symbols.rs, crates/core/tests/s03_memory_clauses.rs | s03_mcheck.c, s03_mcheck_default.c, s03_mcheck_pedantic.c, s03_mtrace.c, s03_mtrace_secure.c, s03_perturb.c, s03_perturb_tunable.c, s03_rlimit_as.c, s03_rlimit_as_raised.c | plan/07-decisions/s03-memory-allocation.md | compat-objects.md, mallocdbg.md |
 | 4 | Byte arrays and strings | crates/boundary/src/posix/s04_strings.rs | abi::ctypes, boundary::caller_alloc, boundary::conv, boundary::dispatch, boundary::ffi, boundary::hot, boundary::locale, boundary::native, boundary::ret, boundary::strz, boundary::sys, kernel::errno, legacy::cstring, legacy::string_compat | s04_strings_symbols.rs, crates/core/tests/s04_strings_clauses.rs | s04_casecmp_locales.c, s04_classed_memset.c, s04_strings_early_copies.c, s04_strings_smoke.c | plan/07-decisions/s04-byte-arrays-and-strings.md |  |
@@ -49,7 +49,7 @@ Other crates: abi, boundary, core, kernel, ld, ld-so, legacy, libc-so, libm-so, 
 | `/dev/` | crates/legacy/src/accounting.rs:470 |
 | `/dev/console` | crates/boundary/src/fmtmsg.rs:268, crates/core/src/log.rs:65, crates/core/src/term.rs:506 |
 | `/dev/log` | crates/core/src/log.rs:63 |
-| `/dev/null` | crates/boundary/src/selftest.rs:442, crates/boundary/src/spawn.rs:778, crates/boundary/src/spawn.rs:851, crates/rt/src/start.rs:198 |
+| `/dev/null` | crates/boundary/src/selftest.rs:442, crates/boundary/src/spawn.rs:778, crates/boundary/src/spawn.rs:851, crates/rt/src/start.rs:245 |
 | `/dev/ptmx` | crates/core/src/term.rs:335, crates/core/src/term.rs:507 |
 | `/dev/pts/` | crates/core/src/term.rs:391, crates/core/src/term.rs:502 |
 | `/dev/shm/` | crates/boundary/src/mqueue.rs:370, crates/boundary/src/nscache.rs:54 |
@@ -101,12 +101,12 @@ Other crates: abi, boundary, core, kernel, ld, ld-so, legacy, libc-so, libm-so, 
 | `/sys/devices/system/cpu` | crates/core/src/system.rs:351 |
 | `/sys/devices/system/cpu/online` | crates/core/src/system.rs:331 |
 | `/usr/` | crates/core/src/catalog/xopen.rs:197 |
-| `/usr/bin/ls` | crates/rt/src/start.rs:297 |
+| `/usr/bin/ls` | crates/rt/src/start.rs:481 |
 | `/usr/bin/prog` | crates/legacy/src/argp.rs:72 |
-| `/usr/lib` | crates/ld/src/arch.rs:225 |
+| `/usr/lib` | crates/ld/src/arch.rs:305 |
 | `/usr/lib/locale` | crates/core/src/locale/mod.rs:533 |
 | `/usr/lib/locale/locale-archive` | crates/core/src/locale/mod.rs:535 |
-| `/usr/lib/x86_64-linux-gnu` | crates/ld/src/arch.rs:225 |
+| `/usr/lib/x86_64-linux-gnu` | crates/ld/src/arch.rs:305 |
 | `/usr/share/i18n/charmaps/` | crates/legacy/src/global_locale.rs:96 |
 | `/usr/share/locale` | crates/legacy/src/intl.rs:62 |
 | `/usr/share/locale-langpack` | crates/legacy/src/intl.rs:66 |

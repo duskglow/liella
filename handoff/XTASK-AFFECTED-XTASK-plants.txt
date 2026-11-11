@@ -1,0 +1,15 @@
+# XTASK-AFFECTED-XTASK (#4684): plants on the xtask tool-module route of `cargo xtask affected`.
+# Run: cargo xtask plants handoff/XTASK-AFFECTED-XTASK-plants.txt --dir <new-directory>
+xaxx-narrowing-removed | xtask/src/affected.rs | lit:return Some(Class::XtaskTool); ==> return full("xtask"); | cargo test -p xtask --bin xtask records_only | msg:a_records_only_change_selects_the_xtask_checks_not_full \.\.\. FAILED
+xaxx-dir-module-lost | xtask/src/affected.rs | lit:Some((m, _)) => Some(m), ==> Some((_, _)) => None, | cargo test -p xtask --bin xtask records_only | msg:a_records_only_change_selects_the_xtask_checks_not_full \.\.\. FAILED
+xaxx-no-static | xtask/src/affected.rs | perl:s/sel\.xtask_cmds\.insert\("static"\.to_string\(\)\);(\s+let why = xtask_module)/$1/ | cargo test -p xtask --bin xtask records_only | msg:a_records_only_change_selects_the_xtask_checks_not_full \.\.\. FAILED
+xaxx-product-as-tool | xtask/src/affected.rs | lit:    ("repro", "`cargo xtask repro`, not a gate step"), ==>     ("repro", "`cargo xtask repro`, not a gate step"), ("so", "planted"), | cargo test -p xtask --bin xtask product_build_path | msg:a_product_build_path_change_still_selects_full \.\.\. FAILED
+xaxx-use-unlisted | xtask/src/affected.rs | lit:    ("trace", "records", "`trace::run` reads the decision ids; static runs trace"), ==> | cargo test -p xtask --bin xtask tool_modules_stay | msg:tool_modules_stay_off_the_product_path \.\.\. FAILED
+xaxx-hottext-no-layout | xtask/src/affected.rs | lit:const IMAGE_TOOLS: &[&str] = &["xtask/src/hottext.rs", "xtask/src/coldbss.rs", "xtask/src/so.rs"]; ==> const IMAGE_TOOLS: &[&str] = &["xtask/src/coldbss.rs", "xtask/src/so.rs"]; | cargo test -p xtask --bin xtask hottext_change | msg:a_hottext_change_selects_the_layout_tests \.\.\. FAILED
+# cargo xtask plants results (6 plants: 6 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# xaxx-narrowing-removed: CAUGHT, caught by xtask affected::tests::a_records_only_change_selects_the_xtask_checks_not_full
+# xaxx-dir-module-lost: CAUGHT, caught by xtask affected::tests::a_records_only_change_selects_the_xtask_checks_not_full
+# xaxx-no-static: CAUGHT, caught by xtask affected::tests::a_records_only_change_selects_the_xtask_checks_not_full
+# xaxx-product-as-tool: CAUGHT, caught by xtask affected::tests::a_product_build_path_change_still_selects_full
+# xaxx-use-unlisted: CAUGHT, caught by xtask affected::tests::tool_modules_stay_off_the_product_path
+# xaxx-hottext-no-layout: CAUGHT, caught by xtask affected::tests::a_hottext_change_selects_the_layout_tests

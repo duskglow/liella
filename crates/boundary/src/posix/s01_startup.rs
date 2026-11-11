@@ -27,6 +27,14 @@ use crate::runtime::{Fn0, Main};
 
 // ------------------------------------------------------------------------------ §1.1 startup
 
+export! { runtime "LIELLA_PRIVATE";
+#[cfg(feature = "runtime")]
+pub extern "C" fn __liella_libc_early_init(info: *const c_void) {
+    // `__liella_libc_early_init(const StartInfo *)`: Liella's `ld.so` calls it before any
+    // constructor (design §14, D-27.22).
+    crate::runtime::early_init(info.expose_provenance())
+}}
+
 export! { runtime "GLIBC_2.34";
 #[cfg(feature = "runtime")]
 pub extern "C" fn __libc_start_main(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Option<Fn0>, fini: Option<Fn0>, rtld_fini: Option<Fn0>, stack_end: *mut c_void) -> c_int {

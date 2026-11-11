@@ -1,0 +1,13 @@
+{"task": "DL-MULTI-WRITABLE-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: static PIE with 3 writable PT_LOADs starts (conformance fixed); RELRO protected segment by segment (rt relro_pieces, ld.so objects and program, static start cold fallback) with a header-patched ld.so e2e test; start-up counters +6..+14 vs base unresolved (different build path); dynamic program with 2/3 writable segments under ld.so not done",
+ "branch": "task/dl-multi-writable-2", "head": "e695c0e39",
+ "gate": {"affected": "1806 passed / 0 failed (9 suites), conformance 22 passed", "peak": "1.4G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The first run-2 commit message says 'Checked on a Zen 1 host'; the host is a Haswell-EP host (corrected in a later commit message and the handoff; history not rewritten).",
+                   "cbench_startup base vs head: c 2150->2156, setloc 67910->67924, printf 71703->71713, wctype 68930->68936; base built under a different path, glibc column moved by 1; not like for like."],
+ "refused": [],
+ "improvement": "A tool that builds origin/next's merge-base at the role's own path (or a startup bench that normalises argv/env length) would make cbench_startup base-vs-head comparisons like for like in one job.",
+ "next_step": "Measure cbench_startup base and head from the same path and fix any real delta; then the dynamic program with 2 and 3 writable PT_LOADs under ld.so (reloc.rs corpus + ldso_run.rs nostdlib PIE), then hot_text_products on the merged head.",
+ "report_file": "handoff/DL-MULTI-WRITABLE.md",
+ "jobs": ["dl-multi-writable-2-final", "dl-multi-writable-2-gate2", "dl-multi-writable-2-plants2", "dl-multi-writable-2-startup-base"]}

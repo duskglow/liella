@@ -66,7 +66,7 @@
 //! Every approximation is within `2^-94`; the rounding test assumes `2^-92`. Results lie in
 //! `[2^-36, 2^76]`, normal: the test's exponent check never refuses them.
 
-use super::{cos_poly, mul_wide, mulhi, mulhi64, reduce, round, sin_poly, MIN_D, SC};
+use super::{big_u64, cos_poly, mul_wide, mulhi, mulhi64, reduce, round, sin_poly, MIN_D, SC};
 use crate::float::{Float, Kind, Num};
 use crate::status::{Rounding, Status};
 
@@ -97,12 +97,18 @@ const A3: u128 = 0xaaaaaaaa_aaaaaaaa_aaaaaaaa_aaaaaaab; // 1/3, units 2^-129
 /// `atan x` rounded into `F` in `mode` when the tier decides it; `None` sends the caller to the
 /// 384-bit route. `x` finite and nonzero (the caller settles `|x| < 2^-34`).
 pub(crate) fn atan<F: Float>(n: &Num, mode: Rounding) -> Option<(F, Status)> {
+    if F::PREC == 113 {
+        return super::quad::arc::atan::<F>(n, mode); // binary128: three limbs (D-10.96)
+    }
     finish::<F>(|| atan_approx(n), mode)
 }
 
 /// `atan2(y, x)` for finite nonzero `y`, `x` (the caller settles zeros, infinities and
 /// `|y/x| < 2^-72` with `x > 0`).
 pub(crate) fn atan2<F: Float>(y: &Num, x: &Num, mode: Rounding) -> Option<(F, Status)> {
+    if F::PREC == 113 {
+        return super::quad::arc::atan2::<F>(y, x, mode); // binary128: three limbs (D-10.96)
+    }
     finish::<F>(|| atan2_approx(y, x), mode)
 }
 
@@ -119,6 +125,9 @@ pub(crate) fn acos<F: Float>(n: &Num, mode: Rounding, hw: impl Fn(f64) -> f64) -
 
 /// `tan x` for `|x| >= 2^-34` finite.
 pub(crate) fn tan<F: Float>(n: &Num, mode: Rounding) -> Option<(F, Status)> {
+    if F::PREC == 113 {
+        return super::quad::tan::<F>(n, mode); // binary128: three limbs (D-10.91)
+    }
     finish::<F>(|| tan_approx(n), mode)
 }
 
@@ -158,7 +167,7 @@ fn dbl(v: u64) -> f64 {
 /// Step 1: `(n/d)·2^126` for `n`, `d` in `[2^127, 2^128)`, in `(2^125, 2^127)`.
 fn div(n: u128, d: u128) -> u128 {
     let dh = (d >> 64) as u64;
-    let v = (TWO115 / dbl(dh >> 11)) as u64; // ≈ 2^126/dh, in (2^62, 2^63]
+    let v = big_u64(TWO115 / dbl(dh >> 11)); // ≈ 2^126/dh, in (2^62, 2^63]
     let q0 = mulhi64((n >> 64) as u64, v); // ≈ (n/d)·2^62
     let t = ((u128::from(q0) * u128::from(dh)) << 2).wrapping_add((u128::from(q0) * (d & super::M64)) >> 62);
     let e = n.wrapping_sub(t) as i128; // n − q0·d/2^62, |e| < 2^78
@@ -171,7 +180,7 @@ fn div(n: u128, d: u128) -> u128 {
 /// `v·2^52`, below `2^53`, scaled): `hw` for this crate's own callers. The crate cannot issue
 /// `sqrtsd` (no `unsafe`, no `f64::sqrt` in `core`); the boundary passes it in (D-10.75).
 pub(crate) fn soft_sqrt(v: f64) -> f64 {
-    let n = (v as u64 as u128) << 52; // below 2^106
+    let n = u128::from(big_u64(v)) << 52; // below 2^106
     dbl(n.isqrt() as u64) * TWO_M26
 }
 
@@ -181,7 +190,7 @@ fn root_seed(w: u128, hw: impl Fn(f64) -> f64) -> (u64, f64) {
     let wd = (w >> 74) as i64 as f64; // w' = ⌊w/2^74⌋, in [2^52, 2^54)
     let iw = TWO90 / wd;
     let r = hw(wd); // √w', in [2^26, 2^27]
-    let s0 = (r * TWO37) as u64; // saturates at 2^64 − 1 when w is just below 2^128
+    let s0 = big_u64(r * TWO37); // 2^64 − 1 when the root rounds to 2^27 (w just below 2^128)
     (s0, r * iw) // 2^90/r = 2^127/s0
 }
 
@@ -190,7 +199,7 @@ fn root_seed(w: u128, hw: impl Fn(f64) -> f64) -> (u64, f64) {
 fn sqrt(w: u128, hw: impl Fn(f64) -> f64) -> (u128, f64) {
     let (s0, vd) = root_seed(w, hw);
     let r = w.wrapping_sub(u128::from(s0) * u128::from(s0)) as i128; // w − s0², |r| < 2^78
-    let c = mul_wide(r.unsigned_abs(), vd as u64); // r·2^63/s0
+    let c = mul_wide(r.unsigned_abs(), big_u64(vd)); // r·2^63/s0 (vd in [2^63, 2^64])
     let s = u128::from(s0) << 64;
     (if r < 0 { s - c } else { s + c }, vd)
 }
@@ -232,6 +241,7 @@ fn atan_le_in(y: Val, x: Val, ix: impl FnOnce() -> f64) -> Val {
     let k = x.e - y.e; // >= 0
     let mut j = 0;
     if k <= 8 {
+        // RANGE: y/x <= 1 + 2^-100 and ix ≈ 256/x.m: h in [0, 256], a signed conversion in range.
         let h = (dbl((y.m >> 75) as u64) * ix()) as usize; // ⌊256·y.m/x.m⌋ within one
         j = ((h >> k) + 1) >> 1;
     }
@@ -282,7 +292,9 @@ fn atan2_approx(b: &Num, a: &Num) -> Option<(bool, Val)> {
 }
 
 /// `√(1 − a²)` for `0 < a < 1` (step 5), its index scale ([`inv_top`] from the root's own
-/// reciprocal: no `divsd` after the root) and whether `a < √(1 − a²)`.
+/// reciprocal: no `divsd` after the root) and whether `a < √(1 − a²)`. Inlined into its two
+/// callers (asinl, acosl): out of line it costs a call and the spills around it.
+#[inline(always)]
 fn root_one_minus_sq(a: Val, hw: impl Fn(f64) -> f64) -> Option<(Val, f64, bool)> {
     if a.e > -128 {
         return None; // a >= 1
@@ -365,7 +377,7 @@ fn tan_approx(n: &Num) -> Option<(bool, Val)> {
 }
 
 /// `atan(j/128)` for `j = 1..=128` (row `j - 1`), in units of `2^-128`.
-const ATAN_J: [u128; 128] = [
+pub(super) const ATAN_J: [u128; 128] = [
     0x01fffd55_5bbba972_d00c46a3_f77cc15f,
     0x03ffeaab_776e5356_ef9e3159_0057dd81,
     0x05ffb806_12970d6b_ce7603f5_cab5251c,
@@ -595,6 +607,22 @@ mod tests {
         }
         eprintln!("arc: worst root error 2^{:.1}", root_worst.log2());
         eprintln!("arc: worst quotient error 2^{:.1}", worst.log2());
+    }
+
+    /// `big_u64` is `as u64` on its whole domain `[2^52, 2^64]` (no spec clause: the root's
+    /// conversion without SSE flags, step 2): every binade's ends, random significands, `2^64`.
+    #[test]
+    fn big_u64_is_the_saturating_conversion() {
+        let mut g = Rng(0x5eed_0b16_u64);
+        let mut vs = vec![2f64.powi(64)];
+        for e in 52..64 {
+            let lo = 2f64.powi(e);
+            vs.extend([lo, lo * (2.0 - f64::EPSILON)]);
+            vs.extend((0..64).map(|_| f64::from_bits(lo.to_bits() | g.next() >> 12)));
+        }
+        for v in vs {
+            assert_eq!(big_u64(v), v as u64, "big_u64({v:e})");
+        }
     }
 
     #[derive(Clone, Copy, Debug, PartialEq)]

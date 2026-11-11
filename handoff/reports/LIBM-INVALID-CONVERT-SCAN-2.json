@@ -1,0 +1,11 @@
+{"task": "LIBM-INVALID-CONVERT-SCAN-2", "model": "opus", "tokens": null,
+ "result": "gate3 red fixed (flags test clippy, gamma RANGE window); float-casts extended to parse.rs; D-10.95 written; strto* flag gap probed and recorded; disassembly, accuracy, counts, Ivy Bridge timing not done",
+ "branch": "task/libm-invalid-convert-scan-2", "head": "8a3c0525a",
+ "gate": {"affected": "see job libm-invalid-convert-scan-2-gate on keke", "peak": null}, "accepted_first_attempt": false,
+ "rulings": [{"item": "strto*/wcsto* raise no overflow/underflow and raise inexact only as a side effect of the long path's float arithmetic (probe a7fa43af9749)", "recommendation": "new story STRTO-FENV-FLAGS: raise float::Rounded's inexact/overflow/underflow from the boundary wrappers, then make finish()'s bounds integer"}],
+ "informational": ["plants seed-as-u64-static, gamma-range-dropped and parse-range-dropped: WARN-NO-MSG although the logs carry the expected line: the msg regexes use \\d, which the tool's regex flavour does not seem to accept; use [0-9]+ next run", "LIBM-LD-ARC-DIRECT not on next yet: merge when it lands"],
+ "refused": [],
+ "improvement": "plants msg: regex flavour (\\d unsupported?) should be stated in docs/plants.md or the tool should reject unsupported escapes up front",
+ "next_step": "merge origin/next after LIBM-LD-ARC-DIRECT; disassembly per function, 10^7 accuracy, counts and Ivy Bridge cycles (handoff Not done list)",
+ "report_file": "handoff/libm-invalid-convert-scan.md",
+ "jobs": ["libm-invalid-convert-scan-2-gate", "libm-invalid-convert-scan-2-plants"]}

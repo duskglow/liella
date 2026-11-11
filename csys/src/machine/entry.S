@@ -74,6 +74,42 @@ liella_machine_ld_enter:
 	.cfi_endproc
 	.size liella_machine_ld_enter, .-liella_machine_ld_enter
 #else
+	/* The start-up data clusters (D-X.62, D-X.64, xtask/src/startup_ro.rs): this object comes first in
+	 * a link, so its empty section comes first in each output section and gives the cluster its start
+	 * alignment (the start-up relro objects stay beside `.got`: a head cluster took a window of its own).
+	 * `cargo xtask so` passes each alignment: the smallest power of two (at least 4 KiB, at most
+	 * 64 KiB) not below the cluster's size over the whole archive, so a cluster of at most 64 KiB
+	 * never straddles a 64 KiB fault-around window, and the written cluster takes the fewest pages.
+	 * The defaults are the largest values (a build that does not pass them). */
+#ifndef LIELLA_RODATA1_ALIGN
+#define LIELLA_RODATA1_ALIGN 65536
+#endif
+#ifndef LIELLA_DATA1_ALIGN
+#define LIELLA_DATA1_ALIGN 65536
+#endif
+#ifndef LIELLA_RELRO_ALIGN
+#define LIELLA_RELRO_ALIGN 65536
+#endif
+#ifdef LIELLA_STATIC_PIE
+	/* LAYOUT-DATA-CLUSTERS-4 (D-X.68): a static PIE relocates itself with exactly one writable
+	 * PT_LOAD (crates/ld/src/boot.rs `image`). The linker starts a new segment where the gap before
+	 * a section reaches a whole page: a 16 KiB `.data1` after `.data` left a 3-page gap and a
+	 * second writable segment, and the start refused the executable (exit 127). At 4 KiB the gap
+	 * stays under a page, and the written cluster still takes ceil(size / 4 KiB) pages. (The relro
+	 * alignment kept one segment in the same test, `.tdata` and `.init_array` ahead of it.) */
+#undef LIELLA_DATA1_ALIGN
+#define LIELLA_DATA1_ALIGN 4096
+#endif
+	.section .rodata1,"a",@progbits
+	.balign LIELLA_RODATA1_ALIGN
+	.section .data1,"aw",@progbits
+	.balign LIELLA_DATA1_ALIGN
+	/* LAYOUT-DATA-CLUSTERS-3 (D-X.67): the relro output section starts on the same kind of boundary
+	 * (its size over the archive), so the relro objects start-up reads share one fault-around window
+	 * wherever text and read-only data end (a 28 KiB relro across a 64 KiB boundary cost tool and
+	 * setlocale a second window, release profile). */
+	.section .data.rel.ro,"aw",@progbits
+	.balign LIELLA_RELRO_ALIGN
 	.section .eh_frame,"a",@unwind
 	.globl liella_eh_frame_start
 	.hidden liella_eh_frame_start

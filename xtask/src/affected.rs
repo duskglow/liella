@@ -20,7 +20,7 @@
 //! 1. ESCALATE TO FULL (everything: the workspace clippy and `cargo xtask test`): `csys/` (but
 //!    the assembly sources, rule 6), `crates/abi`, build scripts, `Cargo.toml`/`Cargo.lock` (but `fuzz/`'s own
 //!    workspace, which selects only `fuzz-check`), the
-//!    toolchain file, `xtask/` (but this module and the audit modules, rule 7, and xtask test code: `xtask/tests/`
+//!    toolchain file, `xtask/` (but this module, the audit and tool modules, rule 7, and xtask test code: `xtask/tests/`
 //!    or a source whose base diff stays inside its trailing `#[cfg(test)]` module, D-X.41), the generated tables and their inputs (`spec/clauses.tsv`, `symbols.tsv`,
 //!    `primitives.tsv`, `spec/abi`, `spec/unicode`, `*_gen.rs`, `tables.rs`, `builtin_items.rs`,
 //!    `include/`; but the math wiring, coefficients, fits and tables generator, rule 8), the product crates, linker and export lists,
@@ -48,6 +48,11 @@
 //!    * every other crate (`kernel`, `rt`, `mem`, `ld`, `native`, `thread-db`, ...), a root file:
 //!      WIDE: every test target of every crate that depends on it (dev-dependencies included),
 //!      directly or not, and every conformance program.
+//!    * "Depends" (both bullets, every tier; XTASK-AFFECTED-LOADER): a crate's own dependencies always count; a
+//!      dependency's onward edge counts only when that crate's test build compiles a module naming the next crate
+//!      (`build_closures`: the features each crate gets in that build, `#[cfg(feature)]`/`any(feature)` module
+//!      gates). liella-math takes boundary with `selftest`, and boundary uses liella-ld only in the product-only
+//!      `bootstrap`, `ld` and `arch`: a loader change no longer selects liella-math's suites.
 //! 5. A test file: that target, and the targets of the crate that name the file (`#[path]`,
 //!    `include!`); a file in a support directory of `tests/`: every target that names the
 //!    directory. Examples, benches and other crate files: clippy only.
@@ -62,6 +67,10 @@
 //!    xtask, or no user at all.
 //! 7. An xtask audit/report module (`XTASK_AUDITS`: policy, symgap, status, schedule, plants): the
 //!    xtask unit tests, clippy, the policy checks and the module's own command.
+//!    XTASK-AFFECTED-XTASK (#4684): an xtask tool module off the product path (`XTASK_TOOLS`: the records and view
+//!    tools, the source checks of `cargo xtask static`, the bench and report commands): the xtask unit tests, clippy
+//!    and `cargo xtask static`. The product build, its image tools, the generators, the test runners and `main.rs` stay
+//!    FULL (a `hottext.rs` change also selects the start-up layout tests).
 //! 8. XTASK-AFFECTED-MATH (ruling #3188): the math export wiring (`crates/boundary/src/posix/s10_math.tsv`,
 //!    `s10_math_gen.rs`, `csys/src/adapter/math_*.c`) selects the math export tests (`Selection::math_exports`: the
 //!    `s10_math_gen` module as if changed, every `liella-math` target, every target whose own source names `s10_math`
@@ -718,18 +727,26 @@ struct Image {
 /// features each edge enables: `Some` for an inline `features = [...]` or none, `None` when the edge can enable
 /// features this reading does not see (`workspace = true`, a `[dependencies.<name>]` table).
 fn link_deps(text: &str) -> BTreeMap<String, Option<BTreeSet<String>>> {
+    dep_edges(text, "dependencies", None)
+}
+
+/// The edges of one dependency table `kind` (`dependencies`, `dev-dependencies`, `workspace.dependencies`; the
+/// `[target.*.<kind>]` tables too) and the features each enables, as [`link_deps`]. XTASK-AFFECTED-LOADER: with `ws`
+/// (the root manifest's `workspace.dependencies`), a `workspace = true` edge enables its own list plus the workspace
+/// entry's, `None` when that entry is unknown.
+fn dep_edges(text: &str, kind: &str, ws: Option<&BTreeMap<String, Option<BTreeSet<String>>>>) -> BTreeMap<String, Option<BTreeSet<String>>> {
     let mut out: BTreeMap<String, Option<BTreeSet<String>>> = BTreeMap::new();
     let mut section = String::new();
     for line in text.lines() {
         let l = line.trim();
         if let Some(h) = l.strip_prefix('[') {
             section = h.trim_end_matches(']').trim_matches('[').to_string();
-            if let Some(d) = section.strip_prefix("dependencies.") {
+            if let Some(d) = section.strip_prefix(&format!("{kind}.")) {
                 out.insert(d.to_string(), None);
             }
             continue;
         }
-        if !(section == "dependencies" || (section.starts_with("target.") && section.ends_with(".dependencies"))) {
+        if !(section == kind || (section.starts_with("target.") && section.ends_with(&format!(".{kind}")))) {
             continue;
         }
         let Some((key, value)) = l.split_once('=') else { continue };
@@ -742,7 +759,12 @@ fn link_deps(text: &str) -> BTreeMap<String, Option<BTreeSet<String>>> {
             _ => key.to_string(),
         };
         let list = value.match_indices("features").find_map(|(i, _)| value[i + "features".len()..].trim_start().strip_prefix('=')?.trim_start().strip_prefix('[')?.split_once(']').map(|(l, _)| l));
-        let feats: Option<BTreeSet<String>> = if value.contains("workspace") { None } else { Some(list.unwrap_or_default().split('\u{22}').skip(1).step_by(2).map(String::from).collect()) };
+        let own: BTreeSet<String> = list.unwrap_or_default().split('\u{22}').skip(1).step_by(2).map(String::from).collect();
+        let feats: Option<BTreeSet<String>> = match (value.contains("workspace"), ws) {
+            (false, _) => Some(own),
+            (true, Some(ws)) => ws.get(&name).cloned().flatten().map(|w| w.into_iter().chain(own).collect()),
+            (true, None) => None,
+        };
         let slot = out.entry(name).or_insert_with(|| Some(BTreeSet::new()));
         match (slot.as_mut(), feats) {
             (Some(s), Some(f)) => s.extend(f),
@@ -833,6 +855,117 @@ fn image_of(root: &Path, crates: &[Crate], nodes: &[Node]) -> Image {
     img
 }
 
+/// XTASK-AFFECTED-LOADER: the features `affected --run` adds to every crate's test build (its second pass).
+const RUN_FEATURES: &[(&str, &[&str])] = &[("liella-boundary", &["export", "selftest"])];
+
+/// XTASK-AFFECTED-LOADER: the modules a crate root declares under `#[cfg(feature = "X")]` or
+/// `#[cfg(any(feature = "X", feature = "Y", ...))]`, with the features any of which compiles them in. Any other cfg
+/// (`all`, `not`, stacked attributes) is not read: the module counts as compiled.
+fn module_gates(root_text: &str) -> Vec<(BTreeSet<String>, String)> {
+    let mut out = Vec::new();
+    // Some(Some(features)): the next item is gated on any of them; Some(None): by a cfg this reading does not follow.
+    let mut gate: Option<Option<BTreeSet<String>>> = None;
+    for l in root_text.lines().map(str::trim) {
+        if let Some(c) = l.strip_prefix("#[cfg(").and_then(|r| r.strip_suffix(")]")) {
+            let inner = c.strip_prefix("any(").and_then(|r| r.strip_suffix(')')).unwrap_or(c);
+            let set: Option<BTreeSet<String>> = inner
+                .split(',')
+                .map(|p| p.trim().strip_prefix("feature").and_then(|r| r.trim_start().strip_prefix('=')).and_then(|r| r.trim().strip_prefix('\u{22}')?.strip_suffix('\u{22}')).map(String::from))
+                .collect();
+            gate = Some(if gate.is_none() { set } else { None });
+            continue;
+        }
+        if l.starts_with("#[cfg") {
+            gate = Some(None);
+            continue;
+        }
+        if l.starts_with("#[") || l.starts_with("//") || l.is_empty() {
+            continue;
+        }
+        if let Some(Some(fs)) = gate.take() {
+            if let Some(m) = l.strip_prefix("pub ").unwrap_or(l).strip_prefix("mod ") {
+                out.push((fs, m.trim_end_matches([';', '{', ' ']).to_string()));
+            }
+        }
+    }
+    out
+}
+
+/// XTASK-AFFECTED-LOADER: per crate, the workspace crates its test build compiles code of (dev-dependencies
+/// included), transitively. The crate's own edges always count. A dependency's edge onward (`B` -> `C`) counts
+/// only when a module of `B` that names `C` is compiled in with the features `B` gets in that build (the union of
+/// every edge into `B` there, plus [`RUN_FEATURES`]): liella-math's tests take boundary with `selftest`, and the
+/// boundary modules that use liella-ld (`bootstrap`, `ld`, `arch`) are built only for the libc and ld.so
+/// products, so a loader change does not reach liella-math's suites (DL-INIT-ORDER-2 ran them for 2203 s). Kept
+/// whenever this cannot tell: features unknown (a `workspace = true` entry with its own features, a crate whose
+/// features another crate's feature table sets), no module of `B` names `C` (a use this reading does not see).
+fn build_closures(root: &Path, crates: &[Crate], nodes: &[Node]) -> BTreeMap<String, BTreeSet<String>> {
+    type Edges = BTreeMap<String, Option<BTreeSet<String>>>;
+    let names: BTreeSet<&str> = crates.iter().map(|c| c.name.as_str()).collect();
+    let top = read(&root.join("Cargo.toml"));
+    let ws = dep_edges(&top, "workspace.dependencies", None);
+    let manifest: BTreeMap<&str, String> = crates.iter().map(|c| (c.name.as_str(), read(&root.join(&c.dir).join("Cargo.toml")))).collect();
+    let edges = |c: &str, kind: &str| -> Edges { dep_edges(&manifest[c], kind, Some(&ws)).into_iter().filter(|(d, _)| d != c && names.contains(d.as_str())).collect() };
+    let normal: BTreeMap<&str, Edges> = names.iter().map(|&c| (c, edges(c, "dependencies"))).collect();
+    let dev: BTreeMap<&str, Edges> = names.iter().map(|&c| (c, edges(c, "dependencies").into_iter().chain(edges(c, "dev-dependencies")).collect())).collect();
+    // `liella/selftest` in boundary's feature table: liella's features are set from outside, not followed.
+    let mut cross: BTreeSet<String> = BTreeSet::new();
+    for m in manifest.values() {
+        let mut in_features = false;
+        for l in m.lines().map(str::trim) {
+            if l.starts_with('[') {
+                in_features = l == "[features]";
+            } else if in_features {
+                cross.extend(l.split('\u{22}').skip(1).step_by(2).filter_map(|v| v.split_once('/')).map(|(d, _)| d.trim_end_matches('?').to_string()));
+            }
+        }
+    }
+    let gates: BTreeMap<&str, Vec<(BTreeSet<String>, String)>> = nodes.iter().filter(|n| n.root).map(|n| (n.krate.as_str(), module_gates(&n.text))).collect();
+    let mut out = BTreeMap::new();
+    for a in crates {
+        let a_name = a.name.as_str();
+        // The features each crate of the build gets: every edge into it, unified (None: unknown).
+        let mut feats: Edges = BTreeMap::new();
+        let mut members: BTreeSet<String> = BTreeSet::new();
+        let mut stack: Vec<(String, Option<BTreeSet<String>>)> = dev[a_name].clone().into_iter().collect();
+        while let Some((b, f)) = stack.pop() {
+            if b == a.name {
+                continue;
+            }
+            let slot = feats.entry(b.clone()).or_insert_with(|| Some(BTreeSet::new()));
+            match (slot.as_mut(), f) {
+                (Some(s), Some(f)) => s.extend(f),
+                _ => *slot = None,
+            }
+            if members.insert(b.clone()) {
+                stack.extend(normal[b.as_str()].clone());
+            }
+        }
+        for (c, fs) in RUN_FEATURES {
+            if let Some(Some(s)) = feats.get_mut(*c) {
+                s.extend(fs.iter().map(|f| f.to_string()));
+            }
+        }
+        let live = |b: &str, c: &str| -> bool {
+            let Some(Some(f)) = feats.get(b).filter(|_| !cross.contains(b)) else { return true };
+            let on = features_on(&manifest[b], f);
+            let off = |m: &str| gates.get(b).is_some_and(|g| g.iter().any(|(fs, x)| x == m && fs.is_disjoint(&on)));
+            let namers: Vec<&Node> = nodes.iter().filter(|n| n.krate == b && n.refs.iter().any(|(k, _)| k.as_deref() == Some(c))).collect();
+            namers.is_empty() || namers.iter().any(|n| n.root || !off(&n.name))
+        };
+        // The crate's own edges (normal, dev and build: `parse_manifest`) always count.
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        let mut stack: Vec<String> = a.deps.iter().filter(|d| names.contains(d.as_str()) && **d != a.name).cloned().collect();
+        while let Some(b) = stack.pop() {
+            if seen.insert(b.clone()) {
+                stack.extend(normal[b.as_str()].keys().filter(|c| live(&b, c)).cloned());
+            }
+        }
+        out.insert(a.name.clone(), seen);
+    }
+    out
+}
+
 impl Repo {
     /// XTASK-AFFECTED-LAYOUT: can a change to `f` change what a static program links from `libc.a`? A source,
     /// data file or build script of a crate the libc product links (not a module compiled only for tests or only
@@ -888,19 +1021,6 @@ impl Repo {
                 let lib = root.join(dir).join("src/lib.rs").is_file() || manifest.lines().any(|l| l.trim() == "[lib]");
                 crates.push(Crate { name, dir: dir.clone(), deps, lib });
             }
-        }
-        let names: BTreeSet<String> = crates.iter().map(|c| c.name.clone()).collect();
-        let direct: BTreeMap<String, BTreeSet<String>> = crates.iter().map(|c| (c.name.clone(), c.deps.iter().filter(|d| names.contains(*d)).cloned().collect())).collect();
-        let mut closure = BTreeMap::new();
-        for c in &crates {
-            let mut seen = BTreeSet::new();
-            let mut stack: Vec<String> = direct[&c.name].iter().cloned().collect();
-            while let Some(d) = stack.pop() {
-                if seen.insert(d.clone()) {
-                    stack.extend(direct[&d].iter().cloned());
-                }
-            }
-            closure.insert(c.name.clone(), seen);
         }
         let aliases: BTreeMap<String, String> = crates.iter().map(|c| (c.name.replace('-', "_"), c.name.clone())).collect();
         let mut nodes = Vec::new();
@@ -1043,6 +1163,7 @@ impl Repo {
         let hubs = (0..nodes.len()).filter(|&y| nodes.iter().filter(|x| names(x, &nodes[y])).count() * 6 >= nodes.len()).collect();
         let test_only = test_only_modules(&nodes);
         let image = image_of(root, &crates, &nodes);
+        let closure = build_closures(root, &crates, &nodes);
         let mut xs = Vec::new();
         files_under(&root.join("xtask/src"), &["rs"], &mut xs);
         let xtask_texts = xs
@@ -1493,6 +1614,8 @@ enum Class {
     /// XTASK-AFFECTED-XTASK-TESTS: xtask test code only (`xtask/tests/`, or a source whose diff stays inside its
     /// trailing `#[cfg(test)]` module): the xtask unit tests, clippy and `cargo xtask static`, not FULL.
     XtaskTestCode,
+    /// XTASK-AFFECTED-XTASK: a module of [`XTASK_TOOLS`]: the xtask unit tests, clippy and `cargo xtask static`.
+    XtaskTool,
     /// XTASK-AFFECTED-MATH: the math export wiring (`s10_math.tsv`, `s10_math_gen.rs`, `csys/src/adapter/math_*.c`).
     MathWiring,
     /// XTASK-AFFECTED-MATH: a generated coefficient file `crates/math/src/coeffs/<family>.rs`.
@@ -1595,6 +1718,53 @@ const XTASK_AUDITS: &[(&str, &[&str])] = &[
     ("xtask/src/schedule.rs", &["status"]),
 ];
 
+/// XTASK-AFFECTED-XTASK: xtask modules (a file `xtask/src/<m>.rs` or a directory `xtask/src/<m>/`) that neither build
+/// the products, nor generate their sources, nor run the test suites: the record and view tools, the source checks of
+/// `cargo xtask static`, and the bench and report commands no gate step runs. A change to one selects the xtask unit
+/// tests, the xtask clippy and `cargo xtask static` (which runs every check that uses it), not FULL. Each must be
+/// named only by `main.rs`, this command, another module of this table or [`XTASK_AUDITS`], or a use listed in
+/// [`XTASK_TOOL_USES`] (the unit test `tool_modules_stay_off_the_product_path` checks it, and that the full gate's
+/// own steps call none of them outside `cargo xtask static`). Every other xtask module still escalates to FULL: the
+/// product build (`so`, `hottext`, `coldbss`, `layout`, ...), the generators, the test runners and `main.rs`.
+const XTASK_TOOLS: &[(&str, &str)] = &[
+    ("records", "the decision, compat and saturation records and their views (static: records, records-gen)"),
+    ("kernel_index", "the generated KERNELS.md view (static: tables-fresh)"),
+    ("register", "the saturation register check (static: register)"),
+    ("compat_ids", "the compat id check (static: compat-ids)"),
+    ("codemap", "the code map view (static: codemap)"),
+    ("compat_plan", "the compat dispatch table check (static: compat-plan)"),
+    ("compatprobe", "the compat probe list check (static: compat-probes)"),
+    ("privpaths", "the private paths check (static: private-paths)"),
+    ("locks", "the lock file freshness check (static: lock-fresh)"),
+    ("fuzz", "the fuzz harness build check (static: fuzz-check)"),
+    ("arch", "the architecture seam audit (static: arch-audit); `arch-check` is not a gate step"),
+    ("bench", "`cargo xtask bench`, not a gate step"),
+    ("benchrows", "`cargo xtask bench-rows`, not a gate step"),
+    ("benchstage", "`cargo xtask bench --stage`, not a gate step"),
+    ("abbench", "the A/B bench driver of `cargo xtask bench`, not a gate step"),
+    ("sweep", "`cargo xtask sweep`, not a gate step"),
+    ("repro", "`cargo xtask repro`, not a gate step"),
+    ("symcov", "`cargo xtask symcov`, a report, not a gate step"),
+];
+
+/// XTASK-AFFECTED-XTASK: the uses of an [`XTASK_TOOLS`] module from a module that escalates to FULL, each a call that
+/// only a check of `cargo xtask static` makes: (user, tool module, why). Read by the unit test only.
+#[cfg(test)]
+const XTASK_TOOL_USES: &[(&str, &str, &str)] = &[
+    ("math", "kernel_index", "`math::run_tables` ends with the kernel index (KERNELS.md, a view), which static runs as tables-fresh"),
+    ("math", "records", "the same call's `records::in_place_env` switch"),
+    ("trace", "records", "`trace::run` reads the decision ids; static runs trace"),
+];
+
+/// The xtask module a source path belongs to: `xtask/src/<m>.rs` or `xtask/src/<m>/...` gives `<m>`.
+fn xtask_module(path: &str) -> Option<&str> {
+    let rest = path.strip_prefix("xtask/src/")?;
+    match rest.split_once('/') {
+        Some((m, _)) => Some(m),
+        None => rest.strip_suffix(".rs"),
+    }
+}
+
 /// GATE-VALIDATION-SH-TESTS (D-X.54): the self-tests of the workload scripts under `validation/`. Each runs as
 /// `bash <path>` from the tree root, needs no build, and ends 0 with a pass line or 1 (`wl_mtmem_test.sh` runs a real
 /// `strace` of a threaded `sort` and exits 0 with SKIP when either is absent). Seconds each (measured on an 8-thread
@@ -1680,6 +1850,10 @@ fn classify(path: &str) -> Option<Class> {
     // step executes them.
     if path.starts_with("xtask/tests/") {
         return Some(Class::XtaskTestCode);
+    }
+    // XTASK-AFFECTED-XTASK: a tool module off the product path (the table's unit test keeps it so).
+    if path.ends_with(".rs") && xtask_module(path).is_some_and(|m| XTASK_TOOLS.iter().any(|(t, _)| *t == m)) {
+        return Some(Class::XtaskTool);
     }
     if path.starts_with("xtask/") {
         return full("xtask (its commands are part of the gate)");
@@ -1852,6 +2026,13 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
                 add(&mut sel.clippy, "xtask".to_string(), &format!("{f} changed"));
                 sel.xtask_cmds.insert("static".to_string());
                 sel.notes.push(format!("{f}: xtask test code only (xtask unit tests, clippy, `cargo xtask static`; not FULL)"));
+            }
+            Some(Class::XtaskTool) => {
+                sel.xtask_tests = true;
+                add(&mut sel.clippy, "xtask".to_string(), &format!("{f} changed"));
+                sel.xtask_cmds.insert("static".to_string());
+                let why = xtask_module(f).and_then(|m| XTASK_TOOLS.iter().find(|(t, _)| *t == m)).map_or("", |(_, w)| *w);
+                sel.notes.push(format!("{f}: an xtask tool module off the product path, {why} (xtask unit tests, clippy, `cargo xtask static`; not FULL)"));
             }
             Some(Class::Full(why)) => {
                 if f.starts_with("xtask/") {
@@ -3241,7 +3422,7 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
                     cmd.args(["test", "-p", c]);
                 }
                 if pass == 1 {
-                    cmd.args(["--features", "liella-boundary/export,liella-boundary/selftest"]);
+                    cmd.args(["--features", &RUN_FEATURES.iter().flat_map(|(c, fs)| fs.iter().map(move |f| format!("{c}/{f}"))).collect::<Vec<_>>().join(",")]);
                 }
                 if sel.libs.contains_key(*c) {
                     cmd.arg(unit_tests_flag(repo, c));
@@ -4143,6 +4324,37 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
         assert_eq!(feature_gated_modules("#[cfg(feature = \"ld\")]\npub mod ld;\n#[cfg(any(feature = \"ld\"))]\nmod a;\nmod b;\n"), vec![("ld".to_string(), "ld".to_string())]);
     }
 
+    // XTASK-AFFECTED-LOADER, no spec clause: liella-math's tests take boundary with `selftest` only, and boundary uses
+    // liella-ld only in modules the libc and ld.so products build (`bootstrap`, `ld`, `arch`), so a loader change does
+    // not select liella-math's suites (DL-INIT-ORDER-2's gate ran them for 2203 s); the loader's own tests, boundary's,
+    // the conformance programs and the start-up layout tests still run. A math change, and a change to liella-rt
+    // (which both the loader and liella-math link), still select liella-math.
+    #[test]
+    fn a_loader_change_does_not_select_the_math_suites() {
+        let math = |s: &Selection| s.tests.keys().any(|(k, _)| k == "liella-math") || s.libs.contains_key("liella-math");
+        for tier in [Tier::Direct, Tier::Wide] {
+            for f in ["crates/ld/src/lib.rs", "crates/ld/src/init.rs", "crates/ld/src/boot.rs"] {
+                let s = select_tier(repo(), &[f.to_string()], tier);
+                assert!(s.full.is_empty() && !math(&s), "{f} ({tier:?}) is loader code: no liella-math suite: {:?} {:?}", s.libs.keys().collect::<Vec<_>>(), s.tests.keys().filter(|(k, _)| k == "liella-math").collect::<Vec<_>>());
+            }
+            let s = select_tier(repo(), &["crates/ld/src/lib.rs".to_string()], tier);
+            assert!(s.tests.keys().any(|(k, _)| k == "liella-ld") && s.libs.contains_key("liella-boundary") && s.conf.len() == repo().conf.len() && has_test(&s, LAYOUT_TESTS[0].1), "{tier:?}: the loader's own tests, boundary's, every conformance program and the layout tests: {:?}", s.tests.keys().collect::<Vec<_>>());
+            for f in ["crates/math/src/lib.rs", "crates/rt/src/lib.rs"] {
+                let s = select_tier(repo(), &[f.to_string()], tier);
+                assert!(math(&s) && s.tests.keys().any(|(k, t)| k == "liella-math" && t == "elem_products"), "{f} ({tier:?}): liella-math's suites run");
+            }
+            let s = select_tier(repo(), &["crates/rt/src/lib.rs".to_string()], tier);
+            assert!(s.tests.keys().any(|(k, _)| k == "liella-ld"), "liella-rt ({tier:?}): the loader's suites run too");
+        }
+        let r = repo();
+        assert!(r.dependents("liella-ld").contains("liella-boundary") && !r.dependents("liella-ld").contains("liella-math"), "{:?}", r.dependents("liella-ld"));
+        let gates = module_gates("#[cfg(any(feature = \"runtime\", feature = \"ld\"))]\nmod bootstrap;\n#[cfg(feature = \"ld\")]\npub mod ld;\n#[cfg(not(feature = \"x\"))]\nmod a;\n#[cfg(test)]\nmod b;\nmod c;\n");
+        assert_eq!(gates, vec![(["ld".to_string(), "runtime".to_string()].into(), "bootstrap".to_string()), (["ld".to_string()].into(), "ld".to_string())]);
+        let ws = dep_edges("[workspace.dependencies]\nb = { path = \"b\" }\n", "workspace.dependencies", None);
+        let dev = dep_edges("[dev-dependencies]\nb = { workspace = true, features = [\"t\"] }\nu = { workspace = true }\n[dependencies]\nn = \"1\"\n", "dev-dependencies", Some(&ws));
+        assert_eq!((dev.get("b"), dev.get("u"), dev.contains_key("n")), (Some(&Some(["t".to_string()].into())), Some(&None), false));
+    }
+
     #[test]
     fn model_has_the_workspace() {
         let repo = repo();
@@ -4854,6 +5066,85 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
                 let stem = m.trim_start_matches("xtask/src/").trim_end_matches(".rs");
                 assert!(!text.contains(&format!("{stem}::")), "{rel} uses the audit module {stem}: it is no longer a leaf, take it out of XTASK_AUDITS");
             }
+        }
+    }
+
+    #[test]
+    fn a_records_only_change_selects_the_xtask_checks_not_full() {
+        // no spec clause: XTASK-AFFECTED-XTASK (#4684). The records tool builds no product and runs no suite: the
+        // xtask unit tests, the xtask clippy and `cargo xtask static` (records, records-gen, register, ...) cover it.
+        for f in ["xtask/src/records/mod.rs", "xtask/src/records/check.rs", "xtask/src/kernel_index.rs", "xtask/src/bench.rs"] {
+            let (_, s) = sel(&[f]);
+            assert!(s.full.is_empty(), "{f} is an xtask tool module off the product path, not FULL: {:?}", s.full);
+            assert!(s.xtask_tests && s.xtask_cmds.contains("static") && s.tests.is_empty() && s.conf.is_empty(), "{f}: {s:?}");
+            assert!(s.clippy.len() == 1 && s.clippy.contains_key("xtask"), "{f}: only the xtask clippy: {s:?}");
+        }
+        // `--tier full` still means everything.
+        assert!(!select_tier(repo(), &["xtask/src/records/mod.rs".to_string()], Tier::Full).full.is_empty());
+    }
+
+    #[test]
+    fn a_product_build_path_change_still_selects_full() {
+        // no spec clause: XTASK-AFFECTED-XTASK. The product build, its image tools, the generators, the test runners and
+        // the dispatcher can change any product or test outcome.
+        for f in ["xtask/src/so.rs", "xtask/src/hottext.rs", "xtask/src/coldbss.rs", "xtask/src/layout.rs", "xtask/src/csys.rs", "xtask/src/csys/veneer.rs", "xtask/src/math.rs", "xtask/src/nextest.rs", "xtask/src/spec.rs", "xtask/src/trace.rs", "xtask/src/main.rs", "xtask/src/labnames.rs", "xtask/src/new_module.rs", "xtask/Cargo.toml"] {
+            assert!(!sel(&[f]).1.full.is_empty(), "{f} takes part in building or checking the products: FULL");
+        }
+    }
+
+    #[test]
+    fn a_hottext_change_selects_the_layout_tests() {
+        // no spec clause: XTASK-AFFECTED-XTASK, XTASK-AFFECTED-LAYOUT. hottext.rs groups libc.a's hot text: the
+        // start-up layout tests measure it (and the change stays FULL: the products change).
+        let (_, s) = sel(&["xtask/src/hottext.rs"]);
+        for (k, t) in LAYOUT_TESTS {
+            assert!(s.tests.contains_key(&(k.to_string(), t.to_string())), "hottext.rs must select {k}/{t}: {:?}", s.tests.keys().collect::<Vec<_>>());
+        }
+        assert!(!s.full.is_empty());
+    }
+
+    /// Does xtask source `text` name module `m` (`m::` after `crate::`, `super::` or a non-path character, or `m`
+    /// inside a `crate::{...}` import)? `liella_ld::arch::` is another crate's module, not xtask's `arch`.
+    fn names_xtask_module(text: &str, m: &str) -> bool {
+        let pat = format!("{m}::");
+        let path_use = text.match_indices(&pat).any(|(i, _)| {
+            let before = &text[..i];
+            before.ends_with("crate::") || before.ends_with("super::") || !before.chars().next_back().is_some_and(|c| c.is_alphanumeric() || c == '_' || c == ':')
+        });
+        let import = text.split("crate::{").skip(1).any(|g| g.split('}').next().unwrap_or_default().split(|c: char| !(c.is_alphanumeric() || c == '_')).any(|w| w == m));
+        path_use || import
+    }
+
+    #[test]
+    fn tool_modules_stay_off_the_product_path() {
+        // no spec clause: XTASK-AFFECTED-XTASK. A module of XTASK_TOOLS is named only by main.rs, this command, other
+        // tool or audit modules, or an XTASK_TOOL_USES row; and the full gate's steps call it only where
+        // `cargo xtask static` calls it too.
+        let audits: Vec<&str> = XTASK_AUDITS.iter().filter_map(|(p, _)| xtask_module(p)).collect();
+        let tools: Vec<&str> = XTASK_TOOLS.iter().map(|(m, _)| *m).collect();
+        let mut files = Vec::new();
+        files_under(&root().join("xtask/src"), &["rs"], &mut files);
+        let files: Vec<(String, String)> = files.iter().map(|p| (p.strip_prefix(root()).unwrap_or(p).to_string_lossy().replace('\\', "/"), read(p))).collect();
+        for m in &tools {
+            assert!(files.iter().any(|(r, _)| xtask_module(r) == Some(*m)), "XTASK_TOOLS names {m}, which has no source under xtask/src");
+            for (rel, text) in &files {
+                let user = xtask_module(rel).unwrap_or_default();
+                if user == *m || user == "main" || user == "affected" || tools.contains(&user) || audits.contains(&user) || !names_xtask_module(text, m) {
+                    continue;
+                }
+                assert!(XTASK_TOOL_USES.iter().any(|(u, t, _)| *u == user && t == m), "{rel} names the tool module {m}: it is on the product path now; take {m} out of XTASK_TOOLS or, if the use is a check of `cargo xtask static` only, add an XTASK_TOOL_USES row");
+            }
+        }
+        let main = read(&root().join("xtask/src/main.rs"));
+        let body = |name: &str| main.split(&format!("\nfn {name}(")).nth(1).and_then(|b| b.split("\n}\n").next()).unwrap_or_default().to_string();
+        let (steps, checks) = (body("test_steps"), body("static_checks"));
+        assert!(steps.contains("so::run_so") && checks.contains("records::check"), "main.rs's test_steps / static_checks not found");
+        for m in &tools {
+            assert!(!names_xtask_module(&steps, m) || names_xtask_module(&checks, m), "the full gate's steps call the tool module {m}, which `cargo xtask static` does not: take it out of XTASK_TOOLS");
+        }
+        // The rows of XTASK_TOOL_USES are real uses (a stale row would hide a later one).
+        for (u, t, _) in XTASK_TOOL_USES {
+            assert!(files.iter().any(|(r, text)| xtask_module(r) == Some(*u) && names_xtask_module(text, t)), "XTASK_TOOL_USES: {u} no longer names {t}: remove the row");
         }
     }
 
