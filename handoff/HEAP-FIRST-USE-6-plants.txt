@@ -1,0 +1,11 @@
+# HEAP-FIRST-USE-6 plants (cargo xtask plants; docs/plants.md). From HEAP-FIRST-USE-4's file, on the merged tree.
+# hot-list-drops-memchr-rest now deletes the key's line: renaming it left a dead key, and the mutant's
+# `cargo xtask so` stopped at the dead-key check before the test ran (#4321).
+# topology-decision-inlined is retired: it planted a 64 KiB straddle of the time path, which the window-safe
+# `time` cluster (LAYOUT-TEXT-PIN, hot-text.clusters) now rules out wherever the slow paths' code goes.
+one-node-reads-node | crates/rt/src/heap.rs | perl:s/if self\.numa\.load\(Relaxed\) \{ pages\.shard\(\) % SHARDS \} else \{ 0 \}/if self.numa.load(Relaxed) { pages.shard() % SHARDS } else { pages.shard() & 0 }/ | cargo test -p liella-rt --test heap_and_sync | msg:one_allowed_node_never_reads_the_node.*FAILED|node is never read
+two-nodes-no-numa | crates/rt/src/heap.rs | perl:s/pages\.allowed_nodes\(\) > 1/pages.allowed_nodes() > 2/ | cargo test -p liella-rt --test heap_and_sync | msg:several_allowed_nodes_place_each_threads_slabs_on_its_node.*FAILED|first slow path reads the node|slab on node
+node-read-on-fast-path | crates/rt/src/heap.rs | perl:s/Self::alloc_fast\(pages, size, align\)/Self::alloc_fast(pages, size + (self.shard_of(pages) & 0), align)/ | cargo test -p liella-rt --test heap_and_sync | msg:several_allowed_nodes_place_each_threads_slabs_on_its_node.*FAILED|no node read on the fast path
+vdso-name-through-bcmp | crates/kernel/src/vdso.rs | perl:s/!same_bytes\(sym_name, want\)/sym_name != want/ | cargo xtask so && cargo test -p liella --test heap_meta_products the_vdso_lookup_takes_no_folding_decision | msg:the_vdso_lookup_takes_no_folding_decision.*FAILED|read system calls
+vdso-version-through-bcmp | crates/kernel/src/vdso.rs | perl:s/same_bytes\(v, version\)/v == version/ | cargo xtask so && cargo test -p liella --test heap_meta_products the_vdso_lookup_takes_no_folding_decision | msg:the_vdso_lookup_takes_no_folding_decision.*FAILED|read system calls
+hot-list-drops-memchr-rest | crates/libc-so/hot-text.list | perl:s/^liella_hot_memchr_rest\t[^\n]*\n//m | cargo xtask so && cargo test -p liella --test hot_text_products init_first_string_calls_after_printf_take_no_text_fault | msg:init_first_string_calls_after_printf_take_no_text_fault.*FAILED|first string calls after printf
