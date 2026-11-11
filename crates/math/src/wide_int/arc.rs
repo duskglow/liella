@@ -115,11 +115,17 @@ pub(crate) fn atan2<F: Float>(y: &Num, x: &Num, mode: Rounding) -> Option<(F, St
 /// `asin a` for `0 < |a| < 1` (other operands give `None`); `hw` is a `double` square root
 /// (step 2: [`soft_sqrt`] or the boundary's `sqrtsd`).
 pub(crate) fn asin<F: Float>(n: &Num, mode: Rounding, hw: impl Fn(f64) -> f64) -> Option<(F, Status)> {
+    if F::PREC == 113 {
+        return super::quad::arc::asin::<F>(n, mode, hw); // binary128: three limbs (D-10.97)
+    }
     finish::<F>(|| asin_approx(n, hw), mode)
 }
 
 /// `acos a` for `0 < |a| < 1` (other operands give `None`); `hw` as for [`asin`].
 pub(crate) fn acos<F: Float>(n: &Num, mode: Rounding, hw: impl Fn(f64) -> f64) -> Option<(F, Status)> {
+    if F::PREC == 113 {
+        return super::quad::arc::acos::<F>(n, mode, hw); // binary128: three limbs (D-10.97)
+    }
     finish::<F>(|| acos_approx(n, hw), mode)
 }
 
