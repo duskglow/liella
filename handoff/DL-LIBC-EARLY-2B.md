@@ -54,8 +54,11 @@ Land with DL-LIBC-EARLY-2 (this branch carries it). Nothing else open.
 
 ## Report
 Jobs on the final content: dl-libc-early-2b-clippy (clippy + static, rc 0), dl-libc-early-2b-plants (1 CAUGHT),
-dl-libc-early-2b-attr-next, dl-libc-early-2b-attr-e2, dl-libc-early-2b-attr-fixed, dl-libc-early-2b-gate (direct tier, --base
-origin/next). Diagnostic jobs (evidence, not proofs of the head): dl-libc-early-2b-diag-next, dl-libc-early-2b-diag-cascade.
-Superseded: dl-libc-early-2b-attr-suite (rc 1: `--only liella-boundary` is not a valid --only name).
+dl-libc-early-2b-attr-next, dl-libc-early-2b-attr-e2, dl-libc-early-2b-attr-fixed, dl-libc-early-2b-gate2 (direct tier,
+`--base origin/task/dl-libc-early-2`: this story's own diff, which selects regex_reentry). Diagnostic jobs (evidence, not proofs of
+the head): dl-libc-early-2b-diag-next, dl-libc-early-2b-diag-cascade.
+Superseded: dl-libc-early-2b-attr-suite (rc 1: `--only liella-boundary` is not a valid --only name);
+dl-libc-early-2b-gate (`--base origin/next`: -2's own xtask/src/so.rs change made it a FULL gate, which a developer run
+must not run. I stopped it; the train runs FULL).
 INFORMATIONAL: to read next's copy of the test for the diagnostic variant I used `git show origin/next:<test path>`. That
 file is identical to the one on this branch before my change (-2 does not touch it).
