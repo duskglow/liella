@@ -460,7 +460,10 @@ pub(crate) fn after_fork_child() {
         fork::set_if_differs!(d.prev, 0);
         fork::set_if_differs!(d.robust[0], addr_of(&d.robust));
         fork::set_if_differs!(d.robust[2], 0);
-        let _ = raw::set_robust_list(addr_of(&d.robust), 24);
+        // LAYOUT-TEXT-PIN-12: through the generic entry the clone of `fork::fork` returns in, so
+        // the fork child runs no other start-up syscall wrapper: the dedicated one sits in another
+        // 64 KiB window at some text phases (the child read 7 at `pre` pads 0x2000-0x5000, 0xd000).
+        let _ = raw::syscall(crate::nr::SET_ROBUST_LIST, [i64::try_from(addr_of(&d.robust)).unwrap_or(0), 24, 0, 0, 0, 0]);
         if OWNED.load(Acquire) || d.has(DESC_CREATED) {
             head = addr_of(d);
         }

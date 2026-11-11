@@ -1017,9 +1017,12 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     let mut renames: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
     // Every grouped section: (member, name after renaming, size, alignment).
     let mut grouped: Vec<(String, String, u64, u64)> = Vec::new();
+    let mut refs = Vec::with_capacity(members.len());
     for m in &members {
         let obj = work.join(m);
         let mut args = String::new();
+        let bytes = fs::read(&obj).map_err(|e| format!("{}: {e}", obj.display()))?;
+        refs.push(elf_refs(&bytes).ok_or_else(|| format!("{}: not a well-formed ELF64 little-endian object", obj.display()))?);
         for (name, size, align) in section_table(&obj)? {
             let name = &name;
             if name == STARTUP_SECTION {
@@ -1111,7 +1114,14 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     keys_out.insert_str(0, "# function keys of this archive (cargo xtask so; tools/hottext/prune.py reads it)\n");
     fs::write(archive.with_file_name("hot-text.matched"), keys_out).map_err(|e| e.to_string())?;
     let (dead, stale, allowed) = unmatched(&entries, &matched, &absent, profile);
-    if let Some(e) = dead_key_verdict(unmatched_error(&dead, &stale, profile.unwrap_or("")), REGEN.load(Ordering::Relaxed))? {
+    // #4778: a listed key whose sections nothing references (regen.sh leaves these keys out).
+    let unreferenced = unreferenced_keys(&refs);
+    let mut unref_out: String = unreferenced.iter().map(|k| format!("{k}\n")).collect();
+    unref_out.insert_str(0, "# function keys of this archive no relocation or C-level entry reaches (cargo xtask so; tools/hottext/regen.sh reads it)\n");
+    fs::write(archive.with_file_name("hot-text.unreferenced"), unref_out).map_err(|e| e.to_string())?;
+    let p = profile.unwrap_or("");
+    let err = [unmatched_error(&dead, &stale, p), profile.and_then(|p| unreferenced_error(&entries, &unreferenced, p))].into_iter().flatten().collect::<Vec<_>>().join("\n");
+    if let Some(e) = dead_key_verdict(Some(err).filter(|e| !e.is_empty()), REGEN.load(Ordering::Relaxed))? {
         println!("so: {REGEN_FLAG}: dead-key check NOT enforced for this regen build (regen.sh rewrites the list, then rebuilds with it):\n{e}");
     }
     println!("so: {allowed} hot-text keys match no function section (traced in the other profile only, or in {ABSENT_LIST})");
@@ -1126,6 +1136,113 @@ fn dead_key_verdict(err: Option<String>, regen: bool) -> Result<Option<String>, 
         Some(e) if regen => Ok(Some(e)),
         Some(e) => Err(e),
     }
+}
+
+/// LAYOUT-TEXT-PIN-12 (#4778): what one object of the archive says about who can reach its function
+/// sections. `funcs`: (section index, function name) of each function section; `entries`: section
+/// index of each global or weak symbol defined there, with its name; `local`: sections a relocation
+/// of another allocated section of this object names; `external`: undefined symbols it relocates.
+#[derive(Debug, Default)]
+struct ObjRefs {
+    funcs: Vec<(usize, String)>,
+    entries: Vec<(usize, String)>,
+    local: BTreeSet<usize>,
+    external: BTreeSet<String>,
+}
+
+/// The [`ObjRefs`] of the ELF64 little-endian relocatable object `b`; `None` when it is not one.
+/// Relocations that apply to a section that is not loaded (debug info) or to `.eh_frame` (every
+/// function has an unwind entry there) and a section's references to itself are not references.
+fn elf_refs(b: &[u8]) -> Option<ObjRefs> {
+    let u16_at = |o: usize| Some(u16::from_le_bytes(b.get(o..o.checked_add(2)?)?.try_into().ok()?));
+    let u32_at = |o: usize| Some(u32::from_le_bytes(b.get(o..o.checked_add(4)?)?.try_into().ok()?));
+    let u64_at = |o: usize| Some(u64::from_le_bytes(b.get(o..o.checked_add(8)?)?.try_into().ok()?));
+    let names = elf_headers(b)?;
+    let shoff = usize::try_from(u64_at(0x28)?).ok()?;
+    let entsize = usize::from(u16_at(0x3a)?);
+    let hdr = |i: usize| i.checked_mul(entsize).and_then(|o| o.checked_add(shoff));
+    let field = |i: usize, at: usize| hdr(i).and_then(|h| u64_at(h.checked_add(at)?));
+    let cstr = |at: usize| b.get(at..).and_then(|r| r.get(..r.iter().position(|c| *c == 0)?)).map(|n| String::from_utf8_lossy(n).into_owned());
+    let mut out = ObjRefs::default();
+    for (i, s) in names.iter().enumerate() {
+        if let Some(f) = function_of(&s.name) {
+            out.funcs.push((i, f.to_string()));
+        }
+    }
+    // (name, section index, global or weak) of every symbol of the one symbol table.
+    let Some(st) = names.iter().position(|s| s.kind == 2) else { return Some(out) };
+    let (st_off, st_size) = (usize::try_from(field(st, 24)?).ok()?, usize::try_from(field(st, 32)?).ok()?);
+    let str_off = usize::try_from(field(usize::try_from(u32_at(hdr(st)?.checked_add(40)?)?).ok()?, 24)?).ok()?;
+    let mut syms = Vec::with_capacity(st_size / 24);
+    for k in 0..st_size / 24 {
+        let e = st_off.checked_add(k * 24)?;
+        let name = cstr(str_off.checked_add(usize::try_from(u32_at(e)?).ok()?)?)?;
+        let (bind, shndx) = (b.get(e + 4)? >> 4, usize::from(u16_at(e + 6)?));
+        if (bind == 1 || bind == 2) && shndx != 0 && shndx < 0xff00 {
+            out.entries.push((shndx, name.clone()));
+        }
+        syms.push((name, shndx));
+    }
+    for (i, s) in names.iter().enumerate().filter(|(_, s)| s.kind == 4) {
+        let target = usize::try_from(u32_at(hdr(i)?.checked_add(44)?)?).ok()?;
+        let flags = field(target, 8)?;
+        if flags & 2 == 0 || names.get(target)?.name == ".eh_frame" {
+            continue;
+        }
+        let (off, size) = (usize::try_from(field(i, 24)?).ok()?, usize::try_from(s.size).ok()?);
+        for k in 0..size / 24 {
+            let sym = usize::try_from(u64_at(off.checked_add(k * 24 + 8)?)? >> 32).ok()?;
+            let (name, shndx) = syms.get(sym)?;
+            if *shndx == 0 {
+                out.external.insert(name.clone());
+            } else if *shndx != target {
+                out.local.insert(*shndx);
+            }
+        }
+    }
+    Some(out)
+}
+
+/// Whether `sym` is a C-level name a program may call (not a Rust-mangled one, which only the
+/// library's own code calls, through a relocation).
+fn is_c_entry(sym: &str) -> bool {
+    !sym.starts_with("_R") && !sym.starts_with("_ZN")
+}
+
+/// The keys of `matched` none of whose function sections in `objs` anything can reach: no
+/// relocation of another loaded section names the section or a symbol defined in it, and it
+/// defines no global C-level name a program may call. Such a section is an out-of-line copy
+/// every caller inlined (`liella_rt::start::program` in the fast profile, #4778): its key pins
+/// dead code in the hot group.
+fn unreferenced_keys(objs: &[ObjRefs]) -> BTreeSet<String> {
+    let external: BTreeSet<&str> = objs.iter().flat_map(|o| o.external.iter().map(String::as_str)).collect();
+    let (mut seen, mut reached) = (BTreeSet::new(), BTreeSet::new());
+    for o in objs {
+        for (i, f) in &o.funcs {
+            let k = key(f);
+            let entry = o.entries.iter().filter(|(s, _)| s == i).any(|(_, n)| is_c_entry(n) || external.contains(n.as_str()));
+            if o.local.contains(i) || entry {
+                reached.insert(k.clone());
+            }
+            seen.insert(k);
+        }
+    }
+    seen.difference(&reached).cloned().collect()
+}
+
+/// The error for listed keys (`entries`) whose every function section is unreachable
+/// (`unreferenced`, from [`unreferenced_keys`]); `None` when no listed key is.
+fn unreferenced_error(entries: &[Entry], unreferenced: &BTreeSet<String>, profile: &str) -> Option<String> {
+    let dead: Vec<&Entry> = entries.iter().filter(|e| unreferenced.contains(&e.key)).collect();
+    if dead.is_empty() {
+        return None;
+    }
+    let mut msg = format!("hot-text.list: {} key(s) name only function sections nothing references in the {profile}-profile libc.a (an out-of-line copy every caller inlined)", dead.len());
+    for e in dead {
+        msg.push_str(&format!("\n  {} ({})", e.key, e.tier));
+    }
+    msg.push_str("\nrun tools/hottext/regen.sh . --build --allow-drop in this profile (it leaves out the keys of hot-text.unreferenced)");
+    Some(msg)
 }
 
 /// Whether tracked file `path` may name [`REGEN_FLAG`]: its definition, its one caller
@@ -1241,6 +1358,37 @@ mod tests {
     use super::{ar_members, before_group, check_lists, check_renames, cluster_align, head_alignments, cluster_bytes, cluster_section, clusters_at_end, dead_key_verdict, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, repair_lists, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
     use std::collections::{BTreeMap, BTreeSet};
     use std::sync::atomic::Ordering;
+
+    #[test]
+    fn dead_key_check_flags_a_key_nothing_references() {
+        // LAYOUT-TEXT-PIN-12 (#4778; no spec clause: build tooling): a listed key whose only section
+        // is an out-of-line copy no caller reaches (a self-call and its unwind entry do not count)
+        // fails `so`; a section called from its own object, from another object, or defining a
+        // C-level entry is reached.
+        let dir = std::env::temp_dir().join(format!("ltp12-refs-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let one = ".section .text._RNvC4test4used,\"ax\",@progbits\n.globl _RNvC4test4used\n_RNvC4test4used: ret\n\
+                   .section .text.entry,\"ax\",@progbits\n.globl entry\nentry: call _RNvC4test4used\n ret\n\
+                   .section .text._RNvC4test4dead,\"ax\",@progbits\n.globl _RNvC4test4dead\n_RNvC4test4dead: call _RNvC4test4dead\n ret\n\
+                   .section .text._RNvC4test5other,\"ax\",@progbits\n.globl _RNvC4test5other\n_RNvC4test5other: ret\n\
+                   .section .eh_frame,\"a\",@progbits\n.quad _RNvC4test4dead\n";
+        let two = ".section .text._RNvC4test4user,\"ax\",@progbits\n.globl _RNvC4test4user\n_RNvC4test4user: call _RNvC4test5other\n ret\n\
+                   .section .data.ptr,\"aw\",@progbits\n.quad _RNvC4test4user\n";
+        let mut objs = Vec::new();
+        for (n, src) in [("one", one), ("two", two)] {
+            let (s, o) = (dir.join(format!("{n}.s")), dir.join(format!("{n}.o")));
+            std::fs::write(&s, src).unwrap();
+            assert!(std::process::Command::new("as").arg("-o").arg(&o).arg(&s).status().expect("the assembler runs").success());
+            objs.push(super::elf_refs(&std::fs::read(&o).unwrap()).expect("an ELF64 object"));
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        let unref = super::unreferenced_keys(&objs);
+        assert_eq!(unref, BTreeSet::from([key("_RNvC4test4dead")]), "unreferenced keys");
+        let list = parse_list(&format!("{}\tstartup\tfast\n{}\tfork\tfast\n", key("_RNvC4test4used"), key("_RNvC4test4dead"))).unwrap();
+        let err = super::unreferenced_error(&list, &unref, "fast").expect("the dead key is reported");
+        assert!(err.contains("1 key(s) name only function sections nothing references") && err.contains(&key("_RNvC4test4dead")), "{err}");
+        assert_eq!(super::unreferenced_error(&list[..1], &unref, "fast"), None);
+    }
 
     #[test]
     fn regen_mode_is_one_explicit_flag_for_regen_sh_only() {

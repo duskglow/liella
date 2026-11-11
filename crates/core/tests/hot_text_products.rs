@@ -377,8 +377,10 @@ fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
 /// and on the Skylake-SP host (fast products, every run identical), so the bound is 8.
 /// STARTUP-FAULTS-RESTORE-3: 6 after the merge with next (fork-tier functions `#[inline(never)]`,
 /// HOTTEXT-REGEN-UNBLOCK): Haswell-EP host, every run identical, and 6 on the Zen 1 host in that
-/// story's base column, so the bound is 7.
-const FORK_BOUND: u64 = 7;
+/// story's base column, so the bound is 7. LAYOUT-TEXT-PIN-12: 6 at every `pre` and `cold` pad once the
+/// child's robust-list registration goes through the syscall entry its clone returns in (it read 7 at
+/// `pre` 0x2000-0x5000 and 0xd000, Haswell-EP host), so the bound is 6.
+const FORK_BOUND: u64 = 6;
 
 #[test]
 fn init_fork_child_stays_within_its_page_fault_bound() {
@@ -1025,7 +1027,9 @@ fn init_data_clusters_hold_at_every_text_phase() {
             // LAYOUT-TEXT-PIN-9's head: true 15 -> 16 at pre 0x800), so equal counts are required at the
             // `cold` pads, where only the data classes move, and at the `lbss` pads, which move the
             // `.lbss` objects against the page grid (the written start-up state must not be there).
-            for mode in ["true", "tool", "fork"].into_iter().filter(|_| region != "pre") {
+            // LAYOUT-TEXT-PIN-12: the fork child at the `pre` pads too (it reads only the syscall entry,
+            // the fork tier and main, so its count does not move with the text phase).
+            for mode in ["true", "tool", "fork"].into_iter().filter(|m| region != "pre" || *m == "fork") {
                 let n = faults(&exe, mode);
                 eprintln!("data phase {region} {pad:#x}: {mode} {n}");
                 counts.entry(mode).or_insert_with(Vec::new).push((format!("{region} {pad:#x}"), n));

@@ -145,7 +145,12 @@ python3 "$here/keys.py" "$work/sections" > "$work/lib.keys"
 # so a start-up key traced at such a label brings its section to the start-up head.
 objdump -t "$T/target/liella/libc.a" > "$work/syms"
 python3 "$here/keys.py" --aliases "$work/syms" > "$work/alias.keys"
-awk -F'\t' 'NR == FNR { lib[$1]; next } $1 in lib' "$work/lib.keys" "$work/hit.keys" > "$work/new.keys"  # keeps the touch order
+# LAYOUT-TEXT-PIN-12 (#4778): less the keys whose sections nothing references (an out-of-line copy every
+# caller inlined; `cargo xtask so` writes them next to the archive and fails on a listed one).
+unref=$T/target/product/$profile/hot-text.unreferenced
+[ -f "$unref" ] || { echo "regen: $unref missing (cargo xtask so writes it)" >&2; exit 1; }
+awk -F'\t' 'FILENAME == ARGV[1] { if ($0 !~ /^#/) dead[$1]; next } FILENAME == ARGV[2] { lib[$1]; next } ($1 in lib) && !($1 in dead)' \
+    "$unref" "$work/lib.keys" "$work/hit.keys" > "$work/new.keys"  # keeps the touch order
 if [ $replace = 1 ] || [ ! -f "$list" ]; then : > "$work/old.keys"; else grep -v '^#' "$list" > "$work/old.keys" || true; fi
 {
     echo "# Functions grouped as hot text in libc.a (PAGEFAULTS-2), in this order (HOT-ORDER: first touch): build-stable keys, see tools/hottext/keys.py."
