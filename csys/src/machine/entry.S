@@ -75,8 +75,8 @@ liella_machine_ld_enter:
 	.size liella_machine_ld_enter, .-liella_machine_ld_enter
 #else
 	/* The start-up data clusters (D-X.62, D-X.64, xtask/src/startup_ro.rs): this object comes first in
-	 * a link, so its empty section comes first in each output section (or, for the relro cluster, in
-	 * the `.data.rel.ro.local*` head of `.data.rel.ro`) and gives the cluster its start alignment.
+	 * a link, so its empty section comes first in each output section and gives the cluster its start
+	 * alignment (the start-up relro objects stay beside `.got`: a head cluster took a window of its own).
 	 * `cargo xtask so` passes each alignment: the smallest power of two (at least 4 KiB, at most
 	 * 64 KiB) not below the cluster's size over the whole archive, so a cluster of at most 64 KiB
 	 * never straddles a 64 KiB fault-around window, and the written cluster takes the fewest pages.
@@ -84,16 +84,11 @@ liella_machine_ld_enter:
 #ifndef LIELLA_RODATA1_ALIGN
 #define LIELLA_RODATA1_ALIGN 65536
 #endif
-#ifndef LIELLA_RELRO_ALIGN
-#define LIELLA_RELRO_ALIGN 65536
-#endif
 #ifndef LIELLA_DATA1_ALIGN
 #define LIELLA_DATA1_ALIGN 65536
 #endif
 	.section .rodata1,"a",@progbits
 	.balign LIELLA_RODATA1_ALIGN
-	.section .data.rel.ro.local.liella_cluster,"aw",@progbits
-	.balign LIELLA_RELRO_ALIGN
 	.section .data1,"aw",@progbits
 	.balign LIELLA_DATA1_ALIGN
 	.section .eh_frame,"a",@unwind

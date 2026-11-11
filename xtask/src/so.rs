@@ -848,9 +848,11 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
         run(Command::new(std::env::var("AR").unwrap_or_else(|_| "ar".into())).arg("s").arg(&archive))?;
     }
     localize_builtins(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &names, &product.join("libc-work"))?;
-    // Large zero-initialised tables after the small state words, out of the start-up pages (D-X.22).
-    crate::coldbss::move_cold_bss(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("coldbss-work"))?;
+    // The written start-up state into the `.data1` cluster first (D-X.64), so that a written object of
+    // 1 KiB or more joins it instead of `.lbss`; then the large zero-initialised tables after the small
+    // state words, out of the start-up pages (D-X.22).
     crate::coldbss::move_startup_state(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, root, &product.join("state-work"))?;
+    crate::coldbss::move_cold_bss(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("coldbss-work"))?;
     // The library's own copies and fills call its internal entries, directly (D-X.15).
     let copies = crate::copies::direct_internal_copies(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("copies-work"))?;
     // (done in the archive as rustc built it, so `libc.so.6` and the weakened `libc.a` both get it)

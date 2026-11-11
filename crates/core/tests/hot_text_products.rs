@@ -799,9 +799,14 @@ fn init_zero_fault_clusters_sit_in_one_window() {
 /// group) or in `.text` (`cold`: after it). The start file is the first object of the link, so the
 /// pad shifts everything after it, as unrelated code of a program or the library would.
 fn padded_crt1(dir: &Path, region: &str, pad: u64) -> PathBuf {
-    let section = if region == "pre" { ".section .text.unlikely.liella_pad,\"ax\",@progbits" } else { ".text" };
+    let body = match region {
+        "pre" => format!(".section .text.unlikely.liella_pad,\"ax\",@progbits\n.fill {pad},1,0xcc\n"),
+        // Shifts every `.lbss` object by `pad` against the page grid, as another emission order would.
+        "lbss" => format!(".section .lbss.liella_pad,\"aw\",@nobits\n.zero {pad}\n"),
+        _ => format!(".text\n.fill {pad},1,0xcc\n"),
+    };
     let (s, o, crt1) = (dir.join("pad.s"), dir.join("pad.o"), dir.join("crt1pad.o"));
-    std::fs::write(&s, format!("{section}\n.fill {pad},1,0xcc\n")).expect("pad.s");
+    std::fs::write(&s, body).expect("pad.s");
     assert!(Command::new("cc").arg("-c").arg(&s).arg("-o").arg(&o).status().expect("cc -c").success(), "pad.s does not assemble");
     let st = Command::new("ld").arg("-r").arg("-o").arg(&crt1).arg(root().join("target/liella/liella-crt1.o")).arg(&o).status().expect("ld -r");
     assert!(st.success(), "ld -r of the padded start file failed");
@@ -922,24 +927,30 @@ fn init_written_startup_objects_are_in_the_data1_cluster() {
         .collect();
     let out = Command::new("objdump").arg("-t").arg(root().join("target/liella/libc.a")).output().expect("objdump");
     let table = String::from_utf8_lossy(&out.stdout).into_owned();
-    let (mut moved, mut bad) = (0, Vec::new());
+    let (mut moved, mut named, mut bad) = (0, 0, Vec::new());
     for l in table.lines() {
         // `<value> <flags> <section>\t<size> [.hidden ]<name>`
         let Some((a, b)) = l.split_once('\t') else { continue };
         let (Some(section), Some(size), Some(name)) = (a.split_whitespace().last(), b.split_whitespace().next().and_then(|z| u64::from_str_radix(z, 16).ok()), b.split_whitespace().last()) else { continue };
         // Only a static in a section of its own (`.data.<symbol>`) can be moved by name; a C object in a
         // section named otherwise (`__environ` in `.bss.environ`) is out of scope (D-X.64, open).
-        if !keys.contains(&unhashed_key(name)) || !section.contains(name) {
+        if section == ".data1" && (name.ends_with("4heap4HEAP") || ["environ", "liella_machine_fold_limit", "liella_machine_cmp_sse_null", "liella_machine_set_mid"].contains(&name)) {
+            named += 1;
+        }
+        if !keys.contains(&unhashed_key(name)) || (section != ".data1" && !section.contains(name)) {
             continue;
         }
         if section == ".data1" {
             moved += 1;
-        } else if ((section.starts_with(".data.") && !section.starts_with(".data.rel.ro")) || section.starts_with(".bss.")) && size <= 4096 {
+        } else if ((section.starts_with(".data.") && !section.starts_with(".data.rel.ro")) || section.starts_with(".bss.") || section.starts_with(".lbss.")) && size <= 4096 {
             bad.push(format!("{name} ({size} bytes) in {section}"));
         }
     }
     eprintln!("written start-up objects in .data1: {moved}");
     assert!(moved > 0, "no written start-up key is in .data1 (move_startup_state not applied?)");
+    // LAYOUT-DATA-CLUSTERS-2: heap::HEAP (over 4 KiB, named in STATE_KEY_SUFFIXES) and C's environ
+    // (by section name) are written by every start and join the cluster too, as do fold.S's start-up words.
+    assert_eq!(named, 5, "heap::HEAP, environ and fold.S start-up words not all in .data1 (STATE_KEY_SUFFIXES / STATE_C_SECTIONS / fold.S)");
     assert!(bad.is_empty(), "written start-up objects outside the .data1 cluster (xtask/src/coldbss.rs move_startup_state): {bad:#?}");
 }
 
@@ -954,30 +965,23 @@ fn section_span(exe: &Path, name: &str) -> Option<(u64, u64)> {
 
 /// LAYOUT-DATA-CLUSTERS (D-X.64): the start-up data clusters hold whatever code lies ahead of or after
 /// the hot group. The probe linked with a start file padded by 0x800, 0x2000, 0x8000 and 0xF000 bytes
-/// (`pre`, `cold`, as the text-phase test): the start-up relro objects at the head of `.data.rel.ro` and
-/// `.rodata1` each sit in one 64 KiB window, `.data1` (the written start-up state) takes exactly
+/// (`pre`, `cold`, as the text-phase test) and with `.lbss` shifted by 0x800 and 0x2000 bytes (`lbss`, as
+/// another emission order of the large tables would): `.rodata1` sits in one 64 KiB window, `.data1` (the
+/// written start-up state, heap::HEAP and environ included: LAYOUT-DATA-CLUSTERS-2) takes exactly
 /// ceil(size / 4 KiB) pages, and the start-up, tool and fork-child fault counts are the same at every
-/// `cold` pad, the fork child within [`FORK_BOUND`]. Before the clusters, the `cold` pads moved the relro and
-/// read-only data windows by one each (LAYOUT-STABILITY-RETHINK). No spec clause (layout of the products).
+/// `cold` and `lbss` pad, the fork child within [`FORK_BOUND`]. Before the clusters, the `cold` pads moved the
+/// read-only data window by one (LAYOUT-STABILITY-RETHINK). No spec clause (layout of the products).
 #[test]
 fn init_data_clusters_hold_at_every_text_phase() {
     let base = std::env::temp_dir().join(format!("liella-data-phase-{}", std::process::id()));
     let (mut bad, mut counts) = (Vec::new(), std::collections::BTreeMap::new());
-    for region in ["pre", "cold"] {
-        for pad in [0x800_u64, 0x2000, 0x8000, 0xF000] {
+    for region in ["pre", "cold", "lbss"] {
+        for pad in [0x800_u64, 0x2000, 0x8000, 0xF000].into_iter().filter(|p| region != "lbss" || *p < 0x8000) {
             let dir = base.join(format!("{region}-{pad:x}"));
             std::fs::create_dir_all(&dir).expect("temp dir");
             let crt1 = padded_crt1(&dir, region, pad);
-            let map = link_map(&dir, &crt1);
+            let _map = link_map(&dir, &crt1);
             let exe = dir.join("page_faults");
-            let head: Vec<(String, u64, u64, String)> = output_inputs(&map, ".data.rel.ro").into_iter().filter(|(n, ..)| n.starts_with(".data.rel.ro.local")).collect();
-            let (lo, hi) = (head.iter().map(|t| t.1).min().unwrap_or(0), head.iter().map(|t| t.1 + t.2).max().unwrap_or(0));
-            eprintln!("data phase {region} {pad:#x}: relro head {lo:#x}..{hi:#x} ({} sections)", head.len());
-            if hi <= lo {
-                bad.push(format!("{region} {pad:#x}: no start-up relro object at the head of .data.rel.ro (relro rename not applied?)"));
-            } else if hi - lo <= 65536 && lo >> 16 != (hi - 1) >> 16 {
-                bad.push(format!("{region} {pad:#x}: relro head {lo:#x}..{hi:#x} straddles a 64 KiB window"));
-            }
             match section_span(&exe, ".rodata1") {
                 Some((a, z)) if z > 0 && a >> 16 == (a + z - 1) >> 16 => {}
                 other => bad.push(format!("{region} {pad:#x}: .rodata1 {other:x?} not in one 64 KiB window")),
@@ -988,8 +992,9 @@ fn init_data_clusters_hold_at_every_text_phase() {
             }
             // The `pre` pads also move the text windows by one (the base's own text phase, measured on
             // LAYOUT-TEXT-PIN-9's head: true 15 -> 16 at pre 0x800), so equal counts are required at the
-            // `cold` pads, where only the data classes move.
-            for mode in ["true", "tool", "fork"].into_iter().filter(|_| region == "cold") {
+            // `cold` pads, where only the data classes move, and at the `lbss` pads, which move the
+            // `.lbss` objects against the page grid (the written start-up state must not be there).
+            for mode in ["true", "tool", "fork"].into_iter().filter(|_| region != "pre") {
                 let n = faults(&exe, mode);
                 eprintln!("data phase {region} {pad:#x}: {mode} {n}");
                 counts.entry(mode).or_insert_with(Vec::new).push((format!("{region} {pad:#x}"), n));

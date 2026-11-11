@@ -264,38 +264,6 @@ fn reached(members: &[(String, Member)], text_keys: &BTreeSet<String>) -> BTreeS
     chosen
 }
 
-/// LAYOUT-DATA-CLUSTERS (D-X.64): the head of `.data.rel.ro`. GNU ld's default script places
-/// `*(.data.rel.ro.local* ...)` before `*(.data.rel.ro .data.rel.ro.* ...)`, so a relro section renamed
-/// `.data.rel.ro.local.<rest>` joins the start object's empty, aligned `.data.rel.ro.local.liella_cluster`
-/// at the head of the output section: the start-up-read relro objects take their own window(s), which no
-/// longer move with the size of the rest of `.data.rel.ro` or of the segments before it.
-pub const RELRO_HEAD: &str = ".data.rel.ro.local";
-
-/// The relocation-read-only sections to move to [`RELRO_HEAD`], per member: each `.data.rel.ro*`
-/// section the start-up functions reach ([`reached`]) or that holds a writable-kind key of
-/// `startup-data.keys` (`rw_keys`: the page-fault trace saw it read at start-up). Sections already at
-/// the head are left as they are.
-fn relro_plan(members: &[(String, Member)], text_keys: &BTreeSet<String>, rw_keys: &BTreeSet<String>) -> BTreeMap<String, BTreeSet<String>> {
-    let mut chosen = reached(members, text_keys);
-    for (mi, (_, m)) in members.iter().enumerate() {
-        chosen.extend(m.syms.values().filter(|s| s.ty == "OBJECT" && keyed(&s.name, rw_keys)).filter_map(|s| s.ndx).map(|ndx| (mi, ndx)));
-    }
-    let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for (mi, (name, m)) in members.iter().enumerate() {
-        for (i, s) in &m.secs {
-            if s.name.starts_with(".data.rel.ro") && !s.name.starts_with(RELRO_HEAD) && s.flags.contains('W') && chosen.contains(&(mi, *i)) {
-                out.entry(name.clone()).or_default().insert(s.name.clone());
-            }
-        }
-    }
-    out
-}
-
-/// The relro head name of `section` (`.data.rel.ro.X` -> `.data.rel.ro.local.X`).
-fn relro_head_name(section: &str) -> String {
-    format!("{RELRO_HEAD}{}", &section[".data.rel.ro".len()..])
-}
-
 /// The start alignment of each start-up data cluster (D-X.64), as the preprocessor names entry.S
 /// reads: the smallest power of two not below the cluster's bytes in `archive` (each input section's
 /// size plus its alignment less one: an upper bound for any link), at least one 4 KiB page and at most
@@ -310,21 +278,20 @@ pub fn cluster_aligns(archive: &Path) -> Result<Vec<(&'static str, u64)>, String
 }
 
 fn cluster_aligns_of(listing: &str) -> Vec<(&'static str, u64)> {
-    let mut bytes = [0u64; 3];
+    let mut bytes = [0u64; 2];
     for l in listing.lines() {
         let Some((_, rest)) = l.trim_start().strip_prefix('[').and_then(|r| r.split_once(']')) else { continue };
         let g: Vec<&str> = rest.split_whitespace().collect();
         let (Some(name), Some(size), Some(align)) = (g.first(), g.get(4).and_then(|h| u64::from_str_radix(h, 16).ok()), g.last().and_then(|a| a.parse::<u64>().ok())) else { continue };
         let k = match *name {
             SECTION => 0,
-            n if n.starts_with(RELRO_HEAD) => 1,
-            crate::coldbss::STATE_SECTION => 2,
+            crate::coldbss::STATE_SECTION => 1,
             _ => continue,
         };
         bytes[k] += size + align.max(1) - 1;
     }
     let pow2 = |b: u64| b.max(4096).next_power_of_two().min(65536);
-    vec![("LIELLA_RODATA1_ALIGN", pow2(bytes[0])), ("LIELLA_RELRO_ALIGN", pow2(bytes[1])), ("LIELLA_DATA1_ALIGN", pow2(bytes[2]))]
+    vec![("LIELLA_RODATA1_ALIGN", pow2(bytes[0])), ("LIELLA_DATA1_ALIGN", pow2(bytes[1]))]
 }
 
 /// The text keys, read-only keys and parsed members of `archive` (`root`: the tree with the key files).
@@ -461,12 +428,7 @@ pub fn dump(root: &Path, args: &[String]) -> Result<(), String> {
 /// the key files; `work`: scratch). Fails when they could exceed [`ALIGN`] bytes. Returns (sections renamed, bytes).
 pub fn place(ar: &str, archive: &Path, root: &Path, work: &Path) -> Result<(usize, u64), String> {
     let (text_keys, ro_keys, members) = inputs(archive, root)?;
-    let (mut rename, bytes, sizes) = plan(&members, &text_keys, &ro_keys);
-    let rw_keys = keys(&fs::read_to_string(root.join("crates/libc-so/startup-data.keys")).map_err(|e| format!("startup-data.keys: {e}"))?, |k| k == "rw");
-    let relro = relro_plan(&members, &text_keys, &rw_keys);
-    for (m, secs) in &relro {
-        rename.entry(m.clone()).or_default().extend(secs.iter().cloned());
-    }
+    let (rename, bytes, sizes) = plan(&members, &text_keys, &ro_keys);
     if bytes > ALIGN {
         return Err(format!("start-up read-only data: up to {bytes} bytes in {SECTION} > {ALIGN} (its alignment, xtask/src/startup_ro.rs and entry.S): it would span two 64 KiB windows in some links; largest: {}", sizes.iter().take(12).map(|(n, s)| format!("{s} {n}")).collect::<Vec<_>>().join(", ")));
     }
@@ -481,8 +443,7 @@ pub fn place(ar: &str, archive: &Path, root: &Path, work: &Path) -> Result<(usiz
     for (m, secs) in &rename {
         let mut cmd = Command::new(&objcopy);
         for s in secs {
-            let to = if s.starts_with(".data.rel.ro") { relro_head_name(s) } else { SECTION.to_string() };
-            cmd.arg("--rename-section").arg(format!("{s}={to}"));
+            cmd.arg("--rename-section").arg(format!("{s}={SECTION}"));
             n += 1;
         }
         crate::so::run(cmd.arg(work.join(m)))?;
@@ -502,12 +463,10 @@ mod tests {
     fn cluster_alignment_is_the_smallest_power_of_two_window_safe_and_page_sized() {
         // LAYOUT-DATA-CLUSTERS (D-X.64; no spec clause, layout of the products): each cluster's bytes
         // (size + alignment - 1 per input section) rounded up to a power of two, at least 4 KiB, at most
-        // 64 KiB; the relro head counts every `.data.rel.ro.local*` section, `.data1` only itself.
+        // 64 KiB; `.data1` counts only itself (LAYOUT-DATA-CLUSTERS-2: no relro cluster, D-X.64).
         let l = "  [ 3] .rodata1 PROGBITS 0000000000000000 000040 004e20 00 A 0 0 32\n  [ 4] .rodata1 PROGBITS 0000000000000000 000040 000100 00 A 0 0 1\n  [ 5] .data.rel.ro.local._RNvX PROGBITS 0000000000000000 000040 000010 00 WA 0 0 8\n  [ 6] .data.rel.ro.x PROGBITS 0000000000000000 000040 090000 00 WA 0 0 8\n  [ 7] .data1 PROGBITS 0000000000000000 000040 001001 00 WA 0 0 1\n  [ 8] .data1x PROGBITS 0000000000000000 000040 040000 00 WA 0 0 1\n";
-        assert_eq!(cluster_aligns_of(l), vec![("LIELLA_RODATA1_ALIGN", 32768), ("LIELLA_RELRO_ALIGN", 4096), ("LIELLA_DATA1_ALIGN", 8192)]);
-        assert_eq!(cluster_aligns_of("  [ 1] .data1 NOBITS 0 0 90000 00 WA 0 0 8\n")[2], ("LIELLA_DATA1_ALIGN", 65536));
-        assert_eq!(relro_head_name(".data.rel.ro._RNvFOO"), ".data.rel.ro.local._RNvFOO");
-        assert_eq!(relro_head_name(".data.rel.ro"), ".data.rel.ro.local");
+        assert_eq!(cluster_aligns_of(l), vec![("LIELLA_RODATA1_ALIGN", 32768), ("LIELLA_DATA1_ALIGN", 8192)]);
+        assert_eq!(cluster_aligns_of("  [ 1] .data1 NOBITS 0 0 90000 00 WA 0 0 8\n")[1], ("LIELLA_DATA1_ALIGN", 65536));
     }
 
     const LISTING: &str = "
