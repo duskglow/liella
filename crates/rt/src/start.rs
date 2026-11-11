@@ -331,6 +331,9 @@ mod tests {
         assert_eq!(p.tls.unwrap().addr, 0x5555_2000);
         assert_eq!(program(&w, 1, 0).tls, None, "phnum limits the headers read");
         assert_eq!(program(&w[..10], 2, 0).tls, None, "a truncated header is ignored");
+        // `phnum` above the whole headers in the table: the cut keeps those (here the PT_PHDR
+        // that gives the bias) rather than dropping the table.
+        assert_eq!(program(&pie[..10], 2, 0x5555_0040), Program { tls: None, bias: 0x5555_0000, relro: None }, "the whole headers before a truncated one are read");
     }
 
     // Spec §12.6 (D-12.4, D-27.12): the `%n` check tests the segments where they were loaded,
