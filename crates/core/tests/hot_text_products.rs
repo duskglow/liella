@@ -799,7 +799,14 @@ fn init_zero_fault_clusters_sit_in_one_window() {
 /// group) or in `.text` (`cold`: after it). The start file is the first object of the link, so the
 /// pad shifts everything after it, as unrelated code of a program or the library would.
 fn padded_crt1(dir: &Path, region: &str, pad: u64) -> PathBuf {
+    padded_start(dir, region, pad, &root().join("target/liella/liella-crt1.o"))
+}
+
+/// [`padded_crt1`] for the start file `start`; region `data` puts the pad in `.data` (it moves the
+/// end of `.data` against the start alignment of `.data1`).
+fn padded_start(dir: &Path, region: &str, pad: u64, start: &Path) -> PathBuf {
     let body = match region {
+        "data" => format!(".section .data.liella_pad,\"aw\",@progbits\n.fill {pad},1,0\n"),
         "pre" => format!(".section .text.unlikely.liella_pad,\"ax\",@progbits\n.fill {pad},1,0xcc\n"),
         // Shifts every `.lbss` object by `pad` against the page grid, as another emission order would.
         "lbss" => format!(".section .lbss.liella_pad,\"aw\",@nobits\n.zero {pad}\n"),
@@ -808,7 +815,7 @@ fn padded_crt1(dir: &Path, region: &str, pad: u64) -> PathBuf {
     let (s, o, crt1) = (dir.join("pad.s"), dir.join("pad.o"), dir.join("crt1pad.o"));
     std::fs::write(&s, body).expect("pad.s");
     assert!(Command::new("cc").arg("-c").arg(&s).arg("-o").arg(&o).status().expect("cc -c").success(), "pad.s does not assemble");
-    let st = Command::new("ld").arg("-r").arg("-o").arg(&crt1).arg(root().join("target/liella/liella-crt1.o")).arg(&o).status().expect("ld -r");
+    let st = Command::new("ld").arg("-r").arg("-o").arg(&crt1).arg(start).arg(&o).status().expect("ld -r");
     assert!(st.success(), "ld -r of the padded start file failed");
     crt1
 }
@@ -1011,4 +1018,54 @@ fn init_data_clusters_hold_at_every_text_phase() {
         }
     }
     assert!(bad.is_empty(), "data phase: {bad:#?}");
+}
+
+/// LAYOUT-DATA-CLUSTERS-4 (D-X.68, D-27.10): every static PIE starts whatever the phase of its data.
+/// The static-PIE start relocates an executable with exactly one writable `PT_LOAD`, and the linker
+/// starts a new segment where the gap before a writable section reaches a page; a 16 KiB `.data1`
+/// start left a 3-page gap after `.data`, and the start refused the program (exit 127). A program
+/// with initialised TLS, a constructor and relro pointers (`.tdata` and `.init_array` ahead of
+/// `.data.rel.ro`), linked through `liella-rcrt1.o` with `.data` padded to each 4 KiB phase of a
+/// 16 KiB boundary, must have one writable `PT_LOAD` and run to exit 0. No spec clause (layout of
+/// the start object).
+#[test]
+fn init_static_pie_keeps_one_writable_segment_at_every_data_phase() {
+    let base = std::env::temp_dir().join(format!("liella-spie-phase-{}", std::process::id()));
+    std::fs::create_dir_all(&base).expect("temp dir");
+    let src = base.join("spie.c");
+    let prog = "static int ctor_ran;\n__attribute__((constructor)) static void mark(void) { ctor_ran = 1; }\n\
+                __thread int tls_seed = 7;\nstatic const char *const names[] = { \"zero\", \"one\" };\n\
+                const char *const *volatile names_ref = names;\n\
+                int main(void) { return ctor_ran == 1 && tls_seed == 7 && names_ref[1][1] == 'n' ? 0 : 3; }\n";
+    std::fs::write(&src, prog).expect("spie.c");
+    let rcrt1 = root().join("target/liella/liella-rcrt1.o");
+    let mut bad = Vec::new();
+    for pad in [0_u64, 0x800, 0x1000, 0x2000, 0x3000] {
+        let dir = base.join(format!("data-{pad:x}"));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let start = if pad == 0 { rcrt1.clone() } else { padded_start(&dir, "data", pad, &rcrt1) };
+        let exe = dir.join("spie");
+        let st = Command::new("cc")
+            .args(["-std=gnu17", "-O1", "-nostdlib", "-fno-builtin", "-static-pie", "-fPIE", "-Wl,-z,pack-relative-relocs"])
+            .arg(&start)
+            .arg(&src)
+            .arg(root().join("target/liella/libc.a"))
+            .args(["-lgcc", "-o"])
+            .arg(&exe)
+            .status()
+            .expect("cc");
+        assert!(st.success(), "data {pad:#x}: the static PIE does not link against the products");
+        let ph = Command::new("readelf").arg("-lW").arg(&exe).output().expect("readelf -l");
+        let text = String::from_utf8_lossy(&ph.stdout);
+        let writable = text.lines().filter(|l| l.split_whitespace().next() == Some("LOAD") && l.split_whitespace().nth(6).is_some_and(|f| f.contains('W'))).count();
+        if writable != 1 {
+            bad.push(format!("data {pad:#x}: {writable} writable PT_LOAD segments (the static-PIE start relocates one)"));
+        }
+        let run = Command::new(&exe).stdin(Stdio::null()).output().expect("run the static PIE");
+        if run.status.code() != Some(0) {
+            bad.push(format!("data {pad:#x}: static PIE exit status {:?}: {}", run.status.code(), String::from_utf8_lossy(&run.stderr).trim()));
+        }
+    }
+    let _ = std::fs::remove_dir_all(&base);
+    assert!(bad.is_empty(), "static PIE data phase: {bad:#?}");
 }
