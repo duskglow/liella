@@ -175,7 +175,10 @@ fn math_double_fast_entry_matches_the_envelope_in_every_mode() {
 fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
     // Clauses: s10_0_f_0.
     // The fast path may run in place only under the default control word; under any other word
-    // the entry switches to the default one before computing (D-10.13). Every rounding direction,
+    // the entry switches to the default one before computing (D-10.13). The one exception is exp
+    // under a word that differs from the default only in its rounding field: its quick phase runs
+    // in place in the caller's direction (D-10.94), so the directed rows below check that path's
+    // results and flags too, while under the FTZ/DAZ words exp still switches. Every rounding direction,
     // with and without FTZ and DAZ: the result is liella-math's accurate one in that direction and
     // MXCSR after the call is the caller's word with exactly the reference flags added, nothing
     // else. Values alone cannot show which path ran (the kernels' rounding tests also hold in the
