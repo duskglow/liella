@@ -1,0 +1,12 @@
+{"task": "DL-LIBC-START-6", "model": "opus", "tokens": null,
+ "result": "dynamic __fpu_control fixed: a relocation's versioned reference now accepts a base definition earlier in the scope (probe-settled, glibc 2.39); sym___fpu_control dynamic passes under Liella's ld.so; plants 7/7 caught",
+ "branch": "task/dl-libc-start-6", "head": "ff0309508",
+ "gate": {"affected": "dl-libc-start-6-gate3 on mei (see hand-back)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "#4807 Liella's own libc_nonshared.a + installed libc.so script (unchanged from -5)", "recommendation": "a product story; the subset keeps the host archive until then"}],
+ "informational": ["records/pending/DL-LIBC-START-6-1.toml (amends D-27.11) needs an id", "D-10.5 amends record still needs an id: the dynamic __fpu_control run now passes", "s23_timefmt fails check 75 on the reference (static-only, out of scope)"],
+ "refused": [],
+ "improvement": "run `cargo xtask records check` (or static) before starting long jobs whenever a record is new or edited: two record-format slips cost two gate and plants restarts here",
+ "next_step": "coordinator assigns the pending decision id (and the D-10.5 amends id); then ruling #4807",
+ "report_file": "handoff/DL-LIBC-START-6-report.md",
+ "jobs": ["dl-libc-start-6-gate3", "dl-libc-start-6-plants3", "dl-libc-start-6-counts-head3"]}
