@@ -1,0 +1,11 @@
+{"task": "LIBM-LD-ARC-RETHINK", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE (context checkpoint): per-phase cycle harness written and building on keke; booked IVB run, cause and design recommendation not done",
+ "branch": "task/libm-ld-arc-rethink", "head": null,
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Preliminary, NOT VERIFIED: if glibc asinl is ~100 cycles, 2.5x (~250) is below atan2l's own 424 cycles, so asinl needs a route without the full atan2 kernel; acosl could reach 2.5x by removing the unexplained stall"],
+ "refused": [],
+ "improvement": "A RETHINK brief that needs a new booked harness should start from a ready per-phase tool: reading three prior handoffs plus code to place markers used most of the 180k context before any measurement",
+ "next_step": "jobwait keke:libm-ld-arc-rethink-build, book kotori, run run_probe.sh under ~/bin/timing, summarise, cost designs A/B/C, write the brief",
+ "report_file": "handoff/libm-ld-arc-rethink.md",
+ "jobs": ["libm-ld-arc-rethink-build"]}
