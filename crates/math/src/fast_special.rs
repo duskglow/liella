@@ -72,6 +72,27 @@
 //! [`two_prod`]) and in [`fused`] (one FMA per exact product, [`dd::two_prod_fma`]). Every product
 //! formed is exact in both (operands near 1, far from overflow and underflow), so the two builds
 //! return the same pairs bit for bit, take the same branches and return the same results.
+//!
+//! **Quick phase** (LIBM-F64-SPECIAL-QUICK, D-10.84): a cheaper first evaluation in front of the
+//! in-place entries, round-to-nearest only ([`erf_tiered`], [`erfc_tiered`]). For `2^-5 <= |x| <
+//! 6` it evaluates the same `ERF_T` row to degree 12 with one exact product: `t² = RN(t·t)`, `t⁴ =
+//! RN(t²·t²)`, `a = p3 + p4·t + p5·t²`, `b1 = p6 + … + p9·t³`, `b2 = p10 + p11·t + p12·t²` by
+//! `f64` Horner (`P3` by its high part), `b = b1 + t⁴·b2`, `r = P2h + (t·a + t⁴·b)` (Estrin's
+//! split, Knuth TAOCP 2 4.6.4: the three chains are independent, so the critical path is about
+//! half of degree-12 Horner), `P0h + P1h·t` by the exact product and one Fast2Sum (`|P1h·t| <=
+//! |P0h|`), the low parts `s.lo + P0l + (P1h·t)lo + P1l·t + P2l·t²`, then `t²·r` added last and a
+//! final Fast2Sum to `(zh, zl)`. The generator proves the bound per slot
+//! (`crates/mathtools/src/special_tables.rs`, `quick_bound`: truncation by Cramér's inequality as
+//! item 1, every operation a rounding): `|erf x − zh − zl| <= RHO_ERF_Q·|zh|`, `RHO_ERF_Q = 2^-62` (largest
+//! slot 2^-62.017 with the generator's 1% margin, near 1).
+//! `erfc` on `(−6, 1)` takes `1 ± (zh + zl)` as the in-place entry does: below 0 within
+//! `RHO_ERF_Q` (`|r.hi| >= 1`), on `(0, 1)` the absolute bound over `1 − erf b` per slot within
+//! `RHO_ERFC_Q_LOW = 2^-61` (same test: 2^-61.55). Rounding: [`fast64`]'s `near` with the matching
+//! multiplier (de Dinechin, Lauter & Muller, RAIRO-ITA 41, 2007); `erf` and `erfc` are never a
+//! double or a midpoint at a double `x != 0`, so `w != 0` holds wherever the test answers. Every
+//! other operand, and every operand the test refuses, goes to the in-place entry unchanged.
+//! Both builds round the same operations (the fused build's only difference is the exact
+//! product), so they return the same pairs bit for bit.
 
 #![allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)] // slot indices bounded by the ranges checked before each lookup
 
@@ -113,6 +134,16 @@ pub(crate) const RHO_ERFC_LOW: f64 = f64::from_bits(0x3bb0_0000_0000_0000);
 /// `fast64`'s `near` for that bound: `1 + 2^-14 + 2^-28 + 2^-42 + 2^-52` (checked exactly by the
 /// tests below).
 pub(crate) const C_ERFC_LOW: f64 = f64::from_bits(0x3ff0_0040_0100_0401);
+/// The quick phase's bound for `erf` and `erfc` below 0 (module doc, "Quick phase"): 2^-62.
+#[allow(dead_code)] // the stated bound; the multiplier below is derived from it (tests)
+pub(crate) const RHO_ERF_Q: f64 = f64::from_bits(0x3c10_0000_0000_0000);
+/// The least `double` `C` with `C·(1 − 2^54·RHO_ERF_Q) > 1 + 2^-53` (checked by the tests).
+pub(crate) const C_ERF_Q: f64 = f64::from_bits(0x3ff0_1010_1010_1011);
+/// The quick phase's bound for `erfc` on `(0, 1)`: 2^-61.
+#[allow(dead_code)] // as RHO_ERF_Q
+pub(crate) const RHO_ERFC_Q_LOW: f64 = f64::from_bits(0x3c20_0000_0000_0000);
+/// The least `C` for `RHO_ERFC_Q_LOW` (as `C_ERF_Q`).
+pub(crate) const C_ERFC_Q_LOW: f64 = f64::from_bits(0x3ff0_2040_8102_0409);
 /// The least `m` of an in-place `erfc` result `y.hi·2^m` (`y.hi` in `[1, 2)`: normal).
 const M_NORMAL: i32 = -1021;
 
@@ -298,6 +329,91 @@ pub fn erfc_nearest(x: f64) -> Option<f64> {
     }
     finish(y, Some(C_EXP), m, || eps, &mut 0)
 }
+/// The quick phase's `erf x` for `2^-5 <= x < 6` as `(zh, zl)` within `RHO_ERF_Q·|zh|` (module
+/// doc, "Quick phase"; the order is the bound's).
+$(#[$a])*
+$(#[$i])*
+fn erf_quick_dd(x: f64) -> Dd {
+    let (i, c) = slot(x, 0x3fa0);
+    let row = &t::ERF_T[i];
+    // [P0h, P0l, P1h, P1l, P2h, P2l, P3h, P3l, p4, ..., p14]: p_k at row[k + 4] from k = 4.
+    let p = |k: usize| f64::from_bits(row[k]);
+    let t = x - c;
+    let t2 = t * t;
+    let t4 = t2 * t2;
+    let a = (p(9) * t + p(8)) * t + p(6);
+    let b1 = ((p(13) * t + p(12)) * t + p(11)) * t + p(10);
+    let b2 = (p(16) * t + p(15)) * t + p(14);
+    let b = b1 + t4 * b2;
+    let r = p(4) + (t * a + t4 * b);
+    let ph = $prod(p(2), t);
+    let s = fast_two_sum(p(0), ph.hi);
+    let low = (s.lo + p(1)) + (ph.lo + (p(3) * t + p(5) * t2));
+    fast_two_sum(s.hi, t2 * r + low)
+}
+
+/// `erf x` rounded to nearest by the quick phase alone, or `None` (outside `2^-5 <= |x| < 6`, or
+/// the rounding test refuses).
+///
+/// # Safety
+///
+/// As [`erf_nearest`].
+$(#[$a])*
+$(#[$i])*
+pub fn erf_quick(x: f64) -> Option<f64> {
+    let ax = dd::abs(x);
+    if !(SMALL..ERF_ONE).contains(&ax) {
+        return None;
+    }
+    let v = fast64::near(erf_quick_dd(ax), C_ERF_Q, 0)?;
+    Some(if x < 0.0 { -v } else { v })
+}
+
+/// `erfc x` rounded to nearest by the quick phase alone (`−6 < x < 1`, `|x| >= 2^-5`), or `None`.
+///
+/// # Safety
+///
+/// As [`erf_nearest`].
+$(#[$a])*
+$(#[$i])*
+pub fn erfc_quick(x: f64) -> Option<f64> {
+    let ax = dd::abs(x);
+    if !(SMALL..ERF_ONE).contains(&ax) || x >= 1.0 {
+        return None;
+    }
+    let y = erf_quick_dd(ax);
+    let (y, c) = if x < 0.0 { (y, C_ERF_Q) } else { (y.neg(), C_ERFC_Q_LOW) };
+    let s = fast_two_sum(1.0, y.hi);
+    fast64::near(fast_two_sum(s.hi, s.lo + y.lo), c, 0)
+}
+
+/// `erf x` rounded to nearest: the quick phase, then [`erf_nearest`] (module doc).
+///
+/// # Safety
+///
+/// As [`erf_nearest`].
+$(#[$a])*
+$(#[$i])*
+pub fn erf_tiered(x: f64) -> Option<f64> {
+    match erf_quick(x) {
+        Some(v) => Some(v),
+        None => erf_nearest(x),
+    }
+}
+
+/// `erfc x` rounded to nearest: the quick phase, then [`erfc_nearest`] (module doc).
+///
+/// # Safety
+///
+/// As [`erf_nearest`].
+$(#[$a])*
+$(#[$i])*
+pub fn erfc_tiered(x: f64) -> Option<f64> {
+    match erfc_quick(x) {
+        Some(v) => Some(v),
+        None => erfc_nearest(x),
+    }
+}
     };
 }
 
@@ -396,5 +512,39 @@ mod tests {
                 assert!(eps <= fast64::RHO_EXP * dd::abs(y.hi), "erfc({x:e})");
             }
         }
+    }
+
+    // Clauses: s10_3_c_0 (D-10.84): the quick phase's multipliers are the least for their stated
+    // bounds, and every result it gives is the correctly rounded one (the accurate path's).
+    #[test]
+    fn quick_phase_rounds_correctly() {
+        let one_u = Mp::from_f64(1.0).add(Mp::from_f64(f64::EPSILON / 2.0));
+        for (rho, c) in [(RHO_ERF_Q, C_ERF_Q), (RHO_ERFC_Q_LOW, C_ERFC_Q_LOW)] {
+            let k = Mp::from_f64(1.0).sub(Mp::from_f64(rho * dd::pow2(54)));
+            assert!(Mp::from_f64(c).mul(k).cmp_abs(one_u).is_gt(), "quick C below its bound");
+            let below = f64::from_bits(c.to_bits() - 1);
+            assert!(Mp::from_f64(below).mul(k).cmp_abs(one_u).is_le(), "quick C not the least");
+        }
+        let (mut miss, mut n) = (0u32, 0u32);
+        for x in operands(20_000, SMALL, ERF_ONE) {
+            for x in [x, -x] {
+                let want = crate::special::erf(x, Rounding::Nearest).0;
+                match erf_quick(x) {
+                    Some(v) => assert_eq!(v.to_bits(), want.to_bits(), "erf quick({x:e}) misrounded"),
+                    None => miss += 1,
+                }
+                n += 1;
+                if x < 1.0 {
+                    let want = crate::special::erfc(x, Rounding::Nearest).0;
+                    match erfc_quick(x) {
+                        Some(v) => assert_eq!(v.to_bits(), want.to_bits(), "erfc quick({x:e}) misrounded"),
+                        None => miss += 1,
+                    }
+                    n += 1;
+                }
+            }
+        }
+        eprintln!("erf/erfc quick: {miss} misses of {n}");
+        assert!(miss * 100 <= n * 3, "quick fallback {miss} of {n} above 3%");
     }
 }

@@ -8,9 +8,9 @@ pub(crate) fn erf_nearest(x: f64) -> Option<f64> {
     if crate::dispatch::fma() {
         // UNSAFE(hot-kernel) SAFETY: as in `exp_log::exp_nearest`.
         #[allow(unsafe_code)]
-        return unsafe { liella_math::fast_special::fused::erf_nearest(x) };
+        return unsafe { liella_math::fast_special::fused::erf_tiered(x) };
     }
-    liella_math::fast_special::erf_nearest(x)
+    liella_math::fast_special::erf_tiered(x)
 }
 
 /// The `double` `erfc` in-place path in its build chosen at startup (as [`erf_nearest`]).
@@ -19,7 +19,7 @@ pub(crate) fn erfc_nearest(x: f64) -> Option<f64> {
     if crate::dispatch::fma() {
         // UNSAFE(hot-kernel) SAFETY: as in `exp_log::exp_nearest`.
         #[allow(unsafe_code)]
-        return unsafe { liella_math::fast_special::fused::erfc_nearest(x) };
+        return unsafe { liella_math::fast_special::fused::erfc_tiered(x) };
     }
-    liella_math::fast_special::erfc_nearest(x)
+    liella_math::fast_special::erfc_tiered(x)
 }
