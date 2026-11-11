@@ -6,6 +6,9 @@
 #include <unistd.h>
 
 extern int __cxa_thread_atexit_impl(void (*fn)(void *), void *obj, void *dso);
+/* The object's DSO handle, as a C++ compiler passes it (Itanium C++ ABI §3.3.5; the start files
+ * define it): a dynamically linked library needs it to find the object that registers. */
+extern void *__dso_handle __attribute__((visibility("hidden")));
 
 static char order[8];
 static int n;
@@ -23,7 +26,7 @@ int main(void)
 {
     if (atexit(a) != 0)
         return 1;
-    if (__cxa_thread_atexit_impl(tdtor, &t1, NULL) != 0 || __cxa_thread_atexit_impl(tdtor, &t2, NULL) != 0)
+    if (__cxa_thread_atexit_impl(tdtor, &t1, &__dso_handle) != 0 || __cxa_thread_atexit_impl(tdtor, &t2, &__dso_handle) != 0)
         return 2;
     exit(0);
 }
