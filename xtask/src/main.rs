@@ -85,6 +85,7 @@ mod repro;
 mod rust_dylib;
 mod schedule;
 mod so;
+mod startup_ro;
 mod spec;
 mod status;
 mod steptime;
@@ -192,6 +193,7 @@ fn main() -> ExitCode {
         "jcc-check" => jcc::run(&root, &args[1..]),
         "partial-write" => partial_write::run(&root, &args[1..]),
         "layout-check" => layout::run(&root, &args[1..]),
+        "startup-ro-plan" => startup_ro::dump(&root, &args[1..]),
         _ => {
             println!("usage: cargo xtask <stubs [--force] | trace [--untested [--out F]] | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | arch-check | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] [--in-place] | kernel-index [--check] [--in-place] | codemap [--check] [--in-place] | records-gen [--check] [--in-place] | records (check | fmt [--check] | new <decision|compat|saturation> <id> [--section S] [--series S] [--story S]) | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] | sweep (run --out <dir> [--only a,b] | compare --new <class>=<tsv>... (--old <class>=<tsv>... | --old-table <md>) [--label L]) [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; --tunables V, or else a non-empty GLIBC_TUNABLES in the caller's environment, sets it for both sides; the two differing is an error) | fuzz <target> --time <minutes> | fuzz-check | so | hottext-repair [--at <rev>] | test | ctest | nextest <args> | affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
             Ok(())

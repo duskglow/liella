@@ -1,0 +1,8 @@
+# LAYOUT-DATA-CLUSTERS-2 plants (cargo xtask plants; docs/plants.md): the written start-up state that left .lbss/.bss/.data
+# (EXIT_HANDLERS by the rename order and size cap, heap::HEAP by name, environ by section name, fold.S's words by definition)
+# and the cluster alignment.
+ldc2-cap | xtask/src/coldbss.rs | lit:pub const STATE_KEYED_MAX: u64 = 4096; ==> pub const STATE_KEYED_MAX: u64 = 1023; | cargo xtask so && cargo test -p liella --test hot_text_products init_written_startup_objects_are_in_the_data1_cluster | msg:EXIT_HANDLERS.*in \.lbss\.
+ldc2-heap | xtask/src/coldbss.rs | lit:list.into_iter().map(|s| (s, STATE_SECTION.to_string())) ==> list.into_iter().filter(|s| !s.contains("4heap4HEAP")).map(|s| (s, STATE_SECTION.to_string())) | cargo xtask so && cargo test -p liella --test hot_text_products init_written_startup_objects_are_in_the_data1_cluster | msg:not all in \.data1
+ldc2-environ | xtask/src/coldbss.rs | lit:[".bss.environ"]; ==> [".bss.environX"]; | cargo xtask so | msg:bss\.environX \(0 sections\)
+ldc2-fold | csys/src/machine/fold.S | perl:s/(liella_machine_cmp_long:.*?)\.pushsection \.data1,/$1.pushsection .data,/s | cargo xtask so && cargo test -p liella --test hot_text_products init_written_startup_objects_are_in_the_data1_cluster | msg:not all in \.data1
+ldc-align | xtask/src/startup_ro.rs | lit:b.max(4096).next_power_of_two().min(65536) ==> b.max(64).min(64) | cargo test -p xtask --bin xtask startup_ro::tests::cluster_alignment | msg:cluster_alignment.*(FAILED|panicked)|left

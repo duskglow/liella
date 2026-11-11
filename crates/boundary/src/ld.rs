@@ -808,6 +808,12 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
     for (s, o) in syms.iter_mut().zip(objs).skip(1) {
         *s = liella_ld::symbols::Object::new(o.dynm).unwrap_or_else(|_| fail_with(&[o.name, b": malformed symbol tables\n"], program::FAILURE));
     }
+    // The C library's private interface (LIELLA_PRIVATE, L14-10, D-27.22): a library from another
+    // build is refused before any of its code runs or any relocation is applied.
+    let early = start::private::find(objs, &syms[..n], interp, |at, out| read_image(usize::try_from(at).unwrap_or(0), out)).unwrap_or_else(|e| {
+        let (start::private::PrivateError::Mismatch(k) | start::private::PrivateError::Malformed(k)) = e;
+        fail_with(&[objs.get(k).map_or(&b"?"[..], |o| o.name), e.message()], program::FAILURE)
+    });
     let global: [usize; OBJECTS_MAX] = core::array::from_fn(|i| i);
     let set = Objects { objs, syms: &syms[..n], global: &global[..n] };
     let mut unique = reloc::UniqueTable::<64, 4096>::default();
@@ -831,7 +837,7 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
     for &(at, len) in maps[1..n].iter().chain(&views).filter(|m| m.1 != 0) {
         let _ = raw::munmap(at, len);
     }
-    run_init(&hooks[..n], &edges[..ne], sp)
+    run_init(&hooks[..n], &edges[..ne], sp, early.map(|f| f.early_init))
 }
 
 /// Most `DT_NEEDED` links over all objects of one start.
@@ -861,8 +867,10 @@ static FINI_DONE: AtomicBool = AtomicBool::new(false);
 /// [`init::init_order`], each called with `(argc, argv, envp)` from the initial stack at `sp`. The
 /// program's own `DT_INIT`/`DT_INIT_ARRAY` are its C library's start (probe: the reference loader
 /// runs neither). Records the finalisation order for [`fini_all`] and returns its address, the
-/// termination function the program gets in `%rdx`.
-fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize) -> usize {
+/// termination function the program gets in `%rdx`. First of all, `early` (the C library's
+/// `__liella_libc_early_init`, design §14, D-27.22) gets the initial stack, so every constructor,
+/// `.preinit_array` included, sees an initialised C library.
+fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<u64>) -> usize {
     let mut order = [0u8; OBJECTS_MAX];
     let mut fini_order = [0u8; OBJECTS_MAX];
     let (Ok(len), Ok(fini_len)) = (init::init_order(hooks.len(), edges, &mut order), init::fini_order(hooks.len(), edges, &mut fini_order)) else {
@@ -876,6 +884,15 @@ fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize) -> usize {
     let call = |f: u64| {
         let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), a, b, c);
     };
+    if let Some(f) = early {
+        let mut auxv = envp;
+        while stack_word(auxv) != 0 {
+            auxv = auxv.wrapping_add(8);
+        }
+        let info = start::private::StartInfo { argc: usize::try_from(argc).unwrap_or(0), argv, envp, auxv: auxv.wrapping_add(8), stack_end: sp };
+        let at = core::ptr::from_ref(&info).expose_provenance();
+        let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), args(at), 0, 0);
+    }
     // Only the program's preinit array is non-empty (`init::hooks` drops a shared object's).
     for h in hooks {
         init::init_calls(0, array_words(h.preinit)).for_each(call);
