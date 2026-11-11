@@ -28,8 +28,9 @@ liella-math targets).
 `--files crates/ld/src/lib.rs` (direct): 88 of 257 test targets, 127 of 127 conformance programs, 3 unit-test libs,
 no liella-math target or lib. Kept: liella-ld's own suites, boundary's, every conformance program, the start-up
 layout tests. `crates/math/src/lib.rs` and `crates/rt/src/lib.rs` still select liella-math (and rt selects the loader).
-Gate time before: DL-INIT-ORDER-2's gate (#4556) 98 min, of which liella-math 2203 s + 583 s interposed. After: see
-the report (measured run of `affected --run --files crates/ld/src/lib.rs`, if it finished in this run).
+Gate time before: DL-INIT-ORDER-2's gate (#4556) 98 min, of which liella-math 2203 s + 583 s interposed. After (one
+measured run, `affected --run --files crates/ld/src/lib.rs`, job `xtask-affected-loader-ldtime-after` on mei): 435 s,
+4 suites, 3712 passed, 0 failed, 127/127 conformance, peak 12G. Before and after ran on different hosts (keke, mei).
 
 ## Tests and plants
 * `affected::tests::a_loader_change_does_not_select_the_math_suites` (no spec clause): loader root, `init.rs`,
