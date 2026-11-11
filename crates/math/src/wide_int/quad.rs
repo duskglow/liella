@@ -362,6 +362,7 @@ fn div3(n: W3, d: W3) -> W3 {
 }
 
 /// Word `i` of the bits of `2/π` behind three zero words (bit `j` of `2/π` at bit `j + 191`).
+#[inline(always)] // 14 calls per reduction: with two reductions (kernel, both) it went out of line
 fn word(i: usize) -> u64 {
     match i.checked_sub(3) {
         Some(k) => t::TWO_OVER_PI[k],
@@ -384,9 +385,7 @@ struct Reduced {
     kd: u32,
 }
 
-/// Steps 1 and 2 for `|x| = m·2^e`, or `None` for `|d| < 2^-160`. Inlined into each caller:
-/// with two callers (`kernel`, `both`) the out-of-line call cost `sinf128` 74 instructions.
-#[inline(always)]
+/// Steps 1 and 2 for `|x| = m·2^e`, or `None` for `|d| < 2^-160`.
 fn reduce(m: u128, e: i32) -> Option<Reduced> {
     let p = (e + 190) as usize; // bit e - 1 of 2/π; e >= -190
     let (w, r) = (p / 64, (p % 64) as u32);
