@@ -279,6 +279,96 @@ fn addr0(f: Fn0) -> usize {
     f as usize
 }
 
+/// Start step 3: `environ`, the arguments (the native interface's), the program names and
+/// `__libc_stack_end`. Shared by [`start`] and [`early_init`].
+#[inline(always)]
+fn publish(argv_addr: usize, n_args: usize, envp: usize, stack_end: usize) {
+    ffi::environ.store(envp, Release);
+    process::ARGV.store(argv_addr, Release);
+    process::ARGC.store(n_args, Release);
+    if n_args > 0 {
+        // UNSAFE(slice): argv[0] and its text.
+        #[allow(unsafe_code)]
+        // SAFETY: argv has argc entries before its NULL (⚑ KERN).
+        let argv0 = unsafe { conv::words_at(argv_addr, 1) }.first().and_then(|&p| usize::try_from(p).ok()).unwrap_or(0);
+        // UNSAFE(slice): the text of argv[0].
+        #[allow(unsafe_code)]
+        // SAFETY: argv[0] is NULL or a NUL-terminated string on the initial stack.
+        let name = unsafe { strz::strz(core::ptr::with_exposed_provenance(argv0)) }.unwrap_or(&[]);
+        let short = start::short_name(name);
+        ffi::program_invocation_name.store(argv0, Release);
+        ffi::program_invocation_short_name.store(argv0.wrapping_add(name.len().saturating_sub(short.len())), Release);
+    }
+    ffi::__libc_stack_end.store(stack_end, Release);
+}
+
+/// Start step 4's tunables (`GLIBC_TUNABLES`, the secure filter), with glibc's diagnostics for a
+/// malformed string when `static_program` and not `secure`. Shared by [`start`] and [`early_init`].
+#[inline(always)]
+fn start_tunables(static_program: bool, secure: bool) -> Tunables {
+    process::getenv(crate::startup_names::GLIBC_TUNABLES).map_or(Tunables::default(), |v| {
+        // UNSAFE(slice): the variable's value, inside the environment.
+        #[allow(unsafe_code)]
+        // SAFETY: `getenv` returned the address of a NUL-terminated value.
+        let text = unsafe { strz::strz(core::ptr::with_exposed_provenance(v)) }.unwrap_or(&[]);
+        // glibc's diagnostics for a malformed string or value, before any program code runs.
+        // Not in secure mode (glibc prints none there, probe-settled) and not when another
+        // `ld.so` started the program: that loader printed them already.
+        if static_program && !secure {
+            liella::config::warnings(text, |parts| {
+                // One line, one write (no allocation): at most 6 pieces.
+                let mut iov = [liella_kernel::mem::IoVec::new(&[]); 6];
+                for (slot, piece) in iov.iter_mut().zip(parts) {
+                    *slot = liella_kernel::mem::IoVec::new(piece);
+                }
+                let _ = CSys.writev(liella_kernel::fd::Fd::STDERR, iov.get(..parts.len()).unwrap_or(&iov));
+            });
+        }
+        Tunables::parse(text, secure)
+    })
+}
+
+/// `__liella_libc_early_init` (`LIELLA_PRIVATE`, plan/ph14/design.md §14, D-27.22): Liella's
+/// `ld.so` calls it after relocation and before any constructor, `.preinit_array` included, so
+/// constructors see an initialised C library: the auxiliary vector, steps 3 and 4 (`environ`, the
+/// program names, `__libc_stack_end`, the tunables and the CPU paths). The NULL-folding guard is
+/// decided at the first small copy or fill (`dispatch::resolve_fold`). `__libc_start_main` runs
+/// the same steps again with the same values (DL-14 makes it skip them).
+pub fn early_init(info: &liella_ld::start::private::StartInfo) {
+    let auxv_words = count_auxv(info.auxv);
+    process::AUXV_WORDS.store(auxv_words, Release);
+    process::AUXV_ADDR.store(info.auxv, Release);
+    // UNSAFE(slice): the auxiliary vector, measured above.
+    #[allow(unsafe_code)]
+    // SAFETY: `count_auxv` measured these words on the initial stack `ld.so` describes.
+    let aux = Auxv::from_words(unsafe { conv::words_at(info.auxv, auxv_words) });
+    crate::sys::set_sysinfo_ehdr(aux.get(AT_SYSINFO_EHDR).and_then(|v| usize::try_from(v).ok()).unwrap_or(0));
+    publish(info.argv, info.argc, info.envp, info.stack_end);
+    let tunables = start_tunables(false, aux.get(AT_SECURE).is_some_and(|v| v != 0));
+    let _ = cpu::init_with(&tunables);
+}
+
+/// `__liella_build_tag@LIELLA_PRIVATE` (L14-10, D-27.22): `ld.so` refuses a `libc.so.6` whose tag
+/// differs from its own.
+// UNSAFE(export): a C data symbol of the private interface, read only by `ld.so`.
+#[unsafe(no_mangle)]
+#[allow(unsafe_code)]
+#[allow(non_upper_case_globals)]
+pub static __liella_build_tag: [u8; liella_ld::start::private::TAG_LEN] = liella_ld::start::private::TAG;
+
+/// `__liella_libc_early_init@LIELLA_PRIVATE`: [`early_init`] for `ld.so`.
+// UNSAFE(export): the private interface's entry, called only by `ld.so`.
+#[unsafe(no_mangle)]
+#[allow(unsafe_code)]
+extern "C" fn __liella_libc_early_init(info: *const liella_ld::start::private::StartInfo) {
+    // UNSAFE(slice): the start description `ld.so` passes.
+    #[allow(unsafe_code)]
+    // SAFETY: `ld.so` passes a live, aligned `StartInfo` on its stack for the call (design §14).
+    if let Some(info) = unsafe { info.as_ref() } {
+        early_init(info);
+    }
+}
+
 /// `__libc_start_main(main, argc, argv, init, fini, rtld_fini, stack_end)`; with `PIE`, the
 /// static-PIE start `liella-rcrt1.o` calls (`liella_start_main_static_pie`, D-27.10).
 pub fn start<const PIE: bool>(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Option<Fn0>, fini: Option<Fn0>, rtld_fini: Option<Fn0>, stack_end: *mut c_void) -> ! {
@@ -327,45 +417,10 @@ pub fn start<const PIE: bool>(main: Option<Main>, argc: c_int, argv: *mut *mut c
 
     // 3. Publish the environment, the arguments (the native interface's), the program names and
     //    the stack end.
-    ffi::environ.store(envp, Release);
-    process::ARGV.store(argv_addr, Release);
-    process::ARGC.store(n_args, Release);
-    if n_args > 0 {
-        // UNSAFE(slice): argv[0] and its text.
-        #[allow(unsafe_code)]
-        // SAFETY: argv has argc entries before its NULL (⚑ KERN).
-        let argv0 = unsafe { conv::words_at(argv_addr, 1) }.first().and_then(|&p| usize::try_from(p).ok()).unwrap_or(0);
-        // UNSAFE(slice): the text of argv[0].
-        #[allow(unsafe_code)]
-        // SAFETY: argv[0] is NULL or a NUL-terminated string on the initial stack.
-        let name = unsafe { strz::strz(core::ptr::with_exposed_provenance(argv0)) }.unwrap_or(&[]);
-        let short = start::short_name(name);
-        ffi::program_invocation_name.store(argv0, Release);
-        ffi::program_invocation_short_name.store(argv0.wrapping_add(name.len().saturating_sub(short.len())), Release);
-    }
-    ffi::__libc_stack_end.store(stack_end.expose_provenance(), Release);
+    publish(argv_addr, n_args, envp, stack_end.expose_provenance());
 
     // 4. Tunables and the CPU paths.
-    let tunables = process::getenv(crate::startup_names::GLIBC_TUNABLES).map_or(Tunables::default(), |v| {
-        // UNSAFE(slice): the variable's value, inside the environment.
-        #[allow(unsafe_code)]
-        // SAFETY: `getenv` returned the address of a NUL-terminated value.
-        let text = unsafe { strz::strz(core::ptr::with_exposed_provenance(v)) }.unwrap_or(&[]);
-        // glibc's diagnostics for a malformed string or value, before any program code runs.
-        // Not in secure mode (glibc prints none there, probe-settled) and not when another
-        // `ld.so` started the program: that loader printed them already.
-        if static_program && !secure {
-            liella::config::warnings(text, |parts| {
-                // One line, one write (no allocation): at most 6 pieces.
-                let mut iov = [liella_kernel::mem::IoVec::new(&[]); 6];
-                for (slot, piece) in iov.iter_mut().zip(parts) {
-                    *slot = liella_kernel::mem::IoVec::new(piece);
-                }
-                let _ = CSys.writev(liella_kernel::fd::Fd::STDERR, iov.get(..parts.len()).unwrap_or(&iov));
-            });
-        }
-        Tunables::parse(text, secure)
-    });
+    let tunables = start_tunables(static_program, secure);
     let cpu_state = cpu::init_with(&tunables);
     // The classed entries (D-4.53): on the AVX2 class, the AVX2 page moves over the SSE2 page,
     // here, with one thread and before the program's IFUNC resolvers and constructors. A program

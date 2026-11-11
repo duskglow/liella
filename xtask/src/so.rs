@@ -315,7 +315,56 @@ fn lib_version_script(root: &Path, have: &BTreeSet<String>, lib_name: &str, nati
         }
         prev = Some(node);
     }
+    // The private start interface with Liella's `ld.so` (design §14, R14-12, D-27.22): its own node.
+    script.push_str("LIELLA_PRIVATE {\n  global:\n");
+    for s in LIBC_PRIVATE {
+        if !have.contains(*s) {
+            return Err(format!("libc.a does not define the private symbol {s} (LIELLA_PRIVATE)"));
+        }
+        script.push_str(&format!("    {s};\n"));
+        count += 1;
+    }
+    script.push_str("};\n");
     Ok((script, count))
+}
+
+/// `libc.so.6`'s exports at `LIELLA_PRIVATE` (design §14, D-27.22): what Liella's `ld.so` calls or reads.
+const LIBC_PRIVATE: &[&str] = &["__liella_build_tag", "__liella_libc_early_init"];
+
+/// The build tag `ld.so` and `libc.so.6` both carry (L14-10, D-27.22, `liella_ld::start::private::TAG`):
+/// FNV-1a 64 over the product sources (`crates/`, `csys/`, `include/`, `Cargo.lock`; paths sorted,
+/// each path then its bytes), so products built from different sources refuse each other, in a git
+/// checkout or a synced copy alike. About 13 MB read per run.
+fn build_tag(root: &Path) -> String {
+    fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+        let Ok(rd) = fs::read_dir(dir) else { return };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                if p.file_name().is_some_and(|n| n != "target") {
+                    walk(&p, out);
+                }
+            } else {
+                out.push(p);
+            }
+        }
+    }
+    let mut files = vec![root.join("Cargo.lock")];
+    for d in ["crates", "csys", "include"] {
+        walk(&root.join(d), &mut files);
+    }
+    files.sort();
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut eat = |bytes: &[u8]| {
+        for &b in bytes {
+            h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+        }
+    };
+    for f in &files {
+        eat(f.strip_prefix(root).unwrap_or(f).to_string_lossy().as_bytes());
+        eat(&fs::read(f).unwrap_or_default());
+    }
+    format!("src-{h:016x}")
 }
 
 /// Check `libc.so.6`'s dynamic symbol table: every native symbol at its node as the default
@@ -818,6 +867,7 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
     cmd.current_dir(root).args(["rustc", "-q", "--profile", profile.name(), "--crate-type", "staticlib", "--manifest-path"]).arg(&manifest).arg("--target-dir").arg(product);
     // Every product crate gets the 64-byte function alignment (D-4.33), then the caller's flags.
     cmd.env("CARGO_ENCODED_RUSTFLAGS", crate::align::encoded_rustflags(root, rustflags));
+    cmd.env("LIELLA_BUILD_TAG", build_tag(root));
     run(&mut cmd)?;
     // Cargo's archive stays as cargo built it; the steps below work on a fresh copy, so every run
     // post-processes the same input once (a killed run cannot leave a half-edited archive behind).
@@ -1050,7 +1100,7 @@ fn run_ld(root: &Path, cargo: &str, cc: &str, profile: Profile) -> Result<(), St
     let manifest = root.join("crates/ld-so/Cargo.toml");
     let product = root.join("target/product");
     let release = root.join("target/liella");
-    run(Command::new(cargo).current_dir(root).args(["rustc", "-q", "--profile", profile.name(), "--crate-type", "staticlib", "--manifest-path"]).arg(&manifest).arg("--target-dir").arg(&product).env("CARGO_ENCODED_RUSTFLAGS", crate::align::encoded_rustflags(root, Some(LD_RUSTFLAGS))))?;
+    run(Command::new(cargo).current_dir(root).args(["rustc", "-q", "--profile", profile.name(), "--crate-type", "staticlib", "--manifest-path"]).arg(&manifest).arg("--target-dir").arg(&product).env("CARGO_ENCODED_RUSTFLAGS", crate::align::encoded_rustflags(root, Some(LD_RUSTFLAGS))).env("LIELLA_BUILD_TAG", build_tag(root)))?;
     let archive = product.join(profile.name()).join("libld_so.a");
     let entry = product.join("ld-entry.o");
     run(Command::new(cc).arg("-c").arg("-DLIELLA_LD").arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&entry))?;
