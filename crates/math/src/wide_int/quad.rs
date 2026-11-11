@@ -262,20 +262,41 @@ fn combine(r: &Reduced, s: W3, c: W3, odd: bool) -> W3 {
 /// `(sign, M, E)` with `M` in `[2^191, 2^192)` and `±M·2^E` within `2^-156` (relative) of `sin x`
 /// (`cos x`), or `None` outside the range of step 1 or for `|d| < 2^-160` (step 2).
 fn kernel(n: &Num, cos: bool) -> Option<(bool, W3, i32)> {
-    let r = reduced(n)?;
-    let (neg, odd) = sign(n, &r, cos);
-    let (m, e) = if r.j == 0 {
-        if odd {
-            let u = mulhi3(r.d, r.d).shr(2 * r.kd - 14);
-            norm(cos_poly(u), 191)
+    // Kept apart from `both` (one function, its helpers written out): the single-function path
+    // measured 100 instructions more per call through the shared helpers.
+    if n.kind != Kind::Finite || n.sig == 0 || n.sig >> 113 != 0 || !(-190..=16271).contains(&n.exp) {
+        return None;
+    }
+    let r = reduce(n.sig, n.exp)?;
+    let k = r.q + u32::from(cos);
+    let odd = k & 1 != 0;
+    let neg = (!cos && n.neg) ^ (k & 2 != 0) ^ (!odd && r.negf);
+    let (d, kd) = (r.d, r.kd);
+    let u = mulhi3(d, d).shr(2 * kd - 14); // d², units 2^-206 (kd >= 7)
+    if r.j == 0 {
+        return Some(if odd {
+            let c = cos_poly(u); // units 2^-191
+            let l = c.h.leading_zeros();
+            (neg, c.shl(l), -191 - l as i32)
         } else {
-            norm(sq_and_sine(&r).1, 190 + r.kd)
-        }
+            let s = mulhi3(d, sin_poly(u)); // s·2^(-190-kd)
+            let l = s.h.leading_zeros();
+            (neg, s.shl(l), -190 - kd as i32 - l as i32)
+        });
+    }
+    let s = mulhi3(d, sin_poly(u)).shr(kd - 7); // S(|d|), units 2^-197
+    let c = cos_poly(u); // C(d), units 2^-191
+    let ([sh, ch], [sl, cl]) = (SC[r.j - 1], SC_LO[r.j - 1]);
+    let (sj, cj) = (W3::with_lo(sh, sl), W3::with_lo(ch, cl)); // units 2^-192
+    let v = if odd {
+        let (a, b) = (mulhi3(cj, c), mulhi3(sj, s).shr(6));
+        if r.sd { a.add(b) } else { a.sub(b) }
     } else {
-        let (u, s) = sq_and_sine(&r);
-        norm(combine(&r, s.shr(r.kd - 7), cos_poly(u), odd), 191)
-    };
-    Some((neg, m, e))
+        let (a, b) = (mulhi3(sj, c), mulhi3(cj, s).shr(6));
+        if r.sd { a.sub(b) } else { a.add(b) }
+    }; // units 2^-191, at least sin(π/512)
+    let l = v.h.leading_zeros();
+    Some((neg, v.shl(l), -191 - l as i32))
 }
 
 /// Steps 1 to 4 for both functions: the reduced operand, `sin|a|` and `cos|a|` (each `(M, E)`,
