@@ -1,0 +1,10 @@
+id = "D-10.95"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+story = "LIBM-INVALID-CONVERT-SCAN"
+date = "2026-11-11"
+body = '''
+**Float-to-integer conversions in the math kernels cannot raise invalid** (LIBM-INVALID-CONVERT-SCAN, -2). On x86-64 without AVX-512 an `as u64`/`as i64` of a value at or past 2^63 (or a NaN) is a signed `cvttsd2si` that raises invalid in hardware; under the envelope the flag is then cleared with an MXCSR write, a serialising instruction paid on every call. The `long double` arc kernels (`asinl`, `acosl` on every call; `atan2l`'s quotient seed for a power-of-two divisor) converted values in [2^62, 2^64]: `wide_int::arc::big_u64` now reads such a value from the double's bits (same result, no conversion instruction). `lgammaf`'s sign parity clamps x to [-2^24, 0] first (NaN to -2^24; every float <= -2^24 is even, so the parity is unchanged). Every other float-to-integer cast states its operand range in a `RANGE:` comment, and the static check `float-casts` (clippy's cast lints forced on, found by type) fails on a cast in liella-math or `crates/core/src/num/parse.rs` without one or a clamp. Test: `crates/boundary/tests/math_kernel_no_invalid.rs` calls the arc kernels between `feclearexcept` and `fetestexcept`. The strto* converters raise no overflow, underflow or deliberate inexact flag today (probe a7fa43af9749: the reference raises each as IEEE 754 §7 says); that is a separate change (handoff/libm-invalid-convert-scan.md).
+'''
