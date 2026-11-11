@@ -1,0 +1,29 @@
+{
+ "task": "DL-INIT-ORDER",
+ "model": "opus",
+ "tokens": null,
+ "result": "ld.so runs program preinit, then shared objects' DT_INIT+INIT_ARRAY dependencies-first (probe-settled DFS over reverse load order, root last), passes a fini pass in %rdx (FINI_ARRAY reversed then DT_FINI, program first); corpus equal to the reference; 6/6 plants caught; start-up counts unchanged",
+ "branch": "task/dl-init-order",
+ "head": null,
+ "gate": {
+  "affected": "PENDING: dl-init-order-gate2 (direct tier + ld.so suites) running at hand-back, suites so far ok",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "DL-0b's libc corpus (atexit/__cxa_atexit, dlopen) cannot run under Liella's ld.so until DL-12/DL-13/dlopen; loader part proven with a -nostdlib corpus of the same graph plus five more",
+  "affected escalates any entry.S change to FULL (_start); splitting the ld variant into its own .S would keep ld-only changes at the direct tier"
+ ],
+ "refused": [],
+ "improvement": "Move liella_machine_ld_enter/ld_entry out of entry.S into their own file so loader-entry changes gate at the direct tier instead of escalating to FULL",
+ "next_step": "Collect dl-init-order-gate2; DL-13 makes libc run the program's own init when init is NULL and leave its fini to rtld_fini, then run DL-0b's dlorder under both loaders",
+ "report_file": "handoff/DL-INIT-ORDER-report.md",
+ "jobs": [
+  "dl-init-order-gate2",
+  "dl-init-order-plants",
+  "dl-init-order-counts",
+  "dl-init-order-counts-next",
+  "dl-init-order-lint"
+ ]
+}

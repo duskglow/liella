@@ -11,6 +11,7 @@
 //! * [`rewrite`]: for `ld.so PROGRAM`, the auxiliary vector entries that describe the program the
 //!   loader mapped instead of the loader itself.
 //! * [`ld_env`], [`preload_names`]: the `LD_*` settings, read once.
+//! * [`bias`]: the mapped program's load bias, from `PT_PHDR` or, without one, its ELF header.
 //! * [`needs_objects`]: whether a dynamic array names a `DT_NEEDED` object (loading dependencies
 //!   comes with DL-8; until then such a program is refused).
 
@@ -177,3 +178,8 @@ pub fn needs_objects(words: &[u64]) -> bool {
 
 /// The diagnostic for a program with dependencies (DL-8 loads them).
 pub const NEEDS_OBJECTS: &[u8] = b"ld.so: the program needs shared objects; loading them is not available in this build\n";
+
+/// The load bias of a mapped program (D-27.18, ruling #4371): `PT_PHDR`'s, or without one the
+/// one its ELF header and the `PT_LOAD` holding its program headers give. One implementation,
+/// in libc's start (`liella_rt::start::bias`), shared with libc's own lookups of the executable.
+pub use liella_rt::start::bias;

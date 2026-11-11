@@ -1,0 +1,12 @@
+{"task": "XTASK-AFFECTED-LAYOUT", "model": "opus", "tokens": null,
+ "result": "xtask affected rule 9: every change linked into libc.a selects hot_text_products, heap_meta_products, cold_bss_products (and so the layout contracts); ld.so-only, docs, other crates do not",
+ "branch": "task/xtask-affected-layout", "head": "21178e7cc",
+ "gate": {"affected": "343 passed / 0 failed", "peak": "1.2G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Cost: the three layout targets add ~50 s (shiki, incl. compiling their test binaries) to a libm story gate, which already builds the products", "No decision record written: the brief reserved no id"],
+ "refused": [],
+ "improvement": "The layout-test list is held by a unit test that fails when a new products test counts static-program faults without being listed, so the rule cannot go stale silently",
+ "next_step": "Land; optional D-X row for rule 9 if the coordinator assigns an id",
+ "report_file": "handoff/XTASK-AFFECTED-LAYOUT.md",
+ "jobs": ["xtask-affected-layout-unit2", "xtask-affected-layout-clippy", "xtask-affected-layout-static", "xtask-affected-layout-gate", "xtask-affected-layout-plants", "xtask-affected-layout-cost"]}

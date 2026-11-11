@@ -72,6 +72,20 @@ fn count_auxv(addr: usize) -> usize {
     }
 }
 
+/// The first 64 bytes of the page at `at`, which holds the executable's program headers: the
+/// candidate ELF header `liella_rt::start::bias` checks when the program has no `PT_PHDR`
+/// (`process::exe_bias`, D-27.21). Not called at start-up.
+pub(crate) fn exe_header(at: usize) -> [u8; 64] {
+    let mut out = [0u8; 64];
+    // UNSAFE(slice): the start of the mapped page holding the executable's program headers.
+    #[allow(unsafe_code)]
+    // SAFETY: `at` is `AT_PHDR` rounded down to its 4096-byte page (⚑ KERN); the kernel maps the
+    // headers readable in that page, and the 64 bytes from its start lie inside it.
+    let page = unsafe { conv::bytes_at(at, out.len()) };
+    out.copy_from_slice(page);
+    out
+}
+
 /// A static program's initial thread: map its static TLS and thread block, copy the TLS image,
 /// set the guards from `AT_RANDOM`, and make it the thread pointer. Returns what the headers
 /// said (the TLS image and the RELRO pages), read once. `PIE`: started by `liella-rcrt1.o`, the

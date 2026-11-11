@@ -1,0 +1,10 @@
+{"task": "LIBM-SINF-IVB-RATCHET-3", "model": "opus", "tokens": null,
+ "result": "in-place cvtss2sd widening for sinf/cosf/tanf: static fixed, plants 7/7, IVB sinf 1.70x (base 1.83x), N100 sinf 1.86x (base 2.33x)",
+ "branch": "task/libm-sinf-ivb-ratchet-3", "head": null,
+ "gate": {"affected": "see jobs: libm-sinf-ivb-ratchet-3-gate2", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["Ivy Bridge branch rounds spread wide (sinf 1.51-2.36); verdict from the 6-round median", "SR id for records/pending/LIBM-SINF-IVB-RATCHET-2-1.toml still to be assigned"],
+ "refused": [],
+ "improvement": "the -2 test floor and the audit parser bug were never run before hand-back because set -e stopped at static; run unit tests of a new check before the check itself",
+ "next_step": "none; optional: widen sincosf/cexpf the same way",
+ "report_file": "handoff/libm-sinf-ivb-ratchet.md",
+ "jobs": ["libm-sinf-ivb-ratchet-3-gate2", "libm-sinf-ivb-ratchet-3-lint", "libm-sinf-ivb-ratchet-3-plants", "libm-sinf-ivb-ratchet-3-counts", "kotori:libm-sinf-ivb-ratchet-3-ivb", "nozomi:libm-sinf-ivb-ratchet-3-n100"]}
