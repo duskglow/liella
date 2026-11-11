@@ -4,9 +4,9 @@
 //! none of them as a pointer or a decision and writes none: with garbage in all of them (the
 //! heap cache word aimed at page zero, so a use of it as a pointer faults) `errno` still
 //! round-trips through one per-thread address outside the block, the heap allocates and frees
-//! through its slow path, a destructor registers, and the words stay as they were. A binary with
-//! one test; nothing but Liella runs while the garbage is in place, and the block is restored
-//! before anything is asserted.
+//! through its slow path, a destructor registers, and the words stay as they were. Nothing but
+//! Liella runs on that thread while the garbage is in place, and the block is restored before
+//! anything is asserted; the other test runs in a forked child, which has only its own thread.
 // opaque-ok: the test is about Liella's own `malloc`/`free` in a process another library started.
 #![no_builtins]
 #![allow(clippy::unwrap_used, clippy::as_conversions, clippy::arithmetic_side_effects, missing_docs)]
@@ -70,4 +70,31 @@ fn foreign_block_low_words_neither_trusted_nor_written() {
     })
     .join()
     .unwrap();
+}
+
+/// In a forked child (one thread; no allocation, so no lock another test thread held at the fork
+/// is met): with no room in the registry the thread gets the shared spare words, which hold no
+/// heap cache, and `errno` still round-trips through one address outside the block.
+fn spare_child(_: &liella_boundary::sys::CSys) -> i32 {
+    liella_boundary::selftest::starve_registry(true);
+    if liella_boundary::selftest::heap_cache_word() != (false, 0) {
+        return 1;
+    }
+    let tp = tb::tp();
+    let e = dg::__errno_location();
+    tb::set_own_errno(77);
+    if tb::own_errno() != 77 || dg::__errno_location() != e {
+        return 2;
+    }
+    if (tp..tp + BLOCK_SIZE).contains(&(e as usize)) {
+        return 3;
+    }
+    0
+}
+
+#[test]
+fn spare_words_hold_no_heap_cache() {
+    // Trace: no spec clause (D-X.60, #4837: the spare words when the registry has no room).
+    let end = liella_boundary::selftest::in_child(spare_child).unwrap();
+    assert_eq!(end, liella_boundary::selftest::ChildEnd::Exited(0), "spare words: 1 = a heap cache slot, 2 = errno did not round-trip, 3 = errno in the block");
 }

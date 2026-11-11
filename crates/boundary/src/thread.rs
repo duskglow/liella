@@ -361,6 +361,17 @@ fn clear_words(b: &liella_rt::tls::ThreadBlock) {
     b.node.store(0, Relaxed);
 }
 
+/// `selftest` only (#4837): while set, [`shadow_entry`] answers as when no chunk can be mapped,
+/// so the calling thread gets [`SPARE`]; a test sets it in a forked child only.
+#[cfg(feature = "selftest")]
+static NO_ROOM: AtomicBool = AtomicBool::new(false);
+
+/// Set or clear [`NO_ROOM`] (`selftest` only).
+#[cfg(feature = "selftest")]
+pub(crate) fn starve_registry(on: bool) {
+    NO_ROOM.store(on, Release);
+}
+
 /// A hash of a thread pointer: a chunk index to start probing at.
 fn shadow_hash(tp: usize) -> usize {
     ((tp >> 12) ^ (tp >> 21)) % SHADOWS
@@ -369,6 +380,10 @@ fn shadow_hash(tp: usize) -> usize {
 /// The registry entry of the thread at `tp` (the caller's), claimed if it has none; `None` when
 /// no chunk can be mapped. Linear probing in each chunk, the next chunk only once one is full.
 fn shadow_entry(tp: usize) -> Option<&'static Shadow> {
+    #[cfg(feature = "selftest")]
+    if NO_ROOM.load(Acquire) {
+        return None;
+    }
     let start = shadow_hash(tp);
     let mut link = &SHADOW_HEAD;
     loop {

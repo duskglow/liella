@@ -764,6 +764,9 @@ struct Caller {
 }
 
 impl Caller {
+    // Its own function, as on next: the hot-text list places it (startup tier); the debug paths'
+    // other changes (D-X.60) had made it inline into their three callers.
+    #[inline(never)]
     fn new(f: u32) -> Caller {
         let mut c = Caller { buf: [0; 256], len: 0 };
         if f & malloc_debug::TRACE != 0 {

@@ -156,6 +156,19 @@ pub fn forbid_threads() {
     crate::thread::forbid();
 }
 
+/// While `on`, the registry of the words of threads whose block another library made has no
+/// room (as when no memory can be mapped for it): a thread that needs an entry gets the shared
+/// spare words (D-X.60, #4837). Process-wide: call it only in a forked child ([`in_child`]).
+pub fn starve_registry(on: bool) {
+    crate::thread::starve_registry(on);
+}
+
+/// The calling thread's heap cache word as the heap sees it in a process the runtime did not
+/// start: whether it has one, and the value the fast paths read (0: none).
+pub fn heap_cache_word() -> (bool, usize) {
+    (crate::thread::heap_cache_slot().is_some(), crate::thread::foreign_heap_cache())
+}
+
 /// Undo [`forbid_threads`]: thread creation works again. With it a test makes thread creation
 /// fail for a while (as a resource limit would) without any load.
 pub fn allow_threads() {
