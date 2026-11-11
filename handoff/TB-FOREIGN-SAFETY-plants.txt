@@ -9,3 +9,14 @@ period-store-moved | crates/boundary/src/zone.rs | lit:tb::current().cache.get(C
 tls-get-addr-trusts-block-flag | crates/boundary/src/ld.rs | lit:if !STARTED_HERE.load(Acquire) { ==> if crate::tb::current().flags.load(Relaxed) & FLAG_OWN == 0 { | cargo test -p liella-ld --test tls tls_get_addr_refuses_in_a_process_it_did_not_start | msg:answered for a block it did not make|tls_get_addr_refuses_in_a_process_it_did_not_start.*FAILED|panicked
 tls-get-addr-zero-dtv-read | crates/boundary/src/ld.rs | lit:if dtv == 0 { ==> if false { | cargo test -p liella-ld --test tls tls_get_addr_refuses_a_thread_without_a_vector | msg:tls_get_addr_refuses_a_thread_without_a_vector.*FAILED|panicked
 ld-products-marker-dropped | xtask/src/affected.rs | lit:|| text.contains("join(\"liella\")") ==> || text.contains("join(\"liella-none\")") | cargo test -p xtask --bin xtask image_model_and_layout_test_list_follow_the_tree | msg:liella-ld::[a-z_]+ runs the built ld.so
+# cargo xtask plants results (10 plants: 10 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# words-trusts-flag: CAUGHT, caught by tb_foreign_words (a panic outside a named test, thread '<unnamed>')
+# ctype-word-ungated: CAUGHT, caught by tb_foreign_words foreign_block_words_neither_trusted_nor_written
+# h-errno-location-ungated: CAUGHT, caught by tb_foreign_words foreign_block_words_neither_trusted_nor_written
+# view-ungated: CAUGHT, caught by tb_foreign_words foreign_block_words_neither_trusted_nor_written
+# points-read-ungated: CAUGHT, caught by tb_foreign_words foreign_block_words_neither_trusted_nor_written
+# fork-child-words-cleared: CAUGHT, caught by s07_locale_symbols foreign_thread_words_kept_in_forked_child
+# period-store-moved: CAUGHT, caught by no test the log names
+# tls-get-addr-trusts-block-flag: CAUGHT, caught by tls tls_get_addr_refuses_in_a_process_it_did_not_start
+# tls-get-addr-zero-dtv-read: CAUGHT, caught by tls tls_get_addr_refuses_a_thread_without_a_vector
+# ld-products-marker-dropped: CAUGHT, caught by xtask affected::tests::image_model_and_layout_test_list_follow_the_tree
