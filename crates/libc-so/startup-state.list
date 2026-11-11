@@ -139,6 +139,9 @@ liella_legacy::global_locale::QUERY_SEQ
 liella_legacy::global_locale::QUERY_HANDLE
 liella_legacy::global_locale::QUERY_SLOT
 liella_boundary::process::SECURE
+# The catalog change counter the first setlocale bumps (LAYOUT-DATA-CLUSTERS-11): after next's merge it was that
+# call's only write on the last `.bss` page start-up leaves untouched (one fault, setlocale + printf 51 -> 50).
+symbol _nl_msg_cat_cntr
 liella_legacy::nscache::NSCACHE
 # The first zone load (localtime_r, tzset). time_compat's HEAD and CURRENT: the first localtime_r writes both
 # (LAYOUT-DATA-CLUSTERS-8: one fault each on untouched `.bss` pages; release localtime 19 before, 17 after, as next).
