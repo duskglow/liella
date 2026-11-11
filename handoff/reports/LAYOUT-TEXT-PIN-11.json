@@ -9,4 +9,5 @@
  "improvement": "xtask so's dead-key check could also require a call site (as init_startup_path_lies_in_the_hot_text_range now does), so a key for inlined code is caught at build time instead of by a regen refusal",
  "next_step": "optional follow-up: find the start-up minflt +1 (exec-time faults; segments.txt of next/merged in ~/work/LAYOUT-TEXT-PIN-11 on shiki)",
  "report_file": "handoff/LAYOUT-TEXT-PIN-11.md",
- "jobs": ["layout-text-pin-11-gate", "layout-text-pin-11-plants", "layout-text-pin-11-lint", "layout-text-pin-11-regen2"]}
+ "superseded": ["layout-text-pin-11-regen (refused the dead-key drop, by design)", "layout-text-pin-11-regen2 (produced the committed lists; rc 101 on init_startup_path_lies_in_the_hot_text_range, fixed in e81201c73 and green in the gate)"],
+ "jobs": ["layout-text-pin-11-gate", "layout-text-pin-11-plants", "layout-text-pin-11-lint"]}
