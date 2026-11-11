@@ -497,8 +497,9 @@ fn s1_1_c_5_static_relro_read_only() {
 #[test]
 fn s1_1_c_0_dynamic_start_conformance() {
     // s1_1_c_0: the C execution environment before main, through ld.so and the dynamic start.
-    // Only programs the reference passes too: s12_stdio_front checks Liella's EINVAL for byte
-    // output on a wide stream (a recorded difference), so it stays with the static runner.
+    // Only programs the reference passes too (the static runner never runs them on it):
+    // s12_stdio_front checks Liella's EINVAL for byte output on a wide stream (a recorded
+    // difference) and s23_timefmt fails its check 75 on the reference; both stay static-only.
     products::conformance_dynamic(&[
         "s01_startup",
         "s01_exit_order",
@@ -508,7 +509,6 @@ fn s1_1_c_0_dynamic_start_conformance() {
         "s01_thread_dtors",
         "s04_strings_smoke",
         "s12_printf",
-        "s23_timefmt",
     ]);
 }
 
