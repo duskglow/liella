@@ -106,7 +106,6 @@ pub fn move_cold_bss(ar: &str, archive: &Path, work: &Path) -> Result<usize, Str
 /// the cluster's first page; with the cluster aligned it sat alone on a `.data` page (first localtime_r
 /// 20 -> 21 faults, fast, perf page-fault map). Here they cost no page of their own.
 const STATE_KEY_SUFFIXES: [&str; 10] = [
-    "6liella4time4zone7NEXT_ID",
     "15liella_boundary5timer5EPOLL",
     "15liella_boundary7process10AUXV_WORDS",
     "15liella_boundary3sys12SYSINFO_EHDR",
@@ -116,6 +115,7 @@ const STATE_KEY_SUFFIXES: [&str; 10] = [
     "13liella_legacy13global_locale4LOCK",
     "13liella_legacy7nscache7NSCACHE",
     "15liella_boundary4heap4HEAP",
+    "6liella4time4zone7NEXT_ID",
 ];
 /// Start-up state that C defines, by whole section name (no Rust symbol to key): `__environ`/`environ`
 /// (8 bytes, `.bss.environ`), written by every start. Zero-initialised: it becomes 8 zero file bytes.
@@ -215,10 +215,12 @@ mod tests {
             }
         }
         // LAYOUT-DATA-CLUSTERS-2: the C start-up state is picked by its whole section name.
-        members.last_mut().unwrap().1.push(sec(".bss.environ", SHT_NOBITS, 8));
+        for c in STATE_C_SECTIONS {
+            members.last_mut().unwrap().1.push(sec(c, SHT_NOBITS, 8));
+        }
         assert!(state_sections(&members[..1], &BTreeSet::new()).is_err(), "a missing listed section is an error");
         let got = state_sections(&members, &BTreeSet::new()).unwrap();
-        assert_eq!((got["a.o"].len(), got["b.o"].len()), (3, STATE_KEY_SUFFIXES.len() - 3 + 1));
+        assert_eq!((got["a.o"].len(), got["b.o"].len()), (3, STATE_KEY_SUFFIXES.len() - 3 + STATE_C_SECTIONS.len()));
         assert!(got["b.o"].iter().any(|s| s == ".bss.environ"));
         assert!(got["a.o"][0].starts_with(".bss._RNvNtCsAbC12_15liella_boundary5timer5EPOLL"));
         assert!(got["a.o"][1].starts_with(".data._RNvNtCsAbC12_15liella_boundary7process10AUXV_WORDS"));
@@ -239,7 +241,7 @@ mod tests {
         assert_eq!(keys.len(), 2);
         let mut h: Vec<Shdr> = STATE_KEY_SUFFIXES.iter().map(|s| sec(&format!(".data._RNvNtCs1_{s}"), 1, 8)).collect();
         h.push(sec(".bss._RNvNtCsQ9_15liella_boundary4heap4KEYD.llvm.77", SHT_NOBITS, 64));
-        h.push(sec(".bss.environ", SHT_NOBITS, 8));
+        h.extend(STATE_C_SECTIONS.iter().map(|c| sec(c, SHT_NOBITS, 8)));
         h.push(sec(".data._RNvNtCsQ9_15liella_boundary4heap3BIG", 1, STATE_KEYED_MAX + 1));
         h.push(sec(".data._RNvNtCsQ9_15liella_boundary4heap4ROKY", 1, 8));
         h.push(sec(".data._RNvNtCsQ9_15liella_boundary4heap5OTHER", 1, 8));
