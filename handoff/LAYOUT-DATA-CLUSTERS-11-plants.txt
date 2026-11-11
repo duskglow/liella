@@ -9,3 +9,7 @@
 ldc9-locale-set | crates/libc-so/startup-state.list | perl:s/\nliella_legacy::global_locale::MAPS\n.*?liella_boundary::process::SECURE\n/\n/s | cargo test -p liella --test hot_text_products -- init_short_programs init_coreutils_shaped | msg:setlocale \+ printf program: [0-9]+ page faults > 51
 ldc11-msg-cat-cntr | crates/libc-so/startup-state.list | perl:s/\nsymbol _nl_msg_cat_cntr\n/\n/ | cargo test -p liella --test hot_text_products -- init_short_programs | equivalent:one fault (setlocale + printf 50 -> 51) inside the count-plus-1 slack of LOCALE_BOUND (51); no bound test can see a single-fault loss, ldc9-locale-set shows the bound catches the page's read and write faults
 ldc8-time-compat | crates/libc-so/startup-state.list | perl:s/\nliella_legacy::time_compat::HEAD\n/\n/ | cargo test -p liella --test hot_text_products -- init_first_localtime_r | equivalent:release-only level (localtime 17 vs 18); the fast gate profile reads 19 either way and LOCALTIME_BOUND (20) is the larger profile's count plus 1
+# cargo xtask plants results (3 plants: 1 CAUGHT, 0 SURVIVED, 2 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# ldc9-locale-set: CAUGHT, caught by hot_text_products init_short_programs_stay_within_their_page_fault_bounds
+# ldc11-msg-cat-cntr: EQUIVALENT
+# ldc8-time-compat: EQUIVALENT
