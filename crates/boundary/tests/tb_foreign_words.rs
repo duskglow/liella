@@ -97,7 +97,7 @@ fn ask(fds: [i32; 2]) -> [usize; ASKED] {
         usize::from(byte[0]),
         usize::from(ct::iswalpha(u32::from('z')) != 0),
         mb::__ctype_get_mb_cur_max(),
-        mb::mblen(b"a\0".as_ptr().cast(), 1) as usize,
+        mb::mblen(c"a".as_ptr(), 1) as usize,
     ]
 }
 
