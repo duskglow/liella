@@ -329,7 +329,9 @@ fn tan_kernel(n: &Num) -> Option<(bool, W3, i32)> {
 const TWO115: f64 = (1u128 << 115) as f64;
 
 /// Step 6: `(n/d)·2^190` for `n`, `d` in `[2^191, 2^192)`, in `[2^188, 2^191)` (`n/d` in `(1/2,
-/// 2)`, the approximation a little either side), within `2^-162` relative.
+/// 2)`, the approximation a little either side), within `2^-162` relative. Inlined: with the arc
+/// tier's callers (D-10.96) it went out of line and `tan` paid the call (18 instructions).
+#[inline(always)]
 fn div3(n: W3, d: W3) -> W3 {
     let dh = (d.h >> 64) as u64;
     let v = (TWO115 / ((dh >> 11) as i64 as f64)) as u64; // 2^62/δ within 2^-50.99, at most 2^63
