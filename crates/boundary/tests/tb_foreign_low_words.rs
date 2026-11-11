@@ -14,7 +14,7 @@ use core::sync::atomic::Ordering::Relaxed;
 
 use liella_boundary::posix::s02_diagnostics as dg;
 use liella_boundary::posix::s03_memory as mem;
-use liella_boundary::{conv, process, tb};
+use liella_boundary::{process, tb};
 use liella_rt::tls::{ThreadBlock, BLOCK_SIZE};
 
 /// The block's words at 0x80-0x9b: errno, TID, destructor list, heap cache, node.
@@ -36,9 +36,9 @@ extern "C" fn no_dtor(_: *mut core::ffi::c_void) {}
 fn ask() -> [usize; 6] {
     let tp = tb::tp();
     let e = dg::__errno_location();
-    conv::errno_cell(e).unwrap().store(4242, Relaxed);
+    tb::set_own_errno(4242);
     let again = dg::__errno_location();
-    let read = conv::errno_cell(again).unwrap().load(Relaxed);
+    let read = tb::own_errno();
     let p = mem::malloc(48);
     let q = mem::malloc(4000);
     let ok = usize::from(!p.is_null() && !q.is_null());
@@ -53,13 +53,15 @@ fn foreign_block_low_words_neither_trusted_nor_written() {
     // Trace: no spec clause (D-X.60: a thread block another library made).
     std::thread::spawn(|| {
         let b = tb::current();
+        // The garbage first: the thread's first allocation (its cache, its node hint) and first
+        // destructor happen with it in place.
         let saved = low(b);
-        let first = ask();
         let planted = (0x5a5a_5a5a, 0x7fff_fff0, 0x18, 0x8, 0xa5a5);
         put(b, planted);
         let during = ask();
         let after = low(b);
         put(b, saved);
+        let first = ask();
         let expect = [1, 1, 4242, 1, 1, 1];
         assert_eq!(first, expect, "the answers with the block as the other library left it");
         assert_eq!(during, expect, "the answers with garbage in the block's words 0x80-0x9b");

@@ -245,6 +245,19 @@ pub fn errno_location() -> *mut c_int {
     }
 }
 
+/// Store `v` in the `errno` cell [`errno_location`] names (D-X.60 tests: the cell Liella's
+/// own `__errno_location` gives, which a test process does not otherwise reach).
+pub fn set_own_errno(v: c_int) {
+    if let Some(c) = crate::conv::errno_cell(errno_location()) {
+        c.store(v, core::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// The value of the `errno` cell [`errno_location`] names (as [`set_own_errno`]).
+pub fn own_errno() -> c_int {
+    crate::conv::errno_cell(errno_location()).map_or(0, |c| c.load(core::sync::atomic::Ordering::Relaxed))
+}
+
 /// The descriptor at `addr` (D-22.9). Crate-private contract (as `crate::raw`): `addr` comes
 /// from a thread block's descriptor word or the thread runtime's lists, so it is the 64-aligned
 /// address of a descriptor the runtime placed in a mapping it made, which stays mapped while
