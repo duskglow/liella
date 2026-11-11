@@ -1,7 +1,8 @@
 # LIBM-CEXP-ROUTE handoff: cexp's middle tier (no bench operand falls to the 384-bit route)
 
-State: branch task/libm-cexp-route (cut from origin/next e167f4952), HEAD in handoff/reports/LIBM-CEXP-ROUTE.json.
-Role keke:~/w/n3. Decisions in force: D-10.99 (this story, records/decisions/D-10/D-10.99.toml), D-10.53, D-10.55.
+State: branch task/libm-cexp-route-2 (LIBM-CEXP-ROUTE's code b0f8ab1f0 + merge of origin/next 019004ab5 at
+65418f7ba; no code change in -2), HEAD in handoff/reports/LIBM-CEXP-ROUTE-2.json. Role shiki:~/w/sh1 (-1 ran on
+keke:~/w/n3). Decisions in force: D-10.99 (this story, records/decisions/D-10/D-10.99.toml), D-10.53, D-10.55.
 
 ## Finding (probe job libm-cexp-route-probe1, bench-box test with a distance print)
 
@@ -26,27 +27,47 @@ Tests (complex_fast_tests.rs): `cexp_middle_tier_bound_covers_the_error`, `cexp_
 `cexp_quick_tier_declines_the_bench_box_only_when_forced` now checks declines against the middle bound and prints
 each decline's distance.
 
-## Jobs (keke, chain ~/work/LIBM-CEXP-ROUTE/chain.sh, sequential in the role; plants in /dev/shm)
+## Jobs on the final head (LIBM-CEXP-ROUTE-2, shiki, all rc 0; scripts ~/work/LIBM-CEXP-ROUTE-2/ on shiki)
 
-check3 (complex_fast tests, workspace clippy -D warnings, xtask static, records check) -> gate (direct tier,
---base origin/next) -> sweep (cexp_quick_tier_sweep: 10^7, cexp and cexpf, four modes) -> hottext
-(hot_text_products) -> percall (wl_percall, validation/percall/cplx_exp.c, static) -> counts (cbench_libm
---compare --counters, dynamic). plants2: handoff/LIBM-CEXP-ROUTE-plants.txt (4 plants). Labels: prefix
-`libm-cexp-route-`. Superseded: probe1 (diagnostic), check1 (bound-tightness threshold), check2 (clippy panic lint),
-plants (killed: stale tree). Results: see the report json / hand-back.
+- `libm-cexp-route-2-check`: workspace clippy -D warnings, xtask static, records check, complex_fast unit tests.
+- `libm-cexp-route-2-plants`: handoff/LIBM-CEXP-ROUTE-plants.txt through `cargo xtask plants` (zram copy):
+  4 CAUGHT, 0 SURVIVED, no WARN lines.
+- `libm-cexp-route-2-gate`: direct tier, --base origin/next: 6 suites ok (1 skipped: no test matched in
+  liella-rt), 1513 passed, 0 failed; peak 2.2G.
+- `libm-cexp-route-2-hottext` (hot_text_products), `libm-cexp-route-2-sweep` (cexp_quick_tier_sweep, 10^7, ok).
+- `libm-cexp-route-2-percall`, `libm-cexp-route-2-counts`: below.
 
-## Expected counts
+-1's keke jobs (check3, plants2, gate, sweep, hottext) were green on the pre-merge head; its percall failed rc 2
+in one second because the WL base e167f4952 was not primed on keke (no code fault). -2 primed the new base
+019004ab5 on shiki (`bash validation/wl_prime_base.sh shiki <sha>`, printed `primed`) before the percall.
 
-cexp_bench should drop by ~450 (846 -> ~400; the 1-in-256 route call becomes a middle-tier call of ~1-2k).
-cexp (typical 32) and cexpf unchanged (the hot path gains only a never-taken branch to `middle`).
+## Counts (instructions per call, deterministic)
+
+wl_percall, validation/percall/cplx_exp.c, static, base 019004ab5 (origin/next) vs new 65418f7ba vs glibc:
+
+| case | glibc | base | new | new/glibc |
+|---|---|---|---|---|
+| cexp_bench | 249.8 | 845.0 | 400.4 | 1.60 |
+| cexp | 250.8 | 396.0 | 397.0 | 1.58 |
+| cexpf_bench | 170.5 | 185.0 | 185.0 | 1.09 |
+| cexpf | 172.6 | 188.0 | 188.0 | 1.09 |
+
+cbench_libm --compare --counters (dynamic): cexp 403.9 (glibc 248.2), cexpf 181.5 (glibc 166.9).
+
+**cexp typical +1 (396 -> 397):** found by disassembling both products (objdump -dr of ~/wl/products/<sha>/libm.a,
+function `complex_fast::fused::cexp_nearest`): the fused kernel now keeps `x` alive for the inline `middle` call,
+so it stores xmm0 to the stack in the prologue (`vmovapd %xmm0,0x20(%rsp)`, frame 0x90 -> 0xc8) and the register
+allocation shifts. The hot entry `cexp` itself is identical. Fix (not made: -2's brief said no code change):
+call `middle` from the cold side (where the declined quick result already goes to the 384-bit route, the
+`cplx_fast_cold` path) instead of inside `fused::cexp_nearest`, so the hot kernel is the base's again; then
+re-run percall and expect cexp 396 and cexp_bench ~400.
 
 ## Next steps
 
-1. Read the chain's results: `~/bin/jobwait libm-cexp-route-gate libm-cexp-route-sweep libm-cexp-route-hottext
-   libm-cexp-route-percall libm-cexp-route-counts libm-cexp-route-plants2` on keke.
-2. Booked timing on Ivy Bridge (nico or kotori, whichever queue is shorter) was NOT run (context budget): the
-   common path's instruction mix is unchanged, so the periodic timing sweep can cover it; book it if the
-   coordinator wants it in this story.
+1. RULING NEEDED (coordinator): land as is (cexp_bench -445, cexp +1), or a short code story to move the `middle`
+   call to the cold path first (recommended: it removes the +1 at no cost; see above).
+2. Booked timing on Ivy Bridge was not run: the common path's mix changes by one store; the periodic timing sweep
+   can cover it.
 3. cexp typical to <= 300 (quick tier's Dd assembly, see handoff/libm-cplx-exp-tier.md step 3); cexpf to <= 120.
 
-Do not redo: the operand search, the bound derivation, the constants.
+Do not redo: the operand search, the bound derivation, the constants, the +1 diagnosis.
