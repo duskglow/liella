@@ -4,6 +4,7 @@
 usage: keys.py <names file>... > keys              sorted
        keys.py --ordered <names file>... > keys    first occurrence order (files in argument order)
        keys.py --aliases <objdump -t output>       `<symbol key>\t<section key>` (see aliases())
+       keys.py --sections <readelf -SW output>     function names of the function sections (see sections())
 The same normalisation is in xtask/src/hottext.rs (`key`); keep the two in step:
   1. drop the library's own prefix `__liella_libc_` (D-X.14 renames; the section keeps the C name);
   2. drop ThinLTO promotion suffixes `.llvm.<digits>`;
@@ -234,7 +235,44 @@ def key(name):
     return name
 
 
-SECTION = re.compile(r"^\.text\.(?:sorted\.h[0-9]+\.|hot\.|unlikely\.)?(\S+)$")
+SORTED = re.compile(r"^sorted\.h[0-9]+\.(.+)$")
+COLD_PREFIX, COLD_SUFFIX = "liella_cold.", ".liella_cold"
+
+
+def function_of(section):
+    """A function section's function name, or None for another section: xtask/src/hottext.rs
+    `function_of`; keep the two in step. `.text.sorted.h<n>.<f>`, `.text.hot.<f>`,
+    `.text.unlikely.<f>` (a #[cold] function), `.text.startup.<f>` / `.text.exit.<f>` and the
+    build's own cold rename `.text.liella_cold.<f>.liella_cold` (D-X.63) all give <f>.
+    LAYOUT-TEXT-PIN-9 (#4541): the cold rename is stripped too, or a function the build renamed
+    cold could never re-enter the list by trace."""
+    if not section.startswith(".text."):
+        return None
+    f = section[len(".text."):]
+    if not f:
+        return None
+    if f.startswith(COLD_PREFIX):
+        name = f[len(COLD_PREFIX):]
+        return name[:-len(COLD_SUFFIX)] if name.endswith(COLD_SUFFIX) else name
+    for p in ("unlikely.", "startup.", "exit."):
+        if f.startswith(p):
+            return f[len(p):]
+    m = SORTED.match(f)
+    if m:
+        return m.group(1)
+    return f[len("hot."):] if f.startswith("hot.") else f
+
+
+def sections(path):
+    """--sections <readelf -SW output>: the function name of every function section, one per line
+    (regen.sh: the names of libc.a that may be listed)."""
+    with open(path) as f:
+        for line in f:
+            m = re.match(r"^\s*\[\s*[0-9]+\]\s+(\S+)\s", line)
+            if m:
+                name = function_of(m.group(1))
+                if name:
+                    print(name)
 
 
 def aliases(path):
@@ -252,10 +290,10 @@ def aliases(path):
             lf, rf = left.split(), right.split()
             if len(lf) < 2 or len(rf) < 2:
                 continue
-            m = SECTION.match(lf[-1])
-            if m is None:
+            name = function_of(lf[-1])
+            if name is None:
                 continue
-            sym, sec = key(rf[-1]), key(m.group(1))
+            sym, sec = key(rf[-1]), key(name)
             if sym != sec and sym != "main":
                 seen.setdefault(sym, set()).add(sec)
     for k in sorted(seen):
@@ -267,6 +305,9 @@ def main():
     args = sys.argv[1:]
     if args[:1] == ["--aliases"] and len(args) == 2:
         aliases(args[1])
+        return
+    if args[:1] == ["--sections"] and len(args) == 2:
+        sections(args[1])
         return
     # --tagged <tier>=<names file>...: `<key>\t<tier>` in first-touch order, each key with the tier
     # of the first file that names it (HOTTEXT-STARTUP-COMPLETE).

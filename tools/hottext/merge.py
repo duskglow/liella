@@ -24,6 +24,9 @@ can never sit between two start-up keys and push the rest into another 64 KiB wi
 `--alias <file>` (`keys.py --aliases` lines, `<symbol key>\t<section key>`; LAYOUT-TEXT-PIN-6, #4467):
 a start-up key the list lacks that is a label inside a listed section (an assembly entry label, an
 alias) brings that section's key to the head instead.
+`--dropped <file>` (LAYOUT-TEXT-PIN-9, ruling #4539): writes the old keys the merge dropped
+(`<key>\t<tier>\t<old profiles>`, empty file if none); each is also printed to stderr. regen.sh
+refuses a list that drops a key unless given --allow-drop.
 """
 import sys
 
@@ -67,7 +70,13 @@ def read_new(path):
 
 def main():
     args = sys.argv[1:]
-    head, alias = None, {}
+    head, alias, dropped_path = None, {}, None
+    if "--dropped" in args:
+        i = args.index("--dropped")
+        if i + 1 >= len(args):
+            sys.exit("merge.py: --dropped needs a file")
+        dropped_path = args[i + 1]
+        del args[i:i + 2]
     if "--alias" in args:
         i = args.index("--alias")
         if i + 1 >= len(args):
@@ -86,7 +95,7 @@ def main():
         head = {k for k, _, _ in read_old(args[i + 1])}
         del args[i:i + 2]
     if len(args) != 3:
-        sys.exit("usage: merge.py <old list lines> <new keys> <profile> [--startup-head <startup-text.keys>] [--alias <file>]")
+        sys.exit("usage: merge.py <old list lines> <new keys> <profile> [--startup-head <startup-text.keys>] [--alias <file>] [--dropped <file>]")
     old_path, new_path, profile = args
     if profile not in PROFILES:
         sys.exit(f"merge.py: unknown profile {profile!r} (want one of {PROFILES})")
@@ -96,6 +105,7 @@ def main():
     out = list(new)
     pos = {k: i for i, k in enumerate(out)}
     anchor = None  # the last old key already placed
+    dropped = []
     for k, t, ps in old:
         legacy = t is None
         others = ps - {profile}
@@ -107,6 +117,7 @@ def main():
             anchor = k
             continue
         if ps and not others:
+            dropped.append(f"{k}\t{t}\t{','.join(x for x in PROFILES if x in ps)}")
             continue  # traced only in this profile, and no longer: stale
         i = pos[anchor] + 1 if anchor is not None else 0
         out.insert(i, k)
@@ -123,6 +134,13 @@ def main():
     for k in out:
         p = ",".join(x for x in PROFILES if x in profs[k]) or "-"
         print(f"{k}\t{tier[k]}\t{p}")
+    # LAYOUT-TEXT-PIN-9 (ruling #4539): a dropped key is never silent. Every one goes to stderr,
+    # and to the --dropped file, where regen.sh refuses the new list unless told --allow-drop.
+    for d in dropped:
+        print(f"merge.py: DROPPED (no {profile} trace hit it, no other profile keeps it): {d}", file=sys.stderr)
+    if dropped_path is not None:
+        with open(dropped_path, "w") as f:
+            f.writelines(d + "\n" for d in dropped)
 
 
 if __name__ == "__main__":

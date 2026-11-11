@@ -1477,4 +1477,101 @@ mod tests {
         assert_eq!(plain, "_start1\tstartup\tfast\nstrlen\tstrings\tfast\nfixture_set\tstrings\tfast\nb\tstrings\tfast\n");
         assert_eq!(aliased, "_start1\tstartup\tfast\nfixture_set\tstartup\tfast\nstrlen\tstrings\tfast\nb\tstrings\tfast\n");
     }
+
+    #[test]
+    fn a_cold_renamed_function_reenters_the_list_by_trace() {
+        // LAYOUT-TEXT-PIN-9, #4541 (no spec clause: build tooling, D-X.63): regen.sh lists the names
+        // of libc.a's function sections with keys.py --sections, which must strip every prefix this
+        // module gives a section (function_of), the cold rename `.text.liella_cold.<f>.liella_cold`
+        // included: a name left with the rename never matches a traced key, so a function the
+        // build once renamed cold could not re-enter the list. Fictional names (see above).
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let tmp = root.join(format!("target/xtask-sections-test-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let names = [
+            ".text.liella_cold.fixture_exit.liella_cold",
+            ".text.sorted.h00012.fixture_len",
+            ".text.unlikely.fixture_cold",
+            ".text.hot.fixture_old",
+            ".text.startup.fixture_gcc",
+            ".text.exit.fixture_fini",
+            ".text.fixture_plain",
+            ".rodata.fixture_tab",
+            ".text",
+        ];
+        let mut readelf = String::from("There are 12 section headers:\n\nSection Headers:\n  [Nr] Name Type Address Off Size ES Flg Lk Inf Al\n");
+        for (i, n) in names.iter().enumerate() {
+            readelf.push_str(&format!("  [{:>2}] {n} PROGBITS 0000000000000000 000040 000010 00  AX  0   0 16\n", i + 1));
+        }
+        std::fs::write(tmp.join("readelf"), readelf).unwrap();
+        let o = std::process::Command::new("python3")
+            .arg("-I")
+            .arg(root.join("tools/hottext/keys.py"))
+            .arg("--sections")
+            .arg(tmp.join("readelf"))
+            .output()
+            .expect("python3 runs tools/hottext/keys.py");
+        std::fs::remove_dir_all(&tmp).unwrap();
+        assert!(o.status.success(), "keys.py: {}", String::from_utf8_lossy(&o.stderr));
+        let got = String::from_utf8(o.stdout).unwrap();
+        let want: String = names.iter().filter_map(|n| function_of(n)).map(|f| format!("{f}\n")).collect();
+        assert_eq!(got, want, "keys.py --sections and function_of disagree");
+        assert!(got.lines().any(|l| l == "fixture_exit"), "the cold rename is not stripped: {got}");
+    }
+
+    #[test]
+    fn merge_names_every_key_it_drops() {
+        // LAYOUT-TEXT-PIN-9, ruling #4539 (no spec clause: build tooling): a key the old list held
+        // that this profile's trace missed and no other profile keeps is dropped only out loud
+        // (stderr and --dropped, which regen.sh refuses without --allow-drop); a key the other
+        // profile keeps is not dropped.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let tmp = root.join(format!("target/xtask-merge-dropped-test-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("old"), "kept\ttool\tfast,release\ngone\ttool\tfast\nother\tlocale\trelease\n").unwrap();
+        let run = |new: &str| {
+            std::fs::write(tmp.join("new"), new).unwrap();
+            let o = std::process::Command::new("python3")
+                .arg("-I")
+                .arg(root.join("tools/hottext/merge.py"))
+                .arg(tmp.join("old"))
+                .arg(tmp.join("new"))
+                .arg("fast")
+                .arg("--dropped")
+                .arg(tmp.join("dropped"))
+                .output()
+                .expect("python3 runs tools/hottext/merge.py");
+            assert!(o.status.success(), "merge.py: {}", String::from_utf8_lossy(&o.stderr));
+            let dropped = std::fs::read_to_string(tmp.join("dropped")).unwrap();
+            (String::from_utf8(o.stdout).unwrap(), String::from_utf8(o.stderr).unwrap(), dropped)
+        };
+        let (short, short_err, short_dropped) = run("a\tstartup\n");
+        let (full, full_err, full_dropped) = run("a\tstartup\ngone\ttool\n");
+        std::fs::remove_dir_all(&tmp).unwrap();
+        assert_eq!(short, "kept\ttool\trelease\nother\tlocale\trelease\na\tstartup\tfast\n");
+        assert_eq!(short_dropped, "gone\ttool\tfast\n");
+        assert!(short_err.contains("DROPPED") && short_err.contains("gone"), "drop not reported: {short_err:?}");
+        assert_eq!(full, "kept\ttool\trelease\na\tstartup\tfast\ngone\ttool\tfast\nother\tlocale\trelease\n");
+        assert!(full_dropped.is_empty() && full_err.is_empty(), "nothing dropped, yet: {full_dropped:?} {full_err:?}");
+    }
+
+    #[test]
+    fn regen_always_traces_the_bounded_tool_and_locale_modes() {
+        // LAYOUT-TEXT-PIN-9, ruling #4539 (no spec clause: build tooling): regen.sh traces
+        // page_faults.c's `locale` and `tool` modes (the programs hot_text_products.rs bounds) on
+        // every run, not only when they are passed as extra programs, and refuses a dropping list
+        // before it writes either file.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let sh = std::fs::read_to_string(root.join("tools/hottext/regen.sh")).unwrap();
+        let at = |s: &str| sh.lines().position(|l| l == s).unwrap_or_else(|| panic!("regen.sh: no top-level line {s:?}"));
+        let extra = at("for cmd in \"$@\"; do");
+        for mode in ["locale", "tool"] {
+            let l = at(&format!("stdin=/dev/null trace {mode} en_US.UTF-8 ./page_faults {mode}"));
+            assert!(l < extra, "regen.sh traces page_faults {mode} after the extra programs");
+        }
+        let refuse = sh.find("if [ $allow_drop = 0 ]; then").expect("regen.sh: no --allow-drop guard");
+        for w in ["mv \"$work/startup.merged\" \"$skeys\"", "mv \"$work/list.merged\" \"$list\""] {
+            assert!(sh.find(w).is_some_and(|p| p > refuse), "regen.sh writes before the drop guard: {w}");
+        }
+    }
 }
