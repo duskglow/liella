@@ -155,6 +155,7 @@ pub(super) fn bessel_core(f: usize, x: f32) -> Option<(f64, f64)> {
             }
         }
     } else if ax < BES_HANKEL {
+        // RANGE: 2 <= ax < BES_HANKEL here: a small nonnegative index.
         let i = ((ax - 2.0) * 0.5) as usize;
         let t = ax - (3 + 2 * i) as f64; // exact: ax is a `float` ≥ 2 (on the 2^-22 grid), |t| ≤ 1
         let c: &[u64] = match f {
@@ -179,6 +180,7 @@ pub(super) fn bessel_finish(x: f32, (y, e): (f64, f64), mode: Rounding, name: &'
         stats::record(name, false);
         return None;
     }
+    // RANGE: 0 <= d < 2^26 (NaN and larger returned above).
     finish(x, y, d as u64 + 1, mode, name)
 }
 

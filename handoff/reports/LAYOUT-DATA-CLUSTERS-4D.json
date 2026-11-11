@@ -1,0 +1,16 @@
+{"task": "LAYOUT-DATA-CLUSTERS-4D", "model": "opus", "tokens": null,
+ "result": "New assertion in start::tests catches 4C's ldc4c-whole plant (program's cut to whole headers, not RELRO rounding); plants 3 of 3 CAUGHT; test-only, no start code changed",
+ "branch": "task/layout-data-clusters-4d", "head": "0614309f6",
+ "gate": {"affected": "pending: ldc4d-gate (affected --run --base origin/next) escalated to FULL because the branch stacks on the unlanded LAYOUT-TEXT-PIN/DATA-CLUSTERS chain (76 files vs origin/next)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "The brief places ldc4c-whole in the RELRO whole-page rounding; its pattern changes program's cut phnum.min(len / 7) to phnum.min(len), which empties the table when phnum exceeds the whole headers in the slice",
+  "The start's only caller passes phnum * 7 words or none, where both cuts agree: the mutant is unreachable from the start today; the assertion pins program's documented contract (truncated table keeps its whole headers) rather than recording EQUIVALENT",
+  "affected --base origin/next on a story stacked on unlanded branches escalates to FULL (entry.S, xtask in the stacked diff)"
+ ],
+ "refused": [],
+ "jobs": ["ldc4d-lint", "LAYOUT-DATA-CLUSTERS-4D-plants", "ldc4d-gate"],
+ "improvement": "Briefs for stacked stories should name the gate base as the parent branch (origin/task/<parent>): base origin/next made this test-only change run a FULL gate",
+ "next_step": "None for this story once ldc4d-gate is green; -5..-7 continue per handoff/LAYOUT-DATA-CLUSTERS-4B.md",
+ "report_file": "handoff/LAYOUT-DATA-CLUSTERS-4D.md"}

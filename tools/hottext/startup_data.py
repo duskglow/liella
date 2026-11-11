@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 """STARTUP-DATA-WINDOWS (D-X.50): the data objects `page_faults true` touches at start-up.
 
-usage: startup_data.py <linked probe> <startup-text.keys> <profile> <startup-data.keys> [--replace]
+usage: startup_data.py <linked probe> <isolated probe> <startup-text.keys> <profile> <startup-data.keys> [--replace]
 
 <linked probe>: crates/core/tests/oracle/page_faults.c linked statically against the products as
 crates/core/tests/hot_text_products.rs links it (tools/hottext/startup_data.sh does that).
-Two sources, both without a debugger watch:
+<isolated probe>: the same link with every input section of `.data`, `.data1`, `.bss` and `.lbss` on a
+64 KiB boundary of its own (the default linker script with SUBALIGN(65536) on those output sections).
+Three sources, all without a debugger watch:
   1. the page faults of `<probe> true` with their data addresses (`perf record -e page-faults -d`):
      each names the first object touched on a page (a window, for read-only file pages);
-  2. every RIP-relative operand of the traced start-up functions (the keys of <startup-text.keys> for
+  2. the same faults of `<isolated probe> true`, writable sections only: no two sections share a page
+     or a fault-around window there, so every writable object start-up reads or writes faults at its
+     own address and is keyed by access, not only when it happens to be first on its page in this
+     build's `.data` order (LAYOUT-DATA-CLUSTERS-3, D-X.67: `__libc_single_threaded` and
+     `_IO_2_1_stdout_` sat on pages another object faulted first, so they had no key and moved with
+     the order of `.data`). Objects that share one input section (a C file's `.data`) still count once;
+  3. every RIP-relative operand of the traced start-up functions (the keys of <startup-text.keys> for
      <profile>; `objdump -d` prints its target as `# <addr> <sym>`): the objects their code addresses.
 Each address is resolved to the data symbol that holds it (`nm -S`); text, TLS, unnamed bytes and
 compiler-numbered constants (`anon.<hash>.<n>`: no build-stable name) are left out; the layout check
@@ -103,12 +111,12 @@ def fault_addrs(exe):
     return [int(t, 16) for t in text.split() if re.fullmatch(r"[0-9a-f]+", t)]
 
 
-def resolve(addrs, data, secs):
+def resolve(addrs, data, secs, writable_only=False):
     """{key: kind} of the data objects holding `addrs` (text, TLS and unnamed bytes skipped)."""
     out = {}
     for a in addrs:
         sec = next((s for s in secs if s[0] <= a < s[1]), None)
-        if sec is None or sec[4] or sec[5]:
+        if sec is None or sec[4] or sec[5] or (writable_only and not sec[3]):
             continue
         hit = [o for o in data if o[0] <= a < o[1]]
         if not hit:
@@ -125,10 +133,10 @@ def resolve(addrs, data, secs):
 def main():
     args = [a for a in sys.argv[1:] if a != "--replace"]
     replace = "--replace" in sys.argv[1:]
-    if len(args) != 4 or args[2] not in PROFILES:
+    if len(args) != 5 or args[3] not in PROFILES:
         sys.exit(__doc__)
-    exe, text_keys, profile, out_path = args
-    exe = os.path.abspath(exe)
+    exe, iso, text_keys, profile, out_path = args
+    exe, iso = os.path.abspath(exe), os.path.abspath(iso)
     secs = sections(exe)
     data, funcs = symbols(exe)
     want = startup_fn_keys(text_keys, profile)
@@ -136,6 +144,9 @@ def main():
     if not ranges:
         sys.exit(f"startup_data: no function of {text_keys} ({profile}) in {exe}")
     traced = resolve(fault_addrs(exe) + operand_targets(exe, ranges), data, secs)
+    iso_data, _ = symbols(iso)
+    for k, kind in resolve(fault_addrs(iso), iso_data, sections(iso), writable_only=True).items():
+        traced.setdefault(k, kind)
     old = {}
     if not replace and os.path.exists(out_path):
         with open(out_path) as f:

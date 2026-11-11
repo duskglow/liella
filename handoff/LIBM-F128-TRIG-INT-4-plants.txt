@@ -1,0 +1,15 @@
+# LIBM-F128-TRIG-INT-4 plants: cargo xtask plants handoff/LIBM-F128-TRIG-INT-4-plants.txt --dir <new RAM dir>
+# The binary128 atan/atan2 tier (crates/math/src/wide_int/quad/arc.rs, D-10.96) and the shared rounding test.
+# The third limb of atan(j/128) dropped: every j >= 1 result loses 64 bits (error about 2^-129).
+f128-arc-limb-dropped | crates/math/src/wide_int/quad/arc.rs | lit:W3::with_lo(ATAN_J[j - 1], ATAN_J_LO[j - 1]) ==> W3::with_lo(ATAN_J[j - 1], 0) | cargo test -p liella-math --lib wide_int::quad::arc | msg:atan[0-9]* .*error [0-9]+(\.[0-9]+)?e-[0-9]+
+# The rounding test skipped: the parent's boundary test refuses nothing.
+f128-arc-round-test-skipped | crates/math/src/wide_int/quad.rs | lit:if (low & ((1 << 78) - 1)).wrapping_sub(ERR) > (1 << 78) - 2 * ERR { ==> if false && (low & ((1 << 78) - 1)).wrapping_sub(ERR) > (1 << 78) - 2 * ERR { | cargo test -p liella-math --lib wide_int::quad | msg:rounding_test_refuses_near_a_boundary.*FAILED|test result: FAILED. [0-9]+ passed; [0-9]+ failed
+# The u^9/19 term dropped: matters only where |r| is near 2^-8, the index-boundary hard cases.
+f128-arc-series-term | crates/math/src/wide_int/quad/arc.rs | lit:let a = A17 - (mulhi64(u1, A19) >> 14); ==> let a = A17; | cargo test -p liella-math --lib wide_int::quad::arc | msg:atan[0-9]* .*error [0-9]+(\.[0-9]+)?e-[0-9]+
+# The index truncated instead of rounded: |r| up to 2^-7, past the series' range.
+f128-arc-index-floor | crates/math/src/wide_int/quad/arc.rs | lit:j = ((h >> k) + 1) >> 1; ==> j = (h >> k) >> 1; | cargo test -p liella-math --lib wide_int::quad::arc | msg:atan[0-9]* .*error [0-9]+(\.[0-9]+)?e-[0-9]+
+# The denominator's carry ignored: x + cy wraps where it reaches 2^128.
+f128-arc-den-carry | crates/math/src/wide_int/quad/arc.rs | lit:    let (den, ld) = if carry { ==>     let (den, ld) = if false { | cargo test -p liella-math --lib wide_int::quad::arc | msg:atan2 .*error [0-9]+(\.[0-9]+)?e[-]?[0-9]+
+# x < 0 composed with pi/2 instead of pi: the test's kernel check composes on its own, so the rounded results
+# against the 384-bit route catch it.
+f128-arc-pi-units | crates/math/src/wide_int/quad/arc.rs | lit:let (m, e) = if x.neg { sub_from(190, t) } else { t }; ==> let (m, e) = if x.neg { sub_from(191, t) } else { t }; | cargo test -p liella-math --lib wide_int::quad::arc | msg:left == right. failed: atan2 Num .* exp: -?[0-9]+ \} (Nearest|Down|Up|Zero)

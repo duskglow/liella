@@ -1,0 +1,11 @@
+{"task": "DL-LIBC-START-BIAS-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: libc's exe_bias now uses the ld.so bias (moved to liella_rt::start::bias, re-exported by liella_ld); test passes; final-head jobs running; start-up counters not measured",
+ "branch": "task/dl-libc-start-bias-3", "head": "6ac4b9a8f",
+ "gate": {"affected": "running (dl-libc-start-bias-3-gate3)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["ld.so cannot load libc.so.6 by soname (no library search); the test names it by path through a DT_SONAME-retagged copy", "a python3 heredoc was used once to edit a scratch script (no-heredoc rule)"],
+ "refused": [],
+ "improvement": "a test-only `cargo xtask static --only unsafe-audit,fuzz-check` before the first job would have saved two job cycles",
+ "next_step": "check the clippy3/static3/gate3/plants3 results; measure cbench_startup on the head and the base (fix the bench syntax in base.sh)",
+ "report_file": "handoff/DL-LIBC-START-BIAS-3.md",
+ "jobs": ["mei:dl-libc-start-bias-3-clippy3", "mei:dl-libc-start-bias-3-static3", "mei:dl-libc-start-bias-3-gate3", "mei:dl-libc-start-bias-3-plants3"]}

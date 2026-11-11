@@ -1,0 +1,11 @@
+{"task": "LAYOUT-TEXT-PIN-8", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE (checkpoint): +4 start-up faults mapped; .data +2 is next's newer code, the branch's +2 is .text from -6's regen dropping 14 tool-path keys (no extra program passed); fix = regen with the page_faults tool/locale program; plants file fixed, not run",
+ "branch": "task/layout-text-pin-8", "head": null,
+ "gate": {"affected": "not run (checkpoint)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "regen.sh run without extra programs silently drops tool-tier keys (merge.py drops keys no trace hit)", "recommendation": "make regen.sh always trace the page_faults probe's tool and locale modes (as the bound test links it), so a plain regen cannot drop them"}],
+ "informational": ["origin/next b49dfd6f8 reads tool 57 / locale 54 / true 17 on the Zen 1 host (fast); next + this branch's diff 59 / 56 / 16", "regen.sh's section sed does not strip the .text.liella_cold. prefix (2 sections): such a function cannot re-enter the list by trace"],
+ "refused": [],
+ "improvement": "the -7 attribution compared the branch with a next 45 commits ahead; applying the branch diff onto a RAM copy of next separated the branch's share (+2 text) from next's (+2 data) in one build",
+ "next_step": "regen both profiles with the page_faults tool/locale program as extras, re-map faults, run plants (handoff/LAYOUT-TEXT-PIN-8-plants.txt) and the direct gate",
+ "report_file": "handoff/LAYOUT-TEXT-PIN-8.md",
+ "jobs": ["layout-text-pin-8-lint"]}

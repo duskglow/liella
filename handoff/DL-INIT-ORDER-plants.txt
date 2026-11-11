@@ -1,0 +1,9 @@
+# DL-INIT-ORDER (phase 14 DL-11, D-27.19): plants on the init/fini order, one object's calls, the program-only
+# preinit array and the termination function in %rdx. Each command rebuilds the ld.so product first, so plants in
+# crates/ld/src, crates/boundary/src/ld.rs and entry.S reach the corpus run.
+deps-after-dependents | crates/ld/src/init.rs | lit:    emit(0, out); ==> emit(0, out); if let Some(s) = out.get_mut(..len) { s.reverse(); } | cargo xtask so && cargo test -p liella-ld --test init_order | msg:dependencies are initialised before their dependents
+fini-not-reversed | crates/ld/src/init.rs | lit:        s.reverse(); ==> | cargo xtask so && cargo test -p liella-ld --test init_order | msg:the finalisation order is the initialisation order reversed
+dt-init-after-array | crates/ld/src/init.rs | lit:    core::iter::once(init).chain(array.iter().copied()).filter(|&f| callable(f)) ==> array.iter().copied().chain(core::iter::once(init)).filter(|&f| callable(f)) | cargo xtask so && cargo test -p liella-ld --test init_order | msg:DT_INIT runs before DT_INIT_ARRAY
+preinit-in-shared-object | crates/ld/src/init.rs | lit:        preinit: if program { array(dt::PREINIT_ARRAY, dt::PREINIT_ARRAYSZ) } else { Array::default() }, ==>         preinit: array(dt::PREINIT_ARRAY, dt::PREINIT_ARRAYSZ), | cargo xtask so && cargo test -p liella-ld --test init_order | msg:p_spre under Liella
+loader-init-skipped | crates/boundary/src/ld.rs | lit:        init::init_calls(h.init, array_words(h.init_array)).for_each(call); ==> let _ = h; | cargo xtask so && cargo test -p liella-ld --test init_order | msg:p_order under Liella
+no-termination-function | csys/src/machine/entry.S | perl:s/(liella_machine_ld_enter:.*?)xorl %ebp, %ebp/$1xorl %edx, %edx\n\txorl %ebp, %ebp/s | cargo xtask so && cargo test -p liella-ld --test init_order | msg:p_order under Liella

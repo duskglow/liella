@@ -1,0 +1,12 @@
+{"task": "LIBM-CPLX-LOG-SQRT-4", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: axis (exact-zero part) paths in the in-place tiers of cexp/clog/csqrt/clogf/csqrtf with a route-equality test (lint, static, tests green); so still blocked: fast regen repairs the 2 dead keys but its list breaks release STARTUP-TEXT-WINDOWS (5 > 4), while the inherited list builds release at 4",
+ "branch": "task/libm-cplx-log-sqrt-4", "head": "421f9dea7",
+ "gate": {"affected": "not run (products do not build: hot-text dead keys)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "hot-text repair: fast-profile regen --build fixes the 2 dead fast keys but its rewritten list moves release start-up text to 5 windows (budget 4); the inherited list builds release at 4", "recommendation": "repair only the two dead fast keys and keep the list's existing order (or make regen's merge keep the order of keys traced in the other profile); no budget change, no inline(never)"}],
+ "informational": ["origin/next 9af6dff86 builds release at 4 windows and fast at 5 windows (clean env, Skylake-SP)", "the axis code is math-only and out of line; it does not change the hot-text keys"],
+ "refused": [],
+ "improvement": "regen.sh is not executable in a git-archive copy (rc 126); call it with bash in job scripts, or set its mode in the tree",
+ "next_step": "rule on the hot-text repair, then gate, plants (handoff/LIBM-CPLX-LOG-SQRT-4-plants.txt), _axis counts, and a decision record for the axis paths",
+ "report_file": "handoff/libm-cplx-log-sqrt.md",
+ "jobs": ["libm-cplx-log-sqrt-4-step1b"]}

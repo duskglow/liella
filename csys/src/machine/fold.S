@@ -1636,8 +1636,9 @@ __memcmpeq:
  * while both are on, low 25 with both, 57 with folding alone, 0 with folding off; their sum never
  * exceeds 57, so `n - 65` plus both carries only for 8-64). They share one 64-byte line
  * with nothing else: all are read by the calls and written only by the startup decisions, so no
- * often-written neighbour may share it (64 bytes per process). */
-	.bss
+ * often-written neighbour may share it (64 bytes per process). Every start writes them, so they sit in
+ * the written start-up cluster (.data1, D-X.64) as 64 zero file bytes, in a line of their own. */
+	.section .data1,"aw",@progbits
 	.globl liella_machine_fold_limit
 	.hidden liella_machine_fold_limit
 	.type liella_machine_fold_limit, @object
@@ -1702,7 +1703,7 @@ liella_machine_cmp_long:
  * below it takes the checked entry). Written only by `crate::dispatch::store_cmp_gates`: on the
  * way up `cmp_sse` first, on the way down `cmp_sse_null` first, so `cmp_sse_null` is never 0 while
  * `cmp_sse` is 0 (else folding off would send 65-128 to the long class). */
-	.pushsection .data.liella_machine_cmp_sse,"aw",@progbits
+	.pushsection .data1,"aw",@progbits
 	.p2align 3
 	.globl liella_machine_cmp_sse
 	.hidden liella_machine_cmp_sse
@@ -1734,8 +1735,8 @@ liella_machine_move_long:
 /* The `memset` entry's `rep stosb` word (MEMSET-4K-3; `ffi::liella_machine_fill_erms_from`):
  * sizes above 256 with `n >= word` take the entry's `rep stosb`. usize::MAX (no size) until the
  * startup decision writes the threshold (at least 257) on ERMS CPUs (`crate::cpu`). Its own
- * 64-byte line: it needs a nonzero initial value, so it cannot share the .bss line above. */
-	.data
+ * 64-byte line: it needs a nonzero initial value, so it cannot share the line above. In the written start-up cluster (.data1, D-X.64) with them. */
+	.section .data1,"aw",@progbits
 	.globl liella_machine_fill_erms_from
 	.hidden liella_machine_fill_erms_from
 	.type liella_machine_fill_erms_from, @object
