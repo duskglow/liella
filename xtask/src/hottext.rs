@@ -518,6 +518,147 @@ fn unmatched_error(dead: &[&Entry], stale: &[String], profile: &str) -> Option<S
     Some(msg.trim_start().to_string())
 }
 
+/// What [`repair_lists`] changed: the new texts of `hot-text.list` and [`ABSENT_LIST`], the keys
+/// dropped from the list, the (key, profile) lines recorded in the allow-list and the stale
+/// (key, profile) lines removed from it.
+#[derive(Debug, Default, PartialEq)]
+struct Repair {
+    list: String,
+    absent: String,
+    dropped: Vec<String>,
+    recorded: Vec<(String, String)>,
+    removed: Vec<(String, String)>,
+}
+
+/// The cheap dead-key repair (HOTTEXT-DEAD-KEY-REPAIR) of `list` (`hot-text.list`) and `absent`
+/// ([`ABSENT_LIST`]), given each profile's matched keys (`matched`: (profile, keys), both profiles):
+/// a key no profile matches is dropped from the list (as tools/hottext/prune.py does); a key one
+/// profile matches but another does not, where [`unmatched`] does not already allow it, gets an
+/// allow-list line for that profile ("inlined in <profile> at <at>"); an allow-list line that
+/// [`unmatched`] calls stale (its key matches now in its profile, or is no longer listed) is
+/// removed. It never adds a key to the list and never reorders: every other line stays as it is.
+fn repair_lists(list: &str, absent: &str, matched: &[(&str, &BTreeSet<String>)], at: &str) -> Result<Repair, String> {
+    let entries = parse_list(list)?;
+    let allowed = parse_absent(absent)?;
+    let first_field = |l: &str| l.split('\t').next().unwrap_or("").trim().to_string();
+    let is_data = |l: &str| !l.trim().is_empty() && !l.starts_with('#');
+    let mut r = Repair::default();
+    let gone: BTreeSet<&str> = entries.iter().filter(|e| !matched.iter().any(|(_, m)| m.contains(&e.key))).map(|e| e.key.as_str()).collect();
+    for l in list.split_inclusive('\n') {
+        let k = first_field(l);
+        if is_data(l) && gone.contains(k.as_str()) {
+            if !r.dropped.contains(&k) {
+                r.dropped.push(k);
+            }
+        } else {
+            r.list.push_str(l);
+        }
+    }
+    let kept: BTreeSet<&str> = entries.iter().map(|e| e.key.as_str()).filter(|k| !gone.contains(k)).collect();
+    for e in entries.iter().filter(|e| !gone.contains(e.key.as_str())) {
+        for (p, m) in matched {
+            let other_only = !e.profiles.is_empty() && !e.profiles.iter().any(|x| x == p);
+            let pair = (e.key.clone(), p.to_string());
+            if !m.contains(&e.key) && !other_only && !allowed.contains(&pair) && !r.recorded.contains(&pair) {
+                r.recorded.push(pair);
+            }
+        }
+    }
+    for l in absent.split_inclusive('\n') {
+        let mut f = l.trim_end_matches(['\n', '\r']).split('\t');
+        let (k, p) = (f.next().unwrap_or(""), f.next().unwrap_or(""));
+        let matches_now = matched.iter().any(|(mp, m)| *mp == p && m.contains(k));
+        if is_data(l) && (!kept.contains(k) || matches_now) {
+            r.removed.push((k.to_string(), p.to_string()));
+        } else {
+            r.absent.push_str(l);
+        }
+    }
+    if !r.recorded.is_empty() && !r.absent.is_empty() && !r.absent.ends_with('\n') {
+        r.absent.push('\n');
+    }
+    for (k, p) in &r.recorded {
+        r.absent.push_str(&format!("{k}\t{p}\tinlined in {p} at {at} (cargo xtask hottext-repair)\n"));
+    }
+    Ok(r)
+}
+
+/// The dead-key contract of [`unmatched`] for every profile of `matched` on the texts of
+/// `hot-text.list` and [`ABSENT_LIST`]: the errors of [`unmatched_error`], joined.
+fn check_lists(list: &str, absent: &str, matched: &[(&str, &BTreeSet<String>)]) -> Result<(), String> {
+    let (entries, allowed) = (parse_list(list)?, parse_absent(absent)?);
+    let errs: Vec<String> = matched
+        .iter()
+        .filter_map(|(p, m)| {
+            let (dead, stale, _) = unmatched(&entries, m, &allowed, Some(p));
+            unmatched_error(&dead, &stale, p)
+        })
+        .collect();
+    if errs.is_empty() { Ok(()) } else { Err(errs.join("\n")) }
+}
+
+/// `cargo xtask hottext-repair [--at <rev>]` (HOTTEXT-DEAD-KEY-REPAIR): the mechanical repair of
+/// dead hot-text keys after `next` moved under a branch (merged in). Builds both profiles'
+/// processed archives (the step of `cargo xtask so` that writes `target/product/<profile>/
+/// hot-text.matched`, with the dead-key check reported, not enforced, as in [`REGEN_FLAG`]'s mode;
+/// `target/liella` is not touched), applies [`repair_lists`] to `crates/libc-so/hot-text.list` and
+/// [`ABSENT_LIST`], prints what it changed, and fails when the contract still does not hold for
+/// either profile. `<rev>` names the revision in the recorded reasons (default: `git rev-parse
+/// --short=12 origin/next`). No tracing and no new key: a real regen stays tools/hottext/regen.sh.
+pub fn repair_cmd(root: &Path, args: &[String]) -> Result<(), String> {
+    let at = match args {
+        [] => {
+            let o = Command::new("git").arg("-C").arg(root).args(["rev-parse", "--short=12", "origin/next"]).output().map_err(|e| format!("hottext-repair: git: {e}"))?;
+            let sha = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if !o.status.success() || sha.is_empty() {
+                return Err("hottext-repair: no origin/next here: pass --at <next sha>".into());
+            }
+            sha
+        }
+        [flag, rev] if flag == "--at" && !rev.is_empty() && !rev.contains(char::is_whitespace) => rev.clone(),
+        _ => return Err("usage: cargo xtask hottext-repair [--at <rev>]".into()),
+    };
+    let product = root.join("target/product");
+    let profiles = [crate::so::Profile::Fast, crate::so::Profile::Release];
+    let mut sets = Vec::new();
+    for p in profiles {
+        let matched_file = product.join(p.name()).join("hot-text.matched");
+        let _ = fs::remove_file(&matched_file);
+        REGEN.store(true, Ordering::Relaxed);
+        let built = crate::so::build_archive(root, &product, &product.join(p.name()).join("hottext-repair-libc.a"), None, p);
+        REGEN.store(false, Ordering::Relaxed);
+        built?;
+        let text = fs::read_to_string(&matched_file).map_err(|e| format!("hottext-repair: {}: {e}", matched_file.display()))?;
+        sets.push(text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string).collect::<BTreeSet<String>>());
+    }
+    let matched: Vec<(&str, &BTreeSet<String>)> = profiles.iter().map(|p| p.name()).zip(sets.iter()).collect();
+    let (list_path, absent_path) = (root.join("crates/libc-so/hot-text.list"), root.join("crates/libc-so").join(ABSENT_LIST));
+    let read = |p: &Path| fs::read_to_string(p).map_err(|e| format!("hottext-repair: {}: {e}", p.display()));
+    let (list, absent) = (read(&list_path)?, read(&absent_path)?);
+    let r = repair_lists(&list, &absent, &matched, &at)?;
+    for k in &r.dropped {
+        println!("hottext-repair: dropped {k} (no profile matches it)");
+    }
+    for (k, p) in &r.recorded {
+        println!("hottext-repair: {ABSENT_LIST}: recorded {k} for {p} (inlined in {p} at {at})");
+    }
+    for (k, p) in &r.removed {
+        println!("hottext-repair: {ABSENT_LIST}: removed stale {p} line {k}");
+    }
+    if r.list != list {
+        fs::write(&list_path, &r.list).map_err(|e| e.to_string())?;
+    }
+    if r.absent != absent {
+        fs::write(&absent_path, &r.absent).map_err(|e| e.to_string())?;
+    }
+    if r.dropped.is_empty() && r.recorded.is_empty() && r.removed.is_empty() {
+        println!("hottext-repair: nothing dead (no file changed)");
+    } else {
+        println!("hottext-repair: {} key(s) dropped, {} {ABSENT_LIST} line(s) recorded, {} stale line(s) removed", r.dropped.len(), r.recorded.len(), r.removed.len());
+    }
+    check_lists(&r.list, &r.absent, &matched).map_err(|e| format!("hottext-repair: the dead-key check still fails after the repair:\n{e}"))
+}
+
 /// A function section's name without any hot prefix: `.text.sorted.h<n>.<f>`, the older
 /// `.text.hot.<f>`, rustc's `.text.unlikely.<f>` (a `#[cold]` function) and plain `.text.<f>` all
 /// give `<f>`. `None` for other sections.
@@ -770,7 +911,7 @@ pub fn static_check(root: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{dead_key_verdict, function_of, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
+    use super::{check_lists, dead_key_verdict, function_of, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, repair_lists, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
     use std::collections::{BTreeMap, BTreeSet};
     use std::sync::atomic::Ordering;
 
@@ -907,6 +1048,31 @@ mod tests {
         assert!(parse_absent("k\tfast\t \n").unwrap_err().contains("line 1"));
         assert!(parse_absent("k\tdebug\twhy\n").is_err());
         assert!(parse_absent("k\tfast\n").is_err());
+    }
+
+    #[test]
+    fn repair_drops_dead_keys_records_one_profile_inlining_and_keeps_live_keys() {
+        // HOTTEXT-DEAD-KEY-REPAIR (no spec clause: build tooling): after next moved under a branch,
+        // a key no profile matches is dropped, a key one profile inlined is allowed there with a
+        // reason, live keys and every other line keep their place, and stale allow lines go.
+        let list = "# head\nlive_both\tstartup\tfast,release\ndead\tfork\tfast\ninl_rel\tstdio\tfast,release\nfast_only\ttool\tfast\nold_listed\nstale_abs\textra\t-\nabs_ok\tlocale\tfast,release\ngone_abs\textra\t-\n";
+        let absent = "# allow\nstale_abs\trelease\twhy\nabs_ok\trelease\twhy\ngone_abs\tfast\twhy\n";
+        let set = |ks: &[&str]| ks.iter().map(|k| k.to_string()).collect::<BTreeSet<String>>();
+        let fast = set(&["live_both", "inl_rel", "fast_only", "old_listed", "stale_abs", "abs_ok", "other_fn"]);
+        let release = set(&["live_both", "old_listed", "stale_abs"]);
+        let matched = [("fast", &fast), ("release", &release)];
+        assert!(check_lists(list, absent, &matched).unwrap_err().contains("match no function section of the fast-profile"));
+        let r = repair_lists(list, absent, &matched, "abc123").unwrap();
+        assert_eq!(r.list, "# head\nlive_both\tstartup\tfast,release\ninl_rel\tstdio\tfast,release\nfast_only\ttool\tfast\nold_listed\nstale_abs\textra\t-\nabs_ok\tlocale\tfast,release\n");
+        assert_eq!(r.absent, "# allow\nabs_ok\trelease\twhy\ninl_rel\trelease\tinlined in release at abc123 (cargo xtask hottext-repair)\n");
+        assert_eq!(r.dropped, vec!["dead".to_string(), "gone_abs".to_string()]);
+        assert_eq!(r.recorded, vec![("inl_rel".to_string(), "release".to_string())]);
+        assert_eq!(r.removed, vec![("stale_abs".to_string(), "release".to_string()), ("gone_abs".to_string(), "fast".to_string())]);
+        assert_eq!(check_lists(&r.list, &r.absent, &matched), Ok(()));
+        // A repaired (or already clean) pair is left as it is.
+        let again = repair_lists(&r.list, &r.absent, &matched, "def456").unwrap();
+        assert_eq!((again.list.as_str(), again.absent.as_str()), (r.list.as_str(), r.absent.as_str()));
+        assert!(again.dropped.is_empty() && again.recorded.is_empty() && again.removed.is_empty());
     }
 
     #[test]
