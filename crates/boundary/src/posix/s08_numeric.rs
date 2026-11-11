@@ -6,7 +6,8 @@
 //! (`LdBits`, `F128Bits`). Those carry the private version node `LIELLA_PRIVATE` (not
 //! exported from the product, phase 4).
 //!
-//! Conversions use the current rounding mode (MXCSR) and the current locale's radix. Only the
+//! Conversions use the current rounding mode (MXCSR) and the current locale's radix, and raise
+//! the IEEE exceptions their rounding signals (inexact, overflow, underflow; D-8.12). Only the
 //! compat `__strto*_internal` / `__wcsto*_internal` entry points group, when their `group`
 //! argument is set: integers and decimal floats read the longest prefix grouped as `LC_NUMERIC`
 //! says ([`grouped`], STRTO-INTERNAL-GROUP-2; hex floats are not grouped yet). The `ecvt`/`fcvt`/`l64a`
@@ -281,9 +282,9 @@ fn wcstol_group<R>(s: *const wchar_t, e: Option<&mut *mut wchar_t>, base: c_int,
 fn strtof_group(s: *const c_char, e: Option<&mut *mut c_char>, fmt: Format) -> u128 {
     let l = locale::current();
     let radix = locale::radix(l);
-    let mode = num_compat::rounding(CSys.mxcsr());
+    let m = &CSys;
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.2).
-    ret::with_errno(with_group(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), l.thousands_sep(), radix, l.grouping(), Grouped::Float, |t, c| num_compat::strto_float(t, 0, c, fmt, mode, radix)))
+    ret::with_errno(with_group(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), l.thousands_sep(), radix, l.grouping(), Grouped::Float, |t, c| num_compat::strto_float(t, 0, c, fmt, m,radix)))
 }
 
 /// `__wcsto{d,f,ld}_internal` with `group` set (§8.3).
@@ -293,9 +294,9 @@ fn wcstof_group(s: *const wchar_t, e: Option<&mut *mut wchar_t>, fmt: Format) ->
     let l = locale::current();
     let radix = locale::wradix(l);
     let (sep, n) = wthousands(l);
-    let mode = num_compat::rounding(CSys.mxcsr());
+    let m = &CSys;
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    ret::with_errno(with_group(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), sep.get(..n).unwrap_or(&[]), &radix, l.grouping(), Grouped::Float, |t, c| num_compat::strto_float(t, 0, c, fmt, mode, &radix)))
+    ret::with_errno(with_group(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), sep.get(..n).unwrap_or(&[]), &radix, l.grouping(), Grouped::Float, |t, c| num_compat::strto_float(t, 0, c, fmt, m,&radix)))
 }
 
 /// The narrow signed `strtol` family (§8.1): the common shapes from the first
@@ -703,49 +704,49 @@ pub extern "C" fn atoll(s: *const c_char) -> c_long {
 export! { "GLIBC_2.2.5";
 pub extern "C" fn atof(s: *const c_char) -> f64 {
     // UNSAFE(slice) SAFETY: s is a string (§8.2).
-    num_compat::atof(ret::must(unsafe { strz::strz(s) }), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::current()))
+    num_compat::atof(ret::must(unsafe { strz::strz(s) }), &CSys, locale::radix(locale::current()))
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn strtod(s: *const c_char, e: Option<&mut *mut c_char>) -> f64 {
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::current())))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), &CSys, locale::radix(locale::current())))
 }}
 
 export! { "GLIBC_2.27";
 pub extern "C" fn strtof64(s: *const c_char, e: Option<&mut *mut c_char>) -> f64 {
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::current())))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), &CSys, locale::radix(locale::current())))
 }}
 
 export! { "GLIBC_2.27";
 pub extern "C" fn strtof32x(s: *const c_char, e: Option<&mut *mut c_char>) -> f64 {
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::current())))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), &CSys, locale::radix(locale::current())))
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn strtod_l(s: *const c_char, e: Option<&mut *mut c_char>, loc: locale_t) -> f64 {
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::of(conv::addr(loc)))))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), &CSys, locale::radix(locale::of(conv::addr(loc)))))
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __strtod_l(s: *const c_char, e: Option<&mut *mut c_char>, loc: locale_t) -> f64 {
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::of(conv::addr(loc)))))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), &CSys, locale::radix(locale::of(conv::addr(loc)))))
 }}
 
 export! { "GLIBC_2.27";
 pub extern "C" fn strtof64_l(s: *const c_char, e: Option<&mut *mut c_char>, loc: locale_t) -> f64 {
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::of(conv::addr(loc)))))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), &CSys, locale::radix(locale::of(conv::addr(loc)))))
 }}
 
 export! { "GLIBC_2.27";
 pub extern "C" fn strtof32x_l(s: *const c_char, e: Option<&mut *mut c_char>, loc: locale_t) -> f64 {
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::of(conv::addr(loc)))))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), &CSys, locale::radix(locale::of(conv::addr(loc)))))
 }}
 
 export! { "GLIBC_2.2.5";
@@ -755,37 +756,37 @@ pub extern "C" fn __strtod_internal(s: *const c_char, e: Option<&mut *mut c_char
         return f64::from_bits(u64::try_from(strtof_group(s, e, Format::F64)).unwrap_or(0));
     }
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::current())))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), &CSys, locale::radix(locale::current())))
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn strtof(s: *const c_char, e: Option<&mut *mut c_char>) -> f32 {
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::current())))
+    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), &CSys, locale::radix(locale::current())))
 }}
 
 export! { "GLIBC_2.27";
 pub extern "C" fn strtof32(s: *const c_char, e: Option<&mut *mut c_char>) -> f32 {
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::current())))
+    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), &CSys, locale::radix(locale::current())))
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn strtof_l(s: *const c_char, e: Option<&mut *mut c_char>, loc: locale_t) -> f32 {
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::of(conv::addr(loc)))))
+    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), &CSys, locale::radix(locale::of(conv::addr(loc)))))
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __strtof_l(s: *const c_char, e: Option<&mut *mut c_char>, loc: locale_t) -> f32 {
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::of(conv::addr(loc)))))
+    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), &CSys, locale::radix(locale::of(conv::addr(loc)))))
 }}
 
 export! { "GLIBC_2.27";
 pub extern "C" fn strtof32_l(s: *const c_char, e: Option<&mut *mut c_char>, loc: locale_t) -> f32 {
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::of(conv::addr(loc)))))
+    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), &CSys, locale::radix(locale::of(conv::addr(loc)))))
 }}
 
 export! { "GLIBC_2.2.5";
@@ -795,49 +796,49 @@ pub extern "C" fn __strtof_internal(s: *const c_char, e: Option<&mut *mut c_char
         return f32::from_bits(u32::try_from(strtof_group(s, e, Format::F32)).unwrap_or(0));
     }
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::current())))
+    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), &CSys, locale::radix(locale::current())))
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn wcstod(s: *const wchar_t, e: Option<&mut *mut wchar_t>) -> f64 {
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::current())))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), &CSys, &locale::wradix(locale::current())))
 }}
 
 export! { "GLIBC_2.27";
 pub extern "C" fn wcstof64(s: *const wchar_t, e: Option<&mut *mut wchar_t>) -> f64 {
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::current())))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), &CSys, &locale::wradix(locale::current())))
 }}
 
 export! { "GLIBC_2.27";
 pub extern "C" fn wcstof32x(s: *const wchar_t, e: Option<&mut *mut wchar_t>) -> f64 {
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::current())))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), &CSys, &locale::wradix(locale::current())))
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn wcstod_l(s: *const wchar_t, e: Option<&mut *mut wchar_t>, loc: locale_t) -> f64 {
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::of(conv::addr(loc)))))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), &CSys, &locale::wradix(locale::of(conv::addr(loc)))))
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __wcstod_l(s: *const wchar_t, e: Option<&mut *mut wchar_t>, loc: locale_t) -> f64 {
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::of(conv::addr(loc)))))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), &CSys, &locale::wradix(locale::of(conv::addr(loc)))))
 }}
 
 export! { "GLIBC_2.27";
 pub extern "C" fn wcstof64_l(s: *const wchar_t, e: Option<&mut *mut wchar_t>, loc: locale_t) -> f64 {
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::of(conv::addr(loc)))))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), &CSys, &locale::wradix(locale::of(conv::addr(loc)))))
 }}
 
 export! { "GLIBC_2.27";
 pub extern "C" fn wcstof32x_l(s: *const wchar_t, e: Option<&mut *mut wchar_t>, loc: locale_t) -> f64 {
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::of(conv::addr(loc)))))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), &CSys, &locale::wradix(locale::of(conv::addr(loc)))))
 }}
 
 export! { "GLIBC_2.2.5";
@@ -847,37 +848,37 @@ pub extern "C" fn __wcstod_internal(s: *const wchar_t, e: Option<&mut *mut wchar
         return f64::from_bits(u64::try_from(wcstof_group(s, e, Format::F64)).unwrap_or(0));
     }
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::current())))
+    ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), &CSys, &locale::wradix(locale::current())))
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn wcstof(s: *const wchar_t, e: Option<&mut *mut wchar_t>) -> f32 {
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::current())))
+    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), &CSys, &locale::wradix(locale::current())))
 }}
 
 export! { "GLIBC_2.27";
 pub extern "C" fn wcstof32(s: *const wchar_t, e: Option<&mut *mut wchar_t>) -> f32 {
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::current())))
+    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), &CSys, &locale::wradix(locale::current())))
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn wcstof_l(s: *const wchar_t, e: Option<&mut *mut wchar_t>, loc: locale_t) -> f32 {
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::of(conv::addr(loc)))))
+    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), &CSys, &locale::wradix(locale::of(conv::addr(loc)))))
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __wcstof_l(s: *const wchar_t, e: Option<&mut *mut wchar_t>, loc: locale_t) -> f32 {
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::of(conv::addr(loc)))))
+    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), &CSys, &locale::wradix(locale::of(conv::addr(loc)))))
 }}
 
 export! { "GLIBC_2.27";
 pub extern "C" fn wcstof32_l(s: *const wchar_t, e: Option<&mut *mut wchar_t>, loc: locale_t) -> f32 {
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::of(conv::addr(loc)))))
+    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), &CSys, &locale::wradix(locale::of(conv::addr(loc)))))
 }}
 
 export! { "GLIBC_2.2.5";
@@ -887,7 +888,7 @@ pub extern "C" fn __wcstof_internal(s: *const wchar_t, e: Option<&mut *mut wchar
         return f32::from_bits(u32::try_from(wcstof_group(s, e, Format::F32)).unwrap_or(0));
     }
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::current())))
+    ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), &CSys, &locale::wradix(locale::current())))
 }}
 
 export! { "LIELLA_PRIVATE";
@@ -909,25 +910,25 @@ pub extern "C" fn liella_wcstold_internal_bits(s: *const wchar_t, e: Option<&mut
 export! { "LIELLA_PRIVATE";
 pub extern "C" fn liella_strtold_bits(s: *const c_char, e: Option<&mut *mut c_char>) -> LdBits {
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    LdBits::from_bits(ret::with_errno(num_compat::strto_float(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), Format::F80, num_compat::rounding(CSys.mxcsr()), locale::radix(locale::current()))))
+    LdBits::from_bits(ret::with_errno(num_compat::strto_float(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), Format::F80, &CSys, locale::radix(locale::current()))))
 }}
 
 export! { "LIELLA_PRIVATE";
 pub extern "C" fn liella_strtof128_bits(s: *const c_char, e: Option<&mut *mut c_char>) -> F128Bits {
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
-    F128Bits::from_bits(ret::with_errno(num_compat::strto_float(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), Format::F128, num_compat::rounding(CSys.mxcsr()), locale::radix(locale::current()))))
+    F128Bits::from_bits(ret::with_errno(num_compat::strto_float(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), Format::F128, &CSys, locale::radix(locale::current()))))
 }}
 
 export! { "LIELLA_PRIVATE";
 pub extern "C" fn liella_wcstold_bits(s: *const wchar_t, e: Option<&mut *mut wchar_t>) -> LdBits {
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    LdBits::from_bits(ret::with_errno(num_compat::strto_float(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), Format::F80, num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::current()))))
+    LdBits::from_bits(ret::with_errno(num_compat::strto_float(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), Format::F80, &CSys, &locale::wradix(locale::current()))))
 }}
 
 export! { "LIELLA_PRIVATE";
 pub extern "C" fn liella_wcstof128_bits(s: *const wchar_t, e: Option<&mut *mut wchar_t>) -> F128Bits {
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
-    F128Bits::from_bits(ret::with_errno(num_compat::strto_float(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), Format::F128, num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::current()))))
+    F128Bits::from_bits(ret::with_errno(num_compat::strto_float(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), Format::F128, &CSys, &locale::wradix(locale::current()))))
 }}
 
 export! { "GLIBC_2.25";
