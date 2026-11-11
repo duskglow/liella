@@ -2,3 +2,5 @@
 # liella_rt::start's program_headers_give_the_tls_image_and_the_bias (two PT_TLS headers: the first counts),
 # planted on next's program-header loop (LAYOUT-DATA-CLUSTERS-4C). Direct tests: the liella-rt unit tests.
 lsr8-last-tls-wins | crates/rt/src/start.rs | lit:PT_TLS if tls.is_none() => tls = Some(h), ==> PT_TLS => tls = Some(h), | cargo test -p liella-rt --lib start:: | msg:first header of a type counts
+# cargo xtask plants results (1 plants: 1 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# lsr8-last-tls-wins: CAUGHT, caught by liella_rt start::tests::program_headers_give_the_tls_image_and_the_bias
