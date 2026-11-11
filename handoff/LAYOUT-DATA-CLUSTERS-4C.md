@@ -34,11 +34,11 @@ The coordinator or -5 can confirm it with 4B's `~/work/LAYOUT-DATA-CLUSTERS-4B/c
 
 ## Jobs (keke)
 - ldc4c-startup-next (rc 0), ldc4c-startup-head-2 (rc 0), ldc4c-lint-2 (clippy + static, rc 0).
-- ldc4c-plants-2 (3 plants, `handoff/LAYOUT-DATA-CLUSTERS-4C-plants.txt`) and ldc4c-gate-2 (`affected --run
+- ldc4c-plants-3 (3 plants, `handoff/LAYOUT-DATA-CLUSTERS-4C-plants.txt`, run from a copy in ~/work, same code) and ldc4c-gate-2 (`affected --run
   --base origin/next`): queued in order by `~/work/LAYOUT-DATA-CLUSTERS-4C/chain.sh`, pending at hand-back.
 - Superseded: ldc4c-startup-4b (diagnostic: rc 1 because 4B is over the limit, the point of the measurement),
   ldc4c-trace-next / ldc4c-trace-4b (diagnostic traces), ldc4c-lint (clippy refused the plain multiply; fixed in
-  2e565c251), ldc4c-startup-head (stopped with the chain after that lint failure).
+  2e565c251), ldc4c-plants-2 (rc 3: the tool refused bare s/// patterns; perl: prefix added in b16ff1fbd), ldc4c-startup-head (stopped with the chain after that lint failure).
 
 ## Next step
 -5..-7 as planned in `handoff/LAYOUT-DATA-CLUSTERS-4B.md` (release `strings` fault, fast `float` +1, -4 item 1).
