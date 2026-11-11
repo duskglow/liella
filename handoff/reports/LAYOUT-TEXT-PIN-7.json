@@ -1,0 +1,26 @@
+{
+ "task": "LAYOUT-TEXT-PIN-7",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: affected-model red fixed (fictional fixture names); classed memset alignment defect fixed (s04_classed_memset passes); fault +2 (tool 60, locale 57) attributed to this branch, next reads 56/53; not fault-mapped; plants not proven",
+ "branch": "task/layout-text-pin-7",
+ "head": null,
+ "gate": {
+  "affected": "not run on final head (lint job: clippy, static, 16 xtask tests green)",
+  "peak": null
+ },
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": [
+  "s04_classed_memset was a layout-dependent defect in hottext::group (4096-aligned classed section reset to 64), not a flake"
+ ],
+ "refused": [],
+ "improvement": "a layout contract that every section keeps at least its object's alignment would have caught the classed-page drop in `so` instead of a conformance program",
+ "next_step": "fault-map tool/locale (perf page-faults -d) branch vs next and fix the +2 by placement; fix the two plants; then the direct gate",
+ "report_file": "handoff/LAYOUT-TEXT-PIN-7.md",
+ "jobs": [
+  "layout-text-pin-7-lint",
+  "layout-text-pin-7-next",
+  "layout-text-pin-7-check"
+ ]
+}
