@@ -1,0 +1,38 @@
+{
+ "task": "LAYOUT-FAULT-CONTRACTS",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: merged HOTTEXT-REGEN-HOSTS-2 (per-profile lists) onto LAYOUT-TEXT-PIN-9, hermetic regen and report-only regen build (D-X.65); perf fault-class contracts, phase test and all-mode regen tracing not started",
+ "branch": "task/layout-fault-contracts",
+ "head": null,
+ "gate": {
+  "affected": "mei:lfc-gate running at hand-back (lfc-lint3: clippy, static, 37 xtask tests ok)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "list file names: the brief says hot-text.fast.list, the merged HOTTEXT-REGEN-HOSTS-2 uses hot-text-fast.list",
+   "recommendation": "keep hot-text-<profile>.list (already in D-X.61, xtask and tests)"
+  },
+  {
+   "item": "fixed LANG/LC_ALL in the hermetic trace",
+   "recommendation": "LANG fixed, LC_ALL unset (env -i), matching how the bound tests run the probes; setting LC_ALL would trace a different setlocale path"
+  }
+ ],
+ "informational": [
+  "perf record -e page-faults -d works for claude on mei, keke, shiki, kanon (paranoid 1); the key-based fallback is not needed on any build host today",
+  "the merged env -i trace had dropped p_cold's TZ=America/New_York (LAYOUT-TEXT-PIN-3); fixed here",
+  "probe_text.sh called merge.py without the host class the merge made mandatory; fixed here",
+  "branch is 25 commits behind origin/next and stacks on unlanded LAYOUT-TEXT-PIN-9"
+ ],
+ "refused": [],
+ "improvement": "brief C needs a size L budget: the mandated merge of HOTTEXT-REGEN-HOSTS-2 alone (5 conflicted files, list split) took ~40% of 90 calls before the perf work could start",
+ "next_step": "implement the fault-classes contract kind (perf, plan in handoff section 'Not done' 1), then the 8-pad per-class phase test, then all-mode regen tracing and the moved-start-up-function plant",
+ "report_file": "handoff/LAYOUT-FAULT-CONTRACTS.md",
+ "jobs": [
+  "mei:lfc-lint3",
+  "mei:lfc-plants",
+  "mei:lfc-gate"
+ ]
+}

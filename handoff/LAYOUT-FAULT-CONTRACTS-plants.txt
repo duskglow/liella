@@ -5,3 +5,10 @@ lfc-fast-rewrites-release | tools/hottext/regen.sh | lit:list=$here/../../crates
 lfc-pycache | tools/hottext/regen.sh | lit:python3 -B "$here/keys.py" --sections ==> python3 "$here/keys.py" --sections | cargo test -p xtask --bin xtask hottext::tests::regen_traces_in_a_hermetic_environment | msg:regen_traces_in_a_hermetic_environment.*(FAILED|panicked)|python3 without -B
 lfc-tz-dropped | tools/hottext/regen.sh | lit: ${TZ:+TZ="$TZ"} HOT_TEXT_OUT= ==>  HOT_TEXT_OUT= | cargo test -p xtask --bin xtask hottext::tests::regen_traces_in_a_hermetic_environment | msg:regen_traces_in_a_hermetic_environment.*(FAILED|panicked)|drops TZ
 lfc-probe-text-no-host | tools/hottext/probe_text.sh | lit: "$profile" "${HOTTEXT_HOST_CLASS:?set by regen.sh (D-X.61)}" ==>  "$profile" | cargo test -p xtask --bin xtask hottext::tests::regen_traces_in_a_hermetic_environment | msg:regen_traces_in_a_hermetic_environment.*(FAILED|panicked)|merge.py without the host class
+# cargo xtask plants results (6 plants: 6 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# lfc-regen-enforces: CAUGHT, caught by xtask layout::tests::a_broken_contract_is_reported_in_the_regen_build_and_fails_any_other
+# lfc-regen-never-enforces: CAUGHT, caught by xtask layout::tests::a_broken_contract_is_reported_in_the_regen_build_and_fails_any_other
+# lfc-fast-rewrites-release: CAUGHT, caught by xtask hottext::tests::regen_traces_in_a_hermetic_environment
+# lfc-pycache: CAUGHT, caught by xtask hottext::tests::regen_traces_in_a_hermetic_environment
+# lfc-tz-dropped: CAUGHT, caught by xtask hottext::tests::regen_traces_in_a_hermetic_environment
+# lfc-probe-text-no-host: CAUGHT, caught by xtask hottext::tests::regen_traces_in_a_hermetic_environment
