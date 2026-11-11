@@ -1,0 +1,11 @@
+id = "D-10.90"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+amends = ["D-10.84"]
+story = "LIBM-F64-SPECIAL-QUICK-REST"
+date = "2026-11-11"
+body = '''
+**`erf` (`double`) in-place entry: branch and sign shape** (LIBM-F64-SPECIAL-QUICK-REST, ratchet after D-10.84's SSE2 `erf_series` +1). `fast_special::erf_nearest` tests `ax >= SMALL` (quick phase and table fallback in the taken arm, the `2^-5` series in the else arm): the ordered `>=` compares `ax` with the constant in memory, while `ax < SMALL` first loads the constant into a register. The result's sign is applied by OR-ing `x`'s sign bit into the positive `erf |x|` (`with_sign_of`), in place of the compare-and-blend that `if x < 0.0 { -v } else { v }` compiles to on SSE2; the value is the same for every operand the entry reaches (`x` is neither zero nor NaN there, `erf |x| > 0`). `erf_quick` uses the same helper. Found by diffing the SSE2 disassembly of the boundary's `erf_nearest` against the revision before D-10.84's change: the `<` compare, `x` held in `xmm13` (a move in and a move out) and the 7-instruction blend. Measured (Skylake-SP build host, `instructions:u` per call, `wl_percall`, `validation/percall/libm_erf.c`; glibc / before D-10.84 / next / this row): SSE2 (`glibc.cpu.hwcaps=-FMA`) `erf_series` 63.0 / 153.0 / 154.0 / **151.0**, `erf_table` 174.0 / 235.0 / 148.0 / **146.0**; FMA `erf_series` 63.0 / 109.0 / 97.0 / 97.0, `erf_table` 159.3 / 162.0 / 120.0 / 120.0; the `erfc` rows unchanged. Tests: `crates/boundary/tests/erf_quick.rs` (both builds, both signs, the series region `0.03..2^-5`); plants `handoff/LIBM-F64-SPECIAL-QUICK-REST-plants.txt`.
+'''
