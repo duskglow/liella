@@ -93,6 +93,35 @@ ok getpass: default 1048576 bytes; set to 4096 and back
 native example: 14 of 14 steps passed
 ";
 
+/// The steps only the static example runs. `kernel types` checks the re-export of
+/// `liella-kernel`'s public types, which the facade makes with feature `static` only (D-X.10:
+/// the dynamic facade compiles in the stateless clean API and reaches everything else through
+/// `libc.so.6`), so the dynamic example has no such step.
+const STATIC_ONLY: &[&str] = &["kernel types"];
+
+/// The standard output the example with `linkage` (`static` or `dynamic`) must print: for
+/// `static` exactly [`EXPECTED`]; for `dynamic` that output with its own first line, without
+/// the [`STATIC_ONLY`] steps, and with a last line counting the steps left.
+fn expected(linkage: &str) -> String {
+    if linkage == "static" {
+        return EXPECTED.to_string();
+    }
+    let lines: Vec<&str> = EXPECTED.lines().filter(|l| !STATIC_ONLY.iter().any(|s| l.strip_prefix("ok ").and_then(|r| r.strip_prefix(s)).is_some_and(|r| r.starts_with(':')))).collect();
+    let steps = lines.iter().filter(|l| l.starts_with("ok ")).count();
+    let mut out = String::new();
+    for line in lines {
+        if line == "native example: linkage static" {
+            out.push_str(&format!("native example: linkage {linkage}"));
+        } else if line.starts_with("native example: ") && line.ends_with(" steps passed") {
+            out.push_str(&format!("native example: {steps} of {steps} steps passed"));
+        } else {
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    out
+}
+
 /// The time zone the static example runs in (a POSIX rule: no zone database needed).
 const TZ: &str = "CET-1CEST,M3.5.0,M10.5.0/3";
 
@@ -141,7 +170,7 @@ fn run_example(root: &Path, name: &str, exe: &Path, dir: &Path, linkage: &str) -
         .map_err(|e| format!("cannot run {}: {e}", exe.display()))?;
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
-    let expected = EXPECTED.replacen("linkage static", &format!("linkage {linkage}"), 1);
+    let expected = expected(linkage);
     let mut errors = Vec::new();
     if out.status.code() != Some(0) {
         errors.push(format!("{name}: status {}, expected 0", out.status));
@@ -405,7 +434,8 @@ pub fn run_native(root: &Path) -> Result<(), String> {
     let (count, interp) = check_dynamic(root, &exe)?;
 
     // 5b. The same example run under Liella's `ld.so` (D-27.24): linked against a by-path copy of
-    // `libc.so.6` with that loader as its interpreter, its output must be the static one's.
+    // `libc.so.6` with that loader as its interpreter, its output must be the static one's
+    // without the static-only steps (`expected("dynamic")`).
     let ld = root.join("target/liella/ld-linux-x86-64.so.2");
     let mut link = common;
     link.extend(link_arg(&libc_by_path(&libc_so, &dir)?));
@@ -420,7 +450,8 @@ pub fn run_native(root: &Path) -> Result<(), String> {
     // 6. The zeroing proof.
     let proof = check_secure_zero(root)?;
 
-    let steps = EXPECTED.lines().filter(|l| l.starts_with("ok ")).count();
-    println!("native: liella-native clean with each feature; static example ran ({steps} steps, output as expected); dynamic example linked (NEEDED libc.so.6, {count} native symbols at their nodes, interpreter {interp}) and ran under Liella's ld.so (output as expected); {proof}");
+    let steps = |linkage| expected(linkage).lines().filter(|l| l.starts_with("ok ")).count();
+    let (stat, dynamic) = (steps("static"), steps("dynamic"));
+    println!("native: liella-native clean with each feature; static example ran ({stat} steps, output as expected); dynamic example linked (NEEDED libc.so.6, {count} native symbols at their nodes, interpreter {interp}) and ran under Liella's ld.so ({dynamic} steps, output as expected); {proof}");
     Ok(())
 }
