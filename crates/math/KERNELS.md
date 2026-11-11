@@ -100,7 +100,8 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast32/trig.rs:115` `pub fn sin_nearest_widen(x: f32, widen: impl Fn(f32) -> f64) -> Option<f32>` — bound: undocumented — doc: `sin_nearest` with the `double` operand from `widen` ([`trig_core_with`], D-10.79): the boundary passes the in-place `cvtss2sd`.
 - `fast32/trig.rs:121` `pub fn cos_nearest_widen(x: f32, widen: impl Fn(f32) -> f64) -> Option<f32>` — bound: undocumented — doc: [`sin_nearest_widen`] for cos.
 - `fast32/trig.rs:127` `pub fn tan_nearest_widen(x: f32, widen: impl Fn(f32) -> f64) -> Option<f32>` — bound: undocumented — doc: [`sin_nearest_widen`] for tan = s/c.
-- `fast32/trig.rs:134` `pub fn sincos(x: f32, mode: Rounding) -> ((f32, f32), Status)` — bound: undocumented — doc: `sincosf`: one reduction for both results; each one that fails its rounding test is computed by the accurate path, so the pair and the flags are those of `sinf`…
+- `fast32/trig.rs:136` `pub fn sincos_nearest_widen(x: f32, widen: impl Fn(f32) -> f64) -> Option<(f32, f32)>` — bound: undocumented — doc: [`sin_nearest_widen`] and [`cos_nearest_widen`] from one [`trig_core_with`] call (the `sincosf` fast path, LIBM-SINCOS-SHARED, D-10.89): both results, each the …
+- `fast32/trig.rs:143` `pub fn sincos(x: f32, mode: Rounding) -> ((f32, f32), Status)` — bound: undocumented — doc: `sincosf`: one reduction for both results; each one that fails its rounding test is computed by the accurate path, so the pair and the flags are those of `sinf`…
 
 ## fast32.rs (f32 core)
 
