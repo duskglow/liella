@@ -167,7 +167,8 @@ impl Field for TidWord {
     const OFFSET: usize = core::mem::offset_of!(ThreadBlock, tid);
 }
 
-/// The 8 bytes at `ThreadBlock::flags` (0x9c; the low 4 are [`Flags`]).
+/// The 8 bytes at `ThreadBlock::flags` (0x9c). There is no reader of the flags themselves: no
+/// decision is taken on them (D-X.58: a foreign block holds another library's data there).
 pub enum FlagsWord {}
 impl sealed::Sealed for FlagsWord {}
 impl Field for FlagsWord {
@@ -182,14 +183,6 @@ impl Field32 for Tid {
     const SHIFT: u32 = 0;
 }
 
-/// `ThreadBlock::flags`: Liella's flags (`FLAG_OWN`).
-pub enum Flags {}
-impl sealed::Sealed for Flags {}
-impl Field32 for Flags {
-    type Word = FlagsWord;
-    const SHIFT: u32 = 0;
-}
-
 // The words' layout: each `Field32` a 4-aligned `AtomicU32` at the start of its word (`SHIFT`
 // 0), the word's 8 bytes inside the block and inside one 64-byte line of the 64-aligned block.
 const _: () = {
@@ -201,7 +194,7 @@ const _: () = {
     assert!(<FlagsWord as Field>::OFFSET % 4 == 0 && <FlagsWord as Field>::OFFSET % 64 + 8 <= 64);
     assert!(<TidWord as Field>::OFFSET + 8 <= liella_rt::tls::BLOCK_SIZE);
     assert!(<FlagsWord as Field>::OFFSET + 8 <= liella_rt::tls::BLOCK_SIZE);
-    assert!(<Tid as Field32>::SHIFT == 0 && <Flags as Field32>::SHIFT == 0);
+    assert!(<Tid as Field32>::SHIFT == 0);
 };
 
 /// The calling thread's `F` field: `current().<field>.load(Relaxed)` as one `%fs`-relative

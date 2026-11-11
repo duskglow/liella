@@ -52,6 +52,12 @@ static OWN_BASE: AtomicUsize = AtomicUsize::new(0);
 /// module with TLS after start (DL-15/DL-16) moves it on. 0 for the initially loaded objects.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 
+/// Whether this loader started the process (D-X.58: ownership is a process-level fact, never a word
+/// of a thread block): set by [`install_tls`] once the initial thread runs on the block it built.
+/// Its threads then all have blocks of this runtime; in a process another loader started (this
+/// object loaded as a library) it stays false and no thread block is read as this loader's.
+static STARTED_HERE: AtomicBool = AtomicBool::new(false);
+
 // The thread-block slots the arch table names are the fields of Liella's block (D-4.15).
 #[allow(clippy::as_conversions)] // const context: no `try_from`; the values are small offsets
 const _: () = {
@@ -444,6 +450,7 @@ fn install_tls(mods: &[Option<Module>], biases: &[u64], placed: &[Option<Placed>
     if crate::arch::set_thread_pointer(tp).is_err() {
         fail()
     }
+    STARTED_HERE.store(true, Release);
 }
 
 /// `__tls_get_addr` (spec §22.6, s22_6_c_4; exported by `ld.so` at `GLIBC_2.3`): the address of
@@ -454,12 +461,17 @@ fn install_tls(mods: &[Option<Module>], biases: &[u64], placed: &[Option<Placed>
 #[unsafe(no_mangle)]
 #[allow(unsafe_code)]
 pub extern "C" fn __tls_get_addr(ti: usize) -> usize {
-    // Only a block this loader made has its dtv word (D-5.11 safety, design §7): never read the
-    // word of a block another loader made as a pointer.
-    if crate::tb::read32::<crate::tb::Flags>() & FLAG_OWN == 0 {
-        refuse(b"ld.so: __tls_get_addr called on a thread block this loader did not make\n");
+    // Only a block this loader's runtime made has its dtv word (D-5.11 safety, design §7; D-X.58):
+    // in a process another loader started, never read the word of a block it made as a pointer.
+    // The test is the process-level byte, never the block's own flags word (another library's data).
+    if !STARTED_HERE.load(Acquire) {
+        refuse(b"ld.so: __tls_get_addr called in a process this loader did not start\n");
     }
     let dtv = crate::tb::read::<crate::tb::Dtv>();
+    if dtv == 0 {
+        // A thread the runtime made without a vector (DL-12: threads get theirs with DL-15/DL-16).
+        refuse(b"ld.so: __tls_get_addr: this thread has no TLS vector\n");
+    }
     // UNSAFE(slice): the caller's `tls_index`.
     #[allow(unsafe_code)]
     // SAFETY: the psABI caller passes the address of a two-word `tls_index` in its GOT (⚑ ABI).
@@ -469,7 +481,8 @@ pub extern "C" fn __tls_get_addr(ti: usize) -> usize {
         let at = dtv.wrapping_add(usize::try_from(i).unwrap_or(0).wrapping_mul(8));
         // UNSAFE(slice): one word of the calling thread's dtv.
         #[allow(unsafe_code)]
-        // SAFETY: the thread block is this loader's (FLAG_OWN, checked above), so its dtv word points at
+        // SAFETY: this loader started the process (`STARTED_HERE`, checked above), so the thread block
+        // is its runtime's and its non-zero dtv word (checked above) points at
         // the vector `install_tls` built: `DTV_HEADER` + slot-count words; `ltls::lookup` reads a slot
         // only after checking it against the count in word 1.
         unsafe { conv::words_at(at, 1) }.first().copied().unwrap_or(0)
