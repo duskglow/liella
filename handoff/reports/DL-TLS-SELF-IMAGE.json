@@ -9,4 +9,4 @@
  "improvement": "A sync_role 'base drift' warning when a story branch lacks code its brief names on next would have saved the merge investigation",
  "next_step": "none required; optional: share one scratch mapping for the header table and PT_DYNAMIC copy in image_view",
  "report_file": "handoff/DL-TLS-SELF-IMAGE.md",
- "jobs": ["dl-tls-self-image-t2", "dl-tls-self-image-gate", "dl-tls-self-image-plants", "dl-tls-self-image-counts", "dl-tls-self-image-count-before"]}
+ "jobs": ["dl-tls-self-image-t2", "dl-tls-self-image-gate", "dl-tls-self-image-plants", "dl-tls-self-image-counts"]}
