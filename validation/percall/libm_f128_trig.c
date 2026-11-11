@@ -36,3 +36,14 @@ Q1(sinf128_1e10, sinf128, 1e10, 2e10)
 Q1(cosf128_1e10, cosf128, 1e10, 2e10)
 Q1(sinf128_1e300, sinf128, 1e300, 2e300)
 Q1(cosf128_1e300, cosf128, 1e300, 2e300)
+
+/* tanf128 and sincosf128 on the same reduction (LIBM-F128-TRIG-INT-2, D-10.91). */
+Q1(tanf128, tanf128, -10.0, 10.0)
+Q1(tanf128_1e300, tanf128, 1e300, 2e300)
+
+CASE(sincosf128, 20000, 1) {
+    fill(-10.0, 10.0); _Float128 acc = 0, s, c;
+    for (long i = 0; i < n; i++) { sincosf128(qx[i & 63], &s, &c); acc += s + c; }
+    pc_sink += (long)acc;
+    PC_CHECKING { sincosf128(qx[5], &s, &c); pc_check("%.15g %.15g", (double)s, (double)c); }
+}

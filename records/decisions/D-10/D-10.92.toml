@@ -1,0 +1,10 @@
+id = "D-10.92"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+story = "LIBM-F128-TRIG-INT-3"
+date = "2026-11-11"
+body = '''
+**`_Float128` sin/cos kernel: the reduction window written out, so sharing the reduction costs sin/cos nothing** (LIBM-F128-TRIG-INT-3; amends D-10.91's code layout only; method, proof and contract D-10.85/D-10.91/D-10.19 unchanged: correctly rounded in every mode). Cause, from a one-call trace of `sinf128` (validation/wl_trace.sh) and the disassembly of the products before and after D-10.91: once `reduce` had three callers (`kernel`, `both`, `tan_kernel`), the 2/π window `core::array::from_fn(\|k\| ...)` in `reduce` stayed an out-of-line `core::array::try_from_fn` call of about 150 instructions, and with the helpers left to the inliner `kernel` also called `reduce`, `sin_poly`, `cos_poly` and `mulhi3` (five sites) out of line. `crates/math/src/wide_int/quad.rs` now builds the seven window words as an array literal, and `mulhi3`, `mul32`, `sin_poly`, `cos_poly`, `word` and `reduce` are `#[inline(always)]`, so every caller gets one straight-line function whatever the number of callers. Measured (wl_percall, `validation/percall/libm_f128_trig.c`, instructions:u per call, Zen 1 host; before D-10.91 / D-10.91 / now): sinf128 1257 / 1332 / 1253, cosf128 1257 / 1332 / 1253, tanf128 89 475 / 1749 / 1704, sincosf128 2439 / 1831 / 1785 (glibc 7251, 7248, 8173, 8756). Each half alone does not do it: the pins without the window fix measured sinf128 1375 (the window call stayed), the window fix without the pins 1325 (tanf128 1743, sincosf128 1825). Tests: `wide_int::quad` unit tests and the 10^7-operand `tier_agrees_with_the_wide_route_long` in the four modes; plants handoff/LIBM-F128-TRIG-INT-3-plants.txt.
+'''
