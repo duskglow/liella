@@ -1720,6 +1720,64 @@ fn complex_float_and_double_members() {
     fpu::clear(&CSys, Flags::ALL);
 }
 
+/// The in-place entries of `cexp`, `clog`, `csqrt` and their `float` members on the axes (one part
+/// an exact zero, LIBM-CPLX-LOG-SQRT-4, D-10.74): each result's bits, flags and `errno` equal the
+/// 384-bit route's to nearest, for unit, exact-root, ordinary, tiny, huge and overflowing
+/// magnitudes of both signs with both signed zeros, the other axis and the origin included.
+#[test]
+fn complex_axes_in_place_match_the_route() {
+    // Clauses: s10_5_c_0, s10_0_c_0.
+    use liella_boundary::mathret::Complex;
+    use liella_math::{complex as c, MathError, Rounding::Nearest};
+    let errno = |e: MathError| match e {
+        MathError::None => 0,
+        MathError::Domain => 33,
+        MathError::Range => 34,
+    };
+    let fmin = f64::from(f32::MIN_POSITIVE);
+    let mags = [
+        0.0, 1.0, 4.0, 0.25, 2.0, 3.0, 0.1, 0.5, 1.0 + f64::EPSILON, 1e300, f64::MAX, 1e-300, f64::MIN_POSITIVE, 2.0 * f64::MIN_POSITIVE,
+        700.0, 709.9, 1e-20, fmin, 2.0 * fmin, f64::from(f32::MAX), 90.0,
+    ];
+    let mut ops = Vec::new();
+    for m in mags {
+        for v in [m, -m] {
+            for z in [0.0, -0.0] {
+                ops.push((v, z));
+                ops.push((z, v));
+            }
+        }
+    }
+    type D = (&'static str, extern "C" fn(Complex<f64>) -> Complex<f64>, fn(f64, f64, liella_math::Rounding) -> c::Res<f64>);
+    type S = (&'static str, extern "C" fn(Complex<f32>) -> Complex<f32>, fn(f32, f32, liella_math::Rounding) -> c::Res<f32>);
+    let dbl: [D; 3] = [("cexp", m::cexp, c::cexp_route::<f64>), ("clog", m::clog, c::clog_route::<f64>), ("csqrt", m::csqrt, c::csqrt_route::<f64>)];
+    let flt: [S; 3] = [("cexpf", m::cexpf, c::cexp_route::<f32>), ("clogf", m::clogf, c::clog_route::<f32>), ("csqrtf", m::csqrtf, c::csqrt_route::<f32>)];
+    for &(x, y) in &ops {
+        for (name, f, route) in dbl {
+            let mut got = (0, 0);
+            let seen = observe(|| {
+                let r = f(Complex { re: x, im: y });
+                got = (r.re.to_bits(), r.im.to_bits());
+            });
+            let ((wr, wi), st) = route(x, y, Nearest);
+            assert_eq!((name, x, y, got, seen), (name, x, y, (wr.to_bits(), wi.to_bits()), (errno(st.error), st.flags)), "{name} on an axis differs from the route");
+        }
+        // The same magnitudes rounded to `float` (overflow to infinity and underflow to zero are wanted operands).
+        #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+        let (xf, yf) = (x as f32, y as f32);
+        for (name, f, route) in flt {
+            let mut got = (0, 0);
+            let seen = observe(|| {
+                let r = f(Complex { re: xf, im: yf });
+                got = (r.re.to_bits(), r.im.to_bits());
+            });
+            let ((wr, wi), st) = route(xf, yf, Nearest);
+            assert_eq!((name, xf, yf, got, seen), (name, xf, yf, (wr.to_bits(), wi.to_bits()), (errno(st.error), st.flags)), "{name} on an axis differs from the route");
+        }
+    }
+    fpu::clear(&CSys, Flags::ALL);
+}
+
 /// The complex functions of `long double`, `_Float64x` and `_Float128` (D-10.21; milestone 5,
 /// M5-1 to M5-4): each name of every family member is exported, and the bit-level functions behind the C forwarders keep the parts in their order
 /// and report the flags of the implementation.

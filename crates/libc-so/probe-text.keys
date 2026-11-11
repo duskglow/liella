@@ -6,7 +6,6 @@ _start	extra	fast,release
 __libc_start_main	extra	fast,release
 _RINvNtC15liella_boundary7runtime5startKb0_EC15liella_boundary	extra	fast,release
 liella_sys_arch_prctl	extra	fast,release
-_RNvNtC9liella_rt5start7program	extra	fast
 liella_sys_mmap	extra	fast,release
 liella_sys_set_tid_address	extra	fast,release
 _RNvNtC15liella_boundary3cpu4init	extra	fast,release
