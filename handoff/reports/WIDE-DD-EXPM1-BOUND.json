@@ -1,0 +1,12 @@
+{"task": "WIDE-DD-EXPM1-BOUND", "model": "opus", "tokens": null,
+ "result": "expm1 dd tier exceeded b=100 on |x|<ln2/128 (2^-99.317 at x=-12783431649032223825*2^-71; the reported 2^-100 at +11193749041240441045*2^-71 was a coarse test estimate of 0.42 of the bound): r^6 term now double-double there (worst 0.0388 of the bound), sweep checks the bound exactly and is no longer ignored",
+ "branch": "task/wide-dd-expm1-bound", "head": "fa1689021",
+ "gate": {"affected": "209 passed / 0 failed", "peak": "1.4G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The ignored *_long sweeps of wide_int.rs, wide_int_el.rs, wide_int/quad.rs, wide_int/quad/arc.rs and wide_int/arc.rs say the accuracy job runs them, but no xtask or validation script does: each should be run once and un-ignored where cheap."],
+ "refused": [],
+ "jobs": ["wide-dd-expm1-bound-lint", "wide-dd-expm1-bound-gate", "wide-dd-expm1-bound-plants", "wide-dd-expm1-bound-hottext"],
+ "improvement": "Error-bound tests should compare the exact claim (|d| < 2^-b|v| in the reference arithmetic), not an exponent estimate that can be 4x off; and an ignored sweep needs a named runner or it rots.",
+ "next_step": "Run and un-ignore (where cheap) the other wide tiers' *_long sweeps.",
+ "report_file": "handoff/wide-dd-expm1-bound.md"}
