@@ -4,7 +4,7 @@
  "tokens": null,
  "result": "sinf128/cosf128 three-limb integer tier: 82434 -> 1257 instructions per call (glibc 7250, 0.17x); proved 2^-156, 10^7 sweep worst 2^-158.25, 0 undecided",
  "branch": "task/libm-f128-trig-int",
- "head": "54cd98a67",
+ "head": "22961c258",
  "gate": {
   "affected": "187 passed / 0 failed",
   "peak": "354M"
@@ -23,6 +23,6 @@
   "shiki:libm-f128-trig-int-plants",
   "shiki:libm-f128-trig-int-sweep",
   "shiki:libm-f128-trig-int-percall",
-  "shiki:libm-f128-trig-int-static-final"
+  "shiki:libm-f128-trig-int-static-final2"
  ]
 }
