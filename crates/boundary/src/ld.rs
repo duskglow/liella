@@ -52,6 +52,69 @@ static OWN_BASE: AtomicUsize = AtomicUsize::new(0);
 /// module with TLS after start (DL-15/DL-16) moves it on. 0 for the initially loaded objects.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 
+/// `__libc_stack_end` (spec §1.1, `GLIBC_2.2.5` of `ld.so` in versions.tsv, R14-12): the initial
+/// stack pointer, set before any object is relocated (a program's copy relocation reads it).
+/// `libc.a` keeps its own definition for static programs (D-27.26).
+// UNSAFE(export): an exported data object of the ld.so product.
+#[unsafe(no_mangle)]
+#[allow(unsafe_code)]
+#[allow(non_upper_case_globals)]
+pub static __libc_stack_end: AtomicUsize = AtomicUsize::new(0);
+
+/// `__rseq_offset` (§22.9, `GLIBC_2.35` of `ld.so`): the rseq area's offset from the thread pointer
+/// (`liella_rt::tls::RSEQ_OFFSET`, the same in every thread), published with [`__rseq_size`].
+// UNSAFE(export): an exported data object of the ld.so product.
+#[unsafe(no_mangle)]
+#[allow(unsafe_code)]
+#[allow(non_upper_case_globals)]
+pub static __rseq_offset: core::sync::atomic::AtomicIsize = core::sync::atomic::AtomicIsize::new(0);
+
+/// `__rseq_size` (§22.9): the size of the area the loader registered for the initial thread, 0 when
+/// registration is off (`glibc.pthread.rseq=0`) or the kernel refused it.
+// UNSAFE(export): an exported data object of the ld.so product.
+#[unsafe(no_mangle)]
+#[allow(unsafe_code)]
+#[allow(non_upper_case_globals)]
+pub static __rseq_size: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// `__rseq_flags` (§22.9): always 0.
+// UNSAFE(export): an exported data object of the ld.so product.
+#[unsafe(no_mangle)]
+#[allow(unsafe_code)]
+#[allow(non_upper_case_globals)]
+pub static __rseq_flags: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Whether the tunables leave rseq registration on (`glibc.pthread.rseq`, D-22.7), read at start.
+static RSEQ_WANTED: AtomicBool = AtomicBool::new(true);
+
+/// The bytes above the initial thread's pointer (D-27.26): the thread block, then room up to the
+/// end of the rseq area at `RSEQ_OFFSET`, where the C library's descriptor puts it in every other
+/// thread, so `__rseq_offset` is one value for all threads.
+#[allow(clippy::as_conversions)] // const context: `try_from` is not const
+const INITIAL_TAIL: u64 = {
+    let end = (liella_rt::tls::RSEQ_OFFSET + liella_rt::thread::RSEQ_SIZE as usize).next_multiple_of(64) as u64;
+    if end > Native::TCB_SIZE { end } else { Native::TCB_SIZE }
+};
+const _: () = assert!(liella_rt::tls::RSEQ_OFFSET % 32 == 0, "the rseq area is 32-byte aligned");
+
+/// Register the initial thread's rseq area at `tp + RSEQ_OFFSET` (inside the area [`map_area`]
+/// mapped, zero-filled) and publish `__rseq_offset`/`__rseq_size`: before relocation, so a
+/// program's copy of them reads the final values. The registered size (0: none).
+fn register_rseq(tp: usize) -> usize {
+    if !RSEQ_WANTED.load(Relaxed) {
+        return 0;
+    }
+    let at = tp.wrapping_add(liella_rt::tls::RSEQ_OFFSET);
+    let size = liella_rt::thread::RSEQ_SIZE;
+    let ok = crate::ffi_sys::liella_sys_rseq(core::ptr::with_exposed_provenance_mut(at), i64::from(size), 0, i64::from(liella_kernel::uapi::RSEQ_SIG)) == 0;
+    if !ok {
+        return 0;
+    }
+    __rseq_offset.store(isize::try_from(liella_rt::tls::RSEQ_OFFSET).unwrap_or(0), Release);
+    __rseq_size.store(size, Release);
+    usize::try_from(size).unwrap_or(0)
+}
+
 // The thread-block slots the arch table names are the fields of Liella's block (D-4.15).
 #[allow(clippy::as_conversions)] // const context: no `try_from`; the values are small offsets
 const _: () = {
@@ -237,7 +300,8 @@ pub extern "C" fn liella_ld_start(sp: usize, ehdr: usize) -> ! {
     // 5. The LD_* settings, the tunables (D-1.8, the secure filter) and the CPU features: the
     // features come from the arch seam only (design §0a); the hwcaps search (DL-8) reads them.
     let ld = start::ld_env(env_entries(envp));
-    let _tunables = ld.tunables.map(|t| Tunables::parse(t, secure));
+    let tunables = ld.tunables.map(|t| Tunables::parse(t, secure));
+    RSEQ_WANTED.store(tunables.is_none_or(|t| t.rseq != Some(false)), Relaxed);
     let features = Native::features(&Auxv::from_words(copy.get(..words).unwrap_or(&[])), &crate::sys::CSys);
     for name in ld.preload.map(start::preload_names).into_iter().flatten() {
         for part in start::preload_ignored(name) {
@@ -357,8 +421,20 @@ fn run(sp: usize, prog: &start::Program, bias: usize, page: u64, path: usize) ->
     let one = [program_tls(headers, prog.phnum)];
     let mut placed = [None];
     let area = ltls::layout::<Native>(&one, &mut placed, Native::TCB_SIZE, ltls::SURPLUS).unwrap_or_else(|_| refuse(b"ld.so: the program's TLS segment is malformed\n"));
-    install_tls(&one, &[u64::try_from(bias).unwrap_or(0)], &placed, &area);
+    install_tls(&one, &[u64::try_from(bias).unwrap_or(0)], &placed, &area, map_area(&area));
     crate::arch::enter(sp, prog.entry, 0)
+}
+
+/// The initial thread's area for `area`, mapped read-write and zero-filled: its `area.align`-aligned
+/// base (mapped before relocation, so the rseq area in it is registered and published first).
+fn map_area(area: &Area) -> usize {
+    let fail = || -> ! { refuse(b"ld.so: cannot set up the initial thread's TLS\n") };
+    let (Ok(len), Ok(align)) = (usize::try_from(area.len), usize::try_from(area.align)) else { fail() };
+    let prot = i32::try_from(liella_kernel::uapi::PROT_READ | liella_kernel::uapi::PROT_WRITE).unwrap_or(0);
+    let flags = i32::try_from(liella_kernel::uapi::MAP_PRIVATE | liella_kernel::uapi::MAP_ANONYMOUS).unwrap_or(0);
+    let Some(map_len) = len.checked_add(align) else { fail() };
+    let Ok(raw_base) = raw::mmap(0, map_len, prot, flags, -1, 0) else { fail() };
+    raw_base.checked_next_multiple_of(align).unwrap_or_else(|| fail())
 }
 
 /// The program's `PT_TLS` from its header words, refused unless its image lies in the file part of a
@@ -381,14 +457,9 @@ fn program_tls(headers: &[u64], phnum: usize) -> Option<Module> {
 /// initialisation image from its loaded (and relocated) object (`biases[i]` + `p_vaddr`, `p_filesz`
 /// bytes; the rest of the block stays zero), fill the thread block (self, dtv, the canary and pointer
 /// guard from the provisional block, `FLAG_OWN`) and the dtv, and make it the thread pointer.
-fn install_tls(mods: &[Option<Module>], biases: &[u64], placed: &[Option<Placed>], area: &Area) {
+/// In the area [`map_area`] mapped at `base`.
+fn install_tls(mods: &[Option<Module>], biases: &[u64], placed: &[Option<Placed>], area: &Area, base: usize) {
     let fail = || -> ! { refuse(b"ld.so: cannot set up the initial thread's TLS\n") };
-    let (Ok(len), Ok(align)) = (usize::try_from(area.len), usize::try_from(area.align)) else { fail() };
-    let prot = i32::try_from(liella_kernel::uapi::PROT_READ | liella_kernel::uapi::PROT_WRITE).unwrap_or(0);
-    let flags = i32::try_from(liella_kernel::uapi::MAP_PRIVATE | liella_kernel::uapi::MAP_ANONYMOUS).unwrap_or(0);
-    let Some(map_len) = len.checked_add(align) else { fail() };
-    let Ok(raw_base) = raw::mmap(0, map_len, prot, flags, -1, 0) else { fail() };
-    let Some(base) = raw_base.checked_next_multiple_of(align) else { fail() };
     let tp = base.wrapping_add(usize::try_from(area.tp).unwrap_or(0));
     let tp64 = u64::try_from(tp).unwrap_or(0);
     for ((m, p), b) in mods.iter().zip(placed).zip(biases) {
@@ -783,13 +854,18 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
         }
     }
     let mut placed: [Option<Placed>; OBJECTS_MAX] = [None; OBJECTS_MAX];
-    let area = ltls::layout::<Native>(&mods[..n], &mut placed[..n], Native::TCB_SIZE, ltls::SURPLUS).unwrap_or_else(|e| {
+    let area = ltls::layout::<Native>(&mods[..n], &mut placed[..n], INITIAL_TAIL, ltls::SURPLUS).unwrap_or_else(|e| {
         let at = match e {
             ltls::TlsError::Align(k) | ltls::TlsError::Size(k) => k,
             _ => 0,
         };
         fail_with(&[objs.get(at).map_or(&b"?"[..], |o| o.name), b": malformed or too large TLS segment\n"], program::FAILURE)
     });
+    // The objects ld.so exports (R14-12, D-27.26): published before any object is relocated, so
+    // a program's copy relocation of one reads its final value.
+    let area_base = map_area(&area);
+    __libc_stack_end.store(sp, Release);
+    let rseq_size = register_rseq(area_base.wrapping_add(usize::try_from(area.tp).unwrap_or(0)));
     for (o, p) in objs[..n].iter_mut().zip(&placed[..n]) {
         o.tls = *p;
     }
@@ -830,13 +906,13 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
     }
     // The images are copied after relocation: a `.tdata` word may hold a relocated address.
     let biases: [u64; OBJECTS_MAX] = core::array::from_fn(|k| objs.get(k).map_or(0, |o| o.bias));
-    install_tls(&mods[..n], &biases[..n], &placed[..n], &area);
+    install_tls(&mods[..n], &biases[..n], &placed[..n], &area, area_base);
     // The interpreter, when in the list, ran its own start already: no hooks of its own here.
     let hooks: [init::Hooks; OBJECTS_MAX] = core::array::from_fn(|i| objs.get(i).filter(|_| Some(i) != interp).map_or_else(init::Hooks::default, |o| init::hooks(&o.dynm, o.bias, i == 0)));
     for &(at, len) in maps[1..n].iter().chain(&views).filter(|m| m.1 != 0) {
         let _ = raw::munmap(at, len);
     }
-    run_init(&hooks[..n], &edges[..ne], sp, early.map(|f| f.early_init))
+    run_init(&hooks[..n], &edges[..ne], sp, early.map(|f| f.early_init), rseq_size)
 }
 
 /// Most `DT_NEEDED` links over all objects of one start.
@@ -869,7 +945,7 @@ static FINI_DONE: AtomicBool = AtomicBool::new(false);
 /// termination function the program gets in `%rdx`. First of all, `early` (the C library's
 /// `__liella_libc_early_init`, design §14, D-27.22) gets the initial stack, so every constructor,
 /// `.preinit_array` included, sees an initialised C library.
-fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<u64>) -> usize {
+fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<u64>, rseq_size: usize) -> usize {
     let mut order = [0u8; OBJECTS_MAX];
     let mut fini_order = [0u8; OBJECTS_MAX];
     let (Ok(len), Ok(fini_len)) = (init::init_order(hooks.len(), edges, &mut order), init::fini_order(hooks.len(), edges, &mut fini_order)) else {
@@ -888,7 +964,7 @@ fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<
         while stack_word(auxv) != 0 {
             auxv = auxv.wrapping_add(8);
         }
-        let info = start::private::StartInfo { argc: usize::try_from(argc).unwrap_or(0), argv, envp, auxv: auxv.wrapping_add(8), stack_end: sp };
+        let info = start::private::StartInfo { argc: usize::try_from(argc).unwrap_or(0), argv, envp, auxv: auxv.wrapping_add(8), stack_end: sp, rseq_size };
         let at = core::ptr::from_ref(&info).expose_provenance();
         let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), args(at), 0, 0);
     }

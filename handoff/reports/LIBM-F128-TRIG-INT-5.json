@@ -1,0 +1,10 @@
+{"task": "LIBM-F128-TRIG-INT-5", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE (context checkpoint): asinf128/acosf128 three-limb tier written and proved within 2^-160.2; tests, 10^7 sweep (0 undecided, worst 2^-161.36), clippy, static green; 4 of 5 plants CAUGHT (index-scale plant does not compile); counts running; sqrtsd boundary row, D-10.97 record, gate, hot_text, timing left",
+ "branch": "task/libm-f128-trig-int-5", "head": null,
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["plants: f128-arcsin-index-scale WARN-NO-MSG (mutant does not compile: u64::from of an untyped constant); rewrite that plant"],
+ "refused": [],
+ "improvement": "thread_common.txt is read whole at start (57 KB, about a third of the 150k context checkpoint): a short current-rules digest would leave room for an L story in one run",
+ "next_step": "read -percall2, switch the f128 asin/acos boundary rows to sqrtsd (math-gen), record D-10.97, fix the index-scale plant, gate + hot_text + plants + counts on the final head, book timing",
+ "report_file": "handoff/libm-f128-trig-int-5.md",
+ "jobs": ["libm-f128-trig-int-5-lint", "libm-f128-trig-int-5-plants", "libm-f128-trig-int-5-percall2"]}

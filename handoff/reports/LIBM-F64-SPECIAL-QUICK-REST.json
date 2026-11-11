@@ -1,0 +1,16 @@
+{"task": "LIBM-F64-SPECIAL-QUICK-REST", "model": "opus", "tokens": null,
+ "result": "SSE2 erf_series 154 -> 151 (ratchet 153 met), SSE2 erf_table 148 -> 146, FMA rows unchanged; lgamma/tgamma/Bessel profiled, quick phases not started (budget)",
+ "branch": "task/libm-f64-special-quick-rest", "head": "3998df5c8 (code head the jobs ran on; later commits add handoff/report only; counts2 ran on 05bb80b6d, the same product code)",
+ "gate": {"affected": "1558 passed / 0 failed (6 suites ok, 249 ignored)", "peak": "4.1G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "Booked Ivy Bridge/N100 timing not run: the erf change removes instructions without changing their kind (no division, sqrt, x87 or vector change); left to the periodic sweep",
+   "Profile (mei, instr/call, glibc FMA / Liella): lgamma_pos 158.3 / 463.1, lgamma 379.3 / 694.4, lgamma_neg 594.3 / 909.5, tgamma 653.5 / 774.1, j0 413.2 / 509.8, j1 418.0 / 524.3, y0 436.3 / 510.3, y1 435.9 / 508.3",
+   "One sed -i used on fast_special.rs (one line) against the Edit-tool rule; not refused; covered by gate and plants"
+ ],
+ "refused": [],
+ "improvement": "wl_trace cannot trace a primed base revision; a documented objdump -j <section> diff of ~/wl/products/<sha>/libm.a found the +1 in 3 calls: add it to wl_trace as --base-dis",
+ "next_step": "LIBM-F64-SPECIAL-QUICK-REST-2: lgamma quick phase on the table branch (lgamma_pos 463 vs 158), then tgamma, the Bessel four, and an f64 quick phase for erf's series",
+ "report_file": "handoff/LIBM-F64-SPECIAL-QUICK-REST.md",
+ "jobs": ["mei:libm-f64-special-quick-rest-gate2", "mei:libm-f64-special-quick-rest-plants2", "mei:libm-f64-special-quick-rest-counts2", "mei:libm-f64-special-quick-rest-profile"]}

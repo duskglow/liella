@@ -1,0 +1,11 @@
+id = "D-27.26"
+section = "s26-29"
+spec = "§27"
+ann = "ABI"
+status = "active"
+story = "DL-LIBC-EARLY-3"
+date = "2026-11-11"
+tests = ["crates/ld/tests/reloc.rs::reloc_loader_objects_published", "crates/boundary/tests/s22_threads_symbols.rs::sym___rseq_size"]
+body = '''
+**`__libc_stack_end` and the rseq objects are `ld.so`'s; `ld.so` registers the initial thread's rseq area (phase 14 DL-13, plan/ph14/design.md §14, R14-12).** Liella's `ld.so` exports `__libc_stack_end@@GLIBC_2.2.5`, `__rseq_offset@@GLIBC_2.35`, `__rseq_size@@GLIBC_2.35` and `__rseq_flags@@GLIBC_2.35`, as spec/abi/versions.tsv places them; `libc.so.6` keeps its own copies local (they serve `libc.a`'s static programs, unchanged) and never refers to the loader's, so no libc-side code names the loader crate (D-27.22's dependency rule). For a dynamically linked program `ld.so` reserves, above the initial thread's pointer, the thread block and room up to `liella_rt::tls::RSEQ_OFFSET + 32` (where the C library's descriptor holds the rseq area in every other thread, so `__rseq_offset` is one value for all threads), maps that area before relocating any object, registers the 32-byte rseq area there (unless `glibc.pthread.rseq=0`), and publishes `__rseq_offset`/`__rseq_size` and `__libc_stack_end` (the initial stack pointer) before relocation, so a program's copy relocation of one reads its final value. The registered size travels to the C library in `StartInfo.rseq_size` (`__liella_libc_early_init`); when it is non-zero, the threads `libc.so.6` creates register their own areas at the same offset. Static programs and the program-alone start (no `DT_NEEDED`) are unchanged.
+'''

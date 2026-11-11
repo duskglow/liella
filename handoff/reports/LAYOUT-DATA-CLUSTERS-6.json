@@ -1,0 +1,12 @@
+{"task": "LAYOUT-DATA-CLUSTERS-6", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: start-up state declared in crates/libc-so/startup-state.list (no trace drives placement; profile-independent; strict), strings probe fixed (#4677); fast green; release still fork child 8 at the data 0x3000 pad (inherited from -5)",
+ "branch": "task/layout-data-clusters-6", "head": "see hand-back (code 2bb5119da)",
+ "gate": {"affected": "not run (release hot_text_products red first): ldc6-check-1 fast 22/22 passed, release 21 passed / 1 failed (init_data_clusters_hold_at_every_text_phase, fork 8 > 7 at data 0x3000)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "D-X id for the declared start-up state decision (supersedes D-X.69's trace keying; brief reserved none)", "recommendation": "reserve one D-X id for the -7 run; record option C (list) adopted, A (link_section) rejected for unsafe attribute/NOBITS mixing, B (marker-module macro) as the follow-up if renames burden"}],
+ "informational": ["fast pays +1 on locale/tool/fork vs -5 regen-3 (OUTCOME and FMA joined .data1), all within bounds", "startup-data.keys rw keys no longer place anything; the file stays as STARTUP-DATA-WINDOWS input"],
+ "refused": [],
+ "jobs": ["ldc6-lint-final (clippy + static on the final head, rc 0)", "SUPERSEDED ldc6-check-1 (code head 2bb5119da, rc 1: release data-phase fork child 8 > 7 at data 0x3000, the open item)", "SUPERSEDED ldc6-lint0 (step 0, inherited head 293716af8, rc 0)", "SUPERSEDED ldc6-evidence-head (evidence on the inherited head, rc 0)"],
+ "improvement": "context ran out before calls: dumping and diffing archive symbol tables locally cost more than one remote analysis script would have; analyse on the host and copy back only the summary",
+ "next_step": "map the release fork child at the data 0x3000 pad (perf -d) and fix it by member order inside .data1; then fold the two keys/suffix tests into one list-driven test, file the D-X record, run plants and the direct-tier gate",
+ "report_file": "handoff/LAYOUT-DATA-CLUSTERS-6.md"}
