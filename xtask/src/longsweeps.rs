@@ -4,12 +4,12 @@
 //! An `#[ignore]`d test runs only when something asks for it by name. Before this runner, the long sweeps said
 //! "the accuracy job runs them" while no command or script did (#4749), so they had never run. Each sweep is
 //! one row of [`SWEEPS`] with its group:
-//! - `long` (10^7 operands or so, minutes in release): `cargo xtask test` runs them as its `long-sweeps` step
-//!   when `LIELLA_NO_VERDICT_CACHE=1`, the nightly and release runs that already run every accuracy shard
-//!   (D-10.57). The ordinary gate leaves them out.
-//! - `exhaustive` (every `float` operand, 2^32 to 2^34 calls each, tens of minutes to hours under load) and
-//!   `count` (Ziv retry counts that also assert the retries end): run only by `cargo xtask long-sweeps
-//!   --group exhaustive|count`, a job of their own.
+//! - `long` (10^7 operands or so, minutes in release) and `count` (Ziv retry counts that also assert the
+//!   retries end; about 3 s of tests after a release build of about 4 min on 26 threads, ruling #4751):
+//!   `cargo xtask test` runs both as its `long-sweeps` step when `LIELLA_NO_VERDICT_CACHE=1`, the nightly and
+//!   release runs that already run every accuracy shard (D-10.57). The ordinary gate leaves them out.
+//! - `exhaustive` (every `float` operand, 2^32 to 2^34 calls each, tens of minutes to hours under load): run
+//!   only by `cargo xtask long-sweeps --group exhaustive`, a weekly job on an idle build host (ruling #4750).
 //!
 //! `cargo xtask long-sweeps [--group long|exhaustive|count|all] [--list]` (default `long`) runs each sweep of the
 //! group once, in release, by its exact name (`-- --ignored --exact --nocapture`), prints its output and one
@@ -32,9 +32,9 @@ use std::time::Instant;
 pub enum Group {
     /// `cargo xtask test` with `LIELLA_NO_VERDICT_CACHE=1` (nightly and release), and `long-sweeps`.
     Long,
-    /// `long-sweeps --group exhaustive` only.
+    /// `long-sweeps --group exhaustive` only (weekly, ruling #4750).
     Exhaustive,
-    /// `long-sweeps --group count` only.
+    /// As `Long` (ruling #4751), and `long-sweeps --group count`.
     Count,
 }
 
@@ -69,6 +69,7 @@ pub const SWEEPS: &[Sweep] = &[
     lib("crates/math/src/wide_int/arc.rs", "wide_int::arc::tests::arc_tier_agrees_with_the_wide_route_long", Group::Long),
     lib("crates/math/src/wide_int/quad/arc.rs", "wide_int::quad::arc::tests::tier_agrees_with_the_wide_route_long", Group::Long),
     lib("crates/math/src/complex_fast_tests.rs", "complex_fast::tests::cexp_quick_tier_sweep", Group::Long),
+    lib("crates/math/src/complex_fast_ls_tests.rs", "complex_fast::ls_tests::clog_csqrt_quick_tier_sweep", Group::Long),
     Sweep { file: "crates/math/tests/fast_bessel_n.rs", target: Some("fast_bessel_n"), test: "bessel_n_tier_sweep", group: Group::Long },
     lib("crates/math/src/fast32/erf.rs", "fast32::erf::tests::erff_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/erf.rs", "fast32::erf::tests::erfcf_fast_path_agrees_exhaustively", Group::Exhaustive),

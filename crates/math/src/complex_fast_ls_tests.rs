@@ -247,7 +247,7 @@ fn bench_rows_reach_the_route_only_where_measured() {
 /// The 10^7-operand sweep per function (`cargo test --release -p liella-math --lib -- --ignored
 /// clog_csqrt_quick_tier_sweep`): the comparison above on 8 threads, four modes.
 #[test]
-#[ignore = "long sweep, run as a job"]
+#[ignore = "long sweep: cargo xtask long-sweeps runs it in release (nightly and release runs)"]
 fn clog_csqrt_quick_tier_sweep() {
     // Clauses: s10_5_c_0, s10_0_f_0.
     let threads: Vec<_> = (0..8u64).map(|i| std::thread::spawn(move || compare(312_500, 0x2545_f491_4f6c_dd1d ^ (i + 1).wrapping_mul(0xd1b5_4a32_d192_ed03)))).collect();
