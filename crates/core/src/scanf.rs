@@ -25,7 +25,7 @@ use crate::locale::file::Cat;
 use crate::locale::{Item, Locale};
 use crate::mem::{InlineVec, TryVec};
 use crate::num::float::{Format, Rounding};
-use crate::num::parse::{parse_float, Dialect};
+use crate::num::parse::{parse_float, Dialect, Signals};
 use crate::text::{self, Decoded, Encoding, MbState};
 
 /// The symbol set a call came through (spec §12.7, ⚑ COMPAT).
@@ -124,6 +124,8 @@ pub struct Scanned {
     pub outcome: Outcome,
     /// An error to report through `errno` (a read error, or `EILSEQ`), whatever the outcome.
     pub error: Option<Errno>,
+    /// The IEEE exceptions the float conversions signalled, for the caller to raise (D-8.12).
+    pub signals: Signals,
 }
 
 // ------------------------------------------------------------------------------ the format
@@ -932,6 +934,8 @@ struct Run {
     converted: bool,
     /// Sequential arguments used.
     seq: usize,
+    /// Exceptions the float conversions signalled.
+    signals: Signals,
 }
 
 impl Run {
@@ -959,10 +963,10 @@ impl Run {
 /// field cannot be had (`ENOMEM`).
 pub fn scan<F: FmtUnit, I: Input + ?Sized>(fmt: &[F], input: &mut I, sink: &mut dyn Sink, ctx: Ctx<'_>) -> Result<Scanned> {
     let mut r = Reader { input, loc: ctx.loc, wide: F::WIDE, used: 0, ended: false, error: None };
-    let mut run = Run { assigned: 0, converted: false, seq: 0 };
+    let mut run = Run { assigned: 0, converted: false, seq: 0, signals: Signals::default() };
     let stop = directives(fmt, &mut r, sink, &ctx, &mut run)?;
     let outcome = if stop == Stop::InputFailure && !run.converted { Outcome::InputFailure } else { Outcome::Assigned(run.assigned) };
-    Ok(Scanned { outcome, error: r.error })
+    Ok(Scanned { outcome, error: r.error, signals: run.signals })
 }
 
 /// Execute the format's directives in order.
@@ -1056,6 +1060,7 @@ fn convert<F: FmtUnit, I: Input + ?Sized>(fmt: &[F], s: &Spec, r: &mut Reader<'_
             if parsed.used != text.len() {
                 return Ok(Some(Stop::Mismatch));
             }
+            run.signals = run.signals.or(parsed.signals());
             if !s.skip {
                 let bits = parsed.value.pack(format).to_le_bytes();
                 let addr = run.arg(sink, s.arg);

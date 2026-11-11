@@ -1,0 +1,5 @@
+# STRTO-FENV-FLAGS plants (D-8.12): the flags matrix conformance test must catch each.
+drop-overflow | crates/legacy/src/num_compat.rs | perl:s/\(s\.overflow, Flags::OVERFLOW\)/(false, Flags::OVERFLOW)/ | cargo xtask affected --only conformance:s08_strto_fenv_flags --with-exports --run | msg:FAIL flags .*got IE want IOE
+exact-raises-inexact | crates/core/src/num/parse.rs | perl:s/inexact: r\.inexact \}/inexact: true }/ | cargo xtask affected --only conformance:s08_strto_fenv_flags --with-exports --run | msg:FAIL flags .*got I want -
+drop-underflow | crates/legacy/src/num_compat.rs | perl:s/\(s\.underflow, Flags::UNDERFLOW\)/(false, Flags::UNDERFLOW)/ | cargo xtask affected --only conformance:s08_strto_fenv_flags --with-exports --run | msg:FAIL flags .*got IE want IUE
+scanf-drops-signals | crates/core/src/scanf.rs | perl:s/run\.signals = run\.signals\.or\(parsed\.signals\(\)\);// | cargo xtask affected --only conformance:s08_strto_fenv_flags --with-exports --run | msg:FAIL flags sscanf

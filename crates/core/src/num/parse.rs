@@ -225,6 +225,38 @@ pub struct ParsedFloat {
     pub used: usize,
     /// Range outcome.
     pub range: FloatRange,
+    /// The value differs from the exact one (IEEE inexact; with `range`, [`ParsedFloat::signals`]).
+    /// The `double` fast path's single IEEE operation (`exact_f64`) raises its inexact in hardware
+    /// and reports `false` here (D-8.12).
+    pub inexact: bool,
+}
+
+/// The IEEE 754 exceptions a conversion signals (C Annex F.5, D-8.12): inexact when the result
+/// is not exact, overflow when it rounds beyond the largest finite value, underflow when it is
+/// tiny and inexact. The caller raises them once, after the conversion.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct Signals {
+    /// IEEE inexact.
+    pub inexact: bool,
+    /// IEEE overflow.
+    pub overflow: bool,
+    /// IEEE underflow.
+    pub underflow: bool,
+}
+
+impl Signals {
+    /// Both sets together.
+    #[must_use]
+    pub fn or(self, o: Signals) -> Signals {
+        Signals { inexact: self.inexact | o.inexact, overflow: self.overflow | o.overflow, underflow: self.underflow | o.underflow }
+    }
+}
+
+impl ParsedFloat {
+    /// The exceptions this conversion signals. Overflow and underflow are always inexact.
+    pub fn signals(&self) -> Signals {
+        Signals { inexact: self.inexact, overflow: self.range == FloatRange::Overflow, underflow: self.range == FloatRange::Underflow }
+    }
 }
 
 /// Significant decimal digits kept exactly; later nonzero digits only set the sticky bit. Large
@@ -249,7 +281,7 @@ fn result(r: Rounded, used: usize) -> ParsedFloat {
     } else {
         FloatRange::Ok
     };
-    ParsedFloat { value: r.value, used, range }
+    ParsedFloat { value: r.value, used, range, inexact: r.inexact }
 }
 
 fn eq_ignore_case<T: Unit>(s: &[T], at: usize, word: &[u8]) -> bool {
@@ -265,7 +297,7 @@ fn radix_at<T: Unit>(s: &[T], i: usize, radix: &[T]) -> bool {
 /// locale's radix character (D-8.3), in the string's units: the multibyte decimal point for
 /// byte strings (several bytes in some locales), the wide one for wide strings.
 pub fn parse_float<T: Unit>(s: &[T], radix: &[T], fmt: Format, mode: Rounding, dialect: Dialect) -> ParsedFloat {
-    let none = ParsedFloat { value: Float { neg: false, value: Value::Zero }, used: 0, range: FloatRange::Ok };
+    let none = ParsedFloat { value: Float { neg: false, value: Value::Zero }, used: 0, range: FloatRange::Ok, inexact: false };
     let mut i = 0usize;
     while i < s.len() && is_space(byte_at(s, i)) {
         i += 1;
@@ -282,7 +314,7 @@ pub fn parse_float<T: Unit>(s: &[T], radix: &[T], fmt: Format, mode: Rounding, d
     // Infinity and NaN.
     if eq_ignore_case(s, i, b"inf") {
         let used = if eq_ignore_case(s, i, b"infinity") { i + 8 } else { i + 3 };
-        return ParsedFloat { value: Float { neg, value: Value::Inf }, used, range: FloatRange::Ok };
+        return ParsedFloat { value: Float { neg, value: Value::Inf }, used, range: FloatRange::Ok, inexact: false };
     }
     if eq_ignore_case(s, i, b"nan") {
         let mut used = i + 3;
@@ -302,7 +334,7 @@ pub fn parse_float<T: Unit>(s: &[T], radix: &[T], fmt: Format, mode: Rounding, d
                 used = j + 1;
             }
         }
-        return ParsedFloat { value: Float { neg, value: Value::Nan { payload, quiet: true } }, used, range: FloatRange::Ok };
+        return ParsedFloat { value: Float { neg, value: Value::Nan { payload, quiet: true } }, used, range: FloatRange::Ok, inexact: false };
     }
     // Hexadecimal.
     if byte_at(s, i) == b'0' && byte_at(s, i + 1).eq_ignore_ascii_case(&b'x') {
@@ -571,6 +603,9 @@ fn exponent_part<T: Unit>(s: &[T], m: &Mantissa) -> (i64, usize) {
     (m.dexp, i)
 }
 
+/// log10(2) × 10^12, truncated (0.301029995663981...).
+const LOG10_2_E12: i64 = 301_029_995_663;
+
 /// Powers of ten a `double` holds exactly.
 const EXACT_POW10: [f64; 23] = [1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22];
 
@@ -598,8 +633,10 @@ fn finish(dexp: i64, used: usize, mut n: Big, nkept: usize, truncated: bool, neg
         return result(round(neg, 0, 0, false, fmt, mode), used);
     }
     // Certain overflow and certain underflow, decided with margin from the format's range.
-    let max10 = ((fmt.emax + 1) as f64 * core::f64::consts::LOG10_2) as i64 + 2;
-    let min10 = ((fmt.emin() - fmt.prec as i32) as f64 * core::f64::consts::LOG10_2) as i64 - 2;
+    // Integer arithmetic only: a floating-point operation here would raise inexact into the
+    // caller's environment (D-8.12). log10(2) to 12 places; truncation toward zero as before.
+    let max10 = i64::from(fmt.emax + 1) * LOG10_2_E12 / 1_000_000_000_000 + 2;
+    let min10 = i64::from(fmt.emin() - fmt.prec as i32) * LOG10_2_E12 / 1_000_000_000_000 - 2;
     if dexp - 1 > max10 {
         return result(round(neg, 1, fmt.emax + 2, false, fmt, mode), used);
     }
