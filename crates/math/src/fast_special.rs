@@ -293,15 +293,15 @@ pub fn erf_nearest(x: f64) -> Option<f64> {
         return Some(if x < 0.0 { -v } else { v });
     }
     // The quick phase shares the table branch's range check, so the series path sees no new
-    // compare (module doc, "Quick phase").
-    let (y, eps) = if ax >= SMALL {
-        if let Some(v) = erf_quick_near(ax) {
-            return Some(if x < 0.0 { -v } else { v });
-        }
-        erf_table_dd(ax)
-    } else {
-        erf_small_dd(ax)
-    };
+    // compare (module doc, "Quick phase"); the table path it falls back to is out of line.
+    if ax >= SMALL {
+        let v = match erf_quick_near(ax) {
+            Some(v) => v,
+            None => erf_table_near(ax)?,
+        };
+        return Some(if x < 0.0 { -v } else { v });
+    }
+    let (y, eps) = erf_small_dd(ax);
     let v = finish(y, Some(C_EXP), 0, || eps, &mut 0)?;
     Some(if x < 0.0 { -v } else { v })
 }
@@ -329,18 +329,13 @@ pub fn erfc_nearest(x: f64) -> Option<f64> {
             return Some(2.0 - ax.min(8.0) * E63);
         }
         // As in `erf_nearest`: the quick phase inside the table branch only.
-        let (y, eps) = if ax >= SMALL {
-            if let Some(v) = erfc_quick_near(x, ax) {
-                return Some(v);
-            }
-            erf_table_dd(ax)
-        } else {
-            erf_small_dd(ax)
-        };
-        let (y, c) = if x < 0.0 { (y, C_EXP) } else { (y.neg(), C_ERFC_LOW) };
-        let s = fast_two_sum(1.0, y.hi);
-        let r = fast_two_sum(s.hi, s.lo + y.lo);
-        return finish(r, Some(c), 0, || eps + E103, &mut 0);
+        if ax >= SMALL {
+            return match erfc_quick_near(x, ax) {
+                Some(v) => Some(v),
+                None => erfc_table_near(x, ax),
+            };
+        }
+        return erfc_low_near(x, erf_small_dd(ax));
     }
     if !(..ERFC_MAX).contains(&x) {
         return None;
@@ -372,6 +367,36 @@ fn erf_quick_dd(x: f64) -> Dd {
     let s = fast_two_sum(p(0), ph.hi);
     let low = (s.lo + p(1)) + (ph.lo + (p(3) * t + p(5) * t2));
     fast_two_sum(s.hi, t2 * r + low)
+}
+
+/// `erfc x` on `(−6, 1)` as `1 ± erf |x|` from `erf |x|` as `(y, eps)`, rounded to nearest, or
+/// `None` (the in-place entry's `1 − erf` branch).
+$(#[$a])*
+$(#[$i])*
+fn erfc_low_near(x: f64, (y, eps): (Dd, f64)) -> Option<f64> {
+    let (y, c) = if x < 0.0 { (y, C_EXP) } else { (y.neg(), C_ERFC_LOW) };
+    let s = fast_two_sum(1.0, y.hi);
+    let r = fast_two_sum(s.hi, s.lo + y.lo);
+    finish(r, Some(c), 0, || eps + E103, &mut 0)
+}
+
+/// The table path for `2^-5 <= x < 6` when the quick phase's rounding test refuses: out of line
+/// and cold, so the quick phase keeps no table value live across it (the SSE2 build spilled
+/// them when both shared one body).
+$(#[$a])*
+#[cold]
+#[inline(never)]
+fn erf_table_near(x: f64) -> Option<f64> {
+    let (y, eps) = erf_table_dd(x);
+    finish(y, Some(C_EXP), 0, || eps, &mut 0)
+}
+
+/// As [`erf_table_near`] for `erfc` (`ax = |x|`, `2^-5 <= ax < 6`, `x < 1`).
+$(#[$a])*
+#[cold]
+#[inline(never)]
+fn erfc_table_near(x: f64, ax: f64) -> Option<f64> {
+    erfc_low_near(x, erf_table_dd(ax))
 }
 
 /// The quick phase's `erf x` rounded to nearest for `2^-5 <= x < 6`, or `None` when its rounding
