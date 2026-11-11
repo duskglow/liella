@@ -20,6 +20,7 @@ use liella_kernel::uapi::O_RDWR;
 
 use crate::tls::TlsImage;
 
+const PT_LOAD: u64 = 1;
 const PT_PHDR: u64 = 6;
 const PT_TLS: u64 = 7;
 const PT_GNU_RELRO: u64 = 0x6474_e552;
@@ -44,11 +45,21 @@ pub const PAGE: usize = 4096;
 /// Read `phnum` program headers from `words` (the headers at runtime address `phdr_addr`), in
 /// one pass (STATIC-RELRO-2: start-up reads them once). The bias comes from `PT_PHDR`; without
 /// one the executable is taken as non-PIE. The first header of each type counts.
+///
+/// Every start pays this loop once per header (LAYOUT-DATA-CLUSTERS-4C, D-X.64's aligned clusters
+/// add a `PT_LOAD`), so it keeps one bound and leaves a `PT_LOAD`, most of any program's headers,
+/// after one compare: the table is cut to `phnum` whole headers first (`chunks_exact` then has the
+/// only bound; `take` was a second counter per header).
 pub fn program(words: &[u64], phnum: usize, phdr_addr: usize) -> Program {
     let field = |h: &[u64], i: usize| h.get(i).copied().map_or(0, |v| usize::try_from(v).unwrap_or(usize::MAX));
     let (mut phdr, mut tls, mut relro) = (None, None, None);
-    for h in words.chunks_exact(PHDR_WORDS).take(phnum) {
-        match h.first().map_or(0, |w| w & 0xffff_ffff) {
+    let table = words.get(..phnum.min(words.len() / PHDR_WORDS) * PHDR_WORDS).unwrap_or_default();
+    for h in table.chunks_exact(PHDR_WORDS) {
+        let ty = h.first().map_or(0, |w| w & 0xffff_ffff);
+        if ty == PT_LOAD {
+            continue;
+        }
+        match ty {
             PT_PHDR if phdr.is_none() => phdr = Some(h),
             PT_TLS if tls.is_none() => tls = Some(h),
             PT_GNU_RELRO if relro.is_none() => relro = Some(h),
