@@ -48,6 +48,11 @@
 //!    * every other crate (`kernel`, `rt`, `mem`, `ld`, `native`, `thread-db`, ...), a root file:
 //!      WIDE: every test target of every crate that depends on it (dev-dependencies included),
 //!      directly or not, and every conformance program.
+//!    * "Depends" (both bullets, every tier; XTASK-AFFECTED-LOADER): a crate's own dependencies always count; a
+//!      dependency's onward edge counts only when that crate's test build compiles a module naming the next crate
+//!      (`build_closures`: the features each crate gets in that build, `#[cfg(feature)]`/`any(feature)` module
+//!      gates). liella-math takes boundary with `selftest`, and boundary uses liella-ld only in the product-only
+//!      `bootstrap`, `ld` and `arch`: a loader change no longer selects liella-math's suites.
 //! 5. A test file: that target, and the targets of the crate that name the file (`#[path]`,
 //!    `include!`); a file in a support directory of `tests/`: every target that names the
 //!    directory. Examples, benches and other crate files: clippy only.
@@ -718,18 +723,26 @@ struct Image {
 /// features each edge enables: `Some` for an inline `features = [...]` or none, `None` when the edge can enable
 /// features this reading does not see (`workspace = true`, a `[dependencies.<name>]` table).
 fn link_deps(text: &str) -> BTreeMap<String, Option<BTreeSet<String>>> {
+    dep_edges(text, "dependencies", None)
+}
+
+/// The edges of one dependency table `kind` (`dependencies`, `dev-dependencies`, `workspace.dependencies`; the
+/// `[target.*.<kind>]` tables too) and the features each enables, as [`link_deps`]. XTASK-AFFECTED-LOADER: with `ws`
+/// (the root manifest's `workspace.dependencies`), a `workspace = true` edge enables its own list plus the workspace
+/// entry's, `None` when that entry is unknown.
+fn dep_edges(text: &str, kind: &str, ws: Option<&BTreeMap<String, Option<BTreeSet<String>>>>) -> BTreeMap<String, Option<BTreeSet<String>>> {
     let mut out: BTreeMap<String, Option<BTreeSet<String>>> = BTreeMap::new();
     let mut section = String::new();
     for line in text.lines() {
         let l = line.trim();
         if let Some(h) = l.strip_prefix('[') {
             section = h.trim_end_matches(']').trim_matches('[').to_string();
-            if let Some(d) = section.strip_prefix("dependencies.") {
+            if let Some(d) = section.strip_prefix(&format!("{kind}.")) {
                 out.insert(d.to_string(), None);
             }
             continue;
         }
-        if !(section == "dependencies" || (section.starts_with("target.") && section.ends_with(".dependencies"))) {
+        if !(section == kind || (section.starts_with("target.") && section.ends_with(&format!(".{kind}")))) {
             continue;
         }
         let Some((key, value)) = l.split_once('=') else { continue };
@@ -742,7 +755,12 @@ fn link_deps(text: &str) -> BTreeMap<String, Option<BTreeSet<String>>> {
             _ => key.to_string(),
         };
         let list = value.match_indices("features").find_map(|(i, _)| value[i + "features".len()..].trim_start().strip_prefix('=')?.trim_start().strip_prefix('[')?.split_once(']').map(|(l, _)| l));
-        let feats: Option<BTreeSet<String>> = if value.contains("workspace") { None } else { Some(list.unwrap_or_default().split('\u{22}').skip(1).step_by(2).map(String::from).collect()) };
+        let own: BTreeSet<String> = list.unwrap_or_default().split('\u{22}').skip(1).step_by(2).map(String::from).collect();
+        let feats: Option<BTreeSet<String>> = match (value.contains("workspace"), ws) {
+            (false, _) => Some(own),
+            (true, Some(ws)) => ws.get(&name).cloned().flatten().map(|w| w.into_iter().chain(own).collect()),
+            (true, None) => None,
+        };
         let slot = out.entry(name).or_insert_with(|| Some(BTreeSet::new()));
         match (slot.as_mut(), feats) {
             (Some(s), Some(f)) => s.extend(f),
@@ -833,6 +851,117 @@ fn image_of(root: &Path, crates: &[Crate], nodes: &[Node]) -> Image {
     img
 }
 
+/// XTASK-AFFECTED-LOADER: the features `affected --run` adds to every crate's test build (its second pass).
+const RUN_FEATURES: &[(&str, &[&str])] = &[("liella-boundary", &["export", "selftest"])];
+
+/// XTASK-AFFECTED-LOADER: the modules a crate root declares under `#[cfg(feature = "X")]` or
+/// `#[cfg(any(feature = "X", feature = "Y", ...))]`, with the features any of which compiles them in. Any other cfg
+/// (`all`, `not`, stacked attributes) is not read: the module counts as compiled.
+fn module_gates(root_text: &str) -> Vec<(BTreeSet<String>, String)> {
+    let mut out = Vec::new();
+    // Some(Some(features)): the next item is gated on any of them; Some(None): by a cfg this reading does not follow.
+    let mut gate: Option<Option<BTreeSet<String>>> = None;
+    for l in root_text.lines().map(str::trim) {
+        if let Some(c) = l.strip_prefix("#[cfg(").and_then(|r| r.strip_suffix(")]")) {
+            let inner = c.strip_prefix("any(").and_then(|r| r.strip_suffix(')')).unwrap_or(c);
+            let set: Option<BTreeSet<String>> = inner
+                .split(',')
+                .map(|p| p.trim().strip_prefix("feature").and_then(|r| r.trim_start().strip_prefix('=')).and_then(|r| r.trim().strip_prefix('\u{22}')?.strip_suffix('\u{22}')).map(String::from))
+                .collect();
+            gate = Some(if gate.is_none() { set } else { None });
+            continue;
+        }
+        if l.starts_with("#[cfg") {
+            gate = Some(None);
+            continue;
+        }
+        if l.starts_with("#[") || l.starts_with("//") || l.is_empty() {
+            continue;
+        }
+        if let Some(Some(fs)) = gate.take() {
+            if let Some(m) = l.strip_prefix("pub ").unwrap_or(l).strip_prefix("mod ") {
+                out.push((fs, m.trim_end_matches([';', '{', ' ']).to_string()));
+            }
+        }
+    }
+    out
+}
+
+/// XTASK-AFFECTED-LOADER: per crate, the workspace crates its test build compiles code of (dev-dependencies
+/// included), transitively. The crate's own edges always count. A dependency's edge onward (`B` -> `C`) counts
+/// only when a module of `B` that names `C` is compiled in with the features `B` gets in that build (the union of
+/// every edge into `B` there, plus [`RUN_FEATURES`]): liella-math's tests take boundary with `selftest`, and the
+/// boundary modules that use liella-ld (`bootstrap`, `ld`, `arch`) are built only for the libc and ld.so
+/// products, so a loader change does not reach liella-math's suites (DL-INIT-ORDER-2 ran them for 2203 s). Kept
+/// whenever this cannot tell: features unknown (a `workspace = true` entry with its own features, a crate whose
+/// features another crate's feature table sets), no module of `B` names `C` (a use this reading does not see).
+fn build_closures(root: &Path, crates: &[Crate], nodes: &[Node]) -> BTreeMap<String, BTreeSet<String>> {
+    type Edges = BTreeMap<String, Option<BTreeSet<String>>>;
+    let names: BTreeSet<&str> = crates.iter().map(|c| c.name.as_str()).collect();
+    let top = read(&root.join("Cargo.toml"));
+    let ws = dep_edges(&top, "workspace.dependencies", None);
+    let manifest: BTreeMap<&str, String> = crates.iter().map(|c| (c.name.as_str(), read(&root.join(&c.dir).join("Cargo.toml")))).collect();
+    let edges = |c: &str, kind: &str| -> Edges { dep_edges(&manifest[c], kind, Some(&ws)).into_iter().filter(|(d, _)| d != c && names.contains(d.as_str())).collect() };
+    let normal: BTreeMap<&str, Edges> = names.iter().map(|&c| (c, edges(c, "dependencies"))).collect();
+    let dev: BTreeMap<&str, Edges> = names.iter().map(|&c| (c, edges(c, "dependencies").into_iter().chain(edges(c, "dev-dependencies")).collect())).collect();
+    // `liella/selftest` in boundary's feature table: liella's features are set from outside, not followed.
+    let mut cross: BTreeSet<String> = BTreeSet::new();
+    for m in manifest.values() {
+        let mut in_features = false;
+        for l in m.lines().map(str::trim) {
+            if l.starts_with('[') {
+                in_features = l == "[features]";
+            } else if in_features {
+                cross.extend(l.split('\u{22}').skip(1).step_by(2).filter_map(|v| v.split_once('/')).map(|(d, _)| d.trim_end_matches('?').to_string()));
+            }
+        }
+    }
+    let gates: BTreeMap<&str, Vec<(BTreeSet<String>, String)>> = nodes.iter().filter(|n| n.root).map(|n| (n.krate.as_str(), module_gates(&n.text))).collect();
+    let mut out = BTreeMap::new();
+    for a in crates {
+        let a_name = a.name.as_str();
+        // The features each crate of the build gets: every edge into it, unified (None: unknown).
+        let mut feats: Edges = BTreeMap::new();
+        let mut members: BTreeSet<String> = BTreeSet::new();
+        let mut stack: Vec<(String, Option<BTreeSet<String>>)> = dev[a_name].clone().into_iter().collect();
+        while let Some((b, f)) = stack.pop() {
+            if b == a.name {
+                continue;
+            }
+            let slot = feats.entry(b.clone()).or_insert_with(|| Some(BTreeSet::new()));
+            match (slot.as_mut(), f) {
+                (Some(s), Some(f)) => s.extend(f),
+                _ => *slot = None,
+            }
+            if members.insert(b.clone()) {
+                stack.extend(normal[b.as_str()].clone());
+            }
+        }
+        for (c, fs) in RUN_FEATURES {
+            if let Some(Some(s)) = feats.get_mut(*c) {
+                s.extend(fs.iter().map(|f| f.to_string()));
+            }
+        }
+        let live = |b: &str, c: &str| -> bool {
+            let Some(Some(f)) = feats.get(b).filter(|_| !cross.contains(b)) else { return true };
+            let on = features_on(&manifest[b], f);
+            let off = |m: &str| gates.get(b).is_some_and(|g| g.iter().any(|(fs, x)| x == m && fs.is_disjoint(&on)));
+            let namers: Vec<&Node> = nodes.iter().filter(|n| n.krate == b && n.refs.iter().any(|(k, _)| k.as_deref() == Some(c))).collect();
+            namers.is_empty() || namers.iter().any(|n| n.root || !off(&n.name))
+        };
+        // The crate's own edges (normal, dev and build: `parse_manifest`) always count.
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        let mut stack: Vec<String> = a.deps.iter().filter(|d| names.contains(d.as_str()) && **d != a.name).cloned().collect();
+        while let Some(b) = stack.pop() {
+            if seen.insert(b.clone()) {
+                stack.extend(normal[b.as_str()].keys().filter(|c| live(&b, c)).cloned());
+            }
+        }
+        out.insert(a.name.clone(), seen);
+    }
+    out
+}
+
 impl Repo {
     /// XTASK-AFFECTED-LAYOUT: can a change to `f` change what a static program links from `libc.a`? A source,
     /// data file or build script of a crate the libc product links (not a module compiled only for tests or only
@@ -888,19 +1017,6 @@ impl Repo {
                 let lib = root.join(dir).join("src/lib.rs").is_file() || manifest.lines().any(|l| l.trim() == "[lib]");
                 crates.push(Crate { name, dir: dir.clone(), deps, lib });
             }
-        }
-        let names: BTreeSet<String> = crates.iter().map(|c| c.name.clone()).collect();
-        let direct: BTreeMap<String, BTreeSet<String>> = crates.iter().map(|c| (c.name.clone(), c.deps.iter().filter(|d| names.contains(*d)).cloned().collect())).collect();
-        let mut closure = BTreeMap::new();
-        for c in &crates {
-            let mut seen = BTreeSet::new();
-            let mut stack: Vec<String> = direct[&c.name].iter().cloned().collect();
-            while let Some(d) = stack.pop() {
-                if seen.insert(d.clone()) {
-                    stack.extend(direct[&d].iter().cloned());
-                }
-            }
-            closure.insert(c.name.clone(), seen);
         }
         let aliases: BTreeMap<String, String> = crates.iter().map(|c| (c.name.replace('-', "_"), c.name.clone())).collect();
         let mut nodes = Vec::new();
@@ -1043,6 +1159,7 @@ impl Repo {
         let hubs = (0..nodes.len()).filter(|&y| nodes.iter().filter(|x| names(x, &nodes[y])).count() * 6 >= nodes.len()).collect();
         let test_only = test_only_modules(&nodes);
         let image = image_of(root, &crates, &nodes);
+        let closure = build_closures(root, &crates, &nodes);
         let mut xs = Vec::new();
         files_under(&root.join("xtask/src"), &["rs"], &mut xs);
         let xtask_texts = xs
@@ -3241,7 +3358,7 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
                     cmd.args(["test", "-p", c]);
                 }
                 if pass == 1 {
-                    cmd.args(["--features", "liella-boundary/export,liella-boundary/selftest"]);
+                    cmd.args(["--features", &RUN_FEATURES.iter().flat_map(|(c, fs)| fs.iter().map(move |f| format!("{c}/{f}"))).collect::<Vec<_>>().join(",")]);
                 }
                 if sel.libs.contains_key(*c) {
                     cmd.arg(unit_tests_flag(repo, c));
@@ -4141,6 +4258,37 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
         assert_eq!((deps.get("b"), deps.contains_key("c"), deps.contains_key("d")), (Some(&None), false, true));
         assert_eq!(features_on("[features]\nruntime = [\"export\"]\nselftest = [\"liella/selftest\"]\n", &["runtime".to_string()].into()), ["default", "export", "runtime"].iter().map(|s| s.to_string()).collect());
         assert_eq!(feature_gated_modules("#[cfg(feature = \"ld\")]\npub mod ld;\n#[cfg(any(feature = \"ld\"))]\nmod a;\nmod b;\n"), vec![("ld".to_string(), "ld".to_string())]);
+    }
+
+    // XTASK-AFFECTED-LOADER, no spec clause: liella-math's tests take boundary with `selftest` only, and boundary uses
+    // liella-ld only in modules the libc and ld.so products build (`bootstrap`, `ld`, `arch`), so a loader change does
+    // not select liella-math's suites (DL-INIT-ORDER-2's gate ran them for 2203 s); the loader's own tests, boundary's,
+    // the conformance programs and the start-up layout tests still run. A math change, and a change to liella-rt
+    // (which both the loader and liella-math link), still select liella-math.
+    #[test]
+    fn a_loader_change_does_not_select_the_math_suites() {
+        let math = |s: &Selection| s.tests.keys().any(|(k, _)| k == "liella-math") || s.libs.contains_key("liella-math");
+        for tier in [Tier::Direct, Tier::Wide] {
+            for f in ["crates/ld/src/lib.rs", "crates/ld/src/init.rs", "crates/ld/src/boot.rs"] {
+                let s = select_tier(repo(), &[f.to_string()], tier);
+                assert!(s.full.is_empty() && !math(&s), "{f} ({tier:?}) is loader code: no liella-math suite: {:?} {:?}", s.libs.keys().collect::<Vec<_>>(), s.tests.keys().filter(|(k, _)| k == "liella-math").collect::<Vec<_>>());
+            }
+            let s = select_tier(repo(), &["crates/ld/src/lib.rs".to_string()], tier);
+            assert!(s.tests.keys().any(|(k, _)| k == "liella-ld") && s.libs.contains_key("liella-boundary") && s.conf.len() == repo().conf.len() && has_test(&s, LAYOUT_TESTS[0].1), "{tier:?}: the loader's own tests, boundary's, every conformance program and the layout tests: {:?}", s.tests.keys().collect::<Vec<_>>());
+            for f in ["crates/math/src/lib.rs", "crates/rt/src/lib.rs"] {
+                let s = select_tier(repo(), &[f.to_string()], tier);
+                assert!(math(&s) && s.tests.keys().any(|(k, t)| k == "liella-math" && t == "elem_products"), "{f} ({tier:?}): liella-math's suites run");
+            }
+            let s = select_tier(repo(), &["crates/rt/src/lib.rs".to_string()], tier);
+            assert!(s.tests.keys().any(|(k, _)| k == "liella-ld"), "liella-rt ({tier:?}): the loader's suites run too");
+        }
+        let r = repo();
+        assert!(r.dependents("liella-ld").contains("liella-boundary") && !r.dependents("liella-ld").contains("liella-math"), "{:?}", r.dependents("liella-ld"));
+        let gates = module_gates("#[cfg(any(feature = \"runtime\", feature = \"ld\"))]\nmod bootstrap;\n#[cfg(feature = \"ld\")]\npub mod ld;\n#[cfg(not(feature = \"x\"))]\nmod a;\n#[cfg(test)]\nmod b;\nmod c;\n");
+        assert_eq!(gates, vec![(["ld".to_string(), "runtime".to_string()].into(), "bootstrap".to_string()), (["ld".to_string()].into(), "ld".to_string())]);
+        let ws = dep_edges("[workspace.dependencies]\nb = { path = \"b\" }\n", "workspace.dependencies", None);
+        let dev = dep_edges("[dev-dependencies]\nb = { workspace = true, features = [\"t\"] }\nu = { workspace = true }\n[dependencies]\nn = \"1\"\n", "dev-dependencies", Some(&ws));
+        assert_eq!((dev.get("b"), dev.get("u"), dev.contains_key("n")), (Some(&Some(["t".to_string()].into())), Some(&None), false));
     }
 
     #[test]
