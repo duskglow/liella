@@ -3627,7 +3627,7 @@ strrchr	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:471	ret::found
 strsep	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:882	ret::ptr
 strsignal	GLIBC_2.2.5	crates/boundary/src/posix/s20_signals.rs:285	ret::ptr
 strspn	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:537	ret::must
-strstr	GLIBC_2.2.5	csys/src/machine/scan.S:7677	liella_machine_strpair
+strstr	GLIBC_2.2.5	csys/src/machine/scan.S:7690	liella_machine_strpair_avx_run
 strtod	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:710	ret::with_errno
 strtod_l	GLIBC_2.3	crates/boundary/src/posix/s08_numeric.rs:728	ret::with_errno
 strtof	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:762	ret::with_errno
