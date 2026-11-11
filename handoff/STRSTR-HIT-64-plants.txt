@@ -1,0 +1,8 @@
+# STRSTR-HIT-64: plants on the 64-byte head of strstr's direct entry liella_machine_strstr (csys/src/machine/scan.S).
+# Run: cargo xtask plants handoff/STRSTR-HIT-64-plants.txt --dir <new RAM dir> --timeout 900
+skip-distance | csys/src/machine/scan.S | perl:s/(liella_machine_strstr:.*?)leaq \(%rdi,%rax\), %rdx\n/$1leaq 1(%rdi,%rax), %rdx\n/s | cargo test -p liella-boundary --features selftest --test strstr_find | msg:panicked at|test .* FAILED
+avx-skip-distance | csys/src/machine/scan.S | perl:s/(liella_machine_strstr:.*?)vpxor 32\(%rdi\), %ymm0, %ymm4\n/$1vpxor 31(%rdi), %ymm0, %ymm4\n/s | cargo test -p liella-boundary --features selftest --test strstr_find | msg:panicked at|test .* FAILED
+sse-skip-distance | csys/src/machine/scan.S | perl:s/(liella_machine_strstr:.*?)movdqu 32\(%rdi\), %xmm4\n/$1movdqu 33(%rdi), %xmm4\n/s | cargo test -p liella-boundary --features selftest --test strstr_find | msg:panicked at|test .* FAILED
+verify-last-byte | csys/src/machine/scan.S | perl:s/(liella_machine_strstr:.*?)movl \$-2, %r11d\n/$1movl \$-1, %r11d\n/s | cargo test -p liella-boundary --features selftest --test strstr_find | msg:panicked at|test .* FAILED
+sse-stop32-offset | csys/src/machine/scan.S | perl:s/(liella_machine_strstr:.*?\.Lsstr_sse_stop32:\n\tbsfl %r10d, %r10d\n\t)leaq 32\(/$1leaq 16(/s | cargo test -p liella-boundary --features selftest --test strstr_find | msg:panicked at|test .* FAILED
+vfail-nul | csys/src/machine/scan.S | perl:s/(liella_machine_strstr:.*?\.Lsstr_vfail:\n\tcmpb \$0, \(%rcx,%rax\)\n)\tje \.Lsstr_null\n/$1/s | cargo test -p liella-boundary --features selftest --test strstr_find | msg:panicked at|test .* FAILED|SIGSEGV|signal: 11
