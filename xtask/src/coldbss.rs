@@ -149,7 +149,8 @@ fn state_sections(members: &[(String, Vec<Shdr>)], keys: &BTreeSet<String>) -> R
             _ => sym,
         };
         let k = crate::hottext::key(sym);
-        if let Some(i) = STATE_KEY_SUFFIXES.iter().position(|s| k.ends_with(s)) {
+        // A split static under ThinLTO is `<symbol>.0.llvm.<n>`: both suffixes go (timer::EPOLL).
+        if let Some(i) = STATE_KEY_SUFFIXES.iter().position(|s| split_stem(&k).ends_with(s)) {
             seen[i] += 1;
             out.entry(member.clone()).or_default().push(name.to_string());
         } else if keys.contains(split_stem(&k)) && size_of(members, member, name) <= STATE_KEYED_MAX {
@@ -186,7 +187,7 @@ mod tests {
         // section is picked whatever its crate hash and ThinLTO suffix; a missing one is an error.
         let mut members = vec![("a.o".to_string(), Vec::new())];
         for (i, s) in STATE_KEY_SUFFIXES.iter().enumerate() {
-            let (kind, tail) = if i % 2 == 0 { (".bss", ".llvm.42") } else { (".data", ".0") };
+            let (kind, tail) = if i % 2 == 0 { (".bss", ".0.llvm.42") } else { (".data", ".0") };
             members.last_mut().unwrap().1.push(sec(&format!("{kind}._RNvNtCsAbC12_{s}{tail}"), SHT_NOBITS, 8));
             if i == 2 {
                 members.push(("b.o".to_string(), vec![sec(".data._RNvNtCsX_15liella_boundary3cpu8NOT_USED", 1, 8)]));

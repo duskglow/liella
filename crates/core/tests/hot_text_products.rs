@@ -663,7 +663,7 @@ fn init_startup_state_statics_are_in_data1() {
     ] {
         let sections: Vec<&str> = table
             .lines()
-            .filter(|l| l.split_whitespace().last().is_some_and(|n| symbol_stem(n).ends_with(suffix)))
+            .filter(|l| l.split_whitespace().last().is_some_and(|n| symbol_stem(n.rsplit_once(".llvm.").map_or(n, |(s, _)| s)).ends_with(suffix)))
             // `<value> <flags> <section>\t<size> [.hidden ]<name>`
             .filter_map(|l| l.split_once('\t').and_then(|(a, _)| a.split_whitespace().last()))
             .filter(|s| *s != "*UND*")
