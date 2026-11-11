@@ -6,6 +6,7 @@ _start	startup	fast,release
 __libc_start_main	startup	fast,release
 _RINvNtC15liella_boundary7runtime5startKb0_EC15liella_boundary	startup	fast,release
 liella_sys_arch_prctl	startup	fast,release
+_RNvNtC9liella_rt5start7program	startup	fast
 liella_sys_mmap	startup	fast,release
 liella_sys_set_tid_address	startup	fast,release
 _RNvNtC15liella_boundary3cpu4init	startup	fast,release
