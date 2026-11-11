@@ -599,6 +599,18 @@ pub fn tan<F: Float>(x: F, mode: Rounding) -> (F, Status) {
 
 /// `sincos(x)`: `(sin x, cos x)` with the flags of both.
 pub fn sincos<F: Float>(x: F, mode: Rounding) -> ((F, F), Status) {
+    if F::PREC == 113 {
+        // binary128: one reduction for both (D-10.91); an undecided one takes the 384-bit route.
+        if let Ok(n) = trig_special(x, false) {
+            if !cubic_tiny::<F>(&n) {
+                if let Some((s, c)) = wide_int::quad::sin_and_cos::<F>(&n, mode) {
+                    let (s, st) = s.unwrap_or_else(|| approx(sin_cos_of(&n).0, mode));
+                    let (c, ct) = c.unwrap_or_else(|| approx(sin_cos_of(&n).1, mode));
+                    return ((s, c), st.and(ct));
+                }
+            }
+        }
+    }
     let (s, st) = sin(x, mode);
     let (c, ct) = cos(x, mode);
     ((s, c), st.and(ct))
@@ -637,19 +649,22 @@ pub fn asin_sqrt<F: Float>(x: F, mode: Rounding, sqrt: impl Fn(f64) -> f64) -> (
     if let Some(r) = elem::nan_in(&n) {
         return r;
     }
-    if n.kind == Kind::Zero {
-        return (x, Status::OK);
+    match n.kind {
+        Kind::Zero => return (x, Status::OK),
+        Kind::Inf => return arc_domain::<F>(),
+        _ => {}
+    }
+    if cubic_tiny::<F>(&n) {
+        return near_x(&n, true, mode); // x + x³/6 (|x| < 1: no domain error)
+    }
+    // The tier first (it takes only 0 < |x| < 1): no 384-bit value on its path.
+    if let Some(r) = wide_int::arc::asin::<F>(&n, mode, sqrt) {
+        return r;
     }
     let a = value(&n).abs();
     let one = Mp::from_i64(1);
-    if n.kind == Kind::Inf || a.cmp_abs(one).is_gt() {
+    if a.cmp_abs(one).is_gt() {
         return arc_domain::<F>();
-    }
-    if cubic_tiny::<F>(&n) {
-        return near_x(&n, true, mode); // x + x³/6
-    }
-    if let Some(r) = wide_int::arc::asin::<F>(&n, mode, sqrt) {
-        return r;
     }
     let r = if a == one {
         mp::pi().ldexp(-1)
@@ -678,9 +693,16 @@ pub fn acos_sqrt<F: Float>(x: F, mode: Rounding, sqrt: impl Fn(f64) -> f64) -> (
     if let Some(r) = elem::nan_in(&Num { neg: n.neg && !F::EXPLICIT, ..n }) {
         return r;
     }
+    if n.kind == Kind::Inf {
+        return arc_domain::<F>();
+    }
+    // The tier first (it takes only 0 < |x| < 1): no 384-bit value on its path.
+    if let Some(r) = wide_int::arc::acos::<F>(&n, mode, sqrt) {
+        return r;
+    }
     let v = value(&n);
     let one = Mp::from_i64(1);
-    if n.kind == Kind::Inf || v.cmp_abs(one).is_gt() {
+    if v.cmp_abs(one).is_gt() {
         return arc_domain::<F>();
     }
     if v == one {
@@ -688,9 +710,6 @@ pub fn acos_sqrt<F: Float>(x: F, mode: Rounding, sqrt: impl Fn(f64) -> f64) -> (
     }
     if v == one.neg() {
         return approx(mp::pi(), mode);
-    }
-    if let Some(r) = wide_int::arc::acos::<F>(&n, mode, sqrt) {
-        return r;
     }
     // 2·atan(√((1 − x)/(1 + x))), the differences exact.
     approx(mp::atan(one.sub(v).div(one.add(v)).sqrt()).ldexp(1), mode)

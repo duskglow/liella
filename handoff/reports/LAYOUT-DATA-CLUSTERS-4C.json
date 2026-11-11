@@ -1,0 +1,11 @@
+{"task": "LAYOUT-DATA-CLUSTERS-4C", "model": "opus", "tokens": null,
+ "result": "startup_instr_c 2156 -> 2142 (next 2146, limit 2150): 4B's aligned .rodata1 adds a 2nd read-only PT_LOAD; the start's phdr scan now costs ~7 instead of 13 instructions per header",
+ "branch": "task/layout-data-clusters-4c", "head": "b16ff1fbd",
+ "gate": {"affected": "pending (ldc4c-gate-2)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["start-up faults not re-measured on this head (code-only change, no layout change); 4B's fast -12 / release -13 should hold", "bench limit startup_instr_c 2150 could be tightened to the new 2142 level (coordinator's call)"],
+ "refused": [],
+ "improvement": "a gdb single-step per-function split of one start-up child (trace_start.py) attributed the +10 in two calls; layout stories should compare start-up instructions with next as well as faults",
+ "next_step": "-5: release strings fault and fast float +1 (handoff/LAYOUT-DATA-CLUSTERS-4B.md)",
+ "report_file": "handoff/LAYOUT-DATA-CLUSTERS-4C.md",
+ "jobs": ["ldc4c-lint-2", "ldc4c-startup-next", "ldc4c-startup-head-2", "ldc4c-plants-3", "ldc4c-gate-2"]}

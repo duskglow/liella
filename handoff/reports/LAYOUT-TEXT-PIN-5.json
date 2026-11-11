@@ -1,0 +1,36 @@
+{
+ "task": "LAYOUT-TEXT-PIN-5",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: Start-up keys at the hot-text list head (ruling #4417, merge.py --startup-head); fast then release regen rc 0; @place end: start-up text 3 windows both profiles, every fault bound holds (release tool 58, locale 55, localtime 18); fast window budget 5 -> 4; gate red: 1 conformance program failed (unidentified, budget out)",
+ "branch": "task/layout-text-pin-5",
+ "head": "629b56064",
+ "gate": {
+  "affected": "30 suites ok, 11448 passed / 0 failed; conformance 126 passed / 1 failed (rc 1)",
+  "peak": "16G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "padding per static binary (end: fast 83,257 B, release 58,031 B of cluster gaps) vs faults",
+   "recommendation": "owner decides after LAYOUT-DATA-CLUSTERS (#4418); unchanged"
+  },
+  {
+   "item": "start-up windows read 3 in both profiles (budgets fast 4, release 4)",
+   "recommendation": "tighten to 3 at the #4348 re-derivation after A and B land"
+  }
+ ],
+ "informational": [
+  "release regen --build cannot bootstrap from a list that breaks STARTUP-TEXT-WINDOWS (no .profile written; #4397, C's item); a fast regen first made it pass",
+  "@place in-place with the new list: fast localtime 21 > 20 (diagnostic job layout-text-pin-5-regen-measure2 rc 1 for that reason only)",
+  "third start-up window = the strings cluster head: a start-up key with no list position (alias of a strings-cluster function) sits there"
+ ],
+ "refused": [],
+ "improvement": "regen --build should skip layout contracts on its first build (they judge the list it is about to replace); this run spent one queued job learning that",
+ "next_step": "Find the failing conformance program (grep the conformance section of ~/w/sh2/target/affected.log on shiki, job layout-text-pin-5-gate), check it against origin/next, fix or report; then C as in the handoff",
+ "report_file": "handoff/LAYOUT-TEXT-PIN-5.md",
+ "jobs": [
+  "layout-text-pin-5-gate",
+  "layout-text-pin-5-plants"
+ ]
+}

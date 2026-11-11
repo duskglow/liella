@@ -49,7 +49,7 @@ Other crates: abi, boundary, core, kernel, ld, ld-so, legacy, libc-so, libm-so, 
 | `/dev/` | crates/legacy/src/accounting.rs:470 |
 | `/dev/console` | crates/boundary/src/fmtmsg.rs:268, crates/core/src/log.rs:65, crates/core/src/term.rs:506 |
 | `/dev/log` | crates/core/src/log.rs:63 |
-| `/dev/null` | crates/boundary/src/selftest.rs:442, crates/boundary/src/spawn.rs:778, crates/boundary/src/spawn.rs:851, crates/rt/src/start.rs:159 |
+| `/dev/null` | crates/boundary/src/selftest.rs:442, crates/boundary/src/spawn.rs:778, crates/boundary/src/spawn.rs:851, crates/rt/src/start.rs:210 |
 | `/dev/ptmx` | crates/core/src/term.rs:335, crates/core/src/term.rs:507 |
 | `/dev/pts/` | crates/core/src/term.rs:391, crates/core/src/term.rs:502 |
 | `/dev/shm/` | crates/boundary/src/mqueue.rs:370, crates/boundary/src/nscache.rs:54 |
@@ -81,7 +81,6 @@ Other crates: abi, boundary, core, kernel, ld, ld-so, legacy, libc-so, libm-so, 
 | `/etc/ttys` | crates/legacy/src/accounting.rs:46 |
 | `/proc/loadavg` | crates/core/src/system.rs:191 |
 | `/proc/self/auxv` | crates/boundary/src/sys.rs:343 |
-| `/proc/self/exe` | crates/boundary/src/ld.rs:365 |
 | `/proc/self/fd` | crates/core/src/process.rs:453, crates/legacy/src/io_compat.rs:40 |
 | `/proc/self/fd/` | crates/core/src/term.rs:462, crates/legacy/src/fs_compat.rs:66 |
 | `/proc/self/fd/0123456789` | crates/legacy/src/accounting.rs:447 |
@@ -102,12 +101,12 @@ Other crates: abi, boundary, core, kernel, ld, ld-so, legacy, libc-so, libm-so, 
 | `/sys/devices/system/cpu` | crates/core/src/system.rs:351 |
 | `/sys/devices/system/cpu/online` | crates/core/src/system.rs:331 |
 | `/usr/` | crates/core/src/catalog/xopen.rs:197 |
-| `/usr/bin/ls` | crates/rt/src/start.rs:258 |
+| `/usr/bin/ls` | crates/rt/src/start.rs:395 |
 | `/usr/bin/prog` | crates/legacy/src/argp.rs:72 |
-| `/usr/lib` | crates/ld/src/arch.rs:225 |
+| `/usr/lib` | crates/ld/src/arch.rs:305 |
 | `/usr/lib/locale` | crates/core/src/locale/mod.rs:533 |
 | `/usr/lib/locale/locale-archive` | crates/core/src/locale/mod.rs:535 |
-| `/usr/lib/x86_64-linux-gnu` | crates/ld/src/arch.rs:225 |
+| `/usr/lib/x86_64-linux-gnu` | crates/ld/src/arch.rs:305 |
 | `/usr/share/i18n/charmaps/` | crates/legacy/src/global_locale.rs:96 |
 | `/usr/share/locale` | crates/legacy/src/intl.rs:62 |
 | `/usr/share/locale-langpack` | crates/legacy/src/intl.rs:66 |
