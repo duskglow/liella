@@ -10,4 +10,5 @@
  "improvement": "hot_text_products lacks a per-pad fault map mode; padmap.sh/classify.py (~/work/LAYOUT-TEXT-PIN-12 on shiki) could become tools/hottext/padmap so each layout story stops rewriting it",
  "next_step": "spot-check the 30 unreferenced keys, regen both profiles with --allow-drop, padmap per pad, affected gate, plants",
  "report_file": "handoff/LAYOUT-TEXT-PIN-12.md",
- "jobs": ["layout-text-pin-12-padmap-head", "layout-text-pin-12-padmap-next", "layout-text-pin-12-check"]}
+ "jobs": ["layout-text-pin-12-padmap-head", "layout-text-pin-12-padmap-next"],
+ "superseded": ["layout-text-pin-12-check (rc 1 on 4c33d8c6c: clippy, static and the new test passed; cargo xtask so then failed on the 30 unreferenced keys the new check found)"]}
