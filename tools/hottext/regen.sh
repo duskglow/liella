@@ -1,7 +1,7 @@
 #!/bin/bash
 # Regenerate the hot-text list (PAGEFAULTS-2, crates/libc-so/hot-text-<profile>.list for the profile of the
 # products in <tree>: one list per profile, HOTTEXT-REGEN-HOSTS-2) on a Linux host with gdb.
-# usage: tools/hottext/regen.sh <tree with built products> [--replace] [--build] [--allow-drop] ['<static program> <args>'...]
+# usage: bash tools/hottext/regen.sh <tree with built products> [--replace] [--build] [--allow-drop] ['<static program> <args>'...]
 #   Traces the startup / stdio / setlocale+printf probes, the `locale` and `tool` modes of
 #   crates/core/tests/oracle/page_faults.c (always: LAYOUT-TEXT-PIN-9), and any extra static programs linked
 #   against <tree>/target/liella/libc.a) with trace_gdb.py, keeps the names that are function
@@ -51,7 +51,12 @@ list=$here/../../crates/libc-so/hot-text-$profile.list
 host_class=${HOTTEXT_HOST_CLASS:-$(awk -F': *' '/^vendor_id/ && !v { v = $2 } /^cpu family/ && !f { f = $2 }
     /^model[ \t]*:/ && !m { m = $2 } END { sub(/^Genuine/, "", v); sub(/^Authentic/, "", v); printf "%s-%s-%s", tolower(v), f, m }' /proc/cpuinfo)}
 case $host_class in ""|-*|*[!a-z0-9-]*) echo "regen: bad host class '$host_class' (set HOTTEXT_HOST_CLASS=[a-z0-9-]+)" >&2; exit 1;; esac
-work=$(mktemp -d "${TMPDIR:-/tmp}/hottext.XXXXXX")
+# LAYOUT-FAULT-CONTRACTS (D-X.65): a hermetic trace. The probes run under `env -i` (LANG fixed, LC_ALL and
+# the other LC_* unset, as the bound tests run them; TZ only where a probe sets it), gdb's default
+# disable-randomization (ADDR_NO_RANDOMIZE for the inferior), from a fixed-length path under /tmp
+# whatever TMPDIR says; the helper scripts run as `python3 -B` (no __pycache__ in the tree) and `bash`.
+export HOTTEXT_HOST_CLASS=$host_class
+work=$(mktemp -d /tmp/hottext.XXXXXX)
 trap 'rm -rf "$work"' EXIT
 cp "$here"/probes/*.c "$work"/
 echo x > "$work/in.txt"
@@ -71,7 +76,7 @@ trace() { # <tier> <LANG> <program> <args...>
     # HEAP-FIRST-USE-5: a clean environment with LANG only, as hot_text_products runs the probes; an
     # inherited LC_CTYPE (ssh forwards LC_*, often C.UTF-8) made setlocale(LC_ALL, "") skip the locale
     # file's LC_CTYPE path, and the list lost its keys.
-    env -i PATH="$PATH" HOME="$HOME" LANG="$lang" HOT_TEXT_OUT="$work/names.$n" HOT_TEXT_STDIN="${stdin:-$work/in.txt}" HOT_TEXT_FOLLOW_FORK="${follow:-}" timeout 900 \
+    env -i PATH="$PATH" HOME="$HOME" LANG="$lang" ${TZ:+TZ="$TZ"} HOT_TEXT_OUT="$work/names.$n" HOT_TEXT_STDIN="${stdin:-$work/in.txt}" HOT_TEXT_FOLLOW_FORK="${follow:-}" timeout 900 \
         gdb -nx -batch -x "$here/trace_gdb.py" --args "$@" > "$work/gdb.$n.log" 2>&1 || { tail -5 "$work/gdb.$n.log"; exit 1; }
 }
 # Startup (p_true) first, then the probes from the most common calls to the rarer ones (printf before
@@ -136,7 +141,7 @@ done
 # crates/libc-so/startup-text.keys; the layout check of layout/contracts.tsv counts their 64 KiB windows.
 env -i PATH="$PATH" HOME="$HOME" LANG=C HOT_TEXT_OUT="$work/startup.names" HOT_TEXT_STDIN="$work/in.txt" HOT_TEXT_FOLLOW_FORK= timeout 900 \
     gdb -nx -batch -x "$here/trace_gdb.py" --args ./page_faults true > "$work/gdb.startup.log" 2>&1 || { tail -5 "$work/gdb.startup.log"; exit 1; }
-python3 "$here/keys.py" --tagged "startup=$work/startup.names" > "$work/startup.keys"
+python3 -B "$here/keys.py" --tagged "startup=$work/startup.names" > "$work/startup.keys"
 skeys=$here/../../crates/libc-so/startup-text.keys
 if [ $replace = 1 ] || [ ! -f "$skeys" ]; then : > "$work/startup.old"; else grep -v '^#' "$skeys" > "$work/startup.old" || true; fi
 {
@@ -144,22 +149,22 @@ if [ $replace = 1 ] || [ ! -f "$skeys" ]; then : > "$work/startup.old"; else gre
     echo "# STARTUP-TEXT-WINDOWS (layout/contracts.tsv, D-X.49): the functions \`page_faults true\` runs (crates/core/tests/oracle/page_faults.c"
     echo "# linked as crates/core/tests/hot_text_products.rs links it): build-stable keys (tools/hottext/keys.py), first-touch order."
     echo "# <key> TAB startup TAB <profiles traced in> TAB <profile@host class pairs whose trace hit it> (D-X.61)."
-    python3 "$here/merge.py" "$work/startup.old" "$work/startup.keys" "$profile" "$host_class" --dropped "$work/startup.dropped"
+    python3 -B "$here/merge.py" "$work/startup.old" "$work/startup.keys" "$profile" "$host_class" --dropped "$work/startup.dropped"
 } > "$work/startup.merged"
 # shellcheck disable=SC2046
-python3 "$here/keys.py" --tagged $(cat "$work/tagged") > "$work/hit.keys"
+python3 -B "$here/keys.py" --tagged $(cat "$work/tagged") > "$work/hit.keys"
 # Only names that are function sections of libc.a (drops the programs' own functions).
 # (A grouped archive's sections carry the hot prefix, `.text.sorted.h<n>.` or the older `.text.hot.`;
 # a #[cold] function's section is `.text.unlikely.<f>`, HOTTEXT-COLD-STARTUP; an unlisted one the build
 # renamed `.text.liella_cold.<f>.liella_cold`, D-X.63: keys.py --sections strips every one of them,
 # LAYOUT-TEXT-PIN-9 #4541, so a function renamed cold re-enters the list when a trace hits it.)
 readelf -SW "$T/target/liella/libc.a" > "$work/readelf"
-python3 "$here/keys.py" --sections "$work/readelf" > "$work/sections"
-python3 "$here/keys.py" "$work/sections" > "$work/lib.keys"
+python3 -B "$here/keys.py" --sections "$work/readelf" > "$work/sections"
+python3 -B "$here/keys.py" "$work/sections" > "$work/lib.keys"
 # LAYOUT-TEXT-PIN-6 (#4467): labels inside a function section (assembly entry labels, aliases) -> its key,
 # so a start-up key traced at such a label brings its section to the start-up head.
 objdump -t "$T/target/liella/libc.a" > "$work/syms"
-python3 "$here/keys.py" --aliases "$work/syms" > "$work/alias.keys"
+python3 -B "$here/keys.py" --aliases "$work/syms" > "$work/alias.keys"
 awk -F'\t' 'NR == FNR { lib[$1]; next } $1 in lib' "$work/lib.keys" "$work/hit.keys" > "$work/new.keys"  # keeps the touch order
 if [ $replace = 1 ] || [ ! -f "$list" ]; then : > "$work/old.keys"; else grep -v '^#' "$list" > "$work/old.keys" || true; fi
 {
@@ -167,7 +172,7 @@ if [ $replace = 1 ] || [ ! -f "$list" ]; then : > "$work/old.keys"; else grep -v
     echo "# Generated by tools/hottext/regen.sh; do not edit by hand. One list per profile (HOTTEXT-REGEN-HOSTS-2, D-X.61): only a $profile trace rewrites it, only a $profile build reads it."
     echo "# <key> TAB <tier> TAB <profiles traced in: $profile or -> (HOTTEXT-STARTUP-COMPLETE; tiers startup fork stdio strings locale tool extra) TAB <$profile@host class pairs whose trace hit it> (D-X.61): the union over every host class traced."
     # Ruling #4417 (D-X.63): every STARTUP-TEXT-WINDOWS key (merged above) joins the start-up tier at the head.
-    python3 "$here/merge.py" "$work/old.keys" "$work/new.keys" "$profile" "$host_class" --startup-head "$work/startup.merged" --alias "$work/alias.keys" \
+    python3 -B "$here/merge.py" "$work/old.keys" "$work/new.keys" "$profile" "$host_class" --startup-head "$work/startup.merged" --alias "$work/alias.keys" \
         --dropped "$work/list.dropped"
 } > "$work/list.merged"
 # LAYOUT-TEXT-PIN-9 (ruling #4539): a key that was on either file and that this trace drops is named here,

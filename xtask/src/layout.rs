@@ -411,6 +411,17 @@ fn check_one(c: &Contract, pr: &mut Products) -> Result<String, Vec<String>> {
 
 /// Check every contract on the products in `dir` (built with `profile`, when known); one line per contract, every
 /// failure listed.
+/// LAYOUT-FAULT-CONTRACTS (D-X.65): the verdict of [`check_products`] in a build. The regen build
+/// (`regen = true`, `cargo xtask so --hottext-regen`) turns a broken contract into a report and goes on, since
+/// a contract must never block the tool that restores it; every other build fails. `Ok(Some(report))`: print it.
+pub fn regen_verdict(checked: Result<(), String>, regen: bool) -> Result<Option<String>, String> {
+    match checked {
+        Ok(()) => Ok(None),
+        Err(e) if regen => Ok(Some(format!("so: --hottext-regen: {e} (reported, not enforced: the plain `cargo xtask so` after the regen enforces it)"))),
+        Err(e) => Err(e),
+    }
+}
+
 pub fn check_products(root: &Path, dir: &Path, profile: Option<&str>) -> Result<(), String> {
     let contracts = load(root)?;
     let mut pr = Products { root, dir, profile: profile.map(str::to_string), index: BTreeMap::new() };
@@ -1147,6 +1158,18 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_broken_contract_is_reported_in_the_regen_build_and_fails_any_other() {
+        // LAYOUT-FAULT-CONTRACTS, D-X.65 (no spec clause: build tooling): a contract never blocks the
+        // tool that restores it, and only that build may pass one.
+        let broken = || Err::<(), String>("layout: 1 of 12 contracts broken: STARTUP-TEXT-WINDOWS".to_string());
+        let report = regen_verdict(broken(), true).expect("the regen build goes on").expect("and reports");
+        assert!(report.contains("STARTUP-TEXT-WINDOWS") && report.contains("not enforced"), "{report}");
+        assert_eq!(regen_verdict(broken(), false), Err("layout: 1 of 12 contracts broken: STARTUP-TEXT-WINDOWS".to_string()));
+        assert_eq!(regen_verdict(Ok(()), true), Ok(None));
+        assert_eq!(regen_verdict(Ok(()), false), Ok(None));
+    }
 
     fn row(id: &str, rule: &str) -> Contract {
         Contract { id: id.into(), kind: "object-align".into(), subjects: vec!["libc.a:X".into()], rule: rule.into(), reason: "r".into(), decision: "D-X.48".into() }

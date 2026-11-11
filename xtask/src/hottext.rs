@@ -33,6 +33,12 @@ use crate::so::OWN_PREFIX;
 pub const REGEN_FLAG: &str = "--hottext-regen";
 static REGEN: AtomicBool = AtomicBool::new(false);
 
+/// Whether this build is the regen build (`--hottext-regen`): dead keys and layout contracts are reported, not
+/// enforced (D-X.56, D-X.65).
+pub fn regen_on() -> bool {
+    REGEN.load(Ordering::Relaxed)
+}
+
 /// The arguments of `cargo xtask so`: [`REGEN_FLAG`] turns the regen mode on; it is refused under
 /// CI (the `CI` variable set) and any other argument is an error.
 pub fn regen_mode(args: &[String]) -> Result<(), String> {
@@ -1559,7 +1565,7 @@ mod tests {
         std::fs::write(tmp.join("skeys"), "# c\nvf\tstartup\tfast\ngr\tstartup\tfast,release\nnot_listed\tstartup\tfast\n").unwrap();
         let run = |head: bool| {
             let mut c = std::process::Command::new("python3");
-            c.arg("-I").arg(root.join("tools/hottext/merge.py")).arg(tmp.join("old")).arg(tmp.join("new")).arg("fast");
+            c.arg("-I").arg(root.join("tools/hottext/merge.py")).arg(tmp.join("old")).arg(tmp.join("new")).arg("fast").arg("intel-6-85");
             if head {
                 c.arg("--startup-head").arg(tmp.join("skeys"));
             }
@@ -1569,8 +1575,8 @@ mod tests {
         };
         let (plain, headed) = (run(false), run(true));
         std::fs::remove_dir_all(&tmp).unwrap();
-        assert_eq!(plain, "_start1\tstartup\tfast\na\tstdio\tfast\nvf\tstrings\tfast\nb\tstrings\tfast\ngr\textra\tfast\n");
-        assert_eq!(headed, "_start1\tstartup\tfast\nvf\tstartup\tfast\ngr\tstartup\tfast\na\tstdio\tfast\nb\tstrings\tfast\n");
+        assert_eq!(plain, "_start1\tstartup\tfast\tfast@intel-6-85\na\tstdio\tfast\tfast@intel-6-85\nvf\tstrings\tfast\tfast@intel-6-85\nb\tstrings\tfast\tfast@intel-6-85\ngr\textra\tfast\tfast@intel-6-85\n");
+        assert_eq!(headed, "_start1\tstartup\tfast\tfast@intel-6-85\nvf\tstartup\tfast\tfast@intel-6-85\ngr\tstartup\tfast\tfast@intel-6-85\na\tstdio\tfast\tfast@intel-6-85\nb\tstrings\tfast\tfast@intel-6-85\n");
         let skeys = "vf\tstartup\tfast\n";
         assert_eq!(late_startup_keys(&headed, skeys), (3, vec![]));
         assert_eq!(late_startup_keys(&plain, skeys), (1, vec!["vf".to_string()]));
@@ -1612,7 +1618,7 @@ mod tests {
         std::fs::write(tmp.join("skeys"), "_start1\tstartup\tfast\nfixture_set_entry\tstartup\tfast\n").unwrap();
         let run = |alias: bool| {
             let mut c = std::process::Command::new("python3");
-            c.arg("-I").arg(root.join("tools/hottext/merge.py")).arg(tmp.join("old")).arg(tmp.join("new")).arg("fast");
+            c.arg("-I").arg(root.join("tools/hottext/merge.py")).arg(tmp.join("old")).arg(tmp.join("new")).arg("fast").arg("intel-6-85");
             c.arg("--startup-head").arg(tmp.join("skeys"));
             if alias {
                 c.arg("--alias").arg(tmp.join("alias"));
@@ -1623,8 +1629,8 @@ mod tests {
         };
         let (plain, aliased) = (run(false), run(true));
         std::fs::remove_dir_all(&tmp).unwrap();
-        assert_eq!(plain, "_start1\tstartup\tfast\nstrlen\tstrings\tfast\nfixture_set\tstrings\tfast\nb\tstrings\tfast\n");
-        assert_eq!(aliased, "_start1\tstartup\tfast\nfixture_set\tstartup\tfast\nstrlen\tstrings\tfast\nb\tstrings\tfast\n");
+        assert_eq!(plain, "_start1\tstartup\tfast\tfast@intel-6-85\nstrlen\tstrings\tfast\tfast@intel-6-85\nfixture_set\tstrings\tfast\tfast@intel-6-85\nb\tstrings\tfast\tfast@intel-6-85\n");
+        assert_eq!(aliased, "_start1\tstartup\tfast\tfast@intel-6-85\nfixture_set\tstartup\tfast\tfast@intel-6-85\nstrlen\tstrings\tfast\tfast@intel-6-85\nb\tstrings\tfast\tfast@intel-6-85\n");
     }
 
     #[test]
@@ -1677,7 +1683,7 @@ mod tests {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let tmp = root.join(format!("target/xtask-merge-dropped-test-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(tmp.join("old"), "kept\ttool\tfast,release\ngone\ttool\tfast\nother\tlocale\trelease\n").unwrap();
+        std::fs::write(tmp.join("old"), "kept\ttool\tfast,release\tfast@intel-6-85,release@intel-6-85\ngone\ttool\tfast\tfast@intel-6-85\nother\tlocale\trelease\trelease@intel-6-85\n").unwrap();
         let run = |new: &str| {
             std::fs::write(tmp.join("new"), new).unwrap();
             let o = std::process::Command::new("python3")
@@ -1686,6 +1692,7 @@ mod tests {
                 .arg(tmp.join("old"))
                 .arg(tmp.join("new"))
                 .arg("fast")
+                .arg("intel-6-85")
                 .arg("--dropped")
                 .arg(tmp.join("dropped"))
                 .output()
@@ -1697,10 +1704,10 @@ mod tests {
         let (short, short_err, short_dropped) = run("a\tstartup\n");
         let (full, full_err, full_dropped) = run("a\tstartup\ngone\ttool\n");
         std::fs::remove_dir_all(&tmp).unwrap();
-        assert_eq!(short, "kept\ttool\trelease\nother\tlocale\trelease\na\tstartup\tfast\n");
-        assert_eq!(short_dropped, "gone\ttool\tfast\n");
+        assert_eq!(short, "kept\ttool\trelease\trelease@intel-6-85\nother\tlocale\trelease\trelease@intel-6-85\na\tstartup\tfast\tfast@intel-6-85\n");
+        assert_eq!(short_dropped, "gone\ttool\tfast@intel-6-85\n");
         assert!(short_err.contains("DROPPED") && short_err.contains("gone"), "drop not reported: {short_err:?}");
-        assert_eq!(full, "kept\ttool\trelease\na\tstartup\tfast\ngone\ttool\tfast\nother\tlocale\trelease\n");
+        assert_eq!(full, "kept\ttool\trelease\trelease@intel-6-85\na\tstartup\tfast\tfast@intel-6-85\ngone\ttool\tfast\tfast@intel-6-85\nother\tlocale\trelease\trelease@intel-6-85\n");
         assert!(full_dropped.is_empty() && full_err.is_empty(), "nothing dropped, yet: {full_dropped:?} {full_err:?}");
     }
 
@@ -1722,5 +1729,35 @@ mod tests {
         for w in ["mv \"$work/startup.merged\" \"$skeys\"", "mv \"$work/list.merged\" \"$list\""] {
             assert!(sh.find(w).is_some_and(|p| p > refuse), "regen.sh writes before the drop guard: {w}");
         }
+    }
+
+    #[test]
+    fn regen_traces_in_a_hermetic_environment() {
+        // LAYOUT-FAULT-CONTRACTS, D-X.65 (no spec clause: build tooling): every helper script of the
+        // regen runs Python as `python3 -B` (no __pycache__ in a role tree), the probes run under
+        // `env -i` that passes TZ only where a probe sets it (p_cold's zone), the work directory is a
+        // fixed-length /tmp path whatever TMPDIR says, and probe_text.sh passes merge.py the host class
+        // regen.sh computed (merge.py refuses a call without one).
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let mut bare = Vec::new();
+        for f in ["regen.sh", "probe_text.sh", "startup_data.sh"] {
+            let sh = std::fs::read_to_string(root.join("tools/hottext").join(f)).unwrap();
+            for (n, l) in sh.lines().enumerate() {
+                if !l.trim_start().starts_with('#') && l.contains("python3 ") && !l.contains("python3 -B ") {
+                    bare.push(format!("{f}:{}: {l}", n + 1));
+                }
+            }
+        }
+        assert!(bare.is_empty(), "python3 without -B: {bare:#?}");
+        let sh = std::fs::read_to_string(root.join("tools/hottext/regen.sh")).unwrap();
+        assert!(sh.contains("env -i PATH=\"$PATH\" HOME=\"$HOME\" LANG=\"$lang\" ${TZ:+TZ=\"$TZ\"} "), "regen.sh: trace() drops TZ or is not env -i");
+        assert!(sh.contains("work=$(mktemp -d /tmp/hottext.XXXXXX)"), "regen.sh: work directory not a fixed-length /tmp path");
+        assert!(sh.contains("export HOTTEXT_HOST_CLASS=$host_class"), "regen.sh: host class not exported to probe_text.sh");
+        // Brief item 1: a regen writes only the list of the profile it traced (a fast regen never
+        // reorders the release keys); the only list path regen.sh names is its own profile's.
+        let lists: Vec<&str> = sh.lines().filter(|l| !l.trim_start().starts_with('#') && l.contains("hot-text-")).collect();
+        assert_eq!(lists, ["list=$here/../../crates/libc-so/hot-text-$profile.list"], "regen.sh names another profile's list");
+        let pt = std::fs::read_to_string(root.join("tools/hottext/probe_text.sh")).unwrap();
+        assert!(pt.contains("\"$profile\" \"${HOTTEXT_HOST_CLASS:?"), "probe_text.sh: merge.py without the host class");
     }
 }

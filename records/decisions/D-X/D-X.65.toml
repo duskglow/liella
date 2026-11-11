@@ -1,0 +1,8 @@
+id = "D-X.65"
+section = "x"
+status = "active"
+story = "LAYOUT-FAULT-CONTRACTS"
+date = "2026-11-11"
+body = '''
+**The hot-text regen is hermetic and its build never fails on a layout contract** (LAYOUT-FAULT-CONTRACTS, brief C of LAYOUT-STABILITY-RETHINK, 2026-11-11; layout tooling only, no ABI or behaviour change; keeps D-X.56, D-X.61, D-X.63). (1) Per-profile lists: HOTTEXT-REGEN-HOSTS-2's `hot-text-fast.list` / `hot-text-release.list` (D-X.61) were merged, not redone; LAYOUT-TEXT-PIN-9's regenerated shared list (both profiles traced on a Haswell-EP host) was split by that rule, keeping the host-class pairs. (2) The regen build (`cargo xtask so --hottext-regen`) reports a broken `layout/contracts.tsv` contract and goes on (`layout::regen_verdict`), as D-X.56 does for dead keys: a contract must never block the tool that restores it; the plain `so` that `regen.sh --build` runs after rewriting the lists enforces every contract. (3) Hermetic trace: the probes run under `env -i` with LANG fixed and LC_ALL and every other LC_* unset (as the bound tests run them), TZ passed only where a probe sets it (p_cold's zone, which `env -i` had dropped), gdb's default disable-randomization, a fixed-length work path under /tmp whatever TMPDIR says, every helper as `python3 -B` and `bash`; probe_text.sh passes merge.py the host class regen.sh computed. Not done in this run (next step, the same brief): the per-class fault-address contracts measured with `perf record -e page-faults -d` (ruling #4349), the four-pad phase test of those classes, and regen tracing every contract mode. Checked by `hottext::tests::regen_traces_in_a_hermetic_environment` and `layout::tests::a_broken_contract_is_reported_in_the_regen_build_and_fails_any_other`.
+'''

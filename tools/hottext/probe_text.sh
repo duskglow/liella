@@ -29,7 +29,7 @@ for m in $MODES; do
     tagged="$tagged extra=$work/names.$m"  # merge.py takes hot-text tiers only; these functions' tier is extra
 done
 # shellcheck disable=SC2086
-python3 "$here/keys.py" --tagged $tagged > "$work/probe.keys"
+python3 -B "$here/keys.py" --tagged $tagged > "$work/probe.keys"
 pkeys=$here/../../crates/libc-so/probe-text.keys
 if [ $replace = 1 ] || [ ! -f "$pkeys" ]; then : > "$work/probe.old"; else grep -v '^#' "$pkeys" > "$work/probe.old" || true; fi
 {
@@ -37,7 +37,7 @@ if [ $replace = 1 ] || [ ! -f "$pkeys" ]; then : > "$work/probe.old"; else grep 
     echo "# D-X.62: the functions the fault-bounded \`page_faults <mode>\` probes of crates/core/tests/hot_text_products.rs run that"
     echo "# no hot-text tier covers (modes: $MODES): build-stable keys (tools/hottext/keys.py), first-touch order."
     echo "# <key> TAB extra TAB <profiles traced in>."
-    python3 "$here/merge.py" "$work/probe.old" "$work/probe.keys" "$profile"
+    python3 -B "$here/merge.py" "$work/probe.old" "$work/probe.keys" "$profile" "${HOTTEXT_HOST_CLASS:?set by regen.sh (D-X.61)}"
 } > "$pkeys.tmp"
 mv "$pkeys.tmp" "$pkeys"
 echo "probe-text: $(wc -l < "$work/probe.keys") keys traced ($profile), $(grep -vc '^#' "$pkeys") in $pkeys"

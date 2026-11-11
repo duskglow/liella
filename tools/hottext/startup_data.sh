@@ -16,5 +16,5 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/startupdata.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 cc -std=gnu17 -O1 -static -nostdlib -fno-builtin "$P/liella-crt1.o" "$T/crates/core/tests/oracle/page_faults.c" \
     "$P/libc.a" -lgcc -o "$work/page_faults"
-python3 "$here/startup_data.py" "$work/page_faults" "$here/../../crates/libc-so/startup-text.keys" "$profile" \
+python3 -B "$here/startup_data.py" "$work/page_faults" "$here/../../crates/libc-so/startup-text.keys" "$profile" \
     "$here/../../crates/libc-so/startup-data.keys" "$@"
