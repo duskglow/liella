@@ -18,7 +18,7 @@ const FE_INVALID: i32 = 0x01;
 fn f80(x: f64) -> F80 {
     let b = x.to_bits();
     let sign = u128::from(b >> 63) << 79;
-    let e = u128::from((b >> 52) & 0x7ff) - 1023 + 16383;
+    let e = u128::from((b >> 52) & 0x7ff) + 16383 - 1023;
     let m = (1u128 << 63) | (u128::from(b & ((1 << 52) - 1)) << 11);
     F80(sign | (e << 64) | m)
 }
