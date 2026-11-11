@@ -1140,7 +1140,8 @@ fn run_ld(root: &Path, cargo: &str, cc: &str, profile: Profile) -> Result<(), St
 
 /// The symbols the interpreter exports (DL-12, D-27.20), each at the version `spec/abi/versions.tsv`
 /// gives it for the interpreter's soname; every other symbol stays local.
-const LD_EXPORTS: &[&str] = &["__tls_get_addr"];
+/// `__libc_stack_end` and the rseq objects live here, not in `libc.so.6` (R14-12, D-27.26).
+const LD_EXPORTS: &[&str] = &["__tls_get_addr", "__libc_stack_end", "__rseq_offset", "__rseq_size", "__rseq_flags"];
 
 /// The interpreter's version script: one node per version of [`LD_EXPORTS`], everything else local.
 fn ld_version_script(root: &Path, soname: &str) -> Result<String, String> {

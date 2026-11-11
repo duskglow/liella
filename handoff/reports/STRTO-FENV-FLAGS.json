@@ -1,0 +1,11 @@
+{"task": "STRTO-FENV-FLAGS", "model": "opus", "tokens": null,
+ "result": "strto*/wcsto*/atof/scanf float conversions raise IEEE inexact/overflow/underflow as the rounding implies (D-8.12); flags match the reference over 43 inputs x 11 entries x 4 modes",
+ "branch": "task/strto-fenv-flags", "head": "53540d311",
+ "gate": {"affected": "pending (requeued on final head)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Liella's scanf does not set ERANGE on a float range error; the reference's does (predates this story)", "counts not compared with origin/next; long path adds one branch, short path unchanged"],
+ "refused": [],
+ "improvement": "sync_role could refuse while a chained job script still runs; a requeue helper that kills a label chain by story would save calls",
+ "next_step": "read the requeued gate/plants/counts/hottext jobs; then a scanf ERANGE story",
+ "report_file": "handoff/strto-fenv-flags.md",
+ "jobs": ["strto-fenv-flags-gate2", "strto-fenv-flags-plants2", "strto-fenv-flags-counts2", "strto-fenv-flags-hottext2"]}

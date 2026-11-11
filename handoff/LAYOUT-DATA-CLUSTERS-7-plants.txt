@@ -1,0 +1,4 @@
+# LAYOUT-DATA-CLUSTERS-7 plants (cargo xtask plants; docs/plants.md). Fast products (the gate's profile).
+# The fork child's state block dropped from the declared list: the child reads it on cold .data/.bss pages again
+# (fast fork child 7 before the block, bound 6).
+ldc7-fork-state | crates/libc-so/startup-state.list | perl:s/# The fork child.s state:.*?liella_legacy::time_compat::LOCK\n//s | cargo xtask so && cargo test -p liella --test hot_text_products -- init_fork init_data_clusters_hold_at_every_text_phase | msg:fork child.*(page faults > 6|above its bound 6)

@@ -1,0 +1,13 @@
+{"task": "STRTO-FENV-FLAGS-3", "model": "opus", "tokens": null,
+ "result": "Resolved CI's parse.rs conflict with origin/next (kept D-8.12's integer range bounds; no float cast so D-10.95's RANGE note does not apply) and fixed the merged build's 3 dead locale hot-text keys with one regen.sh run (hot-text.list only)",
+ "branch": "task/strto-fenv-flags-3", "head": "4b71ff47f",
+ "gate": {"affected": "strto-fenv-flags-3-gate2 (see hand-back)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["D-10.95's body still says the strto* converters raise no O/U/I today; D-8.12 is that change (record text untouched).",
+                   "A merge of next can make hot-text keys of generics instantiated in liella_boundary dead without any locale change (inlining moves with unrelated boundary code); the documented fix is one regen.sh --build per profile."],
+ "refused": [],
+ "improvement": "CI's merge_next could run xtask so on the merged tree and name dead hot-text keys in its NEEDS AN AGENT line, so the continuation brief says regen is needed instead of the agent finding it after a red gate.",
+ "next_step": "None once gate2 and plants2 are green.",
+ "report_file": "handoff/strto-fenv-flags.md",
+ "jobs": ["strto-fenv-flags-3-lint2", "strto-fenv-flags-3-gate2", "strto-fenv-flags-3-plants2", "strto-fenv-flags-3-regen"]}

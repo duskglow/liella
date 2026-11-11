@@ -1,0 +1,12 @@
+{"task": "LAYOUT-DATA-CLUSTERS-10", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: next merged, startup-data.keys regenerated on the merged tree (both profiles build, STARTUP-DATA-WINDOWS ok); plant ldc9-locale-set SURVIVED on the merged head, not diagnosed",
+ "branch": "task/layout-data-clusters-10", "head": "1b06b4efd",
+ "gate": {"affected": "ldc10-gate running at hand-back (direct tier, --base origin/next)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["startup_data.sh --replace for one profile drops the other profile's keys and that profile's build then fails STARTUP-DATA-WINDOWS; regenerate in merge mode, one run per profile (ldc10-regen rc 1, superseded by ldc10-regen2)"],
+ "refused": [],
+ "improvement": "regen.sh/startup_data.sh could refuse --replace unless both profiles are traced in the same run; the passing hot_text_products fault tests should print their counts so a surviving plant shows its number",
+ "next_step": "measure setlocale + printf with and without the declared setlocale set on the merged head (fast, Skylake-SP and Broadwell hosts); re-aim the plant/test or tighten LOCALE_BOUND; then re-run plants",
+ "report_file": "handoff/LAYOUT-DATA-CLUSTERS-10.md",
+ "jobs": ["ldc10-lint0", "ldc10-regen2", "ldc10-lint", "ldc10-gate", "ldc10-hot", "ldc10-plants"]}

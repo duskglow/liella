@@ -1,0 +1,28 @@
+{
+ "task": "LIBM-F128-TRIG-INT-6",
+ "model": "opus",
+ "tokens": null,
+ "result": "asin/acos f128 tier finished: sqrtsd seed (asinf128 1354.8 vs glibc 9271.5 instr), D-10.97, 5th plant fixed, tiny-argument overflow found by gate fixed; final gate/plants/percall queued",
+ "branch": "task/libm-f128-trig-int-6",
+ "head": null,
+ "gate": {
+  "affected": "gate red on 53959405a (s10_3_c_0), fixed; fix2 green; gate2 queued",
+  "peak": null
+ },
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": [
+  "direct-tier test -p liella-math takes ~37 min on keke",
+  "sync_role rc 4 after a red gate: the gate keeps running its remaining suites; kill it before resync"
+ ],
+ "refused": [],
+ "improvement": "jobrun gate could stop at the first failed step (or sync could say which job holds the role) so a red gate does not hold the role for its remaining suites",
+ "next_step": "read gate2/plants3/percall4; hot_text_products; booked timing Ivy Bridge + N100",
+ "report_file": "handoff/libm-f128-trig-int-6.md",
+ "jobs": [
+  "libm-f128-trig-int-6-fix2",
+  "libm-f128-trig-int-6-gate2",
+  "libm-f128-trig-int-6-plants3",
+  "libm-f128-trig-int-6-percall4"
+ ]
+}

@@ -14,6 +14,7 @@ use liella::num::parse::{parse_float, parse_i64, parse_i64_short, parse_u64, Dia
 use liella::num::{self, Float, Format, Rounding, StdBit};
 use liella_kernel::Errno;
 use liella_legacy::mb_compat::Local;
+use liella_boundary::sys::CSys;
 use liella_legacy::num_compat as nc;
 
 const N: Rounding = Rounding::Nearest;
@@ -203,20 +204,20 @@ fn s8_2_g_0() {
 fn s8_2_f_1() {
     let p = parse_float(b"1e400", b".", Format::F64, N, Dialect::C99);
     assert_eq!((p.range, f64::from_bits(p.value.pack(Format::F64) as u64)), (FloatRange::Overflow, f64::INFINITY));
-    assert_eq!(nc::strtod(b"-1e400", 0, None::<&mut Local>, N, b"."), (f64::NEG_INFINITY, Some(Errno::ERANGE)));
+    assert_eq!(nc::strtod(b"-1e400", 0, None::<&mut Local>, &CSys, b"."), (f64::NEG_INFINITY, Some(Errno::ERANGE)));
 }
 
 #[test]
 fn s8_2_f_2() {
-    let (v, e) = nc::strtod(b"4e-320", 0, None::<&mut Local>, N, b".");
+    let (v, e) = nc::strtod(b"4e-320", 0, None::<&mut Local>, &CSys, b".");
     assert_eq!((v.to_bits(), e), (8096, Some(Errno::ERANGE)), "a subnormal result");
-    assert_eq!(nc::strtod(b"1e-400", 0, None::<&mut Local>, N, b"."), (0.0, Some(Errno::ERANGE)));
+    assert_eq!(nc::strtod(b"1e-400", 0, None::<&mut Local>, &CSys, b"."), (0.0, Some(Errno::ERANGE)));
 }
 
 #[test]
 fn s8_2_f_3() {
     let mut end = Local(9);
-    assert_eq!(nc::strtod(b"abc", 300, Some(&mut end), N, b"."), (0.0, None));
+    assert_eq!(nc::strtod(b"abc", 300, Some(&mut end), &CSys, b"."), (0.0, None));
     assert_eq!(end.0, 300);
 }
 
@@ -225,7 +226,7 @@ fn s8_3_c_0() {
     let wide: Vec<i32> = " -0x10".chars().map(|c| c as i32).collect();
     assert_eq!(nc::strtol(&wide[..], 0, None::<&mut Local>, 0, Dialect::C99), (-16, None));
     let wf: Vec<i32> = "2.5".chars().map(|c| c as i32).collect();
-    assert_eq!(nc::strtod(&wf[..], 0, None::<&mut Local>, N, &[0x2E]), (2.5, None));
+    assert_eq!(nc::strtod(&wf[..], 0, None::<&mut Local>, &CSys, &[0x2E]), (2.5, None));
     let bad: Vec<i32> = vec![0x661, 0x662];
     assert_eq!(nc::strtol(&bad[..], 0, None::<&mut Local>, 10, Dialect::C99).0, 0, "only ASCII digits");
 }
