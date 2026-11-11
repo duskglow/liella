@@ -214,7 +214,9 @@ fn cexp_middle_tier_decides_the_bench_hard_case() {
     // Clauses: s10_0_f_0. The quick test declines the real part, the middle tier answers it,
     // and in every mode the answer is the 384-bit route's (value bits and status).
     let (x, y) = (f64::from_bits(BENCH_HARD.0), f64::from_bits(BENCH_HARD.1));
-    let Some(([(re, er), _], m)) = parts(x, y) else { panic!("inside the quick tier's range") };
+    let p = parts(x, y);
+    assert!(p.is_some(), "the bench operand is inside the quick tier's range");
+    let Some(([(re, er), _], m)) = p else { return };
     assert!(round(re, er, m, Rounding::Nearest).is_none(), "the quick test no longer declines the bench operand");
     for mode in MODES {
         let w = cexp_route(x, y, mode);
