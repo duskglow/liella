@@ -121,14 +121,11 @@ int main(void) {
                 int fl = fetestexcept(FE_ALL_EXCEPT);
                 int e = errno;
                 fesetround(FE_TONEAREST);
-                /* scanf: the flags only. Its errno on a range error is outside this test
-                 * (Liella's scanf does not set ERANGE; STRTO-FENV-FLAGS handoff). */
-                int scan = fn == 2 || fn == 7 || fn == 10;
-                char got[8], want[8];
-                code_of(got, fl, e, !scan);
-                strcpy(want, rows[i].want[format_of[fn]][m]);
-                size_t len = strlen(want);
-                if (scan && len > 1 && want[len - 1] == 'E') want[len - 1] = 0;
+                /* scanf's float conversions report a range error through errno as strtod
+                 * does (D-12.26), so every entry point is checked for flags and errno. */
+                char got[8];
+                code_of(got, fl, e, 1);
+                const char *want = rows[i].want[format_of[fn]][m];
                 if (strcmp(got, want) != 0) {
                     printf("FAIL flags %s(\"%s\") %s: got %s want %s\n", names[fn], in, mode_names[m], got, want);
                     bad++;

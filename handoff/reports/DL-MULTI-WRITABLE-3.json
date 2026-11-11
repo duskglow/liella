@@ -1,0 +1,30 @@
+{
+ "task": "DL-MULTI-WRITABLE-3",
+ "model": "opus",
+ "tokens": null,
+ "result": "COMPLETE: start-up +6 found (the RELRO fallback kept the auxv borrow live across mprotect) and fixed: startup_instr_c 2156 -> 2149 (base 2150, like for like); ld.so end-to-end tests for a program with 3 writable PT_LOADs (no deps, with libb.so, both ld.so PROG and PT_INTERP) and a target-outside refusal",
+ "branch": "task/dl-multi-writable-3",
+ "head": "54ee766d6",
+ "gate": {
+  "affected": "1809 passed / 0 failed (9 suites), conformance 22 passed",
+  "peak": "3.1G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "cbench_startup like for like on a Broadwell-EP host (base 672acd9aa and head built fresh from equal-length RAM paths, 3 runs each): startup_instr_c base 2150x3, run-2 head 2156x3, run-3 head 2149; setloc/printf/wctype back at base level within their run-to-run spread.",
+  "The static start's relro_by_segment fallback still has no end-to-end test (needs RELRO spanning an unmapped page between kernel-mapped segments); relro_pieces is unit-tested and its ld.so use is covered end to end.",
+  "One sed -i and one python heredoc were used to add test names to D-27.25.toml (rule: Edit tool); result checked and committed."
+ ],
+ "refused": [],
+ "improvement": "validation/wl_prime_base.sh plus a 15-line script building base and head in equal-length RAM dirs gave an exact base-vs-head cbench_startup comparison in one pair of jobs; worth a standard xtask/ops wrapper.",
+ "next_step": "liella::hot_text_products on the merged head (coordinator's merge).",
+ "report_file": "handoff/DL-MULTI-WRITABLE.md",
+ "jobs": [
+  "dl-multi-writable-3-gate",
+  "dl-multi-writable-3-plants",
+  "dl-multi-writable-3-startup-i",
+  "dl-multi-writable-3-startup-b",
+  "dl-multi-writable-3-final-lint"
+ ]
+}

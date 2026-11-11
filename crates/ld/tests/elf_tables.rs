@@ -50,6 +50,15 @@ const TOTAL: usize = 840;
 struct OtherTable;
 impl Arch for OtherTable {
     const NAME: &'static str = "test-other-table";
+    const TLS_VARIANT: liella_ld::arch::TlsVariant = liella_ld::arch::TlsVariant::I;
+    const TCB_SIZE: u64 = 16;
+    const TCB_ALIGN: u64 = 16;
+    const SELF_SLOT: Option<u64> = None;
+    const DTV_SLOT: u64 = 0;
+    const STACK_GUARD_SLOT: Option<u64> = None;
+    const POINTER_GUARD_SLOT: Option<u64> = None;
+    const DTP_BIAS: u64 = 0;
+    const TP_BIAS: i64 = 0;
     const E_MACHINE: u16 = 62;
     const EI_CLASS: u8 = 2;
     const EI_DATA: u8 = 1;

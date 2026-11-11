@@ -1,0 +1,11 @@
+{"task": "LAYOUT-STARTUP-RODATA-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: missed-constant bug fixed (readelf cuts section names at 256 bytes; objcopy renamed nothing): fast tool/locale/startup 56/53/17 = next, 1 ro window; release 1 ro window but first localtime_r 21 > bound 20",
+ "branch": "task/layout-startup-rodata-3", "head": "68a612339",
+ "gate": {"affected": "not run (release localtime bound not met); lint/static/unit job lsr3-lint3 green", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["readelf -SW cuts section names at 256 bytes (symbol names are whole): any pass that renames sections by names read from readelf -S has the same blind spot; xtask/src/coldbss.rs reads .bss.* names that way (not checked whether any are cut).", "Release localtime 21 vs bound 20: zone functions are hot-text tier extra, outside the selection; next's release localtime not measured yet."],
+ "refused": [],
+ "improvement": "cargo xtask startup-ro-plan <libc.a> [<filter>] (added) shows the plan and each section's relocation targets on built products in seconds; it found the bug in one call after two runs of 6-minute rebuild hypotheses.",
+ "next_step": "Measure next's release localtime and fault-map the 21st page; likely add the localtime probe's zone functions as starts (per fault-bounded probe, not per tier), keep both profiles <= 65536 bytes; then plants + direct gate.",
+ "report_file": "handoff/LAYOUT-STARTUP-RODATA.md",
+ "jobs": ["mei:lsr3-lint3", "mei:lsr3-exp1"]}

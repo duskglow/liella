@@ -1,0 +1,5 @@
+# LAYOUT-DATA-CLUSTERS-4D plants: 4C's three plants on crates/rt/src/start.rs `program`, rerun with the
+# truncated-table assertion that catches ldc4c-whole (the cut to whole headers).
+ldc4c-load-skip | crates/rt/src/start.rs | perl:s/if ty == PT_LOAD \{/if ty != PT_LOAD {/ | cargo test -p liella-rt --lib start:: | msg:program_headers_give_the_tls_image_and_the_bias.*FAILED|panicked
+ldc4c-phnum | crates/rt/src/start.rs | perl:s/phnum\.min\(words\.len\(\)/usize::MAX.min(words.len()/ | cargo test -p liella-rt --lib start:: | msg:phnum limits the headers read
+ldc4c-whole | crates/rt/src/start.rs | perl:s/words\.len\(\) \/ PHDR_WORDS\)\.wrapping_mul/words.len()).wrapping_mul/ | cargo test -p liella-rt --lib start:: | msg:the whole headers before a truncated one are read

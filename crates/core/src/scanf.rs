@@ -25,7 +25,7 @@ use crate::locale::file::Cat;
 use crate::locale::{Item, Locale};
 use crate::mem::{InlineVec, TryVec};
 use crate::num::float::{Format, Rounding};
-use crate::num::parse::{parse_float, Dialect, Signals};
+use crate::num::parse::{parse_float, Dialect, FloatRange, Signals};
 use crate::text::{self, Decoded, Encoding, MbState};
 
 /// The symbol set a call came through (spec §12.7, ⚑ COMPAT).
@@ -126,6 +126,9 @@ pub struct Scanned {
     pub error: Option<Errno>,
     /// The IEEE exceptions the float conversions signalled, for the caller to raise (D-8.12).
     pub signals: Signals,
+    /// A floating conversion's result was out of range: `errno` is `ERANGE`, as `strtod`
+    /// reports it (D-12.26), unless `error` names an error, which is reported instead.
+    pub range: bool,
 }
 
 // ------------------------------------------------------------------------------ the format
@@ -936,6 +939,8 @@ struct Run {
     seq: usize,
     /// Exceptions the float conversions signalled.
     signals: Signals,
+    /// A floating conversion's result was out of range.
+    range: bool,
 }
 
 impl Run {
@@ -963,10 +968,10 @@ impl Run {
 /// field cannot be had (`ENOMEM`).
 pub fn scan<F: FmtUnit, I: Input + ?Sized>(fmt: &[F], input: &mut I, sink: &mut dyn Sink, ctx: Ctx<'_>) -> Result<Scanned> {
     let mut r = Reader { input, loc: ctx.loc, wide: F::WIDE, used: 0, ended: false, error: None };
-    let mut run = Run { assigned: 0, converted: false, seq: 0, signals: Signals::default() };
+    let mut run = Run { assigned: 0, converted: false, seq: 0, signals: Signals::default(), range: false };
     let stop = directives(fmt, &mut r, sink, &ctx, &mut run)?;
     let outcome = if stop == Stop::InputFailure && !run.converted { Outcome::InputFailure } else { Outcome::Assigned(run.assigned) };
-    Ok(Scanned { outcome, error: r.error, signals: run.signals })
+    Ok(Scanned { outcome, error: r.error, signals: run.signals, range: run.range })
 }
 
 /// Execute the format's directives in order.
@@ -1061,6 +1066,9 @@ fn convert<F: FmtUnit, I: Input + ?Sized>(fmt: &[F], s: &Spec, r: &mut Reader<'_
                 return Ok(Some(Stop::Mismatch));
             }
             run.signals = run.signals.or(parsed.signals());
+            // A result out of range (overflow, or a tiny inexact result) is reported as strtod
+            // reports it, suppressed conversions included (D-12.26).
+            run.range |= parsed.range != FloatRange::Ok;
             if !s.skip {
                 let bits = parsed.value.pack(format).to_le_bytes();
                 let addr = run.arg(sink, s.arg);

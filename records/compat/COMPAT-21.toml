@@ -1,0 +1,12 @@
+id = "COMPAT-21"
+behaviour = "`scanf` floating range error, then end of input (§12.7, `s12_7_c_3`; D-12.26, ruling #4661)"
+glibc = "`errno` is the value it had on entry when an out-of-range floating field (`%lf %d` on `1e999`) ends at the end of input and a later directive then reaches it; `ERANGE` otherwise"
+liella = "`errno` is `ERANGE` whenever a floating conversion's result is out of range, as `strtod` reports it, whatever follows in the format"
+restore = "A tunable read once at start-up: when set, the scan engine, on reaching the end of input at a later directive after a floating conversion that recorded a range error, puts back the `errno` value saved on entry, so only a range error followed by more input (or by no further directive) leaves `ERANGE`"
+cost = "not implemented now: the restore needs a test of the flag on every scan that reaches the end of input with a range error pending, plus keeping the entry `errno` across the scan, on the default path of every scanf call that can end there"
+status = "registered"
+decisions = ["D-12.26"]
+story = "COMPAT-SCANF-ERANGE"
+date = "2026-11-11"
+body = '''
+'''
