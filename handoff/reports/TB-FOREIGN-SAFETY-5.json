@@ -1,0 +1,12 @@
+{"task": "TB-FOREIGN-SAFETY-5", "model": "opus", "tokens": null,
+ "result": "merged next (layout contract now holds), ld.so __tls_get_addr gated on a process-level byte with foreign-block and zero-dtv tests, hot-text regenerated; gate, plants, counts queued on the final head",
+ "branch": "task/tb-foreign-safety-5", "head": null,
+ "gate": {"affected": "pending (tbfs5-gate-1); story tests tls, tb_foreign_words, s07_locale_symbols green in tbfs5-regen-2", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "#4287 +2 instr per locale-word access: final-head counts queued (tbfs5-counts-1), delta vs a fresh next base not measured", "recommendation": "accept once the counts show +2 against a primed next base"}],
+ "informational": ["regen --allow-drop dropped 2 fast hot-text keys (liella_rt::start::program, iconv::convert) that no trace hit; nm shows 0 definitions in the fast libc.a", "DL-13 __liella_tls_init/release (not on next yet) need the same process-level gate and foreign-block test"],
+ "refused": [],
+ "improvement": "a story held for a layout fix should get the hot-text regen as part of the merge step in its brief: the dead-key check cost a build cycle here",
+ "next_step": "read tbfs5-gate-1, tbfs5-plants-1, tbfs5-counts-1; compare locale rows with a primed next base (+2 wanted)",
+ "report_file": "handoff/TB-FOREIGN-SAFETY.md",
+ "jobs": ["kanon:tbfs5-regen-2", "kanon:tbfs5-gate-1", "kanon:tbfs5-plants-1", "kanon:tbfs5-counts-1"]}

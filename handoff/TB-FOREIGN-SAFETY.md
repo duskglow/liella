@@ -1,17 +1,17 @@
 # TB-FOREIGN-SAFETY: Liella's thread-block words never trusted or written in a block Liella did not make
 
-State: branch `task/tb-foreign-safety-4` (run 4; continues `task/tb-foreign-safety-3`, same code), origin/next
-2e33a3cb9 merged (ruling #4253). HEAD: the handoff commit on top of the merge 9698c773b. **BLOCKED (RULING NEEDED,
-below): `cargo xtask so` fails layout contract STARTUP-DATA-WINDOWS in both profiles (landed on next today, D-X.50)**,
-so no gate, plants or counts can run on this head. clippy and static green on it (tbfs4-lint-2).
-Decision in force: **D-X.58** (records/decisions/D-X/D-X.58.toml; rulings #4212, #4213, #4214, #4241, #4253, #4287).
+State: branch `task/tb-foreign-safety-5` (run 5; continues -4, same code plus the ld.so path). origin/next
+ca8aa835a merged (LAYOUT-STARTUP-RODATA closed with its goal met on next, ruling #4297). HEAD: the report commit on
+top of the hot-text regen. Decision in force: **D-X.58** (records/decisions/D-X/D-X.58.toml; rulings #4212, #4213,
+#4214, #4241, #4253, #4287).
 
 ## The design (D-X.58, short)
 Ownership = process-level byte `liella_machine_owned` (csys/src/machine/points.S), set by `init_initial`
 (crates/boundary/src/thread.rs) when the runtime started the process. Rust reads a crate-private mirror
 `thread::OWNED_HERE` stored beside it (`thread::owned()`: one rip-relative `cmpb`). In a process another C library
 started, `thread::words()` / `foreign_words()` give the thread's registry words (64-entry mmap chunks keyed by thread
-pointer + TID; `SPARE` when the registry has no memory). Per word: 0x9c flags never read; 0x138 view never read.
+pointer + TID; `SPARE` when the registry has no memory). Per word: 0x9c flags never read (run 5: the `tb::Flags`
+reader is removed, so no code can read it); 0x138 view never read.
 
 ## Every word access gated, and how (for the coordinator's review)
 | Site | Word | Owned process | Foreign process |
@@ -25,44 +25,40 @@ pointer + TID; `SPARE` when the registry has no memory). Per word: 0x9c flags ne
 | locale.rs `lconv_char` | 0x128/0x130 lconv | `thread::words().lconv` (block in owned) | registry `lconv` |
 | netdb.rs `__h_errno_location`, get/set | 0xc8 h_errno | block word at tp+offset | registry `h_errno` (address stable per thread) |
 | resolv.rs `res_state`, free, `print_slot` | resolver state word | `thread::words()` | registry word; `SPARE` (shared) is never freed |
+| **ld.rs `__tls_get_addr` (run 5, coordinator #4503)** | %fs:8 dtv (psABI slot; 0x9c no longer read) | `STARTED_HERE` (ld.so's own byte, set by `install_tls`) then dtv != 0, then the lookup | refuse, status 127 ("called in a process this loader did not start") |
 
-## Run 4
-- Step 0 on the inherited head 9cb75fa1f: clippy + static green (tbfs4-lint-1).
-- Merged origin/next 2e33a3cb9 (8 commits: LAYOUT-STARTUP-DATA, D-X.50, new contract STARTUP-DATA-WINDOWS; no
-  conflicts).
-- `regen.sh . --build` (handoff step 1) fails before tracing, in both profiles, on STARTUP-DATA-WINDOWS:
-  fast 4 read-only start-up windows > ro-budget-fast 3 (tbfs4-regen-1); release 5 > 4 (tbfs4-regen-rel-1).
-  origin/next itself, same host: fast 2 windows / 20 pages, contract ok (tbfs4-nextso-1).
-- Cause (probe links of `page_faults.c`, ~/work/TB-FOREIGN-SAFETY-4/{next,role}.{nm,sec} on mei): the branch's
-  .rodata is +0x30 bytes, but its .text in the probe link is +0x6040 (fast), so .rodata starts 0x6000 higher and
-  both start-up rodata clusters straddle a 64 KiB boundary (fast: 0x75e5f8-0x763ffd and 0x7d7450-0x7e3600).
-  Of the text growth only ~7.5 KB is sized symbols and most of that is ThinLTO repartitioning churn in unrelated
-  functions (argp `write_help` +10.6 KB, nss `*_cached` instances, mbrtoc* -7 KB). The release lone window holds the
-  tunables type string `runtime::start` compares (also on next). No start-up data object comes from this story.
-- The 4 dead fast hot-text keys of run 3 are still there (cannot regenerate: regen builds with the layout check).
+## Run 5
+- Step 0 on the inherited head 1e28dff71: clippy + static green (kanon tbfs5-lint-0).
+- Merged origin/next ca8aa835a: one conflict, xtask/src/coldbss.rs: next's `split_stem` covers the same ThinLTO
+  split-static suffix the branch had fixed; next's file taken whole. docs/codemap/symbols.tsv reset to next's
+  (generated view).
+- ld.so `__tls_get_addr` brought under the process rule (069fdfd4f); zero-dtv refusal; tests in crates/ld/tests/tls.rs:
+  `tls_get_addr_refuses_in_a_process_it_did_not_start` (host-libc program dlopens the built ld.so, forged block
+  with bit 0 of 0x9c and a valid-looking dtv), `tls_get_addr_refuses_a_thread_without_a_vector`. D-X.58 body updated.
+- STARTUP-DATA-WINDOWS holds on the merged head (fast: 1 ro window, budget 1). Hot-text regen (both profiles) with
+  `--allow-drop` for 2 fast keys no trace hit (`liella_rt::start::program`, `iconv::convert`; neither touched by this
+  story; `nm` counts in tbfs5-regen-2's log). tbfs5-regen-1 (rc 1) was the refusal without `--allow-drop`.
+- Plants: handoff/TB-FOREIGN-SAFETY-plants.txt, 9 (7 settled in run 3 + 2 for ld.rs).
 
 ## RULING NEEDED
-1. STARTUP-DATA-WINDOWS read-only budgets depend on total text size modulo 64 KiB (next sits at 2 of 3 by layout,
-   D-X.50 measured 3). Recommend: cut the D-X.50 item-3 follow-up for read-only data first (put the start-up
-   functions' rodata input sections in one place, e.g. `.rodata1`, so the count stops moving with text size) and
-   land this branch on top; alternative: accept +1 ro window per profile for this branch (a loosening: owner's call).
-   Padding text to dodge a boundary was not done (it fixes nothing).
-2. (standing, #4287) +2 instructions per locale-word access in owned processes: counts on the final head still owed.
+1. (standing, #4287) +2 instructions per locale-word access in owned processes: the final-head counts job
+   (tbfs5-counts-1, `bench --compare --counters --runs 3 cbench_hot cbench_locale`) ran; the delta against a next
+   base was not measured in this run (budget). The run-4 base (mei:~/work/TB-FOREIGN-SAFETY-4/base-measure.tsv) is
+   stale: next has moved 422 commits.
 
-## Exact next step (once the layout ruling is applied)
-1. On the role: `bash tools/hottext/regen.sh . --build`, then `LIELLA_FULL_PROFILE=1 bash tools/hottext/regen.sh . --build`
-   (fixes the 4 dead keys; Features::detect is a STARTUP key, live in release only). Commit the list files.
-2. Tests tb_foreign_words + s07_locale_symbols; direct gate; plants (handoff/TB-FOREIGN-SAFETY-plants.txt);
-   counts `bench --compare --counters --runs 3 cbench_hot cbench_locale` on that head. Base: next's product code is
-   unchanged since tbfs3-counts-base-1 (the 8 new commits are layout tooling), copy at
-   mei:~/work/TB-FOREIGN-SAFETY-4/base-measure.tsv, join with ~/work/TB-FOREIGN-SAFETY-4/join.py. Want +2.
+## Exact next step
+Read the verdicts of tbfs5-gate-1, tbfs5-plants-1, tbfs5-counts-1 (kanon). For #4287: prime a next base and compare
+the locale rows (want +2). DL-13's `__liella_tls_init`/`release` (not on next yet) need the same process-level gate and
+the same foreign-block test as `__tls_get_addr` (coordinator #4503).
 
 ## Open (D-X.58 known limits)
 - A dead foreign thread's resolver state is not freed on entry reuse; TID reuse at the same thread pointer looks
   like the same thread.
+- ld.so: in a process it started, every thread block is taken as its runtime's (a thread made with a raw `clone` and
+  its own TLS is the program's responsibility, as everywhere under D-X.58).
 
 ## Do not redo
 - No ownership test inside the block can be safe (D-X.58 options). Plants 7/7 settled (#4254, tbfs3-plants-2).
-- run 3's +6 per access was the extern byte; fixed to the `OWNED_HERE` mirror (82ad32ee1), not yet counted.
-- Jobs on mei, run 4: tbfs4-lint-1 (pre-merge head, green), tbfs4-regen-1 / tbfs4-regen-rel-1 (rc 1, the layout
-  evidence), tbfs4-nextso-1 (next baseline), tbfs4-roledump-1 (rc 1, my script), tbfs4-roledump-2, tbfs4-lint-2.
+- run 3's +6 per access was the extern byte; fixed to the `OWNED_HERE` mirror (82ad32ee1).
+- Jobs, run 5 (kanon): tbfs5-lint-0 (inherited head, green), tbfs5-tests-1 (rc 1: dead hot-text keys before regen),
+  tbfs5-regen-1 (rc 1: regen refused the 2 drops), tbfs5-regen-2, tbfs5-gate-1, tbfs5-plants-1, tbfs5-counts-1.
