@@ -1,0 +1,11 @@
+{"task": "LAYOUT-STARTUP-RODATA-4", "model": "opus", "tokens": null,
+ "result": "release first localtime_r 21 -> 18 (next 19 at tip and base, same harness): the localtime probes' traced functions (new @generated probe-text.keys) join the start-up group's starts; fast unchanged 17/53/20, group fast 60064 / release 49412 of 65536",
+ "branch": "task/layout-startup-rodata-4", "head": "56504e2a1",
+ "gate": {"affected": "see layout-startup-rodata-4-gate (direct tier) on shiki", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["next tip 9af6dff86 and base 2e33a3cb9 release products read localtime 19 / lt+mktime 19, branch run 3 read 21 / 21, identical on the Skylake-SP and Haswell-EP hosts: the +2 was the branch's (TZ and TZDIR getenv literals left alone in two cold .rodata windows)", "xtask/src/coldbss.rs reads .bss.* names from readelf -SW, which cuts at 256 bytes (unchecked, from run 3)"],
+ "refused": [],
+ "improvement": "the fault-bounded probes' start sets should all be traced per probe mode (probe-text.keys) instead of by hot-text tier; a fault harness outside cargo (probe.py) let one job compare next and branch products on two hosts in seconds",
+ "next_step": "the .data1 half (#4315) to stop the RW shift, then tighten the tool/locale bounds",
+ "report_file": "handoff/LAYOUT-STARTUP-RODATA.md",
+ "jobs": ["layout-startup-rodata-4-gate", "layout-startup-rodata-4-plants", "layout-startup-rodata-4-lint2"]}

@@ -41,6 +41,24 @@ Q1(cosf128_1e300, cosf128, 1e300, 2e300)
 Q1(tanf128, tanf128, -10.0, 10.0)
 Q1(tanf128_1e300, tanf128, 1e300, 2e300)
 
+/* The inverse functions (LIBM-F128-TRIG-INT-4, D-10.96): atanf128 on [-10, 10] (mostly the pi/2 - A composition) and
+ * [-1, 1] (A alone), atan2f128 on two tables of [-10, 10] (every quadrant), asinf128/acosf128 on (-1, 1). */
+Q1(atanf128, atanf128, -10.0, 10.0)
+Q1(atanf128_1, atanf128, -1.0, 1.0)
+Q1(asinf128, asinf128, -0.99, 0.99)
+Q1(acosf128, acosf128, -0.99, 0.99)
+
+static volatile _Float128 qy[64];
+
+CASE(atan2f128, 20000, 1) {
+    fill(-10.0, 10.0);
+    for (int i = 0; i < 64; i++) qy[i] = qx[(i * 29 + 7) & 63];
+    fill(-10.0, 10.0); _Float128 acc = 0;
+    for (long i = 0; i < n; i++) acc += atan2f128(qy[i & 63], qx[(i + 3) & 63]);
+    pc_sink += (long)acc;
+    PC_CHECKING { pc_check("%.15g", (double)atan2f128(qy[5], qx[8])); }
+}
+
 CASE(sincosf128, 20000, 1) {
     fill(-10.0, 10.0); _Float128 acc = 0, s, c;
     for (long i = 0; i < n; i++) { sincosf128(qx[i & 63], &s, &c); acc += s + c; }
