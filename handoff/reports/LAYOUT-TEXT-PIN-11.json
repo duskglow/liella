@@ -1,0 +1,12 @@
+{"task": "LAYOUT-TEXT-PIN-11", "model": "opus", "tokens": null,
+ "result": "merged next 07a4db6ac; both profiles regenerated (dropped only the dead fast key liella_rt::start::program, no call site on next either); start-up test now holds only referenced optional functions; merged head 54/51/13/6 vs next 55/52/12/6 on the same host, bounds 58/55/17/7",
+ "branch": "task/layout-text-pin-11", "head": null,
+ "gate": {"affected": "hot_text_products 21 passed / 0 failed; cargo xtask affected --run in job layout-text-pin-11-gate", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "start-up page faults read 13 on the merged head vs 12 on next (bound 17) while tool/locale are 1 below next; perf's user-page map shows the merged head one .data page better, so the +1 is not in a user page perf attributes (cause not found)", "recommendation": "land (tool -1, locale -1, within all bounds); cut a small follow-up to map the start-up +1 at exec time"}],
+ "informational": ["next's hot-text.list pins liella_rt::start::program, whose fast out-of-line copy has no call site (inlined into initial_thread): xtask so's dead-key check sees only that the section exists, so a dead key of this kind passes it"],
+ "refused": [],
+ "improvement": "xtask so's dead-key check could also require a call site (as init_startup_path_lies_in_the_hot_text_range now does), so a key for inlined code is caught at build time instead of by a regen refusal",
+ "next_step": "optional follow-up: find the start-up minflt +1 (exec-time faults; segments.txt of next/merged in ~/work/LAYOUT-TEXT-PIN-11 on shiki)",
+ "report_file": "handoff/LAYOUT-TEXT-PIN-11.md",
+ "jobs": ["layout-text-pin-11-gate", "layout-text-pin-11-plants", "layout-text-pin-11-lint", "layout-text-pin-11-regen2"]}
