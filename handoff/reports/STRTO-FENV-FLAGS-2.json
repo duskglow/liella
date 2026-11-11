@@ -1,0 +1,12 @@
+{"task": "STRTO-FENV-FLAGS-2", "model": "opus", "tokens": null,
+ "result": "merged origin/next (scanf ERANGE D-12.26 + IEEE signals D-8.12 kept together); hot_text_products green on the merged head; flags matrix now checks scanf's errno too; gate, plants, lint green",
+ "branch": "task/strto-fenv-flags-2", "head": "4f06ee42c",
+ "gate": {"affected": "7552 passed / 0 failed (9 suites), conformance 16 passed / 0 failed", "peak": "14G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["per-call counts vs origin/next a551cd8c2 (instructions): short path 237/231 vs 241/235 (-4; the cbench strtod rows parse 3.14159, short path); long path +107..+120 (strtod_long 9576 vs 9458, strtold 6248 vs 6142, strtof 3717 vs 3609, overflow 1090 vs 970, underflow 1017 vs 898), sscanf %lf +43; the cost of raising the flags the ruling requires, not profiled further (budget)", "percall self-check: origin/next raises no O/U on 1e400/1e-400 (glibc does), the new head matches glibc"],
+ "refused": [],
+ "improvement": "wl_percall has no strtod-family spec; the one written here (~/work/STRTO-FENV-FLAGS-2/strtod_flags.c on mei, flags in its check) could go into validation/percall/",
+ "next_step": "optional: profile the long path's +110 instructions (raise_signals/enabled/set and parse signals) with wl_trace",
+ "report_file": "handoff/strto-fenv-flags.md",
+ "jobs": ["strto-fenv-flags-2-lint", "strto-fenv-flags-2-hottext", "strto-fenv-flags-2-gate", "strto-fenv-flags-2-plants", "strto-fenv-flags-2-percall"]}
