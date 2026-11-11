@@ -53,7 +53,8 @@ pub const PAGE: usize = 4096;
 pub fn program(words: &[u64], phnum: usize, phdr_addr: usize) -> Program {
     let field = |h: &[u64], i: usize| h.get(i).copied().map_or(0, |v| usize::try_from(v).unwrap_or(usize::MAX));
     let (mut phdr, mut tls, mut relro) = (None, None, None);
-    let table = words.get(..phnum.min(words.len() / PHDR_WORDS) * PHDR_WORDS).unwrap_or_default();
+    // At most `words.len()`: the product cannot wrap.
+    let table = words.get(..phnum.min(words.len() / PHDR_WORDS).wrapping_mul(PHDR_WORDS)).unwrap_or_default();
     for h in table.chunks_exact(PHDR_WORDS) {
         let ty = h.first().map_or(0, |w| w & 0xffff_ffff);
         if ty == PT_LOAD {
