@@ -1,0 +1,10 @@
+# LIBM-F32-REST-2 plants (D-10.82): cargo xtask plants handoff/LIBM-F32-REST-2-plants.txt --dir <new RAM dir>
+# The two LIBM-F32-REST survivors, re-planted. red-lowpart: dropping the fit's u^7 term moves the result by up to
+# |AT7|·(1/64)^7 ≈ 2^-44.8 (≈ 300 double ulp, above the margin of 64), so only operands whose result lies within
+# ~300 ulp(double) of a float boundary change: the sampled gate test does not reach them, the exhaustive sweep (here
+# every third operand, 4 directions) does. asin-partial-write: run 1's mutant `f64::from(x).abs()` compiled to
+# `pand %xmm0,%xmm1; cvtss2sd %xmm1,%xmm1` (the destination written two instructions earlier: no merge from an
+# unowned register, so the check was right to pass it); this mutant converts the signed operand, which stays live for
+# the envelope, so the conversion's destination is a register the export has not written (D-10.67's hazard).
+red-lowpart | crates/math/src/fast32/inv_trig.rs | perl:s/(fn atan_red_any.*?)u2 \* \(AT5 \+ u2 \* AT7\)/$1u2 * AT5/s | LIELLA_SWEEP_STRIDE=3 cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored math_atanf_onepass_sweep | msg:atanf differs from the envelope
+asin-partial-write | crates/math/src/fast32/inv_trig.rs | perl:s/(pub fn asin_onepass_any.*?)let a = onepass_abs\(ab\);/$1let a = f64::from(x); let a = if b >> 31 != 0 { 0.0 - a } else { a };/s | cargo xtask partial-write | msg:asinf\+0x[0-9a-f]+: cvtss2sd
