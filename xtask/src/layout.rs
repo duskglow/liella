@@ -24,7 +24,7 @@ const HEADER: [&str; 6] = ["id", "kind", "subjects", "rule", "reason", "decision
 /// Kinds whose contract is held by a directive in the source (alignment attribute, `.p2align`, `.org`): a row of one
 /// of them needs a `LAYOUT(<ID>)` tag at that directive.
 const SITE_KINDS: &[&str] = &["classed-xref", "object-window", "object-align", "section-offset", "label-align"];
-const KINDS: &[&str] = &["fn-align", "classed-xref", "jcc", "section-rename", "object-window", "object-align", "section-offset", "label-align", "remap", "startup-text-windows", "startup-data-windows"];
+const KINDS: &[&str] = &["fn-align", "classed-xref", "jcc", "section-rename", "object-window", "object-align", "section-offset", "label-align", "remap", "startup-text-windows", "startup-data-windows", "fault-classes"];
 const DIRECTIVES: &[&str] = &[".p2align", ".balign", ".align ", ".org ", "align("];
 
 #[derive(Clone, Debug, PartialEq)]
@@ -405,6 +405,7 @@ fn check_one(c: &Contract, pr: &mut Products) -> Result<String, Vec<String>> {
         }
         "startup-text-windows" => check_startup_windows(c, &p, pr),
         "startup-data-windows" => check_startup_data(c, &p, pr),
+        "fault-classes" => check_fault_classes(c, &p, pr),
         k => Err(one(format!("layout: {}: unknown kind `{k}` (known: {})", c.id, KINDS.join(", ")))),
     }
 }
@@ -948,6 +949,192 @@ fn check_startup_data(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Produ
     startup_data_verdict(c, &d, (window, page), (ro_budget, rw_budget), &profile).map(|s| format!("{s}; {} of {} start-up objects found", keys.len() - d.missing.len(), keys.len()))
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// FAULT-CLASSES (D-X.65, ruling #4349): per-class page-fault contracts measured from fault addresses
+//
+// The probe (`page_faults.c` linked as for STARTUP-TEXT-WINDOWS) runs once in the row's `mode=` under
+// `perf record -e page-faults -c 1 -d` (address randomisation off, empty environment but LANG, stdin /dev/null, cwd /),
+// and every fault address is classed by the probe's program headers: `text` (an executable segment, in a 64 KiB
+// window that holds hot-group text), `text-cold` (an executable segment, in a window without hot-group text: start-up
+// code outside the group), `ro` (a read-only segment), `relro` (GNU_RELRO), `written` (the rest of a writable
+// segment: each page faults on its own), `other` (outside the image: stack, heap, vDSO; reported, not bounded). Each
+// bounded class must stay at or under `<class>-<profile>=`; a class over its bound names the symbol at each of its
+// fault addresses. The key lists stay placement input only: a function that moved, was inlined or renamed is
+// counted where it now faults. Where perf cannot run the row is reported as not measured, except under CI.
+
+/// The classes a fault address falls in; all but `other` carry a bound per profile.
+const FAULT_CLASSES: [&str; 6] = ["text", "text-cold", "ro", "relro", "written", "other"];
+
+/// The fault-around window text faults are counted in (bytes).
+const FAULT_WINDOW: u64 = 1 << 16;
+
+/// A loadable segment of the linked probe, or its GNU_RELRO range (`relro`).
+#[derive(Clone, Debug, PartialEq)]
+struct Segment {
+    start: u64,
+    end: u64,
+    exec: bool,
+    write: bool,
+    relro: bool,
+}
+
+/// `readelf -lW` of the linked probe -> its LOAD segments (memory size) and GNU_RELRO ranges.
+fn parse_segments(text: &str) -> Vec<Segment> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        let relro = match f.first() {
+            Some(&"LOAD") => false,
+            Some(&"GNU_RELRO") => true,
+            _ => continue,
+        };
+        // Type Offset VirtAddr PhysAddr FileSiz MemSiz Flg... Align: the flags may be split by spaces (`R E`).
+        let hex = |s: &str| s.strip_prefix("0x").and_then(|h| u64::from_str_radix(h, 16).ok());
+        let (Some(start), Some(size)) = (f.get(2).and_then(|s| hex(s)), f.get(5).and_then(|s| hex(s))) else { continue };
+        let flags: String = f[6..f.len().saturating_sub(1)].concat();
+        out.push(Segment { start, end: start + size, exec: flags.contains('E'), write: flags.contains('W'), relro });
+    }
+    out
+}
+
+/// The class of fault address `a`: [`FAULT_CLASSES`], given the probe's segments and the hot group's `[lo, hi)`.
+fn fault_class(a: u64, segs: &[Segment], hot: Option<(u64, u64)>) -> &'static str {
+    let inside = |s: &&Segment| a >= s.start && a < s.end;
+    if segs.iter().filter(|s| s.relro).any(|s| inside(&s)) {
+        return "relro";
+    }
+    match segs.iter().filter(|s| !s.relro).find(inside) {
+        None => "other",
+        Some(s) if s.exec => {
+            let w = window_of(a, FAULT_WINDOW);
+            let hot_window = hot.is_some_and(|(lo, hi)| lo < hi && window_of(lo, FAULT_WINDOW) <= w && w <= window_of(hi - 1, FAULT_WINDOW));
+            if hot_window { "text" } else { "text-cold" }
+        }
+        Some(s) if s.write => "written",
+        Some(_) => "ro",
+    }
+}
+
+/// `nm -n`-style lookup: the defined symbol at or below `a`, as `name+0x<off>` (`?` when there is none).
+fn symbol_at(a: u64, syms: &[(u64, String)]) -> String {
+    match syms.partition_point(|(s, _)| *s <= a) {
+        0 => format!("? ({a:#x})"),
+        i => format!("{}+{:#x} ({a:#x})", syms[i - 1].1, a - syms[i - 1].0),
+    }
+}
+
+/// The symbols of `nm -S --defined-only` output, sorted by address.
+fn sorted_symbols(nm: &str) -> Vec<(u64, String)> {
+    let mut out: Vec<(u64, String)> = nm
+        .lines()
+        .filter_map(|l| {
+            let f: Vec<&str> = l.split_whitespace().collect();
+            let a = u64::from_str_radix(f.first()?, 16).ok()?;
+            Some((a, f.last()?.to_string()))
+        })
+        .filter(|(_, n)| !n.starts_with(".L"))
+        .collect();
+    out.sort();
+    out
+}
+
+/// The verdict of one mode's faults (`addrs`, in record order) against the row's bounds: `Ok(counts)` or the
+/// BROKEN lines, each class over its bound with the symbol at every fault address of that class.
+fn fault_class_verdict(c: &Contract, addrs: &[u64], segs: &[Segment], hot: Option<(u64, u64)>, syms: &[(u64, String)], bounds: &BTreeMap<&str, u64>, profile: &str) -> Result<String, Vec<String>> {
+    let mut by: BTreeMap<&str, Vec<u64>> = BTreeMap::new();
+    for &a in addrs {
+        by.entry(fault_class(a, segs, hot)).or_default().push(a);
+    }
+    let n = |k: &str| by.get(k).map_or(0, Vec::len) as u64;
+    let counts = FAULT_CLASSES.iter().map(|k| format!("{k} {}", n(k))).collect::<Vec<_>>().join(", ");
+    let mut bad = Vec::new();
+    for (k, &b) in bounds {
+        if n(k) > b {
+            let at: Vec<String> = by[k].iter().map(|&a| symbol_at(a, syms)).collect();
+            bad.push(c.broken(&format!("class {k} ({profile})"), &format!("{} faults > bound {b}; faults at {}", n(k), at.join(", "))));
+        }
+    }
+    if bad.is_empty() { Ok(counts) } else {
+        bad.push(format!("layout: {}: measured {counts}", c.id));
+        Err(bad)
+    }
+}
+
+/// Link the probe, run it once in `mode` under perf, and return (fault addresses, segments, hot range, symbols).
+/// `Err((true, why))`: perf could not run here (not measured); `Err((false, why))`: any other failure.
+#[allow(clippy::type_complexity)]
+fn measure_faults(pr: &Products, mode: &str) -> Result<(Vec<u64>, Vec<Segment>, Option<(u64, u64)>, Vec<(u64, String)>), (bool, String)> {
+    let work = std::env::temp_dir().join(format!("liella-layout-faults-{}", std::process::id()));
+    std::fs::create_dir_all(&work).map_err(|e| (false, format!("{}: {e}", work.display())))?;
+    let measured = (|| {
+        let (exe, data, map) = (work.join("page_faults"), work.join("perf.data"), work.join("page_faults.map"));
+        let file = |n: &str| pr.file(n).map_err(|e| (false, e));
+        // Linked as link_startup_probe (and hot_text_products.rs) link it.
+        tool(
+            Command::new("cc")
+                .args(["-std=gnu17", "-O1", "-static", "-nostdlib", "-fno-builtin"])
+                .arg(file("liella-crt1.o")?)
+                .arg(pr.root.join("crates/core/tests/oracle/page_faults.c"))
+                .arg(file("libc.a")?)
+                .arg("-lgcc")
+                .arg(format!("-Wl,-Map,{}", map.display()))
+                .arg("-o")
+                .arg(&exe),
+            "cc page_faults.c (the fault-class probe)",
+        )
+        .map_err(|e| (false, e))?;
+        let map = std::fs::read_to_string(&map).map_err(|e| (false, format!("{}: {e}", map.display())))?;
+        let nm = tool(Command::new("nm").args(["-S", "--defined-only"]).arg(&exe), "nm -S page_faults").map_err(|e| (false, e))?;
+        let segs = parse_segments(&tool(Command::new("readelf").arg("-lW").arg(&exe), "readelf -lW page_faults").map_err(|e| (false, e))?);
+        let rec = Command::new("setarch")
+            .args(["-R", "perf", "record", "-q", "-e", "page-faults", "-c", "1", "-d", "-o"])
+            .arg(&data)
+            .arg("--")
+            .arg(&exe)
+            .arg(mode)
+            .env_clear()
+            .env("PATH", "/usr/local/bin:/usr/bin:/bin")
+            .env("LANG", "en_US.UTF-8")
+            .current_dir("/")
+            .stdin(std::process::Stdio::null())
+            .output()
+            .map_err(|e| (true, format!("setarch -R perf record: {e}")))?;
+        if !rec.status.success() || !data.is_file() {
+            return Err((true, format!("perf record -e page-faults -d: {} {}", rec.status, String::from_utf8_lossy(&rec.stderr).trim())));
+        }
+        let script = tool(Command::new("perf").args(["script", "-F", "addr", "-i"]).arg(&data), "perf script -F addr").map_err(|e| (true, e))?;
+        let addrs: Vec<u64> = script.lines().filter_map(|l| u64::from_str_radix(l.trim(), 16).ok()).collect();
+        Ok((addrs, segs, map, nm))
+    })();
+    let _ = std::fs::remove_dir_all(&work);
+    let (addrs, segs, map, nm) = measured?;
+    if addrs.is_empty() {
+        return Err((false, format!("perf recorded no addressed page fault of `page_faults {mode}`")));
+    }
+    let hot = parse_map(&map).iter().filter(|s| is_hot_section(&s.name)).fold(None, |r: Option<(u64, u64)>, s| Some(r.map_or((s.start, s.end), |(lo, hi)| (lo.min(s.start), hi.max(s.end)))));
+    Ok((addrs, segs, hot, sorted_symbols(&nm)))
+}
+
+fn check_fault_classes(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Products) -> Result<String, Vec<String>> {
+    let one = |e: String| vec![e];
+    let window = param_num(p, c, "window").map_err(one)?;
+    same(c, "window", window, FAULT_WINDOW).map_err(one)?;
+    let mode = param(p, c, "mode").map_err(one)?.to_string();
+    let profile = pr.profile.clone().ok_or_else(|| one(format!("layout: {}: the products' profile is unknown (no {}/.profile)", c.id, pr.dir.display())))?;
+    let mut bounds = BTreeMap::new();
+    for k in FAULT_CLASSES.iter().filter(|k| **k != "other") {
+        bounds.insert(*k, param_num(p, c, &format!("{k}-{profile}")).map_err(one)?);
+    }
+    for f in &c.subjects {
+        pr.file(f).map_err(|e| one(c.broken(f, &e)))?;
+    }
+    match measure_faults(pr, &mode) {
+        Ok((addrs, segs, hot, syms)) => fault_class_verdict(c, &addrs, &segs, hot, &syms, &bounds, &profile).map(|s| format!("page_faults {mode} ({profile}): {s}")),
+        Err((true, why)) if std::env::var_os("CI").is_none_or(|v| v.is_empty()) => Ok(format!("NOT MEASURED: perf cannot run here ({why}); the class bounds are checked where it can (CI requires it)")),
+        Err((_, why)) => Err(one(format!("layout: {}: {why}", c.id))),
+    }
+}
+
 /// The profile recorded in `<dir>/.profile` (written last by `cargo xtask so`).
 fn marker_profile(dir: &Path) -> Option<String> {
     std::fs::read_to_string(dir.join(".profile")).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
@@ -1169,6 +1356,39 @@ mod tests {
         assert_eq!(regen_verdict(broken(), false), Err("layout: 1 of 12 contracts broken: STARTUP-TEXT-WINDOWS".to_string()));
         assert_eq!(regen_verdict(Ok(()), true), Ok(None));
         assert_eq!(regen_verdict(Ok(()), false), Ok(None));
+    }
+
+    #[test]
+    fn fault_addresses_are_classed_by_segment_and_a_rise_names_the_symbol() {
+        // LAYOUT-FAULT-CONTRACTS, D-X.65 (no spec clause: build tooling): a fault is classed by where it lands,
+        // not by a key list, and a class over its bound names the function at the new fault address.
+        let phdrs = "  LOAD           0x000000 0x0000000000400000 0x0000000000400000 0x000400 0x000400 R   0x1000\n\
+                     \x20 LOAD           0x001000 0x0000000000401000 0x0000000000401000 0x050000 0x050000 R E 0x1000\n\
+                     \x20 LOAD           0x052000 0x0000000000452000 0x0000000000452000 0x008000 0x008000 R   0x1000\n\
+                     \x20 LOAD           0x05a000 0x000000000045b000 0x000000000045b000 0x002000 0x006000 RW  0x1000\n\
+                     \x20 GNU_RELRO      0x05a000 0x000000000045b000 0x000000000045b000 0x001000 0x001000 R   0x1\n";
+        let segs = parse_segments(phdrs);
+        assert_eq!(segs.len(), 5, "{segs:?}");
+        assert!(segs[1].exec && !segs[1].write && segs[3].write && segs[4].relro, "{segs:?}");
+        let hot = Some((0x401000, 0x409000));
+        // A fault in a window holding hot-group text is `text` even past the group's end (fault-around maps it).
+        assert_eq!(fault_class(0x401000, &segs, hot), "text");
+        assert_eq!(fault_class(0x40f000, &segs, hot), "text");
+        assert_eq!(fault_class(0x430123, &segs, hot), "text-cold");
+        assert_eq!(fault_class(0x452010, &segs, hot), "ro");
+        assert_eq!(fault_class(0x45b008, &segs, hot), "relro");
+        assert_eq!(fault_class(0x45c000, &segs, hot), "written");
+        assert_eq!(fault_class(0x460000, &segs, hot), "written", "bss beyond the file size is written data");
+        assert_eq!(fault_class(0x7ffff000, &segs, hot), "other");
+        let syms = sorted_symbols("0000000000430100 0000000000000040 T liella_sys_exit_group\n0000000000401000 T _start\n");
+        let c = row("STARTUP-FAULT-CLASSES", "mode=true");
+        let bounds: BTreeMap<&str, u64> = [("text", 2), ("text-cold", 0), ("ro", 1), ("relro", 1), ("written", 2)].into_iter().collect();
+        let ok = fault_class_verdict(&c, &[0x401000, 0x452010, 0x45c000, 0x7ffff000, 0x7ffe0000], &segs, hot, &syms, &bounds, "fast");
+        assert_eq!(ok, Ok("text 1, text-cold 0, ro 1, relro 0, written 1, other 2".to_string()), "`other` is never bounded");
+        let moved = fault_class_verdict(&c, &[0x401000, 0x430123], &segs, hot, &syms, &bounds, "fast").unwrap_err();
+        assert!(moved[0].contains("STARTUP-FAULT-CLASSES BROKEN: class text-cold (fast)") && moved[0].contains("liella_sys_exit_group+0x23 (0x430123)"), "{moved:?}");
+        let more = fault_class_verdict(&c, &[0x45c000, 0x45d000, 0x45e000], &segs, hot, &syms, &bounds, "fast").unwrap_err();
+        assert!(more[0].contains("class written (fast): 3 faults > bound 2"), "{more:?}");
     }
 
     fn row(id: &str, rule: &str) -> Contract {
