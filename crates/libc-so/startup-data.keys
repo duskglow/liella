@@ -35,7 +35,7 @@ _RNvNtC15liella_boundary4heap11RESERVE_TOP.0	rw	fast,release
 _RNvNtC15liella_boundary4heap12RESERVE_LIVE	rw	fast,release
 _RNvNtC15liella_boundary4heap12RESERVE_LOCK	rw	fast,release
 _RNvNtC15liella_boundary4heap4HEAP	rw	fast,release
-_RNvNtC15liella_boundary4heap5DEBUG	rw	fast,release
+_RNvNtC15liella_boundary4heap5DEBUG	rw	release
 _RNvNtC15liella_boundary5stdio4FREE.0	rw	fast,release
 _RNvNtC15liella_boundary5stdio5SLOTS	rw	fast,release
 _RNvNtC15liella_boundary6thread10LOCK_ALONE.0	rw	release
