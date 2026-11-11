@@ -1,8 +1,10 @@
 # DL-LIBC-EARLY: LIELLA_PRIVATE, early init, the export moves and rseq publishing (phase 14 DL-13)
 
-**State:** branch `task/dl-libc-early-3` (on `task/dl-libc-early-2`, not yet in next), code head c914ae2c9, plants
-commit 5a2588945, role keke:~/w/n3. DL-13 is complete in code: build tag check and early init (-1/-2), export moves
-and rseq publishing (-3). Report: handoff/DL-LIBC-EARLY-3-report.md (and DL-LIBC-EARLY-2-report.md).
+**State:** branch `task/dl-libc-early-4` (-3's head plus a fixed plants file and a merge of origin/next
+28a903a01; -2/-3 not yet in next), code head c914ae2c9 (no code change since), role mei:~/w/s4. DL-13 is complete
+in code: build tag check and early init (-1/-2), export moves and rseq publishing (-3); -4 fixed the plants file
+(-3's rc 2 was a ` | ` inside a plant's replacement) and ran the plants, gate, and start-up counts side by side with
+next. Plants file: handoff/DL-LIBC-EARLY-4-plants.txt. Reports: handoff/DL-LIBC-EARLY-4-report.md (-3, -2 too).
 
 **Decisions in force:** D-27.26 (this story: placement, initial rseq area, publish before relocation),
 D-27.22 (private interface; `StartInfo` gained `rseq_size`), D-27.19/.20 (init order, interpreter exports),
