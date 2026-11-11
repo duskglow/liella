@@ -289,6 +289,8 @@ fn atan_le3(y: Scaled, x: Scaled, ix: f64) -> Scaled {
     let k = x.1 - y.1; // >= 0
     let mut j = 0;
     if k <= 8 {
+        // RANGE: y' = ⌊y.M/2^139⌋ and x' are in [2^52, 2^53), ix ≈ 256/x': the product is
+        // positive and below 2^10, far inside the signed range.
         let h = (dbl((y.0.h >> 75) as u64) * ix) as usize; // in [128, 512)
         j = ((h >> k) + 1) >> 1;
     }
