@@ -10,3 +10,8 @@ fraction-mask | crates/math/src/wide_int/arc.rs | lit:let m = (b & ((1 << 52) - 
 # The reciprocal's conversion reverted to `as u64`: same values, the hardware invalid flag back (a performance
 # regression, measured by idq.ms_uops per call, not a functional one: the envelope's exit drops hardware flags).
 recip-as | crates/math/src/wide_int/arc.rs | lit:big_u64(vd)); ==> vd as u64); | cargo test -p liella-math --lib wide_int::arc | equivalent:identical values (both exact on [2^63, 2^64]); only the hardware invalid flag and its microcode stall differ, which the envelope hides and the idq.ms_uops counts measure
+# cargo xtask plants results (4 plants: 3 CAUGHT, 0 SURVIVED, 1 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# sat-lost: CAUGHT, caught by liella_math wide_int::arc::tests::big_u64_is_the_saturating_conversion
+# bias-off: CAUGHT, caught by liella_math wide_int::arc::tests::big_u64_is_the_saturating_conversion
+# fraction-mask: CAUGHT, caught by liella_math wide_int::arc::tests::big_u64_is_the_saturating_conversion
+# recip-as: EQUIVALENT
