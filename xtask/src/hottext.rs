@@ -1097,7 +1097,7 @@ pub fn static_check(root: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ar_members, before_group, check_renames, cluster_align, cluster_bytes, cluster_section, clusters_at_end, dead_key_verdict, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
+    use super::{ar_members, before_group, check_renames, cluster_align, head_alignments, cluster_bytes, cluster_section, clusters_at_end, dead_key_verdict, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
     use std::collections::{BTreeMap, BTreeSet};
     use std::sync::atomic::Ordering;
 
