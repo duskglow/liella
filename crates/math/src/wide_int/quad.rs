@@ -1,5 +1,5 @@
 //! The integer fixed-point first tier of the binary128 (`_Float128`) sine and cosine (spec §10.3,
-//! D-10.52, D-10.85): the method of the x87 tier in [`super`] carried to three 64-bit limbs, with
+//! D-10.52, D-10.85), and of tangent and `sincos` on the same reduction (D-10.91): the method of the x87 tier in [`super`] carried to three 64-bit limbs, with
 //! a proved relative error below `2^-156` and the integer rounding test of Ziv's strategy on a
 //! 192-bit significand ([`round`]). When every value within `2^-152` of the approximation rounds
 //! alike in the caller's direction, that rounding is the correctly rounded result; otherwise
@@ -59,6 +59,26 @@
 //!    bits; when the 78 bits below its rounding bit are at least that far from zero and from
 //!    `2^78`, every value in the interval rounds alike in every direction and none is exact. The
 //!    results lie in `[2^-80, 1]`: always normal, never overflowing.
+//! 6. Quotient [`div3`] of `n`, `d` in `[2^191, 2^192)` (`ν = n/2^192`, `δ = d/2^192` in `[1/2,
+//!    1)`): Newton's reciprocal iteration and one residual correction (Brent & Zimmermann ch. 3;
+//!    J.-M. Muller, Elementary Functions, 3rd ed. 2016, ch. 2), one `divsd` and no integer `div`.
+//!    `v0 = 2^115/⌊δ·2^53⌋` (one `divsd`, truncated) is `1/δ` within `2^-50.99` (as the x87 arc
+//!    tier's step 1). With `δ'` the top 128 bits of `δ` (`2^-127` relative), `ε = 1 − δ'v0`
+//!    (`|ε| < 2^-50.9`) is formed within one unit of `2^-110` from the top of the 192-bit product,
+//!    and `v1 = v0 + v0·ε` (the product truncated to `2^-126`) leaves `|1 − δ·v1| <= ε² +
+//!    2^-108.9 + 2^-125 < 2^-101.5`. `q = ν'·v1` from `n`'s top 128 bits (truncations below `2^-125`) is `ν/δ`
+//!    within `2^-101.4` relative, so the residual `E = ν − qδ` (exact modulo `2^256` in units
+//!    `2^-318`, `|E| < 2^-101.4`) is formed exactly and truncated to `2^-192`. `q + E·v1'`, with
+//!    `v1'` the top word of `v1` (`|v1' − 1/δ| < 2^-61.9`) and the product truncated to `2^-190`,
+//!    is `ν/δ` within `2^-101.4·2^-61.9 + 2^-189.4 < 2^-163.2` absolute: `2^-162.2` relative
+//!    (`ν/δ > 1/2`).
+//! 7. `tan` and `sincos` ([`tan`], [`sin_and_cos`]): one reduction and both polynomials give
+//!    `sin|a|` and `cos|a|` (step 4: within `2^-156.4` and `2^-157` for `j >= 1`, `2^-160.9` and
+//!    `2^-157.5` for `j = 0`); `sincos` rounds each as `sin`, `cos` do. `tan|x| = tan a` in even
+//!    quadrants and `cot a` in odd ones: the quotient of step 6 adds its `2^-162.2` to the two
+//!    relative errors, so `tan` is within `2^-156.4 + 2^-157 + 2^-162.2 < 2^-155.6`, inside the
+//!    rounding test's `2^-152`. `|d| >= 2^-160` and `|x| >= 2^-58` keep `tan` in `[2^-59,
+//!    2^161]`: normal.
 
 use super::{M64, SC, mul_wide, mulhi, mulhi64};
 use crate::coeffs::tables as t;
@@ -165,43 +185,156 @@ pub(crate) fn sin_cos<F: Float>(n: &Num, cos: bool, mode: Rounding) -> Option<(F
     round::<F>(neg, m, e, mode)
 }
 
-/// `(sign, M, E)` with `M` in `[2^191, 2^192)` and `±M·2^E` within `2^-156` (relative) of `sin x`
-/// (`cos x`), or `None` outside the range of step 1 or for `|d| < 2^-160` (step 2).
-fn kernel(n: &Num, cos: bool) -> Option<(bool, W3, i32)> {
+/// `tan x` rounded into `F` (binary128) in `mode` when the tier decides it (step 7); `None`
+/// sends the caller to the 384-bit route. `n` as for [`sin_cos`].
+pub(crate) fn tan<F: Float>(n: &Num, mode: Rounding) -> Option<(F, Status)> {
+    if F::PREC != 113 || F::EXPLICIT {
+        return None;
+    }
+    let (neg, m, e) = tan_kernel(n)?;
+    round::<F>(neg, m, e, mode)
+}
+
+/// A rounded result, or `None` where the rounding test does not decide it.
+pub(crate) type Decided<F> = Option<(F, Status)>;
+
+/// `sin x` and `cos x` from one reduction (step 7): each rounded into `F` (binary128) in `mode`,
+/// `None` in either place the rounding test does not decide (that function alone takes the
+/// 384-bit route); `None` outside the tier. `n` as for [`sin_cos`].
+pub(crate) fn sin_and_cos<F: Float>(n: &Num, mode: Rounding) -> Option<(Decided<F>, Decided<F>)> {
+    if F::PREC != 113 || F::EXPLICIT {
+        return None;
+    }
+    let (r, s, c) = both(n)?;
+    let pick = |cos: bool| {
+        let (neg, odd) = sign(n, &r, cos);
+        let (m, e) = if odd { c } else { s };
+        round::<F>(neg, m, e, mode)
+    };
+    Some((pick(false), pick(true)))
+}
+
+/// The reduced operand of a finite nonzero binary128 `n` in the range of step 1.
+fn reduced(n: &Num) -> Option<Reduced> {
     if n.kind != Kind::Finite || n.sig == 0 || n.sig >> 113 != 0 || !(-190..=16271).contains(&n.exp) {
         return None;
     }
-    let r = reduce(n.sig, n.exp)?;
-    // sin|x| = sin(qπ/2 + a), cos|x| = sin((q + 1)π/2 + a); an odd quadrant takes cos a.
+    reduce(n.sig, n.exp)
+}
+
+/// The sign of `sin x` (`cos x`) and whether it takes `cos|a|`: `sin|x| = sin(qπ/2 + a)`, `cos|x|
+/// = sin((q + 1)π/2 + a)`; an odd quadrant takes `cos a`.
+fn sign(n: &Num, r: &Reduced, cos: bool) -> (bool, bool) {
     let k = r.q + u32::from(cos);
     let odd = k & 1 != 0;
-    let neg = (!cos && n.neg) ^ (k & 2 != 0) ^ (!odd && r.negf);
-    let (d, kd) = (r.d, r.kd);
-    let u = mulhi3(d, d).shr(2 * kd - 14); // d², units 2^-206 (kd >= 7)
-    if r.j == 0 {
-        return Some(if odd {
-            let c = cos_poly(u); // units 2^-191
-            let l = c.h.leading_zeros();
-            (neg, c.shl(l), -191 - l as i32)
-        } else {
-            let s = mulhi3(d, sin_poly(u)); // s·2^(-190-kd)
-            let l = s.h.leading_zeros();
-            (neg, s.shl(l), -190 - kd as i32 - l as i32)
-        });
-    }
-    let s = mulhi3(d, sin_poly(u)).shr(kd - 7); // S(|d|), units 2^-197
-    let c = cos_poly(u); // C(d), units 2^-191
+    ((!cos && n.neg) ^ (k & 2 != 0) ^ (!odd && r.negf), odd)
+}
+
+/// `v·2^-units` (`v` at least `2^128`) as `(M, E)`, `M` in `[2^191, 2^192)`.
+fn norm(v: W3, units: u32) -> (W3, i32) {
+    let l = v.h.leading_zeros();
+    (v.shl(l), -(units as i32) - l as i32)
+}
+
+/// `d²` in units `2^-206` and `S(|d|) = |d|·Σ` in units `2^-(190 + kd)` (step 3).
+fn sq_and_sine(r: &Reduced) -> (W3, W3) {
+    let u = mulhi3(r.d, r.d).shr(2 * r.kd - 14); // kd >= 7
+    (u, mulhi3(r.d, sin_poly(u)))
+}
+
+/// Step 4 for `j >= 1`: `sin|a|` (`odd` false) or `cos|a|` from `S(|d|)` (units `2^-197`) and
+/// `C(d)` (units `2^-191`), in units `2^-191`, at least `sin(π/512)`.
+fn combine(r: &Reduced, s: W3, c: W3, odd: bool) -> W3 {
     let ([sh, ch], [sl, cl]) = (SC[r.j - 1], SC_LO[r.j - 1]);
     let (sj, cj) = (W3::with_lo(sh, sl), W3::with_lo(ch, cl)); // units 2^-192
-    let v = if odd {
+    if odd {
         let (a, b) = (mulhi3(cj, c), mulhi3(sj, s).shr(6));
         if r.sd { a.add(b) } else { a.sub(b) }
     } else {
         let (a, b) = (mulhi3(sj, c), mulhi3(cj, s).shr(6));
         if r.sd { a.sub(b) } else { a.add(b) }
-    }; // units 2^-191, at least sin(π/512)
-    let l = v.h.leading_zeros();
-    Some((neg, v.shl(l), -191 - l as i32))
+    }
+}
+
+/// `(sign, M, E)` with `M` in `[2^191, 2^192)` and `±M·2^E` within `2^-156` (relative) of `sin x`
+/// (`cos x`), or `None` outside the range of step 1 or for `|d| < 2^-160` (step 2).
+fn kernel(n: &Num, cos: bool) -> Option<(bool, W3, i32)> {
+    let r = reduced(n)?;
+    let (neg, odd) = sign(n, &r, cos);
+    let (m, e) = if r.j == 0 {
+        if odd {
+            let u = mulhi3(r.d, r.d).shr(2 * r.kd - 14);
+            norm(cos_poly(u), 191)
+        } else {
+            norm(sq_and_sine(&r).1, 190 + r.kd)
+        }
+    } else {
+        let (u, s) = sq_and_sine(&r);
+        norm(combine(&r, s.shr(r.kd - 7), cos_poly(u), odd), 191)
+    };
+    Some((neg, m, e))
+}
+
+/// Steps 1 to 4 for both functions: the reduced operand, `sin|a|` and `cos|a|` (each `(M, E)`,
+/// `M` in `[2^191, 2^192)`, within the bounds of step 4).
+fn both(n: &Num) -> Option<(Reduced, (W3, i32), (W3, i32))> {
+    let r = reduced(n)?;
+    let (u, s) = sq_and_sine(&r);
+    let c = cos_poly(u);
+    let (sa, ca) = if r.j == 0 {
+        (norm(s, 190 + r.kd), norm(c, 191))
+    } else {
+        let s = s.shr(r.kd - 7);
+        (norm(combine(&r, s, c, false), 191), norm(combine(&r, s, c, true), 191))
+    };
+    Some((r, sa, ca))
+}
+
+/// Step 7: `(sign, M, E)` with `±M·2^E` within `2^-155.6` (relative) of `tan x`, `M` in
+/// `[2^191, 2^192)`: `tan|x| = tan a` (`q` even) or `cot a` (`q` odd), `a = fπ/2` of `f`'s sign.
+fn tan_kernel(n: &Num) -> Option<(bool, W3, i32)> {
+    let (r, s, c) = both(n)?;
+    let odd = r.q & 1 != 0;
+    let (top, bot) = if odd { (c, s) } else { (s, c) };
+    let (m, e) = norm(div3(top.0, bot.0), 190);
+    Some((n.neg ^ r.negf ^ odd, m, e + top.1 - bot.1))
+}
+
+const TWO115: f64 = (1u128 << 115) as f64;
+
+/// Step 6: `(n/d)·2^190` for `n`, `d` in `[2^191, 2^192)`, in `[2^188, 2^191)` (`n/d` in `(1/2,
+/// 2)`, the approximation a little either side), within `2^-162` relative.
+fn div3(n: W3, d: W3) -> W3 {
+    let dh = (d.h >> 64) as u64;
+    let v = (TWO115 / ((dh >> 11) as i64 as f64)) as u64; // 2^62/δ within 2^-50.99, at most 2^63
+    // ε = 1 − δ'·v0 in units 2^-110 (one unit high at most): δ'·v0 is 2^190 within 2^139.1 in
+    // units 2^-190, so ⌊δ'·v0/2^80⌋ is 2^110 within 2^59.1.
+    let vw = u128::from(v);
+    let p = ((d.h >> 64) * vw + (((d.h & M64) * vw) >> 64)) >> 16;
+    let eps = (1i128 << 110) - p as i128;
+    let v1 = (vw << 64).wrapping_add(((i128::from(v) * eps) >> 46) as u128); // 1/δ, units 2^-126
+    let q = mulhi(n.h, v1); // n/δ, units 2^-126, below 2^128
+    // E = n·2^126 − q·d (units 2^-318) modulo 2^256: |E| < 2^217, so its bits 126 ..= 253 are E/2^126.
+    let (q1, q0) = (q >> 64, q & M64);
+    let (d2, d1, d0) = (d.h >> 64, d.h & M64, u128::from(d.l));
+    let (a, b) = (q0 * d0, q1 * d0); // q·d0 = b·2^64 + a
+    let (lo, c0) = a.overflowing_add(b << 64);
+    let hi = (b >> 64) + u128::from(c0);
+    // q·d.h·2^64 modulo 2^256: q0·d1 at 2^64, q1·d1 and q0·d2 at 2^128, q1·d2 at 2^192.
+    let m = q0 * d1;
+    let (lo, c1) = lo.overflowing_add(m << 64);
+    let hi = hi.wrapping_add(m >> 64).wrapping_add(u128::from(c1));
+    let hi = hi.wrapping_add(q1 * d1).wrapping_add(q0 * d2).wrapping_add((q1 * d2) << 64);
+    // n·2^126 modulo 2^256.
+    let (nh, nl) = ((n.h << 62) | u128::from(n.l >> 2), u128::from(n.l) << 126);
+    let (el, b0) = nl.overflowing_sub(lo);
+    let eh = nh.wrapping_sub(hi).wrapping_sub(u128::from(b0));
+    let e = ((eh << 2) | (el >> 126)) as i128; // E/2^126, units 2^-192
+    // q + E·v1/2^318, the product from v1's top word: units 2^-190.
+    let (ea, vh) = (e.unsigned_abs(), v1 >> 64);
+    let corr = (ea >> 64) * vh + (((ea & M64) * vh) >> 64);
+    let (q, corr) = (W3 { h: q, l: 0 }, W3 { h: corr >> 64, l: corr as u64 });
+    if e < 0 { q.sub(corr) } else { q.add(corr) }
 }
 
 /// Word `i` of the bits of `2/π` behind three zero words (bit `j` of `2/π` at bit `j + 191`).
@@ -549,6 +682,62 @@ mod tests {
                 }
             }
         }
+        // Step 7: tan against the 384-bit quotient, sincos against the same roundings.
+        let t = s.div(c);
+        match tan_kernel(n) {
+            None => tally.refused += 1,
+            Some((neg, m, e)) => {
+                let rel = (value(neg, m, e).sub(t).to_f64() / t.to_f64()).abs();
+                assert!(rel < (-f64::from(B)).exp2(), "{n:?} tan: error {rel:e}");
+                tally.worst = tally.worst.max(rel);
+            }
+        }
+        for mode in MODES {
+            tally.calls += 3;
+            match tan::<F128>(n, mode) {
+                Some(got) => assert_eq!(got, mp::round::<F128>(t, mode), "{n:?} tan {mode:?}"),
+                None => tally.undecided += 1,
+            }
+            let both = sin_and_cos::<F128>(n, mode).unwrap_or((None, None));
+            for (got, want) in [(both.0, s), (both.1, c)] {
+                match got {
+                    Some(got) => assert_eq!(got, mp::round::<F128>(want, mode), "{n:?} sincos {mode:?}"),
+                    None => tally.undecided += 1,
+                }
+            }
+        }
+    }
+
+    /// Step 6 against the 384-bit quotient: random significands and the extremes (`δ = 1/2`,
+    /// where `v0 = 2^63` and the Newton step is zero; `δ` just above it, where the step is
+    /// negative; `ν`, `δ` at the top of the range).
+    #[test]
+    fn quotient_meets_its_bound() {
+        let full = |h: u128, l: u64| W3 { h: h | 1 << 127, l };
+        let mut cases = vec![
+            (full(0, 0), full(0, 0)),
+            (full(u128::MAX, u64::MAX), full(0, 0)),
+            (full(0, 0), full(u128::MAX, u64::MAX)),
+            (full(u128::MAX, u64::MAX), full(u128::MAX, u64::MAX)),
+            (full(u128::MAX, u64::MAX), full(0, 1)),
+            (full(0, 1), full(1 << 64, 0)),
+            (full(S0.h, S0.l), full((1 << 75) - 1, u64::MAX)),
+        ];
+        let mut g = Rng(0x0123_4567_89ab_cdef);
+        for _ in 0..20_000 {
+            let mut w = || full((u128::from(g.next()) << 64) | u128::from(g.next()), g.next());
+            cases.push((w(), w()));
+        }
+        let mut worst = 0f64;
+        for (n, d) in cases {
+            let q = div3(n, d);
+            assert!(q.h >> 124 != 0 && q.h >> 127 == 0, "{n:?} / {d:?}: {q:?} out of range");
+            let want = value(false, n, 0).div(value(false, d, 0));
+            let rel = (value(false, q, -190).sub(want).to_f64() / want.to_f64()).abs();
+            assert!(rel < (-162f64).exp2(), "{n:?} / {d:?}: error {rel:e}");
+            worst = worst.max(rel);
+        }
+        eprintln!("wide_int::quad div3: worst error 2^{:.1}", worst.log2());
     }
 
     /// A 320-bit unsigned integer, least significant word first.

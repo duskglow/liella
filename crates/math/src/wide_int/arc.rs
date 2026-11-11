@@ -116,6 +116,9 @@ pub(crate) fn acos<F: Float>(n: &Num, mode: Rounding, hw: impl Fn(f64) -> f64) -
 
 /// `tan x` for `|x| >= 2^-34` finite.
 pub(crate) fn tan<F: Float>(n: &Num, mode: Rounding) -> Option<(F, Status)> {
+    if F::PREC == 113 {
+        return super::quad::tan::<F>(n, mode); // binary128: three limbs (D-10.91)
+    }
     finish::<F>(|| tan_approx(n), mode)
 }
 

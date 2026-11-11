@@ -178,12 +178,15 @@ static void fill(double lo, double hi, double lo2, double hi2)
 static void (*volatile sincosf_fn)(float, float *, float *) = sincosf;
 static void (*volatile sincos_fn)(double, double *, double *) = sincos;
 static void (*volatile sincosl_fn)(long double, long double *, long double *) = sincosl;
+static void (*volatile sincosf128_fn)(_Float128, _Float128 *, _Float128 *) = sincosf128;
 static float (*volatile sinf_fn)(float) = sinf;
 static float (*volatile cosf_fn)(float) = cosf;
 static double (*volatile sin_fn)(double) = sin;
 static double (*volatile cos_fn)(double) = cos;
 static long double (*volatile sinl_fn)(long double) = sinl;
 static long double (*volatile cosl_fn)(long double) = cosl;
+static _Float128 (*volatile sinf128_fn)(_Float128) = sinf128;
+static _Float128 (*volatile cosf128_fn)(_Float128) = cosf128;
 
 static unsigned long long digest;
 
@@ -332,6 +335,7 @@ int main(void)
     RSC("sincosf", sincosf_fn, sinf_fn, cosf_fn, float, 4, af, sf, -10.0, 10.0);
     RSC("sincos", sincos_fn, sin_fn, cos_fn, double, 8, ad, sd, -10.0, 10.0);
     RSC("sincosl", sincosl_fn, sinl_fn, cosl_fn, long double, 10, al, sl, -10.0, 10.0);
+    RSC("sincosf128", sincosf128_fn, sinf128_fn, cosf128_fn, _Float128, 16, aq, sq, -10.0, 10.0);
     RU("tanf", tanf, float, af, sf, -10.0, 10.0);
     RU("tan", tan, double, ad, sd, -10.0, 10.0);
     RU("tanl", tanl, long double, al, sl, -10.0, 10.0);
