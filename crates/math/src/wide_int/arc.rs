@@ -66,7 +66,7 @@
 //! Every approximation is within `2^-94`; the rounding test assumes `2^-92`. Results lie in
 //! `[2^-36, 2^76]`, normal: the test's exponent check never refuses them.
 
-use super::{cos_poly, mul_wide, mulhi, mulhi64, reduce, round, sin_poly, MIN_D, SC};
+use super::{big_u64, cos_poly, mul_wide, mulhi, mulhi64, reduce, round, sin_poly, MIN_D, SC};
 use crate::float::{Float, Kind, Num};
 use crate::status::{Rounding, Status};
 
@@ -81,7 +81,6 @@ const ONE: Val = Val { m: 1 << 127, e: -127 };
 const TWO115: f64 = (1u128 << 115) as f64;
 const TWO90: f64 = (1u128 << 90) as f64;
 const TWO37: f64 = (1u64 << 37) as f64;
-const TWO52: f64 = (1u64 << 52) as f64;
 const TWO_M26: f64 = 1.0 / (1u64 << 26) as f64;
 const TWO_M108: f64 = 1.0 / (1u128 << 108) as f64;
 const ONE_IX: f64 = 1.0 / (1u64 << 44) as f64; // 256/top53(1) = 256/2^52
@@ -187,23 +186,6 @@ fn root_seed(w: u128, hw: impl Fn(f64) -> f64) -> (u64, f64) {
     let r = hw(wd); // √w', in [2^26, 2^27]
     let s0 = big_u64(r * TWO37); // 2^64 − 1 when the root rounds to 2^27 (w just below 2^128)
     (s0, r * iw) // 2^90/r = 2^127/s0
-}
-
-/// `v as u64` for an integer-valued `v` in `[2^52, 2^64]` (`2^64` gives `2^64 − 1`, as `as` saturates),
-/// read from the bits: no SSE conversion. `as u64` of a value at or above `2^63` converts it
-/// signed first, which overflows and raises the invalid flag in MXCSR on every call; the
-/// envelope's exit drops that flag again with an MXCSR write, and on Ivy Bridge the next call's
-/// MXCSR read then stalls in microcode (LIBM-LD-ARC-RETHINK-2's attribution: ~58 microcode uops a
-/// call, successive asinl calls no longer overlapping). The root's seed `s0` and its reciprocal
-/// lie in `[2^63, 2^64]` on every call; `div`'s reciprocal reaches `2^63` at power-of-two divisors
-/// and `soft_sqrt` passes `[2^52, 2^54)` (D-10.95).
-#[inline(always)]
-fn big_u64(v: f64) -> u64 {
-    debug_assert!(v >= TWO52);
-    let b = v.to_bits();
-    let sh = ((b >> 52) as u32).wrapping_sub(1075); // v = m·2^sh, sh in [0, 12]
-    let m = (b & ((1 << 52) - 1)) | (1 << 52);
-    if sh >= 12 { u64::MAX } else { m << sh }
 }
 
 /// Step 2: `√w·2^64` for `w` in `[2^126, 2^128 − 2^60]` (no overflow of the result), and the

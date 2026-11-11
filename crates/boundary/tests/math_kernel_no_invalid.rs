@@ -5,10 +5,10 @@
 //! it, every call pays it), so the kernels are called here directly, between `feclearexcept` and
 //! `fetestexcept`. Covered: the `long double` arc kernels (`atan`, `atan2`, `asin`, `acos`), whose
 //! root seed and its reciprocal lie in [2^63, 2^64] on every call and whose quotient seed reaches
-//! 2^63 for a power-of-two divisor.
+//! 2^63 for a power-of-two divisor, and the binary128 `tan` kernel, whose quotient seed does too.
 
 use liella_boundary::posix::s10_math::{feclearexcept, fetestexcept};
-use liella_math::float::F80;
+use liella_math::float::{F80, F128};
 use liella_math::status::Rounding;
 
 const FE_ALL: i32 = 0x3d;
@@ -50,5 +50,19 @@ fn long_double_arc_kernels_raise_no_invalid_in_hardware() {
         for &x in ys.iter().step_by(7) {
             no_invalid("atan2l", &format!("{y:e}, {x:e}"), || liella_math::wide::atan2::<F80>(f80(y), f80(x), Rounding::Nearest));
         }
+    }
+}
+
+/// 2π/3 rounded to binary128.
+const TWO_PI_3_F128: u128 = 0x4000_0c15_2382_d736_5846_5bb3_2e0f_567b;
+
+// s10_3_c_0 (D-10.91, D-10.95): tanf128's quotient seed is 2^63 when the divisor's top word is in
+// [2^63, 2^63 + 2^11). Near 2π/3 the divisor is sin(x − π/2) = sin(π/6 + δ), which is 1/2 or just
+// above it for every encoding at or above 2π/3 here (|δ| <= 2^-105).
+#[test]
+fn binary128_tan_kernel_raises_no_invalid_in_hardware() {
+    for k in -64i32..64 {
+        let x = F128(TWO_PI_3_F128.wrapping_add_signed(i128::from(k)));
+        no_invalid("tanf128", &format!("2π/3 {k:+} ulp"), || liella_math::wide::tan::<F128>(x, Rounding::Nearest));
     }
 }

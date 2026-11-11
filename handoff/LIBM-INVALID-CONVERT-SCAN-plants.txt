@@ -1,5 +1,8 @@
-# LIBM-INVALID-CONVERT-SCAN(-2) plants (docs/plants.md): the root seed restored to `as u64`; a range proof removed.
+# LIBM-INVALID-CONVERT-SCAN(-2, -3) plants (docs/plants.md): a fixed site restored to `as u64`; a range proof removed.
 seed-as-u64-flags | crates/math/src/wide_int/arc.rs | lit:let s0 = big_u64(r * TWO37); ==> let s0 = (r * TWO37) as u64; | cargo test -p liella-boundary --test math_kernel_no_invalid | msg:invalid raised in hardware for a valid operand
-seed-as-u64-static | crates/math/src/wide_int/arc.rs | lit:let s0 = big_u64(r * TWO37); ==> let s0 = (r * TWO37) as u64; | cargo xtask float-casts | msg:arc\.rs:\d+: `f64` to `u64` with no `RANGE:`
-gamma-range-dropped | crates/math/src/fast32/gamma.rs | lit:// RANGE: clamped to [-2^24, 0] ==> // clamped to [-2^24, 0] | cargo xtask float-casts | msg:gamma\.rs:\d+: `f32` to `i32` with no `RANGE:`
-parse-range-dropped | crates/core/src/num/parse.rs | lit:    // RANGE: ==>     // R: | cargo xtask float-casts | msg:parse\.rs:\d+: `f64` to `i64` with no `RANGE:`
+seed-as-u64-static | crates/math/src/wide_int/arc.rs | lit:let s0 = big_u64(r * TWO37); ==> let s0 = (r * TWO37) as u64; | cargo xtask float-casts | msg:arc\.rs:[0-9]+: `f64` to `u64` with no `RANGE:`
+div-as-u64-flags | crates/math/src/wide_int/arc.rs | lit:let v = big_u64(TWO115 / dbl(dh >> 11)); ==> let v = (TWO115 / dbl(dh >> 11)) as u64; | cargo test -p liella-boundary --test math_kernel_no_invalid | msg:invalid raised in hardware for a valid operand
+div-as-u64-static | crates/math/src/wide_int/arc.rs | lit:let v = big_u64(TWO115 / dbl(dh >> 11)); ==> let v = (TWO115 / dbl(dh >> 11)) as u64; | cargo xtask float-casts | msg:arc\.rs:[0-9]+: `f64` to `u64` with no `RANGE:`
+gamma-range-dropped | crates/math/src/fast32/gamma.rs | lit:// RANGE: clamped to [-2^24, 0] ==> // clamped to [-2^24, 0] | cargo xtask float-casts | msg:gamma\.rs:[0-9]+: `f32` to `i32` with no `RANGE:`
+parse-range-dropped | crates/core/src/num/parse.rs | lit:    // RANGE: ==>     // R: | cargo xtask float-casts | msg:parse\.rs:[0-9]+: `f64` to `i64` with no `RANGE:`
+div3-as-u64-flags | crates/math/src/wide_int/quad.rs | lit:let v = big_u64(TWO115 / ((dh >> 11) as i64 as f64)); ==> let v = (TWO115 / ((dh >> 11) as i64 as f64)) as u64; | cargo test -p liella-boundary --test math_kernel_no_invalid | msg:tanf128.*invalid raised in hardware for a valid operand

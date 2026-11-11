@@ -80,7 +80,7 @@
 //!    rounding test's `2^-152`. `|d| >= 2^-160` and `|x| >= 2^-58` keep `tan` in `[2^-59,
 //!    2^161]`: normal.
 
-use super::{M64, SC, mul_wide, mulhi, mulhi64};
+use super::{M64, SC, big_u64, mul_wide, mulhi, mulhi64};
 use crate::coeffs::tables as t;
 use crate::float::{Float, Kind, Num};
 use crate::status::{Flags, Rounding, Status};
@@ -330,7 +330,7 @@ const TWO115: f64 = (1u128 << 115) as f64;
 /// 2)`, the approximation a little either side), within `2^-162` relative.
 fn div3(n: W3, d: W3) -> W3 {
     let dh = (d.h >> 64) as u64;
-    let v = (TWO115 / ((dh >> 11) as i64 as f64)) as u64; // 2^62/δ within 2^-50.99, at most 2^63
+    let v = big_u64(TWO115 / ((dh >> 11) as i64 as f64)); // 2^62/δ within 2^-50.99, in (2^62, 2^63]
     // ε = 1 − δ'·v0 in units 2^-110 (one unit high at most): δ'·v0 is 2^190 within 2^139.1 in
     // units 2^-190, so ⌊δ'·v0/2^80⌋ is 2^110 within 2^59.1.
     let vw = u128::from(v);

@@ -211,6 +211,23 @@ pub(crate) fn mul_wide(a: u128, b: u64) -> u128 {
     (a >> 64) * b + (((a & M64) * b) >> 64)
 }
 
+/// `v as u64` for an integer-valued `v` in `[2^52, 2^64]` (`2^64` gives `2^64 − 1`, as `as` saturates),
+/// read from the bits: no SSE conversion. `as u64` of a value at or above `2^63` converts it
+/// signed first, which overflows and raises the invalid flag in MXCSR on every call; the
+/// envelope's exit drops that flag again with an MXCSR write, and on Ivy Bridge the next call's
+/// MXCSR read then stalls in microcode (LIBM-LD-ARC-RETHINK-2's attribution: ~58 microcode uops a
+/// call, successive asinl calls no longer overlapping). The root's seed `s0` and its reciprocal
+/// lie in `[2^63, 2^64]` on every call; arc's `div` and quad's `div3` reciprocals reach `2^63` when
+/// the divisor's top word is below `2^63 + 2^11`, and arc's `soft_sqrt` passes `[2^52, 2^54)` (D-10.95).
+#[inline(always)]
+pub(crate) fn big_u64(v: f64) -> u64 {
+    debug_assert!(v >= (1u64 << 52) as f64);
+    let b = v.to_bits();
+    let sh = ((b >> 52) as u32).wrapping_sub(1075); // v = m·2^sh, sh in [0, 12]
+    let m = (b & ((1 << 52) - 1)) | (1 << 52);
+    if sh >= 12 { u64::MAX } else { m << sh }
+}
+
 #[inline]
 pub(crate) fn mulhi64(a: u64, b: u64) -> u64 {
     ((u128::from(a) * u128::from(b)) >> 64) as u64
