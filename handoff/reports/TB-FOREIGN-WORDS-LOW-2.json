@@ -1,0 +1,12 @@
+{"task": "TB-FOREIGN-WORDS-LOW-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: ruling #4835 implemented (FOREIGN bit in the malloc-debug flags, OwnPages on cleared paths, __errno_location in tp.S with cmpb on liella_machine_owned); D-X.60 recorded; lint/static/foreign tests green; gate and plants baseline red on 7 hot-text keys absent from the products build",
+ "branch": "task/tb-foreign-words-low-2", "head": null,
+ "gate": {"affected": "0 passed / build failed (hot-text keys absent)", "peak": "1.3G"},
+ "accepted_first_attempt": false,
+ "rulings": [{"item": "__errno_location's hot-text key now names an asm section (.text.liella_machine_errno_location); lists may not be regenerated", "recommendation": "allow a hand rename of that one key in the hot-text lists (or a hot-text.absent line), after checking whether the other 5 absent keys are layout jitter on origin/next"}],
+ "informational": ["5 other hot-text keys absent (TscGate::fresh, intl::bind, CSysImpl::wait4, intl::textdomain, NsCache::attach); not checked against origin/next", "#4837 SPARE plant not written: no test can reach SPARE without a selftest hook"],
+ "refused": [],
+ "improvement": "the hot-text key check runs only inside the products build of the gate/plants; a 'cargo xtask static'-level check of hot-text keys would have caught this before two jobs were spent",
+ "next_step": "resolve the hot-text keys (compare origin/next, ruling on the errno key), then gate, plants, wl_percall with validation/percall/foreign_words.c",
+ "report_file": "handoff/TB-FOREIGN-WORDS-LOW.md",
+ "jobs": ["mei:tb-foreign-words-low-2-lint2"]}
