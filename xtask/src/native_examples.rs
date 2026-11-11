@@ -42,7 +42,8 @@
 //!    Its program interpreter is the host's, which would load the host's `libc.so.6` (no
 //!    `RUNPATH` points at `target/liella`) and stop at the missing `LIELLA_NATIVE_1`, never
 //!    Liella's library.
-//! 5b. The dynamic example linked again, against a copy of `libc.so.6` named by path (its
+//!
+//!    Step 5b links the dynamic example again, against a copy of `libc.so.6` named by path (its
 //!    `DT_SONAME` retagged: `ld.so` has no library search yet) with
 //!    `-Wl,--dynamic-linker=target/liella/ld-linux-x86-64.so.2`, and run as in step 4: the same
 //!    output with `linkage dynamic` in its first line (D-27.24).
