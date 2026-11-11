@@ -79,7 +79,8 @@ pub fn relro(words: &[u64], phnum: usize, phdr_addr: usize, page: usize) -> Opti
 
 /// [`relro`] with the load bias given by the caller: `ld.so` maps the program it runs and knows
 /// its bias, which `PT_PHDR` cannot supply for an object without one (a shared object run as a
-/// program).
+/// program); for a kernel-started program without `PT_PHDR` it finds the bias from the ELF
+/// header in the image (D-27.18).
 pub fn relro_at(words: &[u64], phnum: usize, bias: usize, page: usize) -> Option<(usize, usize)> {
     let field = |h: &[u64], i: usize| h.get(i).copied().map_or(0, |v| usize::try_from(v).unwrap_or(usize::MAX));
     let h = words.chunks_exact(PHDR_WORDS).take(phnum).find(|h| h.first().is_some_and(|w| w & 0xffff_ffff == PT_GNU_RELRO))?;
