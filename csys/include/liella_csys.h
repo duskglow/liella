@@ -20,6 +20,8 @@ uint32_t liella_csys_abi_version(void);
 
 /* Class machine (src/machine, assembly; owner decisions: approved set plus OD-C1). */
 uintptr_t liella_machine_tp(void);
+/* `__errno_location` (machine/tp.S, D-X.60). */
+int *liella_machine_errno_location(void);
 uint64_t liella_machine_rdtsc(void);
 void liella_machine_cpuid(uint32_t leaf, uint32_t subleaf, uint32_t out[4]);
 uint64_t liella_machine_xgetbv0(void);
