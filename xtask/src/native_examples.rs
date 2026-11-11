@@ -38,10 +38,14 @@
 //!
 //!    `readelf` must show `libc.so.6` as its only `DT_NEEDED` entry and every native function
 //!    except `liella_heap_usable_size` (no safe use) referenced at its node (`@LIELLA_NATIVE_1`),
-//!    and no other `liella_` name. It is not run: that needs Liella's dynamic loader (phase 14).
+//!    and no other `liella_` name. This link is not run (5b runs one under Liella's `ld.so`).
 //!    Its program interpreter is the host's, which would load the host's `libc.so.6` (no
 //!    `RUNPATH` points at `target/liella`) and stop at the missing `LIELLA_NATIVE_1`, never
 //!    Liella's library.
+//! 5b. The dynamic example linked again, against a copy of `libc.so.6` named by path (its
+//!    `DT_SONAME` retagged: `ld.so` has no library search yet) with
+//!    `-Wl,--dynamic-linker=target/liella/ld-linux-x86-64.so.2`, and run as in step 4: the same
+//!    output with `linkage dynamic` in its first line (D-27.24).
 //!
 //! 6. The proof that `liella_secure_zero` is never optimised away (D-X.11): the boundary's
 //!    example `secure_zero_codegen` is built with the release profile (fat LTO, one codegen
@@ -120,8 +124,8 @@ fn build(root: &Path, example: &str, feature: &str, link: &[String]) -> Result<P
     Ok(root.join("target/debug/examples").join(example))
 }
 
-/// The static example: run it and compare its output; check it has no interpreter.
-fn check_static(root: &Path, exe: &Path, dir: &Path) -> Result<(), String> {
+/// Run an example as step 4 describes; its errors. `linkage` is the word its first line names.
+fn run_example(root: &Path, name: &str, exe: &Path, dir: &Path, linkage: &str) -> Result<Vec<String>, String> {
     let work = dir.join("run");
     let _ = fs::remove_dir_all(&work);
     fs::create_dir_all(&work).map_err(|e| format!("{}: {e}", work.display()))?;
@@ -136,26 +140,50 @@ fn check_static(root: &Path, exe: &Path, dir: &Path) -> Result<(), String> {
         .map_err(|e| format!("cannot run {}: {e}", exe.display()))?;
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
+    let expected = EXPECTED.replacen("linkage static", &format!("linkage {linkage}"), 1);
     let mut errors = Vec::new();
     if out.status.code() != Some(0) {
-        errors.push(format!("native_static: status {}, expected 0", out.status));
+        errors.push(format!("{name}: status {}, expected 0", out.status));
     }
-    if stdout != EXPECTED {
-        errors.push(format!("native_static: unexpected output\n--- got\n{stdout}--- expected\n{EXPECTED}---"));
+    if stdout != expected {
+        errors.push(format!("{name}: unexpected output\n--- got\n{stdout}--- expected\n{expected}---"));
     }
     if !stderr.is_empty() {
-        errors.push(format!("native_static: standard error is not empty:\n{stderr}"));
+        errors.push(format!("{name}: standard error is not empty:\n{stderr}"));
     }
     let left: Vec<_> = fs::read_dir(&work).map_err(|e| e.to_string())?.flatten().map(|e| e.file_name()).collect();
     if !left.is_empty() {
-        errors.push(format!("native_static: left {left:?} in {}", work.display()));
+        errors.push(format!("{name}: left {left:?} in {}", work.display()));
     }
     let _ = fs::remove_dir_all(&work);
+    Ok(errors)
+}
+
+/// The static example: run it and compare its output; check it has no interpreter.
+fn check_static(root: &Path, exe: &Path, dir: &Path) -> Result<(), String> {
+    let mut errors = run_example(root, "native_static", exe, dir, "static")?;
     let headers = output(Command::new("readelf").args(["-lW"]).arg(exe))?;
     if headers.contains("INTERP") || headers.contains("DYNAMIC") {
         errors.push("native_static: has a program interpreter or a dynamic section; a static link has neither".to_string());
     }
     if errors.is_empty() { Ok(()) } else { Err(errors.join("\n")) }
+}
+
+/// A copy of `libc_so` in `dir` whose `DT_SONAME` tag is retagged `DT_CHECKSUM`, so a program
+/// linked against it names it by path: Liella's `ld.so` has no library search yet (#4537).
+fn libc_by_path(libc_so: &Path, dir: &Path) -> Result<PathBuf, String> {
+    let mut so = fs::read(libc_so).map_err(|e| format!("{}: {e}", libc_so.display()))?;
+    let word = |so: &[u8], at: usize, n: usize| so.get(at..at.saturating_add(n)).map_or(0, |b| b.iter().rev().fold(0usize, |v, &x| v.wrapping_shl(8) | usize::from(x)));
+    let (phoff, phentsize, phnum) = (word(&so, 0x20, 8), word(&so, 0x36, 2), word(&so, 0x38, 2));
+    // PT_DYNAMIC (2): its file offset and size.
+    let ph = (0..phnum).map(|i| phoff.wrapping_add(i.wrapping_mul(phentsize))).find(|&p| word(&so, p, 4) == 2).ok_or("libc.so.6 has no PT_DYNAMIC")?;
+    let (off, len) = (word(&so, ph.wrapping_add(8), 8), word(&so, ph.wrapping_add(32), 8));
+    // DT_SONAME (14) becomes DT_CHECKSUM (0x6ffffdf8).
+    let at = (off..off.saturating_add(len)).step_by(16).find(|&o| word(&so, o, 8) == 14).ok_or("libc.so.6 has no DT_SONAME")?;
+    so.get_mut(at..at.saturating_add(8)).ok_or("DT_SONAME entry out of the file")?.copy_from_slice(&0x6fff_fdf8u64.to_le_bytes());
+    let out = dir.join("libc-by-path.so");
+    fs::write(&out, &so).map_err(|e| format!("{}: {e}", out.display()))?;
+    Ok(out)
 }
 
 /// The dynamic example: its needed libraries and native references. The number of native
@@ -369,16 +397,29 @@ pub fn run_native(root: &Path) -> Result<(), String> {
     check_static(root, &exe, &dir)?;
 
     // 5. The dynamic example.
-    let mut link = common;
+    let mut link = common.clone();
     link.extend(link_arg(&libc_so));
     link.extend(arg("link-arg=-lgcc"));
     let exe = build(root, "native_dynamic", "dynamic", &link)?;
     let (count, interp) = check_dynamic(root, &exe)?;
 
+    // 5b. The same example run under Liella's `ld.so` (D-27.24): linked against a by-path copy of
+    // `libc.so.6` with that loader as its interpreter, its output must be the static one's.
+    let ld = root.join("target/liella/ld-linux-x86-64.so.2");
+    let mut link = common;
+    link.extend(link_arg(&libc_by_path(&libc_so, &dir)?));
+    link.extend(arg("link-arg=-lgcc"));
+    link.extend(arg(&format!("link-arg=-Wl,--dynamic-linker={}", ld.display())));
+    let exe = build(root, "native_dynamic", "dynamic", &link)?;
+    let errors = run_example(root, "native_dynamic", &exe, &dir, "dynamic")?;
+    if !errors.is_empty() {
+        return Err(errors.join("\n"));
+    }
+
     // 6. The zeroing proof.
     let proof = check_secure_zero(root)?;
 
     let steps = EXPECTED.lines().filter(|l| l.starts_with("ok ")).count();
-    println!("native: liella-native clean with each feature; static example ran ({steps} steps, output as expected); dynamic example linked (NEEDED libc.so.6, {count} native symbols at their nodes), not run: it needs Liella's ld.so (phase 14), its interpreter is {interp}; {proof}");
+    println!("native: liella-native clean with each feature; static example ran ({steps} steps, output as expected); dynamic example linked (NEEDED libc.so.6, {count} native symbols at their nodes, interpreter {interp}) and ran under Liella's ld.so (output as expected); {proof}");
     Ok(())
 }
