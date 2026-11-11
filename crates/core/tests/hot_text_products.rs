@@ -1125,7 +1125,7 @@ fn init_startup_data_accesses_are_in_the_data1_cluster() {
         }
     }
     eprintln!("start-up accesses in .data/.bss/.lbss outside .data1: {touched:#?}");
-    assert!(bad.is_empty(), "STARTUP-DATA-KEYS: start-up touches statics outside the .data1 cluster (stale crates/libc-so/startup-data.keys? regenerate with tools/hottext/regen.sh): {bad:#?}");
+    assert!(bad.is_empty(), "STARTUP-DATA-KEYS: start-up touches statics outside the .data1 cluster (declare each in crates/libc-so/startup-state.list): {bad:#?}");
 }
 
 /// LAYOUT-DATA-CLUSTERS-4 (D-X.68, D-27.10): every static PIE starts whatever the phase of its data.

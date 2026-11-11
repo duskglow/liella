@@ -1,0 +1,78 @@
+# The written start-up state: what `cargo xtask so` moves into the `.data1` cluster (xtask/src/coldbss.rs
+# `move_startup_state`; D-X.64, LAYOUT-DATA-CLUSTERS-6). Declared by hand, never generated: placement follows
+# this list, not a trace of the current layout, so it is the same in every profile and every build. The check
+# is a test: hot_text_products `init_startup_data_accesses_are_in_the_data1_cluster` traces `page_faults true`
+# (every writable input section on a 64 KiB boundary of its own) and names any small static start-up touches
+# outside `.data1`; declare it here. `init_written_startup_objects_are_in_the_data1_cluster` checks every entry
+# is defined and in `.data1`.
+# Entries, one per line (text after `#` is a comment):
+#   <crate>::<path>::<STATIC>  a Rust static, and every part LLVM splits it into (`.0`, `.1.llvm.<n>`)
+#   symbol <name>              an object in a section of its own name, `.data.<name>` or `.bss.<name>` (ABI names)
+#   section <name>             an object in a section of another name (C)
+# An entry must name at least one section in every profile, unless it ends with `fast-only` (the release
+# profile's LTO folds it away). A matched section over 8 KiB is refused (the cluster would spread over pages).
+
+# CPU feature detection and the copy/fill thresholds it sets (every start).
+liella_boundary::cpu::DETECTIONS
+liella_boundary::cpu::FEATURES
+liella_boundary::cpu::FEATURES_READY
+liella_boundary::cpu::STATE
+liella_boundary::cpu::AVX2_ERMS_FROM
+liella_boundary::cpu::AVX2_ERMS_TO
+liella_boundary::cpu::ERMS_LARGE_FROM
+liella_boundary::cpu::COPY_MIN
+liella_boundary::cpu::FILL_MIN
+liella_boundary::dispatch::FOLD_RESOLVED
+liella_boundary::dispatch::FOLD_RESOLVING
+liella_boundary::dispatch::FMA  fast-only
+liella_boundary::classed::OUTCOME  fast-only
+# Auxiliary vector, vDSO, arguments, exit handlers (every start).
+liella_boundary::sys::SYSINFO_EHDR
+liella_boundary::sys::VDSO_STATE
+liella_boundary::sys::VDSO_FNS
+liella_boundary::process::AUXV_WORDS
+liella_boundary::process::AUXV_ADDR
+liella_boundary::process::ARGC
+liella_boundary::process::ARGV
+liella_boundary::process::EXIT_HANDLERS
+symbol __libc_stack_end
+symbol program_invocation_name  # and its alias __progname_full
+symbol program_invocation_short_name  # and its alias __progname
+section .bss.environ  # C: environ, __environ, _environ
+# The heap's first allocation (5376 bytes: every process writes its head and tail).
+liella_boundary::heap::HEAP
+liella_boundary::heap::DEBUG
+liella_boundary::heap::RESERVE_TOP
+liella_boundary::heap::RESERVE_LIVE
+liella_boundary::heap::RESERVE_LOCK
+# The initial thread, its TLS image and rseq registration.
+liella_boundary::thread::HEAD
+liella_boundary::thread::LIST
+liella_boundary::thread::LIVE
+liella_boundary::thread::OWNED
+liella_boundary::thread::LOCK_ALONE
+liella_boundary::thread::RSEQ_OWNED
+liella_boundary::thread::FORBIDDEN
+liella_boundary::thread::TLS_IMAGE
+symbol __rseq_offset
+symbol __rseq_size
+symbol __libc_single_threaded
+# The fork child reads it (fork::child_reset); on a page start-up never touched it cost the child a fault.
+liella_boundary::timer::EPOLL
+# stdio: the standard streams and the stream list (printf, exit flush).
+liella_boundary::stdio::FREE
+liella_boundary::stdio::SLOTS
+liella_legacy::stdio_compat::LIST
+liella_legacy::stdio_compat::FLUSHING
+liella_legacy::printf_registry::ACTIVE
+symbol _IO_2_1_stderr_
+symbol _IO_list_all
+symbol stderr
+# Locale and name-service state every process sets up (the C locale's 2944 bytes included).
+liella_legacy::global_locale::GLOBAL
+liella_legacy::global_locale::LOCK
+liella_legacy::global_locale::C
+liella_legacy::nscache::NSCACHE
+# The first zone load (localtime_r, tzset).
+liella::time::zone::NEXT_ID
+section .data.rel.local.__tzname  # C: __tzname, tzname
