@@ -320,6 +320,38 @@ fn floating_conversions() {
 }
 
 #[test]
+fn floating_range_errors_are_reported() {
+    // s12_7_c_3 (D-12.26): a floating conversion whose result overflows, or is tiny and inexact,
+    // is reported as strtod reports it (ERANGE through `range`); the value and count are kept.
+    for (input, fmt) in [("1e999", "%lf"), ("-1e999", "%le"), ("1e39", "%f"), ("0x1.ffffffp127", "%a"), ("1e5000", "%Lf")] {
+        let r = n(input.as_bytes(), fmt);
+        assert_eq!((r.out.outcome, r.out.range), (a(1), true), "overflow {input} {fmt}");
+    }
+    for (input, fmt) in [("1e-999", "%lf"), ("1e-310", "%lg"), ("0x1.8p-1074", "%la"), ("1e-50", "%f"), ("1e-40", "%e"), ("1e-4940", "%Le")] {
+        let r = n(input.as_bytes(), fmt);
+        assert_eq!((r.out.outcome, r.out.range), (a(1), true), "underflow {input} {fmt}");
+    }
+    // Exact subnormals, the smallest normal, infinity and ordinary values are in range.
+    for (input, fmt) in [("0x1p-1074", "%lf"), ("0x1p-149", "%f"), ("0x1p-1022", "%lf"), ("inf", "%lf"), ("1.5", "%Lf"), ("1e308", "%lf")] {
+        let r = n(input.as_bytes(), fmt);
+        assert_eq!((r.out.outcome, r.out.range), (a(1), false), "in range {input} {fmt}");
+    }
+    assert_eq!(f64_of(&n(b"1e999", "%lf").st[0]), f64::INFINITY);
+    // Suppressed, followed by more conversions, wide input; a range error stays reported.
+    let r = n(b"1e999 5", "%*lf %d");
+    assert_eq!((r.out.outcome, r.out.range), (a(1), true));
+    let r = n(b"1e999 1.5", "%lf %lf");
+    assert_eq!((r.out.outcome, r.out.range), (a(2), true));
+    let r = n(b"1e999", "%lf %d");
+    assert_eq!((r.out.outcome, r.out.range), (a(1), true));
+    let r = w("1e-999", "%lf");
+    assert_eq!((r.out.outcome, r.out.range), (a(1), true));
+    // A read error is reported in `error` beside the range error (the boundary prefers it).
+    let r = go("%lf %d".as_bytes(), b"1e999 5".iter().map(|&b| u32::from(b)).collect(), Some(6), &Locale::C, Rounding::Nearest, Set::C99);
+    assert_eq!((r.out.outcome, r.out.error, r.out.range), (a(1), Some(Errno::EIO), true));
+}
+
+#[test]
 fn floating_formats_and_rounding() {
     // s12_7_c_3: float, double and x87 long double, in the caller's rounding mode.
     let r = n(b"1.5", "%Lf");

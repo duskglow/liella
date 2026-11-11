@@ -1,0 +1,8 @@
+# DL-MULTI-WRITABLE-3 plants (D-27.25): the end-to-end tests of a program with three writable PT_LOADs under ld.so (crates/ld/tests/reloc.rs). Each plant rebuilds the product first so a plant in crates/ld/src reaches ld.so, and runs only the test it is aimed at (the unit-level plants are in DL-MULTI-WRITABLE-2-plants.txt).
+e2e-self-first-segment-view | crates/ld/src/boot.rs | lit:let view = self.mem.segment(vaddr, memsz); ==> let view = self.mem.segment(self.img.writable().next().unwrap_or((vaddr, memsz)).0, self.img.writable().next().unwrap_or((vaddr, memsz)).1); | cargo xtask so && cargo test -p liella-ld --test reloc reloc_ldso_program_multi_writable_no_deps | msg:no dependencies, ld.so PROGRAM
+e2e-link-first-writable-only | crates/ld/src/reloc.rs | lit:elf.program_headers().any(|p| { ==> elf.program_headers().filter(|p| p.p_type == pt::LOAD && p.flags & PF_W != 0).take(1).any(|p| { | cargo xtask so && cargo test -p liella-ld --test reloc reloc_ldso_program_multi_writable_with_deps | msg:with libb.so, ld.so PROGRAM
+e2e-outside-store-skipped | crates/ld/src/boot.rs | lit:*self.word(at)? = value.to_ne_bytes(); ==> if let Ok(w) = self.word(at) { *w = value.to_ne_bytes(); } | cargo xtask so && cargo test -p liella-ld --test reloc reloc_ldso_program_target_outside_writable_refused | msg:must be refused
+# cargo xtask plants results (3 plants: 3 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG; job dl-multi-writable-3-plants):
+# e2e-self-first-segment-view: CAUGHT by reloc_ldso_program_multi_writable_no_deps
+# e2e-link-first-writable-only: CAUGHT by reloc_ldso_program_multi_writable_with_deps
+# e2e-outside-store-skipped: CAUGHT by reloc_ldso_program_target_outside_writable_refused

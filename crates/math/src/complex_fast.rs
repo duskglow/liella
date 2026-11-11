@@ -120,8 +120,27 @@ fn parts(x: f64, y: f64) -> Option<([(Dd, f64); 2], i32)> {
 $(#[$a])*
 $(#[$i])*
 pub fn cexp_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
-    let ([(re, er), (im, ei)], m) = parts(x, y)?;
+    let Some(([(re, er), (im, ei)], m)) = parts(x, y) else {
+        return axis(x, y);
+    };
     Some((round(re, er, m, Rounding::Nearest)?, round(im, ei, m, Rounding::Nearest)?))
+}
+
+/// `cexp(x ± 0i) = (e^x, ±0)` for the in-place entry (LIBM-CPLX-LOG-SQRT-4, D-10.74; C Annex
+/// G.6.3.1: the imaginary part is `e^x·sin(±0)`): `e^x` from the real function's in-place kernel
+/// (correctly rounded, normal and finite for `2^-60 <= |x| < 708`, inexact raised in hardware),
+/// and `cexp(±0 ± 0i) = (1, ±0)` exact. Out of line: only the tier's declines reach it.
+$(#[$a])*
+#[inline(never)]
+fn axis(x: f64, y: f64) -> Option<(f64, f64)> {
+    use $exp as ek;
+    if y != 0.0 || !(0.0..708.0).contains(&dd::abs(x)) {
+        return None;
+    }
+    if x == 0.0 {
+        return Some((1.0, y));
+    }
+    Some((ek::exp_nearest(x)?, y))
 }
     };
 }
@@ -168,22 +187,294 @@ pub fn cexp(x: f64, y: f64, mode: Rounding) -> Option<((f64, f64), Status)> {
     Some(((round(re, er, m, mode)?, round(im, ei, m, mode)?), Status::flags(Flags::INEXACT)))
 }
 
-/// The quick tier for any format: `float` and `double` operands, `None` for the others.
+/// A quick tier for any format: `d` for `double` operands, `f` for `float` ones, `None` for the
+/// others.
 #[inline(always)]
-pub(crate) fn cexp_any<F: Float>(x: F, y: F, mode: Rounding) -> Option<((F, F), Status)> {
+fn tier_any<F: Float>(
+    x: F,
+    y: F,
+    d: impl FnOnce(f64, f64) -> Option<((f64, f64), Status)>,
+    f: impl FnOnce(f32, f32) -> Option<((f32, f32), Status)>,
+) -> Option<((F, F), Status)> {
     match F::PREC {
         53 => {
-            let ((a, b), st) = cexp(f64::from_bits(x.to_bits() as u64), f64::from_bits(y.to_bits() as u64), mode)?;
+            let ((a, b), st) = d(f64::from_bits(x.to_bits() as u64), f64::from_bits(y.to_bits() as u64))?;
             Some(((F::from_bits(u128::from(a.to_bits())), F::from_bits(u128::from(b.to_bits()))), st))
         }
         24 => {
-            let ((a, b), st) = fast32::cexpf(f32::from_bits(x.to_bits() as u32), f32::from_bits(y.to_bits() as u32), mode)?;
+            let ((a, b), st) = f(f32::from_bits(x.to_bits() as u32), f32::from_bits(y.to_bits() as u32))?;
             Some(((F::from_bits(u128::from(a.to_bits())), F::from_bits(u128::from(b.to_bits()))), st))
         }
         _ => None,
     }
 }
 
+/// The `cexp` quick tier for any format.
+#[inline(always)]
+pub(crate) fn cexp_any<F: Float>(x: F, y: F, mode: Rounding) -> Option<((F, F), Status)> {
+    tier_any(x, y, |a, b| cexp(a, b, mode), |a, b| fast32::cexpf(a, b, mode))
+}
+
+// ---------------------------------------------------------------------------------------------
+// `clog` and `csqrt` (LIBM-CPLX-LOG-SQRT, D-10.53, D-10.74): the same shape as `cexp` above, each
+// part a double-double with a proved bound and one rounding test ([`round`]); the 384-bit route
+// for everything else. Both take `2^-400 <= |x|, |y| < 2^400` (so every square below is an exact
+// `two_prod` with a normal error term, every part is a normal `double`, and no scaling is
+// needed); zeros, infinities, NaNs, subnormals and wider ranges go to the route.
+//
+// **`csqrt`** (Kahan's formulation, W. Kahan, "Branch cuts for complex elementary functions",
+// 1987): with `a = |x|`, `b = |y|`, `h = |z| = sqrt(a² + b²)`, `t = sqrt((a + h)/2)` and
+// `o = b/(2t)`, `csqrt z = t + i·sign(y)·o` for `x >= 0` and `o + i·sign(y)·t` for `x < 0`: no
+// cancellation anywhere (every sum adds positive terms). Errors, relative: `a² + b²` from two
+// exact products and one 2Sum, `2^-104.4`; [`sqrt_dd`] adds `2^-104` and halves the operand's
+// error, so `h` within `2^-103.4`; `a + h` (2Sum, then one addition of the tails, `2^-104`):
+// `2^-102.6`; halving is exact; `t` within `2^-102.6/2 + 2^-104 < 2^-102.8`; `2t` exact, `o`
+// by [`div_b`] (`2^-103`) within `2^-101.9`. So `SQRT_EPS = 2^-100` relative to the part's
+// head covers both parts. A part may be a `double` (`csqrt(3 + 4i) = 2 + i`), but never a
+// midpoint: `y = 2·re·im` with `re` (or `im`) of 54 significant bits would need at least 54
+// bits. An exact part has `|P.lo| <= eps` (its head is that `double`), so the tier declines
+// those (the route decides their inexact flag); [`round`] declines any interval that holds a
+// midpoint or, in a directed mode, a `double`.
+//
+// **`clog`**: `arg z` from [`invtrig::atan2_abs`] (within `2^-65.5` relative, `min/max >= 2^-60`),
+// `ARG_EPS = 2^-65` of its head. `log|z| = ln(s)/2`, `s = a² + b²` (`a >= b`):
+//
+// * `s` far from 1 (`RN(a² + b²)` outside `[0.75, 1.25)`): `s = sh + sl` within `2^-104.4`,
+//   `ln sh = l` from [`fast64::log_kernel`] within [`fast64::log_eps`], then
+//   `ln s = l + sl/sh`: the dropped `(sl/sh)²/2 <= 2^-107`, the quotient's rounding `2^-106`,
+//   the error of `s` `2^-104` absolute, the addition of the tails `2^-106·(1 + |l|)`: in all
+//   below `LOG_EXTRA·(1 + |l.hi|)`, `LOG_EXTRA = 2^-102` (`|l| >= 0.22`, so the Fast2Sum holds).
+// * `s` near 1: `w = s − 1 = d·(a + 1) + b²` with `d = a − 1` exact (Sterbenz: `a` is in
+//   `[0.61, 1.12]`), `a + 1 = e.hi + e.lo` exact (2Sum), `d·e.hi` and `b²` exact products, so
+//   the cancellation between them costs nothing; the tails' sum (three additions and the
+//   rounded `d·e.lo`) is within `2^-102.6·T`, `T = |d·e.hi| + b²`, and `w` is that sum's 2Sum.
+//   `log1p(w)` moves by at most `2^-102.6·T/(1 + w) < W_ERR·T`, `W_ERR = 2^-102` (`1 + w >=
+//   0.749`). Then `log1p(w.hi) = zh + zl` from [`quick_log::log1p_quick_parts`] within
+//   `2^-64·|zh|` and `log1p(w) = z + w.lo/(1 + w.hi)` (quotient and dropped square below
+//   `2^-104.3·|zh|`, the addition of the tails `2^-104·|zh|`): with the kernel's, below
+//   `L1P_REL·|zh|`, `L1P_REL = 2^-63`. A deep cancellation (`T >> |w|`) shows in the bound,
+//   and the rounding test then sends the operand to the route.
+//
+// Neither part of `clog` is a `double` or a midpoint (for nonzero `x`, `y`: `ln q` of a rational
+// `q != 1` and `atan2` of two nonzero rationals are transcendental, Lindemann–Weierstrass; and
+// `a² + b² = 1` has no solution in nonzero dyadic rationals). The halving of `ln s` is exact.
+//
+// **`float`**: [`fast32::clogf`] and [`fast32::csqrtf`], `double` arithmetic with a margin in
+// ulp of the `double` part and `float`'s online rounding test.
+
+/// The window of `|x|` and `|y|` for `clog` and `csqrt` (bits of `2^-400` and `2^400`).
+const W_MIN: u64 = 0x26f0_0000_0000_0000;
+const W_MAX: u64 = 0x58f0_0000_0000_0000;
+/// `csqrt`'s relative bound per part (`2^-100`, proved `2^-101.9`).
+const SQRT_EPS: f64 = f64::from_bits(0x39b0_0000_0000_0000);
+/// `clog`'s bounds (see above): `2^-65`, `2^-102`, `2^-102`, `2^-63`.
+const ARG_EPS: f64 = f64::from_bits(0x3be0_0000_0000_0000);
+const LOG_EXTRA: f64 = f64::from_bits(0x3990_0000_0000_0000);
+const W_ERR: f64 = f64::from_bits(0x3990_0000_0000_0000);
+const L1P_REL: f64 = f64::from_bits(0x3c00_0000_0000_0000);
+/// `[0.75, 1.25)`: the values of `RN(a² + b²)` that take `log1p`.
+const NEAR_LO: f64 = 0.75;
+const NEAR_HI: f64 = 1.25;
+
+/// `(|x|, |y|)` when both lie in `[2^-400, 2^400)`.
+#[inline(always)]
+fn window(x: f64, y: f64) -> Option<(f64, f64)> {
+    let (ax, ay) = (x.to_bits() & !(1 << 63), y.to_bits() & !(1 << 63));
+    if !(W_MIN..W_MAX).contains(&ax) || !(W_MIN..W_MAX).contains(&ay) {
+        return None;
+    }
+    Some((f64::from_bits(ax), f64::from_bits(ay)))
+}
+
+/// `a² + b²` as a normalized double-double within `2^-104.4` relative (exact products, one 2Sum,
+/// the tails added in two roundings).
+#[inline(always)]
+fn sum_squares(a: f64, b: f64) -> Dd {
+    let (pa, pb) = (dd::two_prod(a, a), dd::two_prod(b, b));
+    let s = dd::two_sum(pa.hi, pb.hi);
+    dd::fast_two_sum(s.hi, s.lo + (pa.lo + pb.lo))
+}
+
+/// The root of a positive normalized double-double, `sqrt` correctly rounded to nearest: one
+/// correction step `(x − s²)/(2s)` with `s²` exact, within `2^-104` relative plus half the
+/// operand's relative error (as the `hypot` kernel, `crate::invtrig`'s module comment).
+#[inline(always)]
+fn sqrt_dd(x: Dd, sqrt: &impl Fn(f64) -> f64) -> Dd {
+    let s = sqrt(x.hi);
+    let ps = dd::two_prod(s, s);
+    dd::fast_two_sum(s, (((x.hi - ps.hi) - ps.lo) + x.lo) / (2.0 * s))
+}
+
+/// `b/d` for a positive `double` `b` and a positive normalized double-double `d`, within `2^-103`
+/// relative (one correction step on the exact residual, as `invtrig`'s `div_dd`).
+#[inline(always)]
+fn div_b(b: f64, d: Dd) -> Dd {
+    let q1 = b / d.hi;
+    let pq = dd::two_prod(q1, d.hi);
+    dd::fast_two_sum(q1, (((b - pq.hi) - pq.lo) - q1 * d.lo) / d.hi)
+}
+
+/// `csqrt`'s parts `[re, im]` (see above), `sqrt` the correctly rounded `double` root.
+#[inline(always)]
+fn csqrt_parts(x: f64, y: f64, sqrt: &impl Fn(f64) -> f64) -> Option<[Dd; 2]> {
+    let (a, b) = window(x, y)?;
+    let h = sqrt_dd(sum_squares(a, b), sqrt);
+    let s = dd::two_sum(a, h.hi);
+    let m = dd::fast_two_sum(s.hi, s.lo + h.lo);
+    let t = sqrt_dd(m.scale(0.5), sqrt);
+    let o = div_b(b, t.scale(2.0));
+    let (re, im) = if x >= 0.0 { (t, o) } else { (o, t) };
+    Some([re, if y < 0.0 { im.neg() } else { im }])
+}
+
+/// One `csqrt` part rounded in `mode`: an exact part (`|P.lo| <= eps`) declines.
+#[inline(always)]
+fn round_root(p: Dd, mode: Rounding) -> Option<f64> {
+    let eps = SQRT_EPS * dd::abs(p.hi);
+    if dd::abs(p.lo) <= eps {
+        return None;
+    }
+    round(p, eps, 0, mode)
+}
+
+/// `csqrt(x + iy)` to nearest for the boundary's in-place entry, `sqrt` the hardware root.
+#[inline(always)]
+pub fn csqrt_nearest(x: f64, y: f64, sqrt: impl Fn(f64) -> f64) -> Option<(f64, f64)> {
+    let Some([re, im]) = csqrt_parts(x, y, &sqrt) else {
+        return csqrt_axis(x, y, &sqrt);
+    };
+    Some((round_root(re, Rounding::Nearest)?, round_root(im, Rounding::Nearest)?))
+}
+
+/// `v` (positive) with the sign bit of `s`.
+#[inline(always)]
+fn with_sign(v: f64, s: f64) -> f64 {
+    f64::from_bits(v.to_bits() | (s.to_bits() & (1 << 63)))
+}
+
+/// Whether `v` is a normal finite nonzero `double` (either sign).
+#[inline(always)]
+fn normal(v: f64) -> bool {
+    (f64::MIN_POSITIVE..=f64::MAX).contains(&dd::abs(v))
+}
+
+/// `csqrt` on an axis for the in-place entry (LIBM-CPLX-LOG-SQRT-4, D-10.74): one part an exact
+/// zero, the other normal. `csqrt(x ± 0i)` is `(√x, ±0)` for `x > 0` and `(+0, ±√|x|)` for
+/// `x < 0`; `csqrt(±0 + iy)` is `(t, t)` with the sign of `y` on the second, `t = √(|y|/2)`
+/// (`|y|/2` exact for `|y| >= 2^-1021`) (C Annex G.6.4.2 and conjugate symmetry). Each part is
+/// one correctly rounded hardware root, which raises inexact exactly when it is inexact and
+/// nothing else on a normal operand. Out of line: only the tier's declines reach it.
+#[inline(never)]
+fn csqrt_axis(x: f64, y: f64, sqrt: &impl Fn(f64) -> f64) -> Option<(f64, f64)> {
+    if y == 0.0 && normal(x) {
+        let r = sqrt(dd::abs(x));
+        return Some(if x > 0.0 { (r, y) } else { (0.0, with_sign(r, y)) });
+    }
+    if x == 0.0 && normal(y) && dd::abs(y) >= 2.0 * f64::MIN_POSITIVE {
+        let t = sqrt(0.5 * dd::abs(y));
+        return Some((t, with_sign(t, y)));
+    }
+    None
+}
+
+/// `clog` on an axis for the in-place entry (LIBM-CPLX-LOG-SQRT-4, D-10.74): one part an exact
+/// zero, the other normal. `clog(x ± 0i) = (ln|x|, ±0)` for `x > 0` and `(ln|x|, ±π)` for
+/// `x < 0`; `clog(±0 + iy) = (ln|y|, π/2)` with the sign of `y` (C Annex G.6.3.2 and conjugate
+/// symmetry). `ln|v|` is the real logarithm's in-place kernel ([`fast64::log_nearest`]: correctly
+/// rounded, inexact raised in hardware, `|v| != 1`); `clog(1 ± 0i) = (+0, ±0)` is exact. At
+/// `|v| = 1` otherwise the real part is an exact zero and the rounded `π` or `π/2` would raise
+/// nothing, so those decline.
+#[inline(never)]
+fn clog_axis(x: f64, y: f64) -> Option<(f64, f64)> {
+    let (v, im) = if y == 0.0 && normal(x) {
+        if x == 1.0 {
+            return Some((0.0, y));
+        }
+        (x, if x > 0.0 { y } else { with_sign(core::f64::consts::PI, y) })
+    } else if x == 0.0 && normal(y) {
+        (y, with_sign(core::f64::consts::FRAC_PI_2, y))
+    } else {
+        return None;
+    };
+    let v = dd::abs(v);
+    if v == 1.0 {
+        return None;
+    }
+    Some((fast64::log_nearest(v)?, im))
+}
+
+/// The correctly rounded `double` root in software (the envelope's modes; no `sqrtsd` here).
+fn soft_sqrt(v: f64) -> f64 {
+    crate::fused::sqrt::<f64, f64>(v, Rounding::Nearest).0
+}
+
+/// `csqrt(x + iy)` in `mode` by the quick tier, both parts or `None`.
+#[inline(always)]
+pub fn csqrt(x: f64, y: f64, mode: Rounding) -> Option<((f64, f64), Status)> {
+    let [re, im] = csqrt_parts(x, y, &soft_sqrt)?;
+    Some(((round_root(re, mode)?, round_root(im, mode)?), Status::flags(Flags::INEXACT)))
+}
+
+/// `clog`'s parts with their bounds, `[(log|z|, eps), (arg z, eps)]` (see above).
+#[inline(always)]
+fn clog_parts(x: f64, y: f64) -> Option<[(Dd, f64); 2]> {
+    let (ax, ay) = window(x, y)?;
+    let th = crate::invtrig::atan2_abs(y, x)?;
+    let arg = (if y < 0.0 { th.neg() } else { th }, ARG_EPS * dd::abs(th.hi));
+    let (a, b) = if ax >= ay { (ax, ay) } else { (ay, ax) };
+    let (pa, pb) = (dd::two_prod(a, a), dd::two_prod(b, b));
+    let (z, eps) = if (NEAR_LO..NEAR_HI).contains(&(pa.hi + pb.hi)) {
+        // |z| near 1: w = (a − 1)(a + 1) + b² with exact products.
+        let d = a - 1.0;
+        let e = dd::two_sum(a, 1.0);
+        let dp = dd::two_prod(d, e.hi);
+        let h = dd::two_sum(dp.hi, pb.hi);
+        let w = dd::two_sum(h.hi, ((h.lo + dp.lo) + pb.lo) + d * e.lo);
+        let (zh, zl) = crate::fast64::quick_log::log1p_quick_parts(w.hi)?;
+        let z = dd::fast_two_sum(zh, zl + w.lo / (1.0 + w.hi));
+        (z, L1P_REL * dd::abs(zh) + W_ERR * (dd::abs(dp.hi) + pb.hi))
+    } else {
+        let s = dd::two_sum(pa.hi, pb.hi);
+        let s = dd::fast_two_sum(s.hi, s.lo + (pa.lo + pb.lo));
+        let (l, tail) = fast64::log_kernel(s.hi)?;
+        let z = dd::fast_two_sum(l.hi, l.lo + s.lo / s.hi);
+        (z, fast64::log_eps(l, tail) + LOG_EXTRA * (1.0 + dd::abs(l.hi)))
+    };
+    Some([(z.scale(0.5), 0.5 * eps * WIDEN), arg])
+}
+
+/// `clog(x + iy)` to nearest for the boundary's in-place entry.
+#[inline(always)]
+pub fn clog_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
+    let Some([(re, er), (im, ei)]) = clog_parts(x, y) else {
+        return clog_axis(x, y);
+    };
+    Some((round(re, er, 0, Rounding::Nearest)?, round(im, ei, 0, Rounding::Nearest)?))
+}
+
+/// `clog(x + iy)` in `mode` by the quick tier, both parts or `None`.
+#[inline(always)]
+pub fn clog(x: f64, y: f64, mode: Rounding) -> Option<((f64, f64), Status)> {
+    let [(re, er), (im, ei)] = clog_parts(x, y)?;
+    Some(((round(re, er, 0, mode)?, round(im, ei, 0, mode)?), Status::flags(Flags::INEXACT)))
+}
+
+/// The `clog` quick tier for any format.
+#[inline(always)]
+pub(crate) fn clog_any<F: Float>(x: F, y: F, mode: Rounding) -> Option<((F, F), Status)> {
+    tier_any(x, y, |a, b| clog(a, b, mode), |a, b| fast32::clogf(a, b, mode))
+}
+
+/// The `csqrt` quick tier for any format.
+#[inline(always)]
+pub(crate) fn csqrt_any<F: Float>(x: F, y: F, mode: Rounding) -> Option<((F, F), Status)> {
+    tier_any(x, y, |a, b| csqrt(a, b, mode), |a, b| fast32::csqrtf(a, b, mode, soft_sqrt))
+}
+
 #[cfg(test)]
 #[path = "complex_fast_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "complex_fast_ls_tests.rs"]
+mod ls_tests;

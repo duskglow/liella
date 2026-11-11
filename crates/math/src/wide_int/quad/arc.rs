@@ -84,8 +84,8 @@
 //!    `2^-160.25 + 2^-173.8`: `asin`, `acos` within `2^-160.2`. Results lie in `[2^-58, π)`:
 //!    the caller settles `|a| < 2^-58`, and `acos(1 − 2^-113) > 2^-57`.
 
-use super::super::arc::{ATAN_J, big_u64};
-use super::super::{M64, mul_wide, mulhi, mulhi64};
+use super::super::arc::ATAN_J;
+use super::super::{M64, big_u64, mul_wide, mulhi, mulhi64};
 use super::{ONE, Scaled, W3, div3, mul32, mulhi3, norm, round};
 use crate::float::{Float, Kind, Num};
 use crate::status::{Rounding, Status};
@@ -343,6 +343,8 @@ fn atan_le(y: Q, x: Q) -> Scaled {
     let k = x.e - y.e; // >= 0: y <= x, both normalised
     let mut j = 0;
     if k <= 8 {
+        // RANGE: y.m, x.m in [2^112, 2^113): both tops in [2^52, 2^53), so h is in [128, 512),
+        // a signed conversion in range (no invalid).
         let h = (dbl((y.m >> 60) as u64) * (256.0 / dbl((x.m >> 60) as u64))) as usize; // in [128, 512)
         j = ((h >> k) + 1) >> 1;
     }

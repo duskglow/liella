@@ -1,0 +1,4 @@
+# LIBM-F64-SPECIAL-QUICK-2 plants (cargo xtask plants; docs/plants.md): the erf/erfc quick phase in fast_special.rs,
+# now inside erf_nearest/erfc_nearest (the rounding-test plant hits the shared helper erf_quick_near).
+quick-rounding-test-skipped | crates/math/src/fast_special.rs | lit:fast64::near(erf_quick_dd(x), C_ERF_Q, 0) ==> Some(erf_quick_dd(x).hi) | cargo test -p liella-math --release --lib quick_phase_rounds_correctly | msg:erf quick\(.*\) misrounded
+quick-last-term-dropped | crates/math/src/fast_special.rs | lit:let b2 = (p(16) * t + p(15)) * t + p(14); ==> let b2 = p(15) * t + p(14); | cargo test -p liella-boundary --release --test erf_quick | msg:erfc?\(.*\) misrounded

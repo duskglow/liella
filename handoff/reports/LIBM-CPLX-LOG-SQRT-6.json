@@ -1,0 +1,25 @@
+{
+ "task": "LIBM-CPLX-LOG-SQRT-6",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: LAYOUT-JITTER: start-up faults attributed (not the pruning: the dead keys' code sits in listed keys; heap::DEBUG .data page +2 and an out-of-line find_cached +1 from liella_boundary code-unit churn; a fast regen does not fix it; next reaches locale 55 / tool 58 / fork 8 at cold/pre pads); origin/next merged; cexp 5.34x cause named",
+ "branch": "task/libm-cplx-log-sqrt-6",
+ "head": "see git log -1 (handoff commit after merge c767dc493)",
+ "gate": {
+  "affected": "not run (LAYOUT-JITTER hold; run 5's gate red on 3 start-up fault bounds)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "Start-up fault bounds +3/+3/+1 over next on keke (16/55/58/8 vs 16/52/55/7) come from liella_boundary code-unit churn (heap::DEBUG data page, find_cached out of line); next reaches each count at some pad but not all three at one pad", "recommendation": "hold for LAYOUT-TEXT-PIN / LAYOUT-DATA-CLUSTERS (LAYOUT-JITTER); do not loosen bounds"}
+ ],
+ "informational": [
+  "tools/hottext/regen.sh leaves tools/hottext/__pycache__ in the role (keys.cpython-312.pyc), which fails static private-paths",
+  "cexp no-FMA: 640.1 vs glibc 289.1 typical, 1088.9 vs 288.5 on cbench_libm's 256 (1 routed operand = +449/call)"
+ ],
+ "refused": [],
+ "improvement": "The fault measure tool should be a repo tool (validation/) with a two-tree diff mode; this run rebuilt it from another story's scratch.",
+ "next_step": "After LAYOUT-TEXT-PIN / LAYOUT-DATA-CLUSTERS land: merge next, rebuild, gate, rerun run 5's plants",
+ "report_file": "handoff/libm-cplx-log-sqrt.md",
+ "jobs": ["keke:libm-cplx-log-sqrt-6-measure", "keke:libm-cplx-log-sqrt-6-cexp2", "keke:libm-cplx-log-sqrt-6-lint"]
+}

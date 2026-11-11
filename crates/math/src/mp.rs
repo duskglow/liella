@@ -745,6 +745,7 @@ pub fn exp(x: Mp) -> Mp {
     if x.is_zero() {
         return Mp::from_i64(1);
     }
+    // RANGE: |x| < 2^40 (the contract): |k| < 2^41.
     let k = (x.to_f64() / core::f64::consts::LN_2) as i64;
     let r = x.sub(ln2().mul(Mp::from_i64(k)));
     let s = r.ldexp(-12);
@@ -958,6 +959,7 @@ pub fn ln10() -> Mp {
 pub fn reduce_half_pi(x: f64) -> (i64, Mp) {
     let ax = if x < 0.0 { -x } else { x };
     let (k, r) = if ax < 1.0e9 {
+        // RANGE: 0 <= ax < 10^9: k < 2^30.
         let k = (ax * core::f64::consts::FRAC_2_PI + 0.5) as i64;
         (k, Mp::from_f64(ax).sub(pi().ldexp(-1).mul(Mp::from_i64(k))))
     } else {

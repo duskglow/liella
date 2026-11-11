@@ -497,6 +497,84 @@ void _start(void) {{ int **pp = r_pp(); int c = *pp == &r_x ? 0 : 3; if ({}) *pp
     std::fs::remove_dir_all(&d).ok();
 }
 
+/// s27_1_c_1, design §6 (RELRO last), D-27.25 (amends D-27.10): a dependency whose `PT_GNU_RELRO`
+/// spans two writable `PT_LOAD`s (GNU ld keeps RELRO inside one segment, so `split_relro_load`
+/// rewrites the linked object's program headers) is relocated in both segments and its RELRO pages
+/// in each segment are read-only afterwards: reading both ends exits 0, writing either dies with
+/// SIGSEGV. Catches RELRO protected through only one segment's range.
+#[test]
+fn reloc_ldso_relro_across_segments() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let d = dir("relro-split");
+    // 1100 relocated pointers in .data.rel.ro: RELRO covers at least two whole pages.
+    let src = "int r_x = 1; int *const r_p[1100] = { [0 ... 1099] = &r_x };
+int **r_first(void) { return (int **)&r_p[0]; } int **r_last(void) { return (int **)&r_p[1099]; }\n";
+    let r = build(&d, "libr.so", src, &["-fPIC", "-shared"]);
+    let (file, at) = split_relro_load(&std::fs::read(&r).unwrap());
+    let p = sym_value(&file, b"r_p");
+    assert!(p < at && p + 1099 * 8 >= at, "r_p[0] ({p:#x}) must lie in the first segment and r_p[1099] in the second (split at {at:#x})");
+    // Written under another name and copied over the linked object by cp(1) (no ETXTBSY window).
+    let tmp = d.join("libr.bytes");
+    std::fs::write(&tmp, &file).unwrap();
+    assert!(Command::new("cp").arg(&tmp).arg(&r).status().unwrap().success());
+    let prog = |name: &str, write: &str| {
+        let s = format!(
+            "extern int **r_first(void); extern int **r_last(void); extern int r_x;
+void _start(void) {{ int **f = r_first(), **l = r_last(); int c = *f == &r_x && *l == &r_x ? 0 : 3; {write}
+__asm__ volatile(\"syscall\" :: \"a\"(231), \"D\"(c)); }}\n"
+        );
+        build(&d, name, &s, &["-fPIE", "-pie", r.to_str().unwrap()])
+    };
+    let (code, sig, err) = run(Command::new(&ld).arg(prog("pread", "")));
+    assert_eq!((code, sig), (Some(0), None), "reading RELRO in both segments: {err}");
+    for (name, write) in [("pfirst", "*f = 0;"), ("plast", "*l = 0;")] {
+        let (code, sig, _) = run(Command::new(&ld).arg(prog(name, write)));
+        assert_eq!((code, sig), (None, Some(11)), "{name}: writing RELRO in that segment after relocation must fault");
+    }
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// `f` with the writable `PT_LOAD` holding `PT_GNU_RELRO`'s last whole page split in two at that
+/// page (`at`, returned): the same bytes at the same addresses, now two adjacent segments, so RELRO
+/// spans a segment boundary. The table keeps its size: the `PT_NOTE` header (unused by the loader)
+/// gives its slot, and the second half follows the first so the `PT_LOAD`s stay in address order.
+fn split_relro_load(f: &[u8]) -> (Vec<u8>, u64) {
+    const PAGE: u64 = 4096;
+    let rd = |o: usize| u64::from_le_bytes(f[o..o + 8].try_into().unwrap());
+    let (phoff, phnum) = (rd(32) as usize, usize::from(u16::from_le_bytes([f[56], f[57]])));
+    let hs: Vec<&[u8]> = (0..phnum).map(|i| &f[phoff + i * 56..phoff + i * 56 + 56]).collect();
+    let ty = |h: &[u8]| u32::from_le_bytes(h[..4].try_into().unwrap());
+    let word = |h: &[u8], i: usize| u64::from_le_bytes(h[8 * i..8 * i + 8].try_into().unwrap());
+    let relro = hs.iter().find(|h| ty(h) == 0x6474_e552).expect("PT_GNU_RELRO");
+    let (r, m) = (word(relro, 2), word(relro, 5));
+    let at = ((r + m) & !(PAGE - 1)) - PAGE;
+    assert!(at > r & !(PAGE - 1), "RELRO must cover two whole pages");
+    let load = hs.iter().position(|h| ty(h) == 1 && word(h, 2) < at && at < word(h, 2) + word(h, 4)).expect("the PT_LOAD holding RELRO");
+    let note = hs.iter().position(|h| ty(h) == 4).expect("a PT_NOTE slot to reuse");
+    let set = |h: &[u8], o: u64, v: u64, fsz: u64, msz: u64, align: u64| {
+        let mut n = h[..8].to_vec();
+        for w in [o, v, v, fsz, msz, align] {
+            n.extend(w.to_le_bytes());
+        }
+        n
+    };
+    let l = hs[load];
+    let cut = at - word(l, 2);
+    let mut table = Vec::new();
+    for (i, h) in hs.iter().enumerate() {
+        if i == load {
+            table.push(set(l, word(l, 1), word(l, 2), cut, cut, word(l, 6)));
+            table.push(set(l, word(l, 1) + cut, at, word(l, 4) - cut, word(l, 5) - cut, PAGE));
+        } else if i != note {
+            table.push(h.to_vec());
+        }
+    }
+    assert_eq!(table.len(), phnum);
+    let mut v = f.to_vec();
+    v[phoff..phoff + 56 * phnum].copy_from_slice(&table.concat());
+    (v, at)
+}
+
 // ------------------------------------------------------------------ (4) the program's memory image
 
 /// A program (TEXTREL with `-Wl,-z,notext`) with one dependency that copies nothing: exits 0 when the
@@ -660,6 +738,97 @@ fn without_pt_phdr(ld: &Path, d: &Path, p: &Path, name: &str) {
     assert_eq!((code, sig), (Some(0), None), "{name}: ld.so PROGRAM without PT_PHDR: check number {code:?} failed; stderr: {err}");
 }
 
+/// A copy of `lib/libc.so.6` at `d/name` whose `DT_SONAME` is retagged `DT_CHECKSUM` (so a program
+/// linked against it names it by path: `ld.so` has no library search yet), changed by `edit`.
+fn libc_by_path(lib: &Path, d: &Path, name: &str, edit: impl FnOnce(&mut Vec<u8>)) -> std::path::PathBuf {
+    let mut so = std::fs::read(lib.join("libc.so.6")).unwrap();
+    let elf = Elf::parse::<Native>(&so).unwrap();
+    let dynph = elf.find(liella_ld::elf::pt::DYNAMIC).unwrap();
+    let (off, len) = (dynph.offset as usize, dynph.filesz as usize);
+    let at = (off..off + len).step_by(16).find(|&o| so[o..o + 8] == 14u64.to_le_bytes()).expect("libc.so.6 has a DT_SONAME");
+    so[at..at + 8].copy_from_slice(&0x6fff_fdf8u64.to_le_bytes());
+    edit(&mut so);
+    let out = d.join(name);
+    std::fs::write(&out, &so).unwrap();
+    out
+}
+
+/// The program of [`reloc_libc_early_init_before_preinit`]: its `.preinit_array` function, the first
+/// program code to run, records 1 when the C library has no environment yet (`getenv` of a variable
+/// the test sets), 2 when the NULL-folding copy and fill with a zero length do not return; `main`
+/// exits with what it recorded (0: initialised).
+const EARLY_PROG: &str = "#include <stdlib.h>
+#include <string.h>
+static int seen = 3;
+static void pre(int argc, char **argv, char **envp) {
+  (void)argc; (void)argv; (void)envp;
+  if (getenv(\"LIELLA_EARLY_PROBE\") == 0) { seen = 1; return; }
+  seen = 2;
+  memcpy(0, 0, 0);
+  memset(0, 0, 0);
+  seen = 0;
+}
+__attribute__((section(\".preinit_array\"), used)) static void (*pre_entry)(int, char **, char **) = pre;
+int main(void) { return seen; }
+";
+
+/// Link [`EARLY_PROG`] as a PIE against `libc` (by path) with `ld` as its interpreter.
+fn early_prog(ld: &Path, d: &Path, libc: &Path, out: &str) -> std::path::PathBuf {
+    let crt1 = target().join("liella").join("liella-crt1.o");
+    let c = d.join("early.c");
+    std::fs::write(&c, EARLY_PROG).unwrap();
+    let o = d.join(out);
+    let r = Command::new("cc").args(["-O1", "-fno-builtin", "-nostdlib", "-fPIE", "-pie"]).arg(format!("-Wl,--dynamic-linker={}", ld.display())).arg("-o").arg(&o).arg(&crt1).arg(&c).arg(libc).arg("-lgcc").output().unwrap();
+    assert!(r.status.success(), "{out}: {}", String::from_utf8_lossy(&r.stderr));
+    o
+}
+
+/// s27_1_c_8, D-27.22 (design §14): `ld.so` calls libc's `__liella_libc_early_init` before any
+/// constructor, so the program's `.preinit_array` function finds the environment published and
+/// `memcpy(NULL, NULL, 0)`/`memset(NULL, 0, 0)` return; kernel-started and as `ld.so PROGRAM`.
+#[test]
+fn reloc_libc_early_init_before_preinit() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let lib = target().join("liella");
+    if !lib.join("liella-crt1.o").exists() || !lib.join("libc.so.6").exists() {
+        eprintln!("SKIP: liella-crt1.o or libc.so.6 not built (run cargo xtask so)");
+        return;
+    }
+    let d = std::fs::canonicalize(dir("libcearly")).unwrap();
+    let libc = libc_by_path(&lib, &d, "libc-early.so", |_| {});
+    let p = early_prog(&ld, &d, &libc, "early");
+    for (how, mut cmd) in [("kernel-started", Command::new(&p)), ("ld.so PROGRAM", { let mut c = Command::new(&ld); c.arg(&p); c })] {
+        let (code, sig, err) = run(cmd.env("LIELLA_EARLY_PROBE", "1"));
+        assert_eq!((code, sig), (Some(0), None), "{how}: early init before .preinit_array: check number {code:?} failed; stderr: {err}");
+    }
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// s27_1_c_8, L14-10, D-27.22: a `libc.so.6` whose `LIELLA_PRIVATE` build tag differs from the
+/// loader's (another build) is refused at load with the diagnostic, before any of its code runs.
+#[test]
+fn reloc_libc_build_tag_mismatch_refused() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let lib = target().join("liella");
+    if !lib.join("liella-crt1.o").exists() || !lib.join("libc.so.6").exists() {
+        eprintln!("SKIP: liella-crt1.o or libc.so.6 not built (run cargo xtask so)");
+        return;
+    }
+    let d = std::fs::canonicalize(dir("libctag")).unwrap();
+    let prefix = liella_ld::start::private::TAG_PREFIX;
+    let libc = libc_by_path(&lib, &d, "libc-other.so", |so| {
+        let at = so.windows(prefix.len()).position(|w| w == prefix).expect("libc.so.6 carries a build tag") + prefix.len();
+        so[at] ^= 0x20;
+    });
+    let p = early_prog(&ld, &d, &libc, "other");
+    for (how, mut cmd) in [("kernel-started", Command::new(&p)), ("ld.so PROGRAM", { let mut c = Command::new(&ld); c.arg(&p); c })] {
+        let (code, sig, err) = run(cmd.env("LIELLA_EARLY_PROBE", "1"));
+        assert_eq!((code, sig), (Some(127), None), "{how}: a libc from another build ran; stderr: {err}");
+        assert!(err.contains("libc-other.so: LIELLA_PRIVATE build tag differs"), "{how}: the build-tag diagnostic is missing: {err}");
+    }
+    std::fs::remove_dir_all(&d).ok();
+}
+
 /// The program of [`reloc_libc_bias_without_pt_phdr`]: exits 0 when libc's view of the executable's
 /// load bias is the real one (`AT_ENTRY` minus the header's `e_entry`, found without libc's help):
 /// 1 when `dl_iterate_phdr`'s first object has another `dlpi_addr`; a `%n` in a read-only format
@@ -700,14 +869,7 @@ fn reloc_libc_bias_without_pt_phdr() {
         return;
     }
     let d = std::fs::canonicalize(dir("libcbias")).unwrap();
-    let mut so = std::fs::read(lib.join("libc.so.6")).unwrap();
-    let elf = Elf::parse::<Native>(&so).unwrap();
-    let dynph = elf.find(liella_ld::elf::pt::DYNAMIC).unwrap();
-    let (off, len) = (dynph.offset as usize, dynph.filesz as usize);
-    let at = (off..off + len).step_by(16).find(|&o| so[o..o + 8] == 14u64.to_le_bytes()).expect("libc.so.6 has a DT_SONAME");
-    so[at..at + 8].copy_from_slice(&0x6fff_fdf8u64.to_le_bytes());
-    let libc_so = d.join("libc-by-path.so");
-    std::fs::write(&libc_so, &so).unwrap();
+    let libc_so = libc_by_path(&lib, &d, "libc-by-path.so", |_| {});
     let c = d.join("bias.c");
     std::fs::write(&c, LIBC_BIAS_PROG).unwrap();
     let interp = format!("-Wl,--dynamic-linker={}", ld.display());
@@ -791,6 +953,112 @@ fn with_loads(f: &[u8], total: usize) -> Vec<u8> {
     v[32..40].copy_from_slice(&off.to_le_bytes());
     v[56..58].copy_from_slice(&(n as u16).to_le_bytes());
     v
+}
+
+/// A program's data in three or more writable `PT_LOAD`s (as conformance
+/// s01_static_pie_multi_writable.c): three small 16 KiB-aligned pointer sections back to back, each
+/// beginning about 16 KiB past the one before, so GNU ld starts a new writable segment for at least
+/// two of them. `{decl}` declares what `{init}` (each section's three pointers) and `{check}` (the
+/// test of one section `s`, true when right) use. Exits 0 when every section is right, else the
+/// section's number (1 `.liella_seg2`, 2 `.data1`, 3 `.liella_seg3`).
+fn multi_writable_src(decl: &str, init: &str, check: &str) -> String {
+    format!(
+        "{decl}
+static int m_a = 1, m_b = 2;
+void *m_seg2[] __attribute__((section(\".liella_seg2\"), aligned(16384))) = {{ {init} }};
+void *m_data1[] __attribute__((section(\".data1\"), aligned(16384))) = {{ {init} }};
+void *m_seg3[] __attribute__((section(\".liella_seg3\"), aligned(16384))) = {{ {init} }};
+static int ok(void **s) {{ return *(int *)s[0] == 1 && *(int *)s[1] == 2 && ({check}); }}
+void _start(void) {{
+  int c = !ok(m_seg2) ? 1 : !ok(m_data1) ? 2 : !ok(m_seg3) ? 3 : 0;
+  __asm__ volatile(\"syscall\" :: \"a\"(231), \"D\"(c)); __builtin_unreachable();
+}}\n"
+    )
+}
+
+/// The number of writable `PT_LOAD`s in the linked file `p`.
+fn writable_loads(p: &Path) -> usize {
+    let f = std::fs::read(p).unwrap();
+    let elf = Elf::parse::<Native>(&f).unwrap();
+    elf.program_headers().filter(|h| h.p_type == 1 && h.flags & 2 != 0).count()
+}
+
+/// Runs `p` as `ld.so PROGRAM`, then `q` (the same program naming `ld` in `PT_INTERP`) started by
+/// the kernel; both must exit 0 (`what` names the case in the messages). Each file must have at
+/// least three writable `PT_LOAD`s, so a linker that stops splitting fails here, not vacuously.
+fn run_multi_writable(ld: &Path, p: &Path, q: &Path, what: &str) {
+    for f in [p, q] {
+        assert!(writable_loads(f) >= 3, "{what}: {} must have three or more writable PT_LOADs", f.display());
+    }
+    let (code, sig, err) = run(Command::new(ld).arg(p));
+    assert_eq!((code, sig), (Some(0), None), "{what}, ld.so PROGRAM: section {code:?} has a wrong pointer; stderr: {err}");
+    let (code, sig, err) = run(&mut Command::new(q));
+    assert_eq!((code, sig), (Some(0), None), "{what}, PT_INTERP: section {code:?} has a wrong pointer; stderr: {err}");
+}
+
+/// s27_1_c_1, D-27.25 (amends D-27.10): a `-nostdlib` PIE without dependencies whose RELATIVE
+/// targets lie in three writable `PT_LOAD`s is relocated by ld.so's self-relocator (`boot::image`,
+/// `relocate_self`) in every segment, as `ld.so PROGRAM` and through `PT_INTERP`. Catches a relocator
+/// that writes only through one writable segment or refuses a target in a later one.
+#[test]
+fn reloc_ldso_program_multi_writable_no_deps() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let d = dir("multiw-self");
+    let src = multi_writable_src("", "&m_a, &m_b, 0", "s[2] == 0");
+    let interp = format!("-Wl,--dynamic-linker={}", ld.display());
+    let p = build(&d, "pself", &src, &["-fPIE", "-pie"]);
+    let q = build(&d, "pself-interp", &src, &["-fPIE", "-pie", &interp]);
+    run_multi_writable(&ld, &p, &q, "no dependencies");
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// no spec clause (D-27.25, D-27.10 refusals): the program of
+/// `reloc_ldso_program_multi_writable_no_deps` with `PF_W` taken off its last writable `PT_LOAD`
+/// (header patch: the segment is mapped read-only, its pointers are then in no writable segment)
+/// is refused by ld.so with status 127 and a message, before any store: neither a fault on the
+/// read-only page nor a run.
+#[test]
+fn reloc_ldso_program_target_outside_writable_refused() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let d = dir("multiw-ro");
+    let p = build(&d, "pself", &multi_writable_src("", "&m_a, &m_b, 0", "s[2] == 0"), &["-fPIE", "-pie"]);
+    let mut f = std::fs::read(&p).unwrap();
+    let (phoff, phnum) = (u64::from_le_bytes(f[32..40].try_into().unwrap()) as usize, usize::from(u16::from_le_bytes([f[56], f[57]])));
+    let at = |i: usize| phoff + i * 56;
+    let rd = |f: &[u8], o: usize| u32::from_le_bytes(f[o..o + 4].try_into().unwrap());
+    let vaddr = |f: &[u8], i: usize| u64::from_le_bytes(f[at(i) + 16..at(i) + 24].try_into().unwrap());
+    let last = (0..phnum).filter(|&i| rd(&f, at(i)) == 1 && rd(&f, at(i) + 4) & 2 != 0).max_by_key(|&i| vaddr(&f, i)).unwrap();
+    let flags = rd(&f, at(last) + 4) & !2;
+    f[at(last) + 4..at(last) + 8].copy_from_slice(&flags.to_le_bytes());
+    // Written under another name and copied by cp(1), as in `without_pt_phdr` (no ETXTBSY window).
+    let (tmp, q) = (d.join("ro.bytes"), d.join("pro"));
+    std::fs::write(&tmp, &f).unwrap();
+    std::fs::set_permissions(&tmp, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    assert!(Command::new("cp").arg(&tmp).arg(&q).status().unwrap().success());
+    let (code, sig, err) = run(Command::new(&ld).arg(&q));
+    assert_eq!((code, sig), (Some(127), None), "a RELATIVE target in a read-only segment must be refused; stderr: {err}");
+    assert!(err.contains("cannot relocate the program"), "the refusal names the cause: {err}");
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// s27_1_c_1, D-27.25: a PIE with a dependency (libb.so) whose targets in three writable `PT_LOAD`s
+/// are RELATIVE and symbol relocations (`b_fn`, `b_data`) is relocated by ld.so's object path
+/// (`link`) in every segment, as `ld.so PROGRAM` and through `PT_INTERP`.
+#[test]
+fn reloc_ldso_program_multi_writable_with_deps() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let d = dir("multiw-link");
+    let b = build(&d, "libb.so", LIBB, &["-fPIC", "-shared"]);
+    let src = multi_writable_src(
+        "extern int b_data; extern int b_fn(void);",
+        "&m_a, &m_b, (void *)b_fn, &b_data",
+        "((int (*)(void))s[2])() == 5 && s[3] == (void *)&b_data && b_data == 7",
+    );
+    let interp = format!("-Wl,--dynamic-linker={}", ld.display());
+    let p = build(&d, "plink", &src, &["-fPIE", "-pie", b.to_str().unwrap()]);
+    let q = build(&d, "plink-interp", &src, &["-fPIE", "-pie", b.to_str().unwrap(), &interp]);
+    run_multi_writable(&ld, &p, &q, "with libb.so");
+    std::fs::remove_dir_all(&d).ok();
 }
 
 /// s27_1_c_1, L14-6 (ruling #4323): a text-relocated program with a dependency runs, started by the
