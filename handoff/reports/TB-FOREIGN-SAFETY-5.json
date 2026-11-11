@@ -9,4 +9,5 @@
  "improvement": "a story held for a layout fix should get the hot-text regen as part of the merge step in its brief: the dead-key check cost a build cycle here",
  "next_step": "read tbfs5-gate-1, tbfs5-plants-1, tbfs5-counts-1; compare locale rows with a primed next base (+2 wanted)",
  "report_file": "handoff/TB-FOREIGN-SAFETY.md",
- "jobs": ["kanon:tbfs5-regen-2", "kanon:tbfs5-gate-1", "kanon:tbfs5-plants-1", "kanon:tbfs5-counts-1"]}
+ "superseded": ["kanon:tbfs5-regen-2 (regen, story tests and clippy green; static red only on a __pycache__ .pyc regen.sh left in the role; static reruns inside tbfs5-gate-1)"],
+ "jobs": ["kanon:tbfs5-gate-1", "kanon:tbfs5-plants-1", "kanon:tbfs5-counts-1"]}
