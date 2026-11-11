@@ -161,8 +161,8 @@ impl Pages for FakePages {
     fn shard(&self) -> usize {
         self.shard.get()
     }
-    fn cache_slot(&self) -> &AtomicUsize {
-        &self.slots[self.thread.get()]
+    fn cache_slot(&self) -> Option<&AtomicUsize> {
+        Some(&self.slots[self.thread.get()])
     }
     fn race_point(&self, at: RacePoint) {
         assert_eq!(at, RacePoint::RemotePinned);

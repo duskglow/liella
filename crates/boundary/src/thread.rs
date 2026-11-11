@@ -318,14 +318,45 @@ pub(crate) fn is_spare(b: &liella_rt::tls::ThreadBlock) -> bool {
     addr_of(b) == addr_of(&SPARE)
 }
 
-/// Empty words (a new thread's).
+/// D-X.60: `__errno_location` in a process the runtime did not start: the thread's registry
+/// word (0x80 of a block another library made is that library's). The address stays the
+/// thread's for its life, so every read and write through it agrees; with [`SPARE`] (no memory
+/// for the registry) the foreign threads share one word.
+#[cold]
+#[inline(never)]
+pub(crate) fn foreign_errno() -> *mut core::ffi::c_int {
+    foreign_words().errno.as_ptr()
+}
+
+/// D-X.60: the heap's cache word of the calling thread: the block's word in a process the
+/// runtime started, else the registry's; `None` with [`SPARE`] (a cache is never shared, so such
+/// a thread allocates with no cache).
+#[inline]
+pub(crate) fn heap_cache_slot() -> Option<&'static AtomicUsize> {
+    let w = words();
+    (!is_spare(w)).then_some(&w.heap_cache)
+}
+
+/// [`heap_cache_slot`]'s value (0: none) in a process the runtime did not start: the heap's
+/// fast paths read it here instead of the block's word 0x90.
+#[cold]
+#[inline(never)]
+pub(crate) fn foreign_heap_cache() -> usize {
+    heap_cache_slot().map_or(0, |s| s.load(Relaxed))
+}
+
+/// Empty words (a new thread's). The heap cache word is kept: the cache of the block's dead
+/// thread passes to the new one (it has one owner at a time, and is not lost); its `errno`,
+/// destructor list (never run on another thread) and node hint start empty.
 fn clear_words(b: &liella_rt::tls::ThreadBlock) {
-    let words = [&b.thread, &b.locale, &b.ctype_b, &b.ctype_toupper, &b.ctype_tolower, &b.res, &b.view];
+    let words = [&b.thread, &b.locale, &b.ctype_b, &b.ctype_toupper, &b.ctype_tolower, &b.res, &b.view, &b.tls_dtors];
     for w in words.into_iter().chain(&b.lconv).chain(&b.cache) {
         w.store(0, Relaxed);
     }
     b.flags.store(0, Relaxed);
     b.h_errno.store(0, Relaxed);
+    b.errno.store(0, Relaxed);
+    b.node.store(0, Relaxed);
 }
 
 /// A hash of a thread pointer: a chunk index to start probing at.

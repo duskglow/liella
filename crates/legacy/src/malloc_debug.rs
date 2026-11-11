@@ -348,7 +348,7 @@ impl Debug {
     /// among the [`PROBE`] its key hashes to, else (all taken) it shares the first of them. O(1).
     fn ring<'w, P: Pages>(pages: &P, w: &'w [AtomicUsize]) -> Option<&'w [AtomicUsize]> {
         // The address of the thread's heap cache word: distinct for every live thread.
-        let key = core::ptr::from_ref(pages.cache_slot()).addr();
+        let key = pages.cache_slot().map_or(0, |s| core::ptr::from_ref(s).addr());
         let h = (key >> 6).wrapping_mul(0x9e37_79b9_7f4a_7c15).wrapping_shr(usize::BITS.wrapping_sub(RINGS.trailing_zeros()));
         let at = |i: usize| {
             let k = i.wrapping_rem(RINGS).wrapping_mul(RING_WORDS);

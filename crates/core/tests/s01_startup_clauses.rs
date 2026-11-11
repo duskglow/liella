@@ -416,9 +416,9 @@ impl Pages for NoPages {
     fn words(&self, _: usize, _: usize) -> &[std::sync::atomic::AtomicU64] {
         &[]
     }
-    fn cache_slot(&self) -> &std::sync::atomic::AtomicUsize {
+    fn cache_slot(&self) -> Option<&std::sync::atomic::AtomicUsize> {
         static SLOT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-        &SLOT
+        Some(&SLOT)
     }
 }
 

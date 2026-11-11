@@ -349,7 +349,7 @@ unsafe fn small_copy(d: *mut u8, s: *const u8, n: usize) {
 /// Proof: the C ABI (spec Appendix C.9) guarantees a valid, aligned `int` for the calling
 /// thread's lifetime; it is only ever accessed as an atomic here, and the returned reference
 /// is used at once by the caller (never stored).
-pub(crate) fn errno_cell<'a>(p: *mut i32) -> Option<&'a AtomicI32> {
+pub fn errno_cell<'a>(p: *mut i32) -> Option<&'a AtomicI32> {
     if p.is_null() {
         return None;
     }

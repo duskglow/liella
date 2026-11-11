@@ -91,14 +91,15 @@ impl Pages for KernelPages {
     fn shard(&self) -> usize {
         node_hint()
     }
-    fn cache_slot(&self) -> &AtomicUsize {
-        &crate::tb::current().heap_cache
+    fn cache_slot(&self) -> Option<&AtomicUsize> {
+        crate::thread::heap_cache_slot()
     }
     #[inline(always)]
     fn cache_word(&self) -> usize {
         // HEAP-CUTS2 C4: one `%fs`-relative load (plan S2 category tb-field) instead of the
-        // out-of-line thread-pointer call and the load through it.
-        crate::tb::read::<crate::tb::HeapCache>()
+        // out-of-line thread-pointer call and the load through it. D-X.60: only in a process
+        // the runtime started; elsewhere 0x90 is another library's word, and the registry's.
+        if crate::thread::owned() { crate::tb::read::<crate::tb::HeapCache>() } else { crate::thread::foreign_heap_cache() }
     }
     fn address_limit(&self) -> Option<usize> {
         // `RLIMIT_AS` (9); `RLIM_INFINITY` is none.
@@ -150,7 +151,8 @@ fn map_aligned_exactly(len: usize, align: usize, node: Option<u32>) -> Option<us
 /// slab: the vDSO `getcpu` (no system call), remembered in the thread block as node + 1 for
 /// the next slow path. A thread that migrates is noticed at its next slow path.
 fn node_hint() -> usize {
-    let tb = crate::tb::current();
+    // D-X.60: the calling thread's words (0x98 is another library's in a block it made).
+    let tb = crate::thread::words();
     match CSys.getcpu() {
         Ok((_, node)) => {
             tb.node.store(node.saturating_add(1), Relaxed);

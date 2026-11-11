@@ -236,7 +236,13 @@ pub fn current() -> &'static ThreadBlock {
 
 /// `__errno_location()`: the address of this thread's `errno` (spec §2.1, D-2.1).
 pub fn errno_location() -> *mut c_int {
-    core::ptr::with_exposed_provenance_mut(tp().wrapping_add(ERRNO_OFFSET))
+    // D-X.60: the block's word only in a process the runtime started; elsewhere 0x80 is another
+    // library's word and the thread's `errno` is its registry word (stable for its life).
+    if crate::thread::owned() {
+        core::ptr::with_exposed_provenance_mut(tp().wrapping_add(ERRNO_OFFSET))
+    } else {
+        crate::thread::foreign_errno()
+    }
 }
 
 /// The descriptor at `addr` (D-22.9). Crate-private contract (as `crate::raw`): `addr` comes

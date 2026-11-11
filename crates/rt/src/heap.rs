@@ -83,13 +83,16 @@ pub trait Pages {
         0
     }
     /// The calling thread's cache word (the address of its cache, 0 for none yet). Each
-    /// thread has its own; the heap is the only writer.
-    fn cache_slot(&self) -> &AtomicUsize;
-    /// `cache_slot().load(Relaxed)`: the fast paths' read of the cache word. An implementation
-    /// may read it more directly (the boundary: one thread-pointer-relative load, HEAP-CUTS2 C4).
+    /// thread has its own; the heap is the only writer. `None`: the thread has no word of its
+    /// own (D-X.60: a thread another library made whose words could not be placed), so it runs
+    /// with no cache: a cache is never shared by two threads.
+    fn cache_slot(&self) -> Option<&AtomicUsize>;
+    /// `cache_slot()`'s value, 0 for none: the fast paths' read of the cache word. An
+    /// implementation may read it more directly (the boundary: one thread-pointer-relative load,
+    /// HEAP-CUTS2 C4).
     #[inline(always)]
     fn cache_word(&self) -> usize {
-        self.cache_slot().load(Relaxed)
+        self.cache_slot().map_or(0, |s| s.load(Relaxed))
     }
     /// The process's address-space limit in bytes (`RLIMIT_AS`), `None` for none. Asked once,
     /// before the heap's first reservation: its registries are sized to fit (T14).
@@ -1055,7 +1058,7 @@ impl Heap {
     /// The calling thread's cache, taking a parked one or making one on first use.
     #[inline]
     fn cache<'p, S: Sys, P: Pages>(&self, sys: &S, pages: &'p P) -> Option<Cache<'p>> {
-        match pages.cache_slot().load(Relaxed) {
+        match pages.cache_slot()?.load(Relaxed) {
             0 => self.first_cache(sys, pages),
             addr => Self::cache_of(pages, addr),
         }
@@ -1088,13 +1091,14 @@ impl Heap {
 
     #[cold]
     fn first_cache<'p, S: Sys, P: Pages>(&self, sys: &S, pages: &'p P) -> Option<Cache<'p>> {
+        let slot = pages.cache_slot()?;
         let shard = pages.shard() % SHARDS;
         let id = self
             .unpark(sys, pages, shard)
             .or_else(|| self.new_cache(sys, pages, shard))
             .or_else(|| self.unpark_elsewhere(sys, pages, shard))?;
         let k = self.cache_at(pages, id)?;
-        pages.cache_slot().store(self.cache_addr(pages, id), Relaxed);
+        slot.store(self.cache_addr(pages, id), Relaxed);
         Some(k)
     }
 
@@ -1156,8 +1160,8 @@ impl Heap {
     /// Park the calling thread's cache (its thread is exiting): its large blocks are unmapped,
     /// its slabs stay with it, and the next new thread on its shard takes it over (D-3.11).
     pub fn park<S: Sys, P: Pages>(&self, sys: &S, pages: &P) {
-        if let Some(c) = Self::own_cache(pages) {
-            pages.cache_slot().store(0, Relaxed);
+        if let (Some(c), Some(slot)) = (Self::own_cache(pages), pages.cache_slot()) {
+            slot.store(0, Relaxed);
             self.park_cache(sys, pages, &c);
         }
     }
