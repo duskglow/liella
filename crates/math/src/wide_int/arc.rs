@@ -181,8 +181,23 @@ fn root_seed(w: u128, hw: impl Fn(f64) -> f64) -> (u64, f64) {
     let wd = (w >> 74) as i64 as f64; // w' = ⌊w/2^74⌋, in [2^52, 2^54)
     let iw = TWO90 / wd;
     let r = hw(wd); // √w', in [2^26, 2^27]
-    let s0 = (r * TWO37) as u64; // saturates at 2^64 − 1 when w is just below 2^128
+    let s0 = big_u64(r * TWO37); // 2^64 − 1 when the root rounds to 2^27 (w just below 2^128)
     (s0, r * iw) // 2^90/r = 2^127/s0
+}
+
+/// `v as u64` for an integer-valued `v` in `[2^52, 2^64]` (`2^64` gives `2^64 − 1`, as `as` saturates),
+/// read from the bits: no SSE conversion. `as u64` of a value at or above `2^63` converts it
+/// signed first, which overflows and raises the invalid flag in MXCSR on every call; the
+/// envelope's exit drops that flag again with an MXCSR write, and on Ivy Bridge the next call's
+/// MXCSR read then stalls in microcode (LIBM-LD-ARC-RETHINK-2's attribution: ~58 microcode uops a
+/// call, successive asinl calls no longer overlapping). The root's seed `s0` and its reciprocal
+/// lie in `[2^63, 2^64]` on every call.
+#[inline(always)]
+fn big_u64(v: f64) -> u64 {
+    let b = v.to_bits();
+    let sh = ((b >> 52) as u32).wrapping_sub(1075); // v = m·2^sh, sh in [0, 12]
+    let m = (b & ((1 << 52) - 1)) | (1 << 52);
+    if sh >= 12 { u64::MAX } else { m << sh }
 }
 
 /// Step 2: `√w·2^64` for `w` in `[2^126, 2^128 − 2^60]` (no overflow of the result), and the
@@ -190,7 +205,7 @@ fn root_seed(w: u128, hw: impl Fn(f64) -> f64) -> (u64, f64) {
 fn sqrt(w: u128, hw: impl Fn(f64) -> f64) -> (u128, f64) {
     let (s0, vd) = root_seed(w, hw);
     let r = w.wrapping_sub(u128::from(s0) * u128::from(s0)) as i128; // w − s0², |r| < 2^78
-    let c = mul_wide(r.unsigned_abs(), vd as u64); // r·2^63/s0
+    let c = mul_wide(r.unsigned_abs(), big_u64(vd)); // r·2^63/s0 (vd in [2^63, 2^64])
     let s = u128::from(s0) << 64;
     (if r < 0 { s - c } else { s + c }, vd)
 }
@@ -282,7 +297,9 @@ fn atan2_approx(b: &Num, a: &Num) -> Option<(bool, Val)> {
 }
 
 /// `√(1 − a²)` for `0 < a < 1` (step 5), its index scale ([`inv_top`] from the root's own
-/// reciprocal: no `divsd` after the root) and whether `a < √(1 − a²)`.
+/// reciprocal: no `divsd` after the root) and whether `a < √(1 − a²)`. Inlined into its two
+/// callers (asinl, acosl): out of line it costs a call and the spills around it.
+#[inline(always)]
 fn root_one_minus_sq(a: Val, hw: impl Fn(f64) -> f64) -> Option<(Val, f64, bool)> {
     if a.e > -128 {
         return None; // a >= 1
@@ -595,6 +612,22 @@ mod tests {
         }
         eprintln!("arc: worst root error 2^{:.1}", root_worst.log2());
         eprintln!("arc: worst quotient error 2^{:.1}", worst.log2());
+    }
+
+    /// `big_u64` is `as u64` on its whole domain `[2^52, 2^64]` (no spec clause: the root's
+    /// conversion without SSE flags, step 2): every binade's ends, random significands, `2^64`.
+    #[test]
+    fn big_u64_is_the_saturating_conversion() {
+        let mut g = Rng(0x5eed_0b16_u64);
+        let mut vs = vec![2f64.powi(64)];
+        for e in 52..64 {
+            let lo = 2f64.powi(e);
+            vs.extend([lo, lo * (2.0 - f64::EPSILON)]);
+            vs.extend((0..64).map(|_| f64::from_bits(lo.to_bits() | g.next() >> 12)));
+        }
+        for v in vs {
+            assert_eq!(big_u64(v), v as u64, "big_u64({v:e})");
+        }
     }
 
     #[derive(Clone, Copy, Debug, PartialEq)]
