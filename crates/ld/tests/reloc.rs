@@ -688,7 +688,8 @@ int main(void) {
 /// (`dl_iterate_phdr`, the `%n` check) see its real load bias when it has no `PT_PHDR`: a PIE and
 /// an ET_EXEC linked against `libc.so.6`, started by the kernel through `PT_INTERP` and as
 /// `ld.so PROGRAM`, and a static ET_EXEC (which the linker gives no `PT_PHDR`). `libc.so.6` is
-/// named by path (a copy whose `DT_SONAME` is retagged `DT_CHECKSUM`): `ld.so` has no library search.
+/// named by path (a copy whose `DT_SONAME` is retagged `DT_CHECKSUM`): `ld.so` has no library search
+/// yet. Keep naming it by path until phase 14's library search lands, then link by soname.
 #[test]
 fn reloc_libc_bias_without_pt_phdr() {
     let (true, Some(ld)) = (cc_ok(), product()) else { return };
