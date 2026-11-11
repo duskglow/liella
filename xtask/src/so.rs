@@ -1030,7 +1030,7 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     // the 64-byte entries (D-4.33), the classed pages' XREF bias (D-X.34), the hot kernels' jumps off 32-byte
     // boundaries (D-4.67) and no build path in any product (PRODUCT-PATH-REMAP).
     // STARTUP-TEXT-WINDOWS (D-X.49) reads its budget for this profile.
-    // LAYOUT-FAULT-CONTRACTS (D-X.65): the regen build (`--hottext-regen`) reports a broken contract and
+    // LAYOUT-FAULT-CONTRACTS (D-X.65): the regen build (`hottext::REGEN_FLAG`) reports a broken contract and
     // goes on, since a contract never blocks the tool that restores it; the plain `so` after the regen enforces.
     if let Some(report) = crate::layout::regen_verdict(crate::layout::check_products(root, &release, Some(profile.name())), crate::hottext::regen_on())? {
         eprintln!("{report}");

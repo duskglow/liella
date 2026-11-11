@@ -412,12 +412,12 @@ fn check_one(c: &Contract, pr: &mut Products) -> Result<String, Vec<String>> {
 /// Check every contract on the products in `dir` (built with `profile`, when known); one line per contract, every
 /// failure listed.
 /// LAYOUT-FAULT-CONTRACTS (D-X.65): the verdict of [`check_products`] in a build. The regen build
-/// (`regen = true`, `cargo xtask so --hottext-regen`) turns a broken contract into a report and goes on, since
+/// (`regen = true`, `so` with `hottext::REGEN_FLAG`) turns a broken contract into a report and goes on, since
 /// a contract must never block the tool that restores it; every other build fails. `Ok(Some(report))`: print it.
 pub fn regen_verdict(checked: Result<(), String>, regen: bool) -> Result<Option<String>, String> {
     match checked {
         Ok(()) => Ok(None),
-        Err(e) if regen => Ok(Some(format!("so: --hottext-regen: {e} (reported, not enforced: the plain `cargo xtask so` after the regen enforces it)"))),
+        Err(e) if regen => Ok(Some(format!("so: hot-text regen build: {e} (reported, not enforced: the plain `cargo xtask so` after the regen enforces it)"))),
         Err(e) => Err(e),
     }
 }
