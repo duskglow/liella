@@ -323,6 +323,9 @@ pub fn early_init(info: usize) {
     let aux = Auxv::from_words(unsafe { conv::words_at(info.auxv, auxv_words) });
     crate::sys::set_sysinfo_ehdr(aux.get(AT_SYSINFO_EHDR).and_then(|v| usize::try_from(v).ok()).unwrap_or(0));
     publish(info.argv, info.argc, info.envp, info.stack_end);
+    // The loader registered the initial thread's rseq area (it honoured `glibc.pthread.rseq`):
+    // threads this library creates register theirs at the same offset (D-27.26).
+    crate::thread::set_loader_rseq(info.rseq_size != 0);
     // The tunables without diagnostics (`ld.so` read the string already).
     let secure = aux.get(AT_SECURE).is_some_and(|v| v != 0);
     let tunables = process::getenv(crate::startup_names::GLIBC_TUNABLES).map_or(Tunables::default(), |v| Tunables::parse(strz::env_value(v), secure));
