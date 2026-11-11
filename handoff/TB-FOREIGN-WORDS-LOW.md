@@ -22,12 +22,30 @@ OwnPages, errno in tp.S), #4849 (hand rename of the errno hot-text key), #4851 (
 ## Results (keke:~/w/n1)
 - tb-foreign-words-low-3-lint0 (inherited 455d48a6f): clippy + static rc 0; `xtask so` red, 7 keys (above).
 - tb-foreign-words-low-3-basebuild: next 1ce5e4a39 and merge-base ca8aa835a products BUILD-OK.
-- tb-foreign-words-low-3-lint1 (34ec7567d): release build red on Caller::new only (the 5 others back).
-- RESULTS-FINAL
+- tb-foreign-words-low-3-lint1 (34ec7567d): clippy, static green; release build red on Caller::new only.
+- tb-foreign-words-low-3-lint2 (bb64bc056): same (the `#[inline(never)]` theory was wrong).
+- **Caller::new: real cause found and fixed (fb0a75d38).** v0 mangling numbers a module's impls in source order;
+  -2's `impl Pages for OwnPages` inserted before `impl Caller` renamed it Ms1_ -> Ms2_. The impl now goes last
+  in heap.rs; `#[inline(never)]` dropped. tb-foreign-words-low-3-lint3 (17a53373e): clippy, static, records
+  check, release `so` GREEN; fast `so` red. tb-foreign-words-low-3-plants2: rc 2, baseline (fast `so`) red.
+- **Still open: 5 keys absent in the FAST profile only** (TscGate::fresh, intl::bind, Sys::wait4 for
+  CSysImpl<true>, intl::textdomain, the NsCache::attach closure). lint0's list was fast-profile; lint1/2/3 built
+  release first, so release may never have lacked them. **NOT VERIFIED that the errno_inline change (34ec7567d)
+  does anything for them**: it does not restore them in fast. Fast is thin LTO, 16 CGUs: likely CGU partitioning
+  of these CSysImpl generics, moved by this branch's code (next and the merge-base match them in fast).
+- Gate, percall: not run on this head (the chain stops at the red products build).
 
 ## Not done (next run, in this order)
-1. If anything above is red: fix it, rerun only that job.
-2. The foreign-loader probe (D-22.10 harness) for errno: not started.
+1. Fast-profile keys: look for another mangling or placement shift like Caller's first (cheap): which of this
+   chain's edits sit in the modules or generic paths of those 5 (boundary sys.rs CSysImpl, legacy intl,
+   recheck, nscache); compare the fast build's symbol names for them (`nm` on ~/w/<role>/target/liella/libc.a
+   right after `cargo xtask so`, grep `5wait4`, `4intl4bind`) with the keys. If they exist under another name it
+   is a rename (fix in code, as with Caller); if inlined, decide errno_inline's fate (keep: it saves the Rust
+   errno paths a call per store, #4779; or revert) and raise RULING NEEDED for absent lines.
+2. Then gate (`cargo xtask affected --run --base origin/next`), plants (7 plants, all must be CAUGHT), percall
+   (`bash validation/wl_percall.sh --spec validation/percall/foreign_words.c .`; merge-base ca8aa835a primed and
+   built on keke).
+3. The foreign-loader probe (D-22.10 harness) for errno: not started.
 
 ## Not to redo
 The 0x80-0x9b audit table of -1, the registry words, the FOREIGN/OwnPages/asm design, the next/merge-base hot-text

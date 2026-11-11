@@ -1,0 +1,12 @@
+{"task": "TB-FOREIGN-WORDS-LOW-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: release products build green (errno key renamed per #4849; Caller::new key restored by keeping heap.rs impl numbering); 5 hot-text keys still absent in the fast profile only; SPARE hook, test and plants written; gate/plants/percall not green",
+ "branch": "task/tb-foreign-words-low-3", "head": null,
+ "gate": {"affected": "not run on final head (fast products build red)", "peak": null}, "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["origin/next 1ce5e4a39 and merge-base ca8aa835a both build fast products with every hot-text key matched: the absent keys are this branch's, not next's jitter",
+                   "v0 mangling numbers a module's impls in source order: inserting an impl renames the keys of every later impl's functions in the hot-text list (Caller::new, Ms1_ -> Ms2_)"],
+ "refused": [],
+ "jobs": ["tb-foreign-words-low-3-lint3", "tb-foreign-words-low-3-plants2"],
+ "improvement": "xtask so could print, for each unmatched key, the nearest symbol in the archive that differs only in the impl disambiguator (Ms<n>_): two runs went into inlining theories for what was a renumbered impl",
+ "next_step": "check whether the 5 fast-profile keys exist under another mangled name (rename -> fix in code) or are inlined (then decide errno_inline and ask for absent lines), then gate, plants, percall",
+ "report_file": "handoff/TB-FOREIGN-WORDS-LOW.md"}
