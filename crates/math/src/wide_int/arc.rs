@@ -97,12 +97,18 @@ const A3: u128 = 0xaaaaaaaa_aaaaaaaa_aaaaaaaa_aaaaaaab; // 1/3, units 2^-129
 /// `atan x` rounded into `F` in `mode` when the tier decides it; `None` sends the caller to the
 /// 384-bit route. `x` finite and nonzero (the caller settles `|x| < 2^-34`).
 pub(crate) fn atan<F: Float>(n: &Num, mode: Rounding) -> Option<(F, Status)> {
+    if F::PREC == 113 {
+        return super::quad::arc::atan::<F>(n, mode); // binary128: three limbs (D-10.96)
+    }
     finish::<F>(|| atan_approx(n), mode)
 }
 
 /// `atan2(y, x)` for finite nonzero `y`, `x` (the caller settles zeros, infinities and
 /// `|y/x| < 2^-72` with `x > 0`).
 pub(crate) fn atan2<F: Float>(y: &Num, x: &Num, mode: Rounding) -> Option<(F, Status)> {
+    if F::PREC == 113 {
+        return super::quad::arc::atan2::<F>(y, x, mode); // binary128: three limbs (D-10.96)
+    }
     finish::<F>(|| atan2_approx(y, x), mode)
 }
 
@@ -385,7 +391,7 @@ fn tan_approx(n: &Num) -> Option<(bool, Val)> {
 }
 
 /// `atan(j/128)` for `j = 1..=128` (row `j - 1`), in units of `2^-128`.
-const ATAN_J: [u128; 128] = [
+pub(super) const ATAN_J: [u128; 128] = [
     0x01fffd55_5bbba972_d00c46a3_f77cc15f,
     0x03ffeaab_776e5356_ef9e3159_0057dd81,
     0x05ffb806_12970d6b_ce7603f5_cab5251c,

@@ -340,7 +340,7 @@ fn run(sp: usize, prog: &start::Program, bias: usize, page: u64, path: usize) ->
         if start::needs_objects(dyn_words) {
             // The program's name in messages: its path (`ld.so PROGRAM`), else argv[0].
             let at = if path != 0 { path } else { usize::try_from(stack_word(sp.wrapping_add(8))).unwrap_or(0) };
-            let fini = link(prog, bias, page, if at != 0 { c_string(at) } else { b"the program" }, sp, path == 0);
+            let fini = link(prog, bias, page, if at != 0 { c_string(at) } else { b"the program" }, sp);
             crate::arch::enter(sp, prog.entry, fini)
         }
         let ehdr = bias.wrapping_add(usize::try_from(img.header).unwrap_or(0));
@@ -541,8 +541,8 @@ fn read_image(at: usize, out: &mut [u8]) {
     // UNSAFE(slice): bytes of the mapped program, copied before any relocation store.
     #[allow(unsafe_code)]
     // SAFETY: [at, at + len) is the program header table (`AT_PHDR`, ⚑ KERN), the start of its (whole, readable)
-    // page, or the file-backed part of one readable `PT_LOAD` the kernel or `load` mapped; the slice lives
-    // only for this copy, and nothing stores into the program while it is taken.
+    // page, or the file-backed part of one readable `PT_LOAD` mapped by the kernel, `load`, or (ld.so's own ELF
+    // header, D-27.23) its first PT_LOAD; the slice lives only for this copy, and nothing stores meanwhile.
     out.copy_from_slice(unsafe { conv::bytes_at(at, out.len()) });
 }
 
@@ -554,7 +554,7 @@ fn live_segment(at: usize, len: usize) -> &'static [u8] {
     // SAFETY: the caller checked the range is the file-backed part of a readable PT_LOAD, mapped for the
     // process's lifetime. Live means: not writable, the program is not text-relocated, and no segment the
     // relocator may store into overlaps it; the relocator stores only inside writable segments of such an
-    // object (reloc `inside`), so the bytes do not change while the slice is used (until `link` ends).
+    // object (reloc `inside`; ld.so's own image not at all), so the bytes do not change until `link` ends.
     unsafe { conv::bytes_at(at, len) }
 }
 
@@ -676,19 +676,36 @@ fn parse<'a>(file: &'static [u8], name: &'a [u8], bias: u64) -> liella_ld::reloc
     liella_ld::reloc::Obj { elf, dynm, bias, name, tls: None }
 }
 
+/// The interpreter as an object of the scope (D-27.20), read from its own memory image like the
+/// program ([`image_view`], D-27.23): its ELF header at [`OWN_BASE`] (the first bytes of its first
+/// `PT_LOAD`) gives its program header table; no file is opened. It relocated itself at its start,
+/// so its writable segments already hold their final values and the reader copies those holding a
+/// table before the relocator runs, as for the program. The scratch mappings go to `maps`.
+fn own_object(name: &'static [u8], maps: &mut [(usize, usize)]) -> liella_ld::reloc::Obj<'static> {
+    let base = OWN_BASE.load(Relaxed);
+    let mut header = [0u8; liella_ld::elf::EHDR_SIZE];
+    read_image(base, &mut header);
+    let Some((phoff, phnum)) = boot::own_headers(&header) else { fail_with(&[name, b": malformed program headers\n"], program::FAILURE) };
+    let me = start::Program { phdr: base.wrapping_add(usize::try_from(phoff).unwrap_or(usize::MAX)), phnum, entry: 0 };
+    let (head, view) = image_view(&me, base, name, maps);
+    let elf = liella_ld::elf::Elf::from_image::<Native>(head, view).unwrap_or_else(|_| fail_with(&[name, b": malformed program headers\n"], program::FAILURE));
+    let dynm = elf.dynamic().ok().flatten().unwrap_or_else(|| fail_with(&[name, b": no valid dynamic section\n"], program::FAILURE));
+    liella_ld::reloc::Obj { elf, dynm, bias: u64::try_from(base).unwrap_or(0), name, tls: None }
+}
+
 /// Load the program's dependencies (by path; DL-8 adds the search), check their versions, relocate
 /// everything and protect the RELRO pages (DL-10, design §6, D-27.17). The program is read from its
 /// memory image ([`image_view`], ruling #4229, D-27.18), never from its file; `name` names it in
-/// messages (its path for `ld.so PROGRAM`, else `argv[0]`); `kernel_started` is false for
-/// `ld.so PROGRAM` (it picks the interpreter's own file, D-27.20).
+/// messages (its path for `ld.so PROGRAM`, else `argv[0]`).
 // Indices stay below `n`, which never passes OBJECTS_MAX (checked before each store).
 #[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
-fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: usize, kernel_started: bool) -> usize {
+fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: usize) -> usize {
     use liella_ld::reloc::{self, Obj, Objects};
-    const SELF_EXE: &[u8] = b"/proc/self/exe\0";
     let mut maps = [(0usize, 0usize); OBJECTS_MAX];
-    let mut own = [(0usize, 0usize); 3];
-    let (head, view) = image_view(prog, bias, name, &mut own);
+    // The scratch mappings of the two image views: the program's, then the interpreter's own.
+    let mut views = [(0usize, 0usize); 6];
+    let (prog_views, own_views) = views.split_at_mut(3);
+    let (head, view) = image_view(prog, bias, name, prog_views);
     // The program's own file is not known (no file is read): (dev, ino) that no file has.
     let mut ids: [FileId; OBJECTS_MAX] = [(u64::MAX, u64::MAX); OBJECTS_MAX];
     let image = liella_ld::elf::Elf::from_image::<Native>(head, view).unwrap_or_else(|_| fail_with(&[name, b": malformed program headers\n"], program::FAILURE));
@@ -698,7 +715,7 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
     let mut n = 1usize;
     let mut q = 0usize;
     // The interpreter itself, when an object names it (`__tls_get_addr`): already relocated, in the
-    // scope with its exports, never relocated again (D-27.20).
+    // scope with its exports, never relocated again (D-27.20); read from its memory image.
     let mut interp: Option<usize> = None;
     // The DT_NEEDED links (dependent, dependency) in the order each object names them (DL-11).
     let mut edges = [(0u8, 0u8); EDGES_MAX];
@@ -721,16 +738,9 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
                 if n == OBJECTS_MAX {
                     fail_with(&[name, b": too many objects\n"], program::FAILURE);
                 }
-                // Its file: the program's PT_INTERP path when the kernel started the program, else the
-                // running executable (ld.so started as a program). Both strings are NUL-terminated.
-                let own_path = if kernel_started { objs[0].elf.interp().ok().flatten().map_or(0, |p| p.as_ptr().expose_provenance()) } else { SELF_EXE.as_ptr().expose_provenance() };
-                let Some((fd, at, file, id)) = (own_path != 0).then(|| open_file(own_path)).flatten() else { fail_with(&[name, b": cannot read the interpreter's own file\n"], program::FAILURE) };
-                let _ = crate::ffi_sys::liella_sys_close(i64::from(fd));
-                maps[n] = (at, file.len());
-                ids[n] = id;
-                objs[n] = parse(file, name, u64::try_from(OWN_BASE.load(Relaxed)).unwrap_or(0));
-                interp = Some(n);
+                objs[n] = own_object(name, own_views);
                 edge(q, n, name);
+                interp = Some(n);
                 n += 1;
                 continue;
             }
@@ -797,6 +807,12 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
     for (s, o) in syms.iter_mut().zip(objs).skip(1) {
         *s = liella_ld::symbols::Object::new(o.dynm).unwrap_or_else(|_| fail_with(&[o.name, b": malformed symbol tables\n"], program::FAILURE));
     }
+    // The C library's private interface (LIELLA_PRIVATE, L14-10, D-27.22): a library from another
+    // build is refused before any of its code runs or any relocation is applied.
+    let early = start::private::find(objs, &syms[..n], interp, |at, out| read_image(usize::try_from(at).unwrap_or(0), out)).unwrap_or_else(|e| {
+        let (start::private::PrivateError::Mismatch(k) | start::private::PrivateError::Malformed(k)) = e;
+        fail_with(&[objs.get(k).map_or(&b"?"[..], |o| o.name), e.message()], program::FAILURE)
+    });
     let global: [usize; OBJECTS_MAX] = core::array::from_fn(|i| i);
     let set = Objects { objs, syms: &syms[..n], global: &global[..n] };
     let mut unique = reloc::UniqueTable::<64, 4096>::default();
@@ -817,10 +833,10 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
     install_tls(&mods[..n], &biases[..n], &placed[..n], &area);
     // The interpreter, when in the list, ran its own start already: no hooks of its own here.
     let hooks: [init::Hooks; OBJECTS_MAX] = core::array::from_fn(|i| objs.get(i).filter(|_| Some(i) != interp).map_or_else(init::Hooks::default, |o| init::hooks(&o.dynm, o.bias, i == 0)));
-    for &(at, len) in maps[1..n].iter().chain(&own).filter(|m| m.1 != 0) {
+    for &(at, len) in maps[1..n].iter().chain(&views).filter(|m| m.1 != 0) {
         let _ = raw::munmap(at, len);
     }
-    run_init(&hooks[..n], &edges[..ne], sp)
+    run_init(&hooks[..n], &edges[..ne], sp, early.map(|f| f.early_init))
 }
 
 /// Most `DT_NEEDED` links over all objects of one start.
@@ -850,8 +866,10 @@ static FINI_DONE: AtomicBool = AtomicBool::new(false);
 /// [`init::init_order`], each called with `(argc, argv, envp)` from the initial stack at `sp`. The
 /// program's own `DT_INIT`/`DT_INIT_ARRAY` are its C library's start (probe: the reference loader
 /// runs neither). Records the finalisation order for [`fini_all`] and returns its address, the
-/// termination function the program gets in `%rdx`.
-fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize) -> usize {
+/// termination function the program gets in `%rdx`. First of all, `early` (the C library's
+/// `__liella_libc_early_init`, design §14, D-27.22) gets the initial stack, so every constructor,
+/// `.preinit_array` included, sees an initialised C library.
+fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<u64>) -> usize {
     let mut order = [0u8; OBJECTS_MAX];
     let mut fini_order = [0u8; OBJECTS_MAX];
     let (Ok(len), Ok(fini_len)) = (init::init_order(hooks.len(), edges, &mut order), init::fini_order(hooks.len(), edges, &mut fini_order)) else {
@@ -865,6 +883,15 @@ fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize) -> usize {
     let call = |f: u64| {
         let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), a, b, c);
     };
+    if let Some(f) = early {
+        let mut auxv = envp;
+        while stack_word(auxv) != 0 {
+            auxv = auxv.wrapping_add(8);
+        }
+        let info = start::private::StartInfo { argc: usize::try_from(argc).unwrap_or(0), argv, envp, auxv: auxv.wrapping_add(8), stack_end: sp };
+        let at = core::ptr::from_ref(&info).expose_provenance();
+        let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), args(at), 0, 0);
+    }
     // Only the program's preinit array is non-empty (`init::hooks` drops a shared object's).
     for h in hooks {
         init::init_calls(0, array_words(h.preinit)).for_each(call);

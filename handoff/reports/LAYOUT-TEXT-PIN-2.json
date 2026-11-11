@@ -1,0 +1,13 @@
+{"task": "LAYOUT-TEXT-PIN-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: rodata-3 merged (STARTUP-DATA-WINDOWS passes), coldbss on ELF headers with rename read-back checks, rebind split (padding 158,081 -> 104,915 B); fast localtime 21 > bound 20",
+ "branch": "task/layout-text-pin-2", "head": null,
+ "gate": {"affected": "not run (hot_text_products fast: 16 passed / 2 failed, localtime + lt_mktime)", "peak": null},
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["startup_ro.rs keeps its own ar/ELF readers; could reuse hottext::ar_members/elf_headers after both land", "so.rs::sections_of still reads readelf -SW"],
+ "refused": [],
+ "improvement": "A per-host baseline of each stacked branch (here rodata-3 alone on shiki) before measuring the stack would have told at once whether the localtime +1 is this branch's.",
+ "next_step": "Measure rodata-3 alone and next on shiki (localtime), fault-map localtime on V1, fix within bound 20; then release counts, direct gate, plants.",
+ "report_file": "handoff/LAYOUT-TEXT-PIN-2.md",
+ "superseded": ["layout-text-pin-2-lint0 (inherited head)", "layout-text-pin-2-v0-fast (wrong so flag)", "layout-text-pin-2-v0-fast-2 (V0 variant, replaced by the split)"],
+ "jobs": ["layout-text-pin-2-v1-fast", "layout-text-pin-2-plants"]}

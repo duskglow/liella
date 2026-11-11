@@ -299,6 +299,56 @@ fn addr0(f: Fn0) -> usize {
     f as usize
 }
 
+/// Start step 3 for [`early_init`]: `environ`, the arguments (the native interface's), the program
+/// names and `__libc_stack_end`, as [`start`] publishes them (kept apart so the static start's code
+/// and its hot-text keys stay as they are; DL-14 makes `start` skip its copy under Liella's `ld.so`).
+fn publish(argv_addr: usize, n_args: usize, envp: usize, stack_end: usize) {
+    ffi::environ.store(envp, Release);
+    process::ARGV.store(argv_addr, Release);
+    process::ARGC.store(n_args, Release);
+    if n_args > 0 {
+        // UNSAFE(slice): argv[0] and its text.
+        #[allow(unsafe_code)]
+        // SAFETY: argv has argc entries before its NULL (⚑ KERN).
+        let argv0 = unsafe { conv::words_at(argv_addr, 1) }.first().and_then(|&p| usize::try_from(p).ok()).unwrap_or(0);
+        // UNSAFE(slice): the text of argv[0].
+        #[allow(unsafe_code)]
+        // SAFETY: argv[0] is NULL or a NUL-terminated string on the initial stack.
+        let name = unsafe { strz::strz(core::ptr::with_exposed_provenance(argv0)) }.unwrap_or(&[]);
+        let short = start::short_name(name);
+        ffi::program_invocation_name.store(argv0, Release);
+        ffi::program_invocation_short_name.store(argv0.wrapping_add(name.len().saturating_sub(short.len())), Release);
+    }
+    ffi::__libc_stack_end.store(stack_end, Release);
+}
+
+/// `__liella_libc_early_init` (`LIELLA_PRIVATE`, plan/ph14/design.md §14, D-27.22): Liella's
+/// `ld.so` calls it after relocation and before any constructor, `.preinit_array` included, so
+/// constructors see an initialised C library: the auxiliary vector, steps 3 and 4 (`environ`, the
+/// program names, `__libc_stack_end`, the tunables and the CPU paths). The NULL-folding guard is
+/// decided at the first small copy or fill (`dispatch::resolve_fold`). `__libc_start_main` runs
+/// the same steps again with the same values (DL-14 makes it skip them).
+pub fn early_init(info: usize) {
+    // UNSAFE(slice): the start description `ld.so` passes.
+    #[allow(unsafe_code)]
+    // SAFETY: `ld.so` passes the address of a live, aligned `StartInfo` on its stack for the call
+    // (design §14); NULL is ignored.
+    let Some(info) = (unsafe { core::ptr::with_exposed_provenance::<liella_rt::start::private::StartInfo>(info).as_ref() }) else { return };
+    let auxv_words = count_auxv(info.auxv);
+    process::AUXV_WORDS.store(auxv_words, Release);
+    process::AUXV_ADDR.store(info.auxv, Release);
+    // UNSAFE(slice): the auxiliary vector, measured above.
+    #[allow(unsafe_code)]
+    // SAFETY: `count_auxv` measured these words on the initial stack `ld.so` describes.
+    let aux = Auxv::from_words(unsafe { conv::words_at(info.auxv, auxv_words) });
+    crate::sys::set_sysinfo_ehdr(aux.get(AT_SYSINFO_EHDR).and_then(|v| usize::try_from(v).ok()).unwrap_or(0));
+    publish(info.argv, info.argc, info.envp, info.stack_end);
+    // The tunables without diagnostics (`ld.so` read the string already).
+    let secure = aux.get(AT_SECURE).is_some_and(|v| v != 0);
+    let tunables = process::getenv(crate::startup_names::GLIBC_TUNABLES).map_or(Tunables::default(), |v| Tunables::parse(strz::env_value(v), secure));
+    let _ = cpu::init_with(&tunables);
+}
+
 /// `__libc_start_main(main, argc, argv, init, fini, rtld_fini, stack_end)`; with `PIE`, the
 /// static-PIE start `liella-rcrt1.o` calls (`liella_start_main_static_pie`, D-27.10).
 pub fn start<const PIE: bool>(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Option<Fn0>, fini: Option<Fn0>, rtld_fini: Option<Fn0>, stack_end: *mut c_void) -> ! {
