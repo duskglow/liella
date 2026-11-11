@@ -665,7 +665,8 @@ fn without_pt_phdr(ld: &Path, d: &Path, p: &Path, name: &str) {
 /// 1 when `dl_iterate_phdr`'s first object has another `dlpi_addr`; a `%n` in a read-only format
 /// passed to `__printf_chk` aborts (the fortify check places the format by that bias, D-12.4) when
 /// the bias is wrong.
-const LIBC_BIAS_PROG: &str = "#include <elf.h>
+const LIBC_BIAS_PROG: &str = "#define _GNU_SOURCE
+#include <elf.h>
 #include <link.h>
 #include <stdint.h>
 #include <sys/auxv.h>
