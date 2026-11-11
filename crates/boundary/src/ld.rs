@@ -446,6 +446,17 @@ fn install_tls(mods: &[Option<Module>], biases: &[u64], placed: &[Option<Placed>
     }
 }
 
+/// `__libc_stack_end` (spec §1.1, §27.4; exported by `ld.so` at `GLIBC_2.2.5`, R14-12, D-27.20):
+/// the initial stack pointer, stored by [`link`] before any object is relocated, so a program's COPY
+/// relocation of it carries the value. `libc.so.6` keeps its own local copy, which its start
+/// publishes from the same stack pointer (`StartInfo::stack_end`). Unmangled only in the `ld.so`
+/// product: a build with `runtime` takes the C library's definition (`adapter/runtime.c`).
+// UNSAFE(export): a C data symbol needs an unmangled name; the loader defines it once.
+#[cfg_attr(not(feature = "runtime"), unsafe(no_mangle))]
+#[allow(unsafe_code)]
+#[allow(non_upper_case_globals)]
+pub static __libc_stack_end: AtomicUsize = AtomicUsize::new(0);
+
 /// `__tls_get_addr` (spec §22.6, s22_6_c_4; exported by `ld.so` at `GLIBC_2.3`): the address of
 /// `ti->offset` in module `ti->module`'s block for the calling thread. `ti` points at a `tls_index`
 /// (two words: module ID, offset; x86-64 psABI §3.4.6). DL-12: static modules only; any other answer
@@ -702,6 +713,8 @@ fn own_object(name: &'static [u8], maps: &mut [(usize, usize)]) -> liella_ld::re
 #[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
 fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: usize) -> usize {
     use liella_ld::reloc::{self, Obj, Objects};
+    // Before any relocation: a program's COPY relocation of `__libc_stack_end` copies this value.
+    __libc_stack_end.store(sp, Relaxed);
     let mut maps = [(0usize, 0usize); OBJECTS_MAX];
     // The scratch mappings of the two image views: the program's, then the interpreter's own.
     let mut views = [(0usize, 0usize); 6];

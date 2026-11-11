@@ -1140,7 +1140,7 @@ fn run_ld(root: &Path, cargo: &str, cc: &str, profile: Profile) -> Result<(), St
 
 /// The symbols the interpreter exports (DL-12, D-27.20), each at the version `spec/abi/versions.tsv`
 /// gives it for the interpreter's soname; every other symbol stays local.
-const LD_EXPORTS: &[&str] = &["__tls_get_addr"];
+const LD_EXPORTS: &[&str] = &["__libc_stack_end", "__tls_get_addr"];
 
 /// The interpreter's version script: one node per version of [`LD_EXPORTS`], everything else local.
 fn ld_version_script(root: &Path, soname: &str) -> Result<String, String> {
