@@ -1,4 +1,4 @@
 # LAYOUT-DATA-CLUSTERS-4C plants: the one-bound, PT_LOAD-first program header scan (crates/rt/src/start.rs `program`).
-ldc4c-load-skip | crates/rt/src/start.rs | s/if ty == PT_LOAD \{/if ty != PT_LOAD {/ | cargo test -p liella-rt --lib start:: | msg:program_headers_give_the_tls_image_and_the_bias.*FAILED|panicked
-ldc4c-phnum | crates/rt/src/start.rs | s/phnum\.min\(words\.len\(\)/usize::MAX.min(words.len()/ | cargo test -p liella-rt --lib start:: | msg:phnum limits the headers read
-ldc4c-whole | crates/rt/src/start.rs | s/words\.len\(\) \/ PHDR_WORDS\)\.wrapping_mul/words.len()).wrapping_mul/ | cargo test -p liella-rt --lib start:: | msg:program_headers_give_the_tls_image_and_the_bias.*FAILED|panicked
+ldc4c-load-skip | crates/rt/src/start.rs | perl:s/if ty == PT_LOAD \{/if ty != PT_LOAD {/ | cargo test -p liella-rt --lib start:: | msg:program_headers_give_the_tls_image_and_the_bias.*FAILED|panicked
+ldc4c-phnum | crates/rt/src/start.rs | perl:s/phnum\.min\(words\.len\(\)/usize::MAX.min(words.len()/ | cargo test -p liella-rt --lib start:: | msg:phnum limits the headers read
+ldc4c-whole | crates/rt/src/start.rs | perl:s/words\.len\(\) \/ PHDR_WORDS\)\.wrapping_mul/words.len()).wrapping_mul/ | cargo test -p liella-rt --lib start:: | msg:program_headers_give_the_tls_image_and_the_bias.*FAILED|panicked
