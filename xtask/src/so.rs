@@ -1436,7 +1436,7 @@ fn run_libm(root: &Path, cargo: &str, cc: &str, ar: &str, profile: Profile) -> R
     let versioned = check_version_sets(root, &so, "libm.so.6", &have, &BTreeSet::new())?;
     publish(&so, &so_final)?;
     // No libm hot path merges into a register it has not written (D-10.68); published first so a finding can be read.
-    crate::partial_write::check_file(root, &so_final)?;
+    crate::partial_write::check_built(root, &so_final)?;
     println!("so: target/liella/libm.a ({} symbols, {} of them libc.a's and local there), libm.so.6 ({count} versioned symbols, {compat_count} compat versions as name@VERSION ({}); version set and default version of {versioned} names checked against spec/abi/versions.tsv; it cannot be loaded before phase 14)", exports.len(), both.iter().filter(|s| !s.starts_with("liella_")).count(), crate::compat::LIBM_FILE);
     Ok(())
 }

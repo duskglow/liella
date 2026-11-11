@@ -198,8 +198,15 @@ fn atan_small(rm: u128, kr: i32) -> u128 {
     mulhi(rm, atan_poly(u, (u >> 64) as u64))
 }
 
-/// Step 3: `atan(y/x)` for `0 < y <= x`.
+/// Step 3: `atan(y/x)` for `0 < y <= x` (the shared copy: atan2l, asinl, acosl).
 fn atan_le(y: Val, x: Val) -> Val {
+    atan_le_in(y, x)
+}
+
+/// [`atan_le`]'s body, inlined into `atanl` so its constant `x = 1` (or `y = 1`) folds: the
+/// `x.m == 2^127` test, the table index's division by `x` and the call.
+#[inline(always)]
+fn atan_le_in(y: Val, x: Val) -> Val {
     let k = x.e - y.e; // >= 0
     let mut j = 0;
     if k <= 8 {
@@ -243,7 +250,8 @@ fn atan2_pos(y: Val, x: Val) -> Val {
 }
 
 fn atan_approx(n: &Num) -> Option<(bool, Val)> {
-    Some((n.neg, atan2_pos(val(n)?, ONE)))
+    let y = val(n)?;
+    Some((n.neg, if (y.e, y.m) <= (ONE.e, ONE.m) { atan_le_in(y, ONE) } else { sub_from(PIO2, atan_le_in(ONE, y)) }))
 }
 
 fn atan2_approx(b: &Num, a: &Num) -> Option<(bool, Val)> {
