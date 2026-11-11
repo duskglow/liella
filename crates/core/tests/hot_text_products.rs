@@ -659,6 +659,7 @@ fn init_startup_state_statics_are_in_data1() {
         "13liella_legacy13global_locale6GLOBAL",
         "13liella_legacy13global_locale4LOCK",
         "13liella_legacy7nscache7NSCACHE",
+        "15liella_boundary5timer5EPOLL",
     ] {
         let sections: Vec<&str> = table
             .lines()
@@ -675,9 +676,14 @@ fn init_startup_state_statics_are_in_data1() {
 /// The input sections of the `.text` output section of a GNU ld map, in address order:
 /// (name, address, size, file). A long name sits alone on its line, the rest on the next.
 fn text_inputs(map: &str) -> Vec<(String, u64, u64, String)> {
+    output_inputs(map, ".text")
+}
+
+/// The input sections of output section `output` of a GNU ld map, as [`text_inputs`].
+fn output_inputs(map: &str, output: &str) -> Vec<(String, u64, u64, String)> {
     let hex = |s: &str| s.strip_prefix("0x").and_then(|h| u64::from_str_radix(h, 16).ok());
     let lines: Vec<&str> = map.lines().skip_while(|l| !l.starts_with("Linker script and memory map")).collect();
-    let start = lines.iter().position(|l| l.split_whitespace().next() == Some(".text") && !l.starts_with(' ')).expect("no .text output section in the link map");
+    let start = lines.iter().position(|l| l.split_whitespace().next() == Some(output) && !l.starts_with(' ')).unwrap_or_else(|| panic!("no {output} output section in the link map"));
     let mut out = Vec::new();
     for (i, l) in lines.iter().enumerate().skip(start.saturating_add(1)) {
         if !l.is_empty() && !l.starts_with(' ') {
@@ -873,4 +879,129 @@ fn init_startup_rodata_stays_in_one_window_for_any_text_size() {
     for (pad, start, _) in &spans {
         assert_eq!(start % 65536, 0, "pad {pad:#x}: .rodata1 at {start:#x} is not 64 KiB aligned (entry.S's .rodata1 not first?)");
     }
+}
+
+/// A Rust symbol without its crate hashes (`Cs<hash>_` -> `C`) or split / ThinLTO suffixes: the form of
+/// the keys in `crates/libc-so/startup-data.keys`.
+fn unhashed_key(name: &str) -> String {
+    let name = symbol_stem(name.rsplit_once(".llvm.").map_or(name, |(s, _)| s));
+    let b = name.as_bytes();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'C' && b.get(i + 1) == Some(&b's') {
+            let n = b[i + 2..].iter().take_while(|c| c.is_ascii_alphanumeric()).count();
+            if b.get(i + 2 + n) == Some(&b'_') && b.get(i + 3 + n).is_some_and(u8::is_ascii_digit) {
+                out.push('C');
+                i += 3 + n;
+                continue;
+            }
+        }
+        out.push(b[i] as char);
+        i += 1;
+    }
+    out
+}
+
+/// LAYOUT-DATA-CLUSTERS (D-X.64): every written start-up object the page-fault trace found (kind `rw`
+/// in `crates/libc-so/startup-data.keys`) that is a `.data`/`.bss` static of at most 4 KiB sits in
+/// the `.data1` cluster of libc.a, so start-up writes the fewest pages wherever the rest of `.data`
+/// and `.bss` puts it. One left in `.data`/`.bss` is named. No spec clause (layout of the products).
+#[test]
+fn init_written_startup_objects_are_in_the_data1_cluster() {
+    let keys: std::collections::BTreeSet<String> = std::fs::read_to_string(root().join("crates/libc-so/startup-data.keys"))
+        .expect("startup-data.keys")
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .filter_map(|l| {
+            let f: Vec<&str> = l.split('\t').collect();
+            (f.len() == 3 && f[1] == "rw").then(|| symbol_stem(f[0]).to_string())
+        })
+        .collect();
+    let out = Command::new("objdump").arg("-t").arg(root().join("target/liella/libc.a")).output().expect("objdump");
+    let table = String::from_utf8_lossy(&out.stdout).into_owned();
+    let (mut moved, mut bad) = (0, Vec::new());
+    for l in table.lines() {
+        // `<value> <flags> <section>\t<size> [.hidden ]<name>`
+        let Some((a, b)) = l.split_once('\t') else { continue };
+        let (Some(section), Some(size), Some(name)) = (a.split_whitespace().last(), b.split_whitespace().next().and_then(|z| u64::from_str_radix(z, 16).ok()), b.split_whitespace().last()) else { continue };
+        if !keys.contains(&unhashed_key(name)) {
+            continue;
+        }
+        if section == ".data1" {
+            moved += 1;
+        } else if (section.starts_with(".data.") && !section.starts_with(".data.rel.ro")) || section.starts_with(".bss.") {
+            if size <= 4096 {
+                bad.push(format!("{name} ({size} bytes) in {section}"));
+            }
+        }
+    }
+    eprintln!("written start-up objects in .data1: {moved}");
+    assert!(moved > 0, "no written start-up key is in .data1 (move_startup_state not applied?)");
+    assert!(bad.is_empty(), "written start-up objects outside the .data1 cluster (xtask/src/coldbss.rs move_startup_state): {bad:#?}");
+}
+
+/// (address, size) of section `name` in `exe` (`readelf -SW`).
+fn section_span(exe: &Path, name: &str) -> Option<(u64, u64)> {
+    let out = Command::new("readelf").arg("-SW").arg(exe).output().expect("readelf");
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    let line = text.lines().find(|l| l.split_once(']').and_then(|(_, r)| r.split_whitespace().next()) == Some(name))?;
+    let f: Vec<&str> = line.split(']').nth(1)?.split_whitespace().collect();
+    Some((u64::from_str_radix(f[2], 16).ok()?, u64::from_str_radix(f[4], 16).ok()?))
+}
+
+/// LAYOUT-DATA-CLUSTERS (D-X.64): the start-up data clusters hold whatever code lies ahead of or after
+/// the hot group. The probe linked with a start file padded by 0x800, 0x2000, 0x8000 and 0xF000 bytes
+/// (`pre`, `cold`, as the text-phase test): the start-up relro objects at the head of `.data.rel.ro` and
+/// `.rodata1` each sit in one 64 KiB window, `.data1` (the written start-up state) takes exactly
+/// ceil(size / 4 KiB) pages, and the start-up, tool and fork-child fault counts are the same at every
+/// `cold` pad, the fork child within [`FORK_BOUND`]. Before the clusters, the `cold` pads moved the relro and
+/// read-only data windows by one each (LAYOUT-STABILITY-RETHINK). No spec clause (layout of the products).
+#[test]
+fn init_data_clusters_hold_at_every_text_phase() {
+    let base = std::env::temp_dir().join(format!("liella-data-phase-{}", std::process::id()));
+    let (mut bad, mut counts) = (Vec::new(), std::collections::BTreeMap::new());
+    for region in ["pre", "cold"] {
+        for pad in [0x800_u64, 0x2000, 0x8000, 0xF000] {
+            let dir = base.join(format!("{region}-{pad:x}"));
+            std::fs::create_dir_all(&dir).expect("temp dir");
+            let crt1 = padded_crt1(&dir, region, pad);
+            let map = link_map(&dir, &crt1);
+            let exe = dir.join("page_faults");
+            let head: Vec<(String, u64, u64, String)> = output_inputs(&map, ".data.rel.ro").into_iter().filter(|(n, ..)| n.starts_with(".data.rel.ro.local")).collect();
+            let (lo, hi) = (head.iter().map(|t| t.1).min().unwrap_or(0), head.iter().map(|t| t.1 + t.2).max().unwrap_or(0));
+            eprintln!("data phase {region} {pad:#x}: relro head {lo:#x}..{hi:#x} ({} sections)", head.len());
+            if hi <= lo {
+                bad.push(format!("{region} {pad:#x}: no start-up relro object at the head of .data.rel.ro (relro rename not applied?)"));
+            } else if hi - lo <= 65536 && lo >> 16 != (hi - 1) >> 16 {
+                bad.push(format!("{region} {pad:#x}: relro head {lo:#x}..{hi:#x} straddles a 64 KiB window"));
+            }
+            match section_span(&exe, ".rodata1") {
+                Some((a, z)) if z > 0 && a >> 16 == (a + z - 1) >> 16 => {}
+                other => bad.push(format!("{region} {pad:#x}: .rodata1 {other:x?} not in one 64 KiB window")),
+            }
+            match section_span(&exe, ".data1") {
+                Some((a, z)) if z > 0 && ((a + z - 1) >> 12) - (a >> 12) + 1 == z.div_ceil(4096) => eprintln!("data phase {region} {pad:#x}: .data1 {a:#x}+{z:#x}"),
+                other => bad.push(format!("{region} {pad:#x}: .data1 {other:x?} takes more than ceil(size / 4 KiB) pages")),
+            }
+            // The `pre` pads also move the text windows by one (the base's own text phase, measured on
+            // LAYOUT-TEXT-PIN-9's head: true 15 -> 16 at pre 0x800), so equal counts are required at the
+            // `cold` pads, where only the data classes move.
+            for mode in ["true", "tool", "fork"].into_iter().filter(|_| region == "cold") {
+                let n = faults(&exe, mode);
+                eprintln!("data phase {region} {pad:#x}: {mode} {n}");
+                counts.entry(mode).or_insert_with(Vec::new).push((format!("{region} {pad:#x}"), n));
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(&base);
+    for (mode, seen) in &counts {
+        if seen.iter().any(|(_, n)| *n != seen[0].1) {
+            bad.push(format!("{mode}: fault count moves with the text phase: {seen:?}"));
+        }
+        if *mode == "fork" && seen.iter().any(|(_, n)| *n > FORK_BOUND) {
+            bad.push(format!("fork child above its bound {FORK_BOUND}: {seen:?}"));
+        }
+    }
+    assert!(bad.is_empty(), "data phase: {bad:#?}");
 }

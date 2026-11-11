@@ -850,7 +850,7 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
     localize_builtins(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &names, &product.join("libc-work"))?;
     // Large zero-initialised tables after the small state words, out of the start-up pages (D-X.22).
     crate::coldbss::move_cold_bss(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("coldbss-work"))?;
-    crate::coldbss::move_startup_state(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("state-work"))?;
+    crate::coldbss::move_startup_state(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, root, &product.join("state-work"))?;
     // The library's own copies and fills call its internal entries, directly (D-X.15).
     let copies = crate::copies::direct_internal_copies(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("copies-work"))?;
     // (done in the archive as rustc built it, so `libc.so.6` and the weakened `libc.a` both get it)
@@ -988,12 +988,16 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     publish(&so, &so_final)?;
 
     // 4. The start object.
+    // Each start-up data cluster's start alignment, from its size over the whole archive (D-X.64).
+    let aligns = crate::startup_ro::cluster_aligns(&release.join("libc.a"))?;
+    println!("so: start-up data cluster alignments {}", aligns.iter().map(|(d, a)| format!("{d}={a}")).collect::<Vec<_>>().join(" "));
+    let defines: Vec<String> = aligns.iter().map(|(d, a)| format!("-D{d}={a}")).collect();
     let crt1 = tmp_name(&release.join("liella-crt1.o"));
-    run(Command::new(&cc).arg("-c").arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&crt1))?;
+    run(Command::new(&cc).arg("-c").args(&defines).arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&crt1))?;
     publish(&crt1, &release.join("liella-crt1.o"))?;
     // The static-PIE start object (D-27.10): the same file, calling the relocating start.
     let rcrt1 = tmp_name(&release.join("liella-rcrt1.o"));
-    run(Command::new(&cc).arg("-c").arg("-DLIELLA_STATIC_PIE").arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&rcrt1))?;
+    run(Command::new(&cc).arg("-c").arg("-DLIELLA_STATIC_PIE").args(&defines).arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&rcrt1))?;
     start_object_pc_relative(&rcrt1)?;
     publish(&rcrt1, &release.join("liella-rcrt1.o"))?;
     // The profiling start object for `-pg` programs (GCRT1-START): the same `_start`, plus
