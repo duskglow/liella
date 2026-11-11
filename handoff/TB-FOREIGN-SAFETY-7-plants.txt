@@ -3,3 +3,8 @@ with-view-ungated | crates/boundary/src/locale.rs | perl:s/if !crate::thread::ow
 isw-int-ungated | crates/boundary/src/locale.rs | perl:s/if !crate::thread::owned\(\) \{(\s*return foreign_isw_int\(wc, mask\);)/if false {$1/ | cargo test -p liella-boundary --test tb_foreign_words | msg:decoys in the block's words|SIGSEGV|signal
 wtrans-ungated | crates/boundary/src/locale.rs | perl:s/if !crate::thread::owned\(\) \{(\s*return foreign_wtrans\(wc, upper\);)/if false {$1/ | cargo test -p liella-boundary --test tb_foreign_words | msg:decoys in the block's words|SIGSEGV|signal
 view-ungated | crates/boundary/src/locale.rs | perl:s/if !crate::thread::owned\(\) \{(\s*return foreign_view\(\);)/if false {$1/ | cargo test -p liella-boundary --test tb_foreign_words | msg:decoys in the block's words|SIGSEGV|signal
+# cargo xtask plants results (4 plants: 4 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# with-view-ungated: CAUGHT, caught by tb_foreign_words foreign_block_words_neither_trusted_nor_written
+# isw-int-ungated: CAUGHT, caught by tb_foreign_words foreign_block_words_neither_trusted_nor_written
+# wtrans-ungated: CAUGHT, caught by tb_foreign_words foreign_block_words_neither_trusted_nor_written
+# view-ungated: CAUGHT, caught by tb_foreign_words foreign_block_words_neither_trusted_nor_written
