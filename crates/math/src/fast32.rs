@@ -29,6 +29,7 @@ use crate::status::{Flags, Rounding, Status};
 
 mod bessel;
 mod cexp;
+mod clog_csqrt;
 mod erf;
 mod exp_log;
 mod gamma;
@@ -40,6 +41,7 @@ use bessel::{bessel_core, bessel_finish};
 #[cfg(test)]
 pub(crate) use cexp::{cexp_core, CEXP_DELTA};
 pub use cexp::{cexpf, cexpf_nearest};
+pub use clog_csqrt::{clogf, clogf_nearest, csqrtf, csqrtf_nearest};
 use erf::{erf_core, erfc_core, ERFC_DELTA, ERF_DELTA};
 use exp_log::*;
 pub use gamma::{eval_lgamma, eval_tgamma};
@@ -50,7 +52,7 @@ use trig::*;
 pub use exp_log::{eval_pow, pow};
 pub use hyperbolic::{acosh_nearest_sqrt, asinh_nearest_sqrt};
 pub use inv_trig::{atan2, eval_atan2};
-pub use trig::{cos_nearest_widen, sin_nearest_widen, sincos, tan_nearest_widen};
+pub use trig::{cos_nearest_widen, sin_nearest_widen, sincos, sincos_nearest_widen, tan_nearest_widen};
 
 /// The functions with a fast path.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

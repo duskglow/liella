@@ -129,6 +129,8 @@ fn atan_le(y: Q, x: Q) -> Scaled {
     let k = x.e - y.e; // >= 0: y <= x, both normalised
     let mut j = 0;
     if k <= 8 {
+        // RANGE: y.m, x.m in [2^112, 2^113): both tops in [2^52, 2^53), so h is in [128, 512),
+        // a signed conversion in range (no invalid).
         let h = (dbl((y.m >> 60) as u64) * (256.0 / dbl((x.m >> 60) as u64))) as usize; // in [128, 512)
         j = ((h >> k) + 1) >> 1;
     }

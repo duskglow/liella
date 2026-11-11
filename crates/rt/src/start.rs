@@ -20,6 +20,7 @@ use liella_kernel::uapi::O_RDWR;
 
 use crate::tls::TlsImage;
 
+const PT_LOAD: u64 = 1;
 const PT_PHDR: u64 = 6;
 const PT_TLS: u64 = 7;
 const PT_GNU_RELRO: u64 = 0x6474_e552;
@@ -44,11 +45,22 @@ pub const PAGE: usize = 4096;
 /// Read `phnum` program headers from `words` (the headers at runtime address `phdr_addr`), in
 /// one pass (STATIC-RELRO-2: start-up reads them once). The bias comes from `PT_PHDR`; without
 /// one the executable is taken as non-PIE. The first header of each type counts.
+///
+/// Every start pays this loop once per header (LAYOUT-DATA-CLUSTERS-4C, D-X.64's aligned clusters
+/// add a `PT_LOAD`), so it keeps one bound and leaves a `PT_LOAD`, most of any program's headers,
+/// after one compare: the table is cut to `phnum` whole headers first (`chunks_exact` then has the
+/// only bound; `take` was a second counter per header).
 pub fn program(words: &[u64], phnum: usize, phdr_addr: usize) -> Program {
     let field = |h: &[u64], i: usize| h.get(i).copied().map_or(0, |v| usize::try_from(v).unwrap_or(usize::MAX));
     let (mut phdr, mut tls, mut relro) = (None, None, None);
-    for h in words.chunks_exact(PHDR_WORDS).take(phnum) {
-        match h.first().map_or(0, |w| w & 0xffff_ffff) {
+    // At most `words.len()`: the product cannot wrap.
+    let table = words.get(..phnum.min(words.len() / PHDR_WORDS).wrapping_mul(PHDR_WORDS)).unwrap_or_default();
+    for h in table.chunks_exact(PHDR_WORDS) {
+        let ty = h.first().map_or(0, |w| w & 0xffff_ffff);
+        if ty == PT_LOAD {
+            continue;
+        }
+        match ty {
             PT_PHDR if phdr.is_none() => phdr = Some(h),
             PT_TLS if tls.is_none() => tls = Some(h),
             PT_GNU_RELRO if relro.is_none() => relro = Some(h),
@@ -123,6 +135,41 @@ pub fn bias(words: &[u64], phnum: usize, phdr: usize, page: usize, header: impl 
     let load = heads().find(|h| ty(h) == PT_LOAD && field(h, 1) <= phoff && field(h, 1).checked_add(field(h, 4)).is_some_and(|e| end <= e))?;
     let own = field(load, 2).checked_sub(field(load, 1))?.checked_add(phoff)?;
     Some(phdr.wrapping_sub(usize::try_from(own).ok()?))
+}
+
+/// [`relro_at`]'s pages split by segment (D-27.25): `protect(start, len)` once for each `PT_LOAD`
+/// whose pages meet them, with the part inside that segment's pages (from its first byte's page to
+/// the page holding its last byte), in table order; the first error stops the walk and is
+/// returned. A `PT_GNU_RELRO` that spans two writable segments is protected segment by segment,
+/// so a page between them (unmapped, or a loader's reservation) is never touched; with one
+/// segment the single call covers exactly [`relro_at`]'s range. Nothing is called without the
+/// segment, or for pages no `PT_LOAD` holds.
+///
+/// # Errors
+///
+/// The first error `protect` returns.
+pub fn relro_pieces<E>(words: &[u64], phnum: usize, bias: usize, page: usize, mut protect: impl FnMut(usize, usize) -> Result<(), E>) -> Result<(), E> {
+    const PT_LOAD: u64 = 1;
+    let Some((from, len)) = relro_at(words, phnum, bias, page) else { return Ok(()) };
+    let field = |h: &[u64], i: usize| h.get(i).copied().map_or(0, |v| usize::try_from(v).unwrap_or(usize::MAX));
+    for h in words.chunks_exact(PHDR_WORDS).take(phnum).filter(|h| h.first().is_some_and(|w| w & 0xffff_ffff == PT_LOAD)) {
+        if let Some((at, n)) = relro_piece(from, from.wrapping_add(len), field(h, 2).wrapping_add(bias), field(h, 5), page) {
+            protect(at, n)?;
+        }
+    }
+    Ok(())
+}
+
+/// The part of the page range `[from, to)` inside the pages of a segment at `vaddr` with `memsz`
+/// bytes (`[page_down(vaddr), page_up(vaddr + memsz))`), as `(start, len)`; `None` when they do
+/// not meet or the segment's end overflows. The one intersection for [`relro_pieces`] and
+/// `ld.so`'s objects (`liella_ld::reloc::protect_relro`). `page` is a power of two.
+#[must_use]
+pub fn relro_piece(from: usize, to: usize, vaddr: usize, memsz: usize, page: usize) -> Option<(usize, usize)> {
+    let mask = page.wrapping_sub(1);
+    let lo = (vaddr & !mask).max(from);
+    let hi = (vaddr.checked_add(memsz)?.checked_add(mask)? & !mask).min(to);
+    (hi > lo).then(|| (lo, hi.wrapping_sub(lo)))
 }
 
 /// `[page_down(vaddr), page_down(vaddr + memsz))` as `(start, len)`; `None` when empty.
@@ -319,6 +366,9 @@ mod tests {
         assert_eq!(p.tls.unwrap().addr, 0x5555_2000);
         assert_eq!(program(&w, 1, 0).tls, None, "phnum limits the headers read");
         assert_eq!(program(&w[..10], 2, 0).tls, None, "a truncated header is ignored");
+        // `phnum` above the whole headers in the table: the cut keeps those (here the PT_PHDR
+        // that gives the bias) rather than dropping the table.
+        assert_eq!(program(&pie[..10], 2, 0x5555_0040), Program { tls: None, bias: 0x5555_0000, relro: None }, "the whole headers before a truncated one are read");
     }
 
     // Spec §12.6 (D-12.4, D-27.12): the `%n` check tests the segments where they were loaded,
@@ -336,6 +386,54 @@ mod tests {
         assert!(!read_only(&w, 2, bias, 0x10), "the link address is not where it was loaded");
         assert!(read_only(&w, 2, 0, 0x10));
         assert!(!read_only(&w, 1, bias, bias + 0x3010) && !read_only(&w, 0, bias, bias + 0x10), "phnum limits the headers read");
+    }
+
+    // Spec §1.1 (D-27.25, amends D-27.10): a PT_GNU_RELRO spanning writable segments is protected
+    // segment by segment; a page between two segments is never in a range; one segment gives
+    // exactly the single range `relro_at` gives.
+    #[test]
+    fn relro_pieces_stop_at_segment_boundaries() {
+        let pieces = |w: &[u64], n: usize, bias: usize| {
+            let mut v = Vec::new();
+            relro_pieces::<()>(w, n, bias, 0x1000, |a, l| {
+                v.push((a, l));
+                Ok(())
+            })
+            .unwrap();
+            v
+        };
+        let rw = |vaddr: u64, memsz: u64| [1 | (6 << 32), 0, vaddr, vaddr, memsz, memsz, 0x1000];
+        // RELRO 0x10_0f30..0x10_5000 over three RW segments with a one-page hole after the first
+        // (0x10_2000..0x10_3000) and two adjacent ones after it; a segment past RELRO is untouched.
+        let mut w = Vec::new();
+        w.extend(phdr(1, 0, 0x1000, 0x1000, 0x1000));
+        w.extend(rw(0x10_0f30, 0x10d0)); // pages 0x10_0000..0x10_2000
+        w.extend(rw(0x10_3000, 0x1000)); // 0x10_3000..0x10_4000
+        w.extend(rw(0x10_4000, 0x1800)); // 0x10_4000..0x10_6000
+        w.extend(phdr(PT_GNU_RELRO, 0x10_0f30, 0x40d0, 0x40d0, 1));
+        w.extend(rw(0x10_8000, 0x1000));
+        let bias = 0x5555_0000_0000;
+        assert_eq!(
+            pieces(&w, 6, bias),
+            [(bias + 0x10_0000, 0x2000), (bias + 0x10_3000, 0x1000), (bias + 0x10_4000, 0x1000)],
+            "the hole page 0x10_2000 is in no piece; each piece stays inside its segment's pages"
+        );
+        // One segment: one call, the range relro_at gives.
+        let mut one = Vec::new();
+        one.extend(rw(0x10_0f30, 0x5000));
+        one.extend(phdr(PT_GNU_RELRO, 0x10_0f30, 0x40d0, 0x40d0, 1));
+        assert_eq!(pieces(&one, 2, 0), [relro_at(&one, 2, 0, 0x1000).unwrap()]);
+        assert_eq!(pieces(&one, 1, 0), [], "no PT_GNU_RELRO, nothing protected");
+        // The first error stops the walk.
+        let mut calls = 0;
+        assert_eq!(
+            relro_pieces(&w, 6, 0, 0x1000, |_, _| {
+                calls += 1;
+                Err(calls)
+            }),
+            Err(1)
+        );
+        assert_eq!(relro_piece(0x1000, 0x5000, usize::MAX - 0x10, 0x100, 0x1000), None, "an overflowing segment end");
     }
 
     #[test]

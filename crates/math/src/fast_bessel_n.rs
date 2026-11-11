@@ -191,6 +191,8 @@ pub fn jn_kernel(n: u64, x: f64) -> Option<(Dd, f64, i32)> {
     let [j0, j1, y0, y1] = base(x)?;
     let r = recip(x);
     // x > √3 here, so ⌊x⌋ >= 1.
+    // RANGE: x <= MAX_STEPS when !up (returned above); the disassembly keeps the conversion on
+    // that branch (D-10.95 scan).
     let m = if up { n } else { x as u64 };
     let wj = forward(x, r, j0, j1, m)?;
     let wy = forward(x, r, y0, y1, m)?;
@@ -319,6 +321,7 @@ pub fn near32(y: Dd, eps: f64, e: i32, mode: Rounding) -> Option<(f32, Status)> 
     if d.partial_cmp(&67_108_864.0) != Some(Ordering::Less) {
         return None;
     }
+    // RANGE: 0 <= d < 2^26 (NaN and larger returned above).
     let r = fast32::round(v, d as u64 + 2, mode)?;
     Some((r, Status::flags(Flags::INEXACT).hw(Flags::INEXACT)))
 }

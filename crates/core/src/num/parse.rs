@@ -598,6 +598,9 @@ fn finish(dexp: i64, used: usize, mut n: Big, nkept: usize, truncated: bool, neg
         return result(round(neg, 0, 0, false, fmt, mode), used);
     }
     // Certain overflow and certain underflow, decided with margin from the format's range.
+    // RANGE: |operand| < 5000 (emax + 1 <= 16384, emin - prec >= -16495, times log10 2), so
+    // neither conversion can raise invalid (D-10.95). The product and the truncation do raise
+    // inexact, which is today the only inexact a strto* call raises (LIBM-INVALID-CONVERT-SCAN-2).
     let max10 = ((fmt.emax + 1) as f64 * core::f64::consts::LOG10_2) as i64 + 2;
     let min10 = ((fmt.emin() - fmt.prec as i32) as f64 * core::f64::consts::LOG10_2) as i64 - 2;
     if dexp - 1 > max10 {

@@ -1,0 +1,10 @@
+{"task": "LIBM-INVALID-CONVERT-SCAN-4", "model": "opus", "tokens": null,
+ "result": "lgammaf(-2.5): Liella is correctly rounded (exact oracle), the reference is 1 ulp off; pinned in tests and the percall check. Sign from Gamma(x): neg rows -10 under base; pos row's final form not yet measured",
+ "branch": "task/libm-invalid-convert-scan-4", "head": "e7605b8db",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["lgammaf negative operands 21x the reference by instructions (LIBM-F32-REST-NEXT)", "area handoff page not rewritten; see handoff/libm-invalid-convert-scan-4-report.md"],
+ "refused": [],
+ "improvement": "A combined job script with one label per step saved calls; a budget of 70 calls is tight for a correctness question plus a ratchet that needs two count rounds",
+ "next_step": "Read the h2 jobs on mei; if lgammaf_pos <= 315.8 the story is complete, else compare forms by disassembly",
+ "report_file": "handoff/libm-invalid-convert-scan-4-report.md",
+ "jobs": ["libm-invalid-convert-scan-4-h2-clippy", "libm-invalid-convert-scan-4-h2-static", "libm-invalid-convert-scan-4-h2-accuracy", "libm-invalid-convert-scan-4-h2-counts", "libm-invalid-convert-scan-4-h2-hottext", "libm-invalid-convert-scan-4-h2-gate", "libm-invalid-convert-scan-4-h2-plants"]}

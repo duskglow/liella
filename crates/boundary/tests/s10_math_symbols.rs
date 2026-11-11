@@ -455,6 +455,54 @@ fn math_float_hyperbolic_fast_entry_matches_the_envelope_in_every_mode() {
     fpu::clear(&CSys, Flags::ALL);
 }
 
+// ARCH(x86_64): the in-place fast entry of the float sincos export (s10_0_f_0); FPCR/FPSR on aarch64 (A-9)
+#[test]
+#[allow(clippy::arithmetic_side_effects)] // counters over bounded test loops
+fn math_float_sincos_fast_entry_matches_the_envelope_in_every_mode() {
+    // Clauses: s10_0_f_0.
+    // sincosf's in-place entry (LIBM-SINCOS-SHARED, D-10.89) as the float hyperbolic test above:
+    // round to nearest in the default word takes it, DAZ forces the full envelope, and both
+    // results, the flags and errno must agree; the directed modes must give liella-math's
+    // accurate pair. Arguments: every 2^16th `float` bit pattern of each sign (the fast range
+    // 2^-26 <= |x| < 2^19 and every refused range) and the range's edges.
+    use liella_math::real::Real;
+    let pair = |x: f32| {
+        let (mut s, mut c) = (0f32, 0f32);
+        m::sincosf(x, Some(&mut s), Some(&mut c));
+        u64::from(s.to_bits()) << 32 | u64::from(c.to_bits())
+    };
+    let edges: [f32; 6] = [1.490_116_1e-8, 1.490_116_2e-8, 524_287.97, 524_288.0, std::f32::consts::FRAC_PI_4, std::f32::consts::FRAC_PI_2];
+    let mut args: Vec<f32> = edges.iter().flat_map(|&x| [x, -x]).collect();
+    args.extend((0u32..1 << 16).map(|i| f32::from_bits(i << 16 | (i & 0xffff))));
+    let (mut checked, mut bad) = (0usize, Vec::new());
+    for &x in &args {
+        if x != 0.0 && x.abs() < f32::MIN_POSITIVE {
+            continue; // DAZ reads a subnormal argument as zero: another function value
+        }
+        let mut fast = (0, 0);
+        let e_fast = observe(|| fast = around(0x1f80, || pair(x))).0;
+        let mut full = (0, 0);
+        let e_full = observe(|| full = around(0x1f80 | 0x40, || pair(x))).0;
+        if (fast.0, fast.1 | 0x40, e_fast) != (full.0, full.1, e_full) {
+            bad.push(format!("sincosf({x:e}) nearest: {fast:x?} {e_fast} vs {full:x?} {e_full}"));
+        }
+        for (rc, mode) in [(1u32, liella_math::Rounding::Down), (2, liella_math::Rounding::Up), (3, liella_math::Rounding::Zero)] {
+            let (bits, _) = around(0x1f80 | (rc << 13), || pair(x));
+            let ((s, c), _) = Real::sincos(x, mode);
+            let want = u64::from(s.to_bits()) << 32 | u64::from(c.to_bits());
+            if bits != want && !x.is_nan() {
+                bad.push(format!("sincosf({x:e}) rc {rc}: {bits:x} vs {want:x}"));
+            }
+        }
+        checked += 1;
+    }
+    let n = bad.len();
+    bad.truncate(24);
+    assert!(n == 0, "{n} mismatches, the first:\n{}", bad.join("\n"));
+    assert!(checked > 60_000, "{checked}");
+    fpu::clear(&CSys, Flags::ALL);
+}
+
 // ARCH(x86_64): the in-place fast entry of the double exp/log/pow exports (s10_0_f_0); FPCR/FPSR on aarch64 (A-9)
 #[test]
 #[ignore = "long sweep:cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_double_fast_entry_sweep"]
@@ -1717,6 +1765,64 @@ fn complex_float_and_double_members() {
     assert_eq!(observe(|| assert_eq!(m::cpow(z(1.0, 1.0), z(2.0, 0.0)), z(0.0, 2.0))), (0, Flags(0)));
     assert_eq!(observe(|| assert_eq!(m::__clog10(z(100.0, 0.0)), z(2.0, 0.0))), (0, Flags(0)));
     assert_eq!(observe(|| assert_eq!(m::catanh(z(1.0, 0.0)).re, f64::INFINITY)), (34, Flags::DIVBYZERO));
+    fpu::clear(&CSys, Flags::ALL);
+}
+
+/// The in-place entries of `cexp`, `clog`, `csqrt` and their `float` members on the axes (one part
+/// an exact zero, LIBM-CPLX-LOG-SQRT-4, D-10.74): each result's bits, flags and `errno` equal the
+/// 384-bit route's to nearest, for unit, exact-root, ordinary, tiny, huge and overflowing
+/// magnitudes of both signs with both signed zeros, the other axis and the origin included.
+#[test]
+fn complex_axes_in_place_match_the_route() {
+    // Clauses: s10_5_c_0, s10_0_c_0.
+    use liella_boundary::mathret::Complex;
+    use liella_math::{complex as c, MathError, Rounding::Nearest};
+    let errno = |e: MathError| match e {
+        MathError::None => 0,
+        MathError::Domain => 33,
+        MathError::Range => 34,
+    };
+    let fmin = f64::from(f32::MIN_POSITIVE);
+    let mags = [
+        0.0, 1.0, 4.0, 0.25, 2.0, 3.0, 0.1, 0.5, 1.0 + f64::EPSILON, 1e300, f64::MAX, 1e-300, f64::MIN_POSITIVE, 2.0 * f64::MIN_POSITIVE,
+        700.0, 709.9, 1e-20, fmin, 2.0 * fmin, f64::from(f32::MAX), 90.0,
+    ];
+    let mut ops = Vec::new();
+    for m in mags {
+        for v in [m, -m] {
+            for z in [0.0, -0.0] {
+                ops.push((v, z));
+                ops.push((z, v));
+            }
+        }
+    }
+    type D = (&'static str, extern "C" fn(Complex<f64>) -> Complex<f64>, fn(f64, f64, liella_math::Rounding) -> c::Res<f64>);
+    type S = (&'static str, extern "C" fn(Complex<f32>) -> Complex<f32>, fn(f32, f32, liella_math::Rounding) -> c::Res<f32>);
+    let dbl: [D; 3] = [("cexp", m::cexp, c::cexp_route::<f64>), ("clog", m::clog, c::clog_route::<f64>), ("csqrt", m::csqrt, c::csqrt_route::<f64>)];
+    let flt: [S; 3] = [("cexpf", m::cexpf, c::cexp_route::<f32>), ("clogf", m::clogf, c::clog_route::<f32>), ("csqrtf", m::csqrtf, c::csqrt_route::<f32>)];
+    for &(x, y) in &ops {
+        for (name, f, route) in dbl {
+            let mut got = (0, 0);
+            let seen = observe(|| {
+                let r = f(Complex { re: x, im: y });
+                got = (r.re.to_bits(), r.im.to_bits());
+            });
+            let ((wr, wi), st) = route(x, y, Nearest);
+            assert_eq!((name, x, y, got, seen), (name, x, y, (wr.to_bits(), wi.to_bits()), (errno(st.error), st.flags)), "{name} on an axis differs from the route");
+        }
+        // The same magnitudes rounded to `float` (overflow to infinity and underflow to zero are wanted operands).
+        #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+        let (xf, yf) = (x as f32, y as f32);
+        for (name, f, route) in flt {
+            let mut got = (0, 0);
+            let seen = observe(|| {
+                let r = f(Complex { re: xf, im: yf });
+                got = (r.re.to_bits(), r.im.to_bits());
+            });
+            let ((wr, wi), st) = route(xf, yf, Nearest);
+            assert_eq!((name, xf, yf, got, seen), (name, xf, yf, (wr.to_bits(), wi.to_bits()), (errno(st.error), st.flags)), "{name} on an axis differs from the route");
+        }
+    }
     fpu::clear(&CSys, Flags::ALL);
 }
 

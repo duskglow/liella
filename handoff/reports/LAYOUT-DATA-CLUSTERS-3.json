@@ -1,0 +1,11 @@
+{"task": "LAYOUT-DATA-CLUSTERS-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: item 1 done and measured (fast localtime 21 -> 19, next 20; release localtime 19 -> 17, release tool/locale 56/53 -> 55/52 with relro in one window; true/fork unchanged); item 2 tool change (key by access) in, keys not regenerated, .data-order test and plant not written",
+ "branch": "task/layout-data-clusters-3", "head": "c30af27bf",
+ "gate": {"affected": "ldc3-gate-2 queued after ldc3-lint-2 at hand-back", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["-2's gate ldc2-gate failed only on the localtime bounds (21 > 20): fixed here", "release strings mode 1 on -2's head and this head vs 0 on next: not attributed (fast 0)", "relro alignment costs up to 64 KiB (fast) / 32 KiB (release) of zero file bytes before .data.rel.ro"],
+ "refused": [],
+ "improvement": "jobrun refuses a reused label, so a re-run chain must take new labels: a chain script should suffix labels with the head sha",
+ "next_step": "regen startup-data.keys with the isolated link (both profiles), add region data pads + a perf no-fault-outside-.data1 assertion to init_data_clusters_hold_at_every_text_phase, plant: drop the _IO_2_1_stdout_ key",
+ "report_file": "handoff/LAYOUT-DATA-CLUSTERS-3.md",
+ "jobs": ["ldc3-unit-2", "ldc3-after-2", "ldc3-lint-2", "ldc3-gate-2"]}

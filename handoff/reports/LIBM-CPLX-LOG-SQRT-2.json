@@ -1,0 +1,33 @@
+{
+ "task": "LIBM-CPLX-LOG-SQRT-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "clog/clogf/csqrt/csqrtf quick tiers verified: gate green, 6/6 plants caught; IVB time clog 1.30x clogf 0.96x csqrt 3.93x csqrtf 1.25x (were 115-240x); csqrt target (<=2x) not reached; cexp 5.35x/5.70x by time vs 1.6x by instructions",
+ "branch": "task/libm-cplx-log-sqrt-2",
+ "head": "1b7b2706b",
+ "gate": {
+  "affected": "3690 passed / 0 failed (10 suites), conformance 19/0, direct tier with --files (records/ path escalates to FULL)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "cargo xtask affected treats records/decisions/*.toml as an unknown path and escalates to FULL; gate run with --files naming every other changed file (records covered by records check + static)",
+  "#4206: bench operands (uniform [-3,3]^2, 53-bit) never fall under clog's 2^-60 ratio window; the bench does not cover the axes: y = +0 costs clog 745 (glibc 200), csqrt 3760 (glibc 58) instructions, +82/+90 over the base for the declined tier",
+  "cexp/csqrt are 2-3.5x worse by time than by instructions on both timing hosts; hypothesis (not verified): declined operands at the 384-bit route dominate the average, or csqrt's dependent sqrt-div-sqrt-div chain",
+  "10^7 sweep job libm-cplx-log-sqrt-2-sweep queued late on the role; left running for the dispatcher"
+ ],
+ "refused": [],
+ "improvement": "affected should classify records/ like docs (checked by records check) instead of escalating to FULL; and bench --compare rejects --staged although the stage's own hint prints it",
+ "next_step": "LIBM-CPLX-DECLINES: per-operand counts of the 256 bench operands for cexp/csqrt (declines vs latency), then an intermediate accurate tier or axis fast paths (handoff Next steps)",
+ "report_file": "handoff/libm-cplx-log-sqrt.md",
+ "jobs": [
+  "libm-cplx-log-sqrt-2-gate2",
+  "libm-cplx-log-sqrt-2-plants",
+  "libm-cplx-log-sqrt-2-percall2",
+  "libm-cplx-log-sqrt-2-static",
+  "libm-cplx-log-sqrt-2-sweep",
+  "nozomi:libm-cplx-log-sqrt-2-n100b",
+  "nico:libm-cplx-log-sqrt-2-ivb"
+ ]
+}
