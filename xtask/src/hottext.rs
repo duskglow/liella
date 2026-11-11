@@ -1233,7 +1233,13 @@ fn unreferenced_keys(objs: &[ObjRefs]) -> BTreeSet<String> {
 /// The error for listed keys (`entries`) whose every function section is unreachable
 /// (`unreferenced`, from [`unreferenced_keys`]); `None` when no listed key is.
 fn unreferenced_error(entries: &[Entry], unreferenced: &BTreeSet<String>, profile: &str) -> Option<String> {
-    let dead: Vec<&Entry> = entries.iter().filter(|e| unreferenced.contains(&e.key)).collect();
+    // LAYOUT-TEXT-PIN-13: only the keys this profile's trace keeps (or a bare key, every profile): a key
+    // the other profile still lists is that profile's to drop, and regen.sh in this profile can only take
+    // this profile off it, so failing on it here blocked both profiles' regen.
+    let dead: Vec<&Entry> = entries
+        .iter()
+        .filter(|e| unreferenced.contains(&e.key) && (e.profiles.is_empty() || e.profiles.iter().any(|p| p == profile)))
+        .collect();
     if dead.is_empty() {
         return None;
     }
