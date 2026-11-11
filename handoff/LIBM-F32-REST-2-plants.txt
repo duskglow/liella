@@ -8,3 +8,6 @@
 # the envelope, so the conversion's destination is a register the export has not written (D-10.67's hazard).
 red-lowpart | crates/math/src/fast32/inv_trig.rs | perl:s/(fn atan_red_any.*?)u2 \* \(AT5 \+ u2 \* AT7\)/$1u2 * AT5/s | LIELLA_SWEEP_STRIDE=3 cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored math_atanf_onepass_sweep | msg:atanf differs from the envelope
 asin-partial-write | crates/math/src/fast32/inv_trig.rs | perl:s/(pub fn asin_onepass_any.*?)let a = onepass_abs\(ab\);/$1let a = f64::from(x); let a = if b >> 31 != 0 { 0.0 - a } else { a };/s | cargo xtask partial-write | msg:asinf\+0x[0-9a-f]+: cvtss2sd
+# cargo xtask plants results (2 plants: 2 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# red-lowpart: CAUGHT, caught by s10_math_symbols math_atanf_onepass_sweep
+# asin-partial-write: CAUGHT, caught by no test the log names
