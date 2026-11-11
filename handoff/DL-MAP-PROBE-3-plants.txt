@@ -1,0 +1,7 @@
+loads-bound | crates/ld/src/map.rs | lit:count = count.wrapping_add(1); ==> count = count.wrapping_add(1); if count > 64 { return Err(MapError::BadSegments); } | cargo test -p liella-ld --test map | msg:map_malformed_corpus_refused.*(FAILED|panicked)
+bias-ignores-first | crates/ld/src/map.rs | lit:Ok((base, base.wrapping_sub(plan.first))) ==> Ok((base, base)) | cargo test -p liella-ld --test map map_model_objects_from_the_linker | msg:map_model_objects_from_the_linker.*(FAILED|panicked)
+relro-bias-phdr | crates/boundary/src/ld.rs | lit:liella_rt::start::relro_at(headers, prog.phnum, bias, page) ==> liella_rt::start::relro(headers, prog.phnum, prog.phdr, page) | cargo xtask so && cargo test -p liella-ld --test map map_proc_self_maps_of_loaded_programs | msg:map_proc_self_maps_of_loaded_programs.*(FAILED|panicked)
+# cargo xtask plants results (3 plants: 3 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# loads-bound: CAUGHT, caught by map map_malformed_corpus_refused
+# bias-ignores-first: CAUGHT, caught by map map_model_objects_from_the_linker
+# relro-bias-phdr: CAUGHT, caught by map map_proc_self_maps_of_loaded_programs

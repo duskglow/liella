@@ -22,16 +22,20 @@ pub enum Action<'a> {
     Unknown(&'a [u8]),
     /// Run `PROGRAM` (DL-6).
     Program(&'a [u8]),
+    /// `--list PROGRAM`: list the program's dependencies as `LD_TRACE_LOADED_OBJECTS` does (DL-8).
+    List(&'a [u8]),
 }
 
 /// The action for the arguments after `argv[0]`. The first of `--version` and `--help` wins, as
 /// ld.so(8) lists them as stand-alone options; scanning stops at the first argument that is not an
 /// option, the program name.
 pub fn action<'a>(args: impl IntoIterator<Item = &'a [u8]>) -> Action<'a> {
-    match args.into_iter().next() {
+    let mut args = args.into_iter();
+    match args.next() {
         None => Action::Missing,
         Some(b"--version") => Action::Version,
         Some(b"--help") => Action::Help,
+        Some(b"--list") => args.next().map_or(Action::Missing, Action::List),
         Some(arg @ [b'-', ..]) => Action::Unknown(arg),
         Some(arg) => Action::Program(arg),
     }
@@ -62,7 +66,7 @@ pub fn help<A: Arch>() -> [&'static str; 3] {
 pub fn refusal<'a>(action: Action<'a>) -> [&'a [u8]; 3] {
     match action {
         Action::Unknown(arg) => [b"ld.so: unrecognized option '", arg, b"'\nTry 'ld.so --help' for more information.\n"],
-        Action::Program(name) => [b"ld.so: cannot run '", name, b"'\n"],
+        Action::Program(name) | Action::List(name) => [b"ld.so: cannot run '", name, b"'\n"],
         Action::Missing | Action::Version | Action::Help => [b"ld.so: missing program name\nTry 'ld.so --help' for more information.\n", b"", b""],
     }
 }

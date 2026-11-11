@@ -1,0 +1,9 @@
+# DL-IMAGE-READER (ruling #4229, #4323, D-27.18): plants on the image-mode reader of the kernel-started program.
+# Each command rebuilds the ld.so product first, so plants in crates/ld/src and crates/boundary/src/ld.rs reach it.
+slice-kept-across-got-store | crates/ld/src/elf.rs | lit:} else if !aliased { ==> } else if !aliased || ph.flags & PF_W != 0 { | cargo xtask so && cargo test -p liella-ld --test reloc | msg:never sliced in place
+textrel-segments-sliced-live | crates/ld/src/elf.rs | lit:p.p_type == pt::LOAD && (text || p.flags & PF_W != 0); ==> p.p_type == pt::LOAD && (p.flags & PF_W != 0); | cargo xtask so && cargo test -p liella-ld --test reloc | msg:never sliced in place
+# proc-self-exe-read-back is NOT run here: its catching test (reloc_ldso_kernel_started_without_proc) needs
+# `unshare -r`, which kanon refuses (uid_map write: Operation not permitted), so it would skip. Run it where
+# unprivileged user namespaces work by removing the leading '#!' below.
+#!proc-self-exe-read-back | crates/boundary/src/ld.rs | lit:let (head, view) = image_view(prog, bias, name, &mut spans, &mut own); ==> if open_file(b"/proc/self/exe\0".as_ptr().expose_provenance()).is_none() { fail_with(&[name, b": cannot read the program's file\n"], program::FAILURE) } let (head, view) = image_view(prog, bias, name, &mut spans, &mut own); | cargo xtask so && cargo test -p liella-ld --test reloc | msg:kernel-started program without /proc
+textrel-text-left-writable | crates/ld/src/reloc.rs | lit:else { prot_of(ph.flags) }; ==> else { prot_of(ph.flags ^ PF_W) }; | cargo xtask so && cargo test -p liella-ld --test reloc | msg:text not r-x when it runs

@@ -1,0 +1,12 @@
+{"task": "DL-RELOC-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: t4 reds fixed at the cause (empty PT_LOAD skipped, unhashed relocation symbols, --as-needed in test), #4231 dev/ino dedup, ARCH tag, codemap, D-27.17; #4229 memory-image reader and startup counts not done; plants running",
+ "branch": "task/dl-reloc-2", "head": "bb2f5c151",
+ "gate": {"affected": "dl-reloc-2-gate: 578 passed / 2 failed (both fixed in bb2f5c151; failing suites rerun as dl-reloc-2-t2: 15 passed / 0 failed)", "peak": "2.7G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["binutils 2.42 emits an empty PT_LOAD for -z notext; D-27.17 amends D-27.15 to skip it", "the loader's segment mappings carry no file name in /proc/self/maps (mapped from the reservation), so tests cannot identify objects by name there"],
+ "refused": [],
+ "improvement": "the plants tool rebuilds the whole product per plant in a fresh RAM copy (~7 min baseline); a shared warm target dir for plants would cut a 9-plant loader run substantially",
+ "next_step": "DL-RELOC-3: read dl-reloc-2-plants2 verdicts; ruling #4229 memory-image reader (ELF reader image mode) then drop the /proc refusal; differences row wording; cbench_startup counters vs next",
+ "report_file": "handoff/DL-RELOC.md",
+ "jobs": ["mei:dl-reloc-2-t2", "mei:dl-reloc-2-plants2"]}

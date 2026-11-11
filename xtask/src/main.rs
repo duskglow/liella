@@ -35,6 +35,7 @@
 //! | `nextest`      | `cargo nextest run <args>` with the summary lines of a `cargo test` log added (`nextest.rs`); `affected --run` runs its tests through it. |
 //! | `affected`     | Run only the tests a change can affect (conservative selection; see `affected.rs`): `--list` prints the selection with a reason per item, `--run` runs it and prints a summary; one of the two is required (without either: the one-line usage, exit 2; XTASK-AFFECTED-EXPLICIT); `--base <ref>` (default `origin/main`), `--files <path>...` instead of the git query. Escalates to the full gate for `csys/`, `crates/abi`, build and generated files. The full gate still runs once at merge. |
 //! | `so`           | Build the products: `libc.a`, `libc.so.6` (version script from Appendix C.3 and the native C ABI's nodes, D-X.10) and `liella-crt1.o` in `target/liella` (never on Cargo's library path). Built with `[profile.fast]` (thin LTO, 16 codegen units; TOOL-PROFILE) for tests and iteration; `LIELLA_FULL_PROFILE=1` uses the shipped `release` profile (fat LTO). `bench` always builds `release` and refuses fast products (`target/liella/.profile` records which). |
+//! | `hottext-repair` | HOTTEXT-DEAD-KEY-REPAIR: repair dead hot-text keys on a tree with `next` merged in, without tracing: builds both profiles' processed archives (`target/liella` untouched), drops the keys of `crates/libc-so/hot-text.list` no profile matches, records a key one profile no longer matches in `hot-text.absent` ("inlined in <profile> at <rev>"; `--at <rev>`, default `origin/next`), removes stale `hot-text.absent` lines, prints what changed, and fails when the dead-key check still fails. Never adds or reorders keys (a real regen: tools/hottext/regen.sh). |
 //! | `repro`        | The products must not depend on the build directory (ruling #713): builds them in two fresh source copies under `target/repro` (`--dir <base>` elsewhere; not `/dev/shm` under `~/bin/gate`, #714) with the `fast` profile (`--release`: the shipped one) and compares every file of `target/liella`: whole files, then ELF sections (archive members too), accepting differences in `.symtab`/`.strtab` only. Fails naming the first differing file, member and section (`repro.rs`). A nightly job, not part of the gate. |
 //! | `native`       | The native Rust interface (D-X.10): `liella-native` with each feature on its own (clippy, unit tests); its static example built against `libc.a` and run, its dynamic example built against `libc.so.6` and checked with `readelf`. |
 //! | `fuzz`         | The fuzz harnesses of `fuzz/` (a workspace of its own, nightly, libFuzzer through `cargo fuzz`): `--list`; `<target> --time <minutes>` (or `--all`) runs in chunks resuming from the corpus outside the repository (`~/liella-fuzz-corpus`); `--repro`, `--tmin <file>`, `--cmin` for triage (implementation-plan.md §4.5). |
@@ -61,6 +62,7 @@ mod codemap;
 mod jcc;
 mod layout;
 mod benchstage;
+mod float_casts;
 mod forkalloc;
 mod fs_order;
 mod benchrows;
@@ -83,6 +85,7 @@ mod repro;
 mod rust_dylib;
 mod schedule;
 mod so;
+mod startup_ro;
 mod spec;
 mod status;
 mod steptime;
@@ -147,6 +150,7 @@ fn main() -> ExitCode {
         "arch-audit" => arch::audit(&root, args.iter().any(|a| a == "--list"), &arch_tools()),
         "arch-check" => arch_check(&root),
         "purity" => policy::purity(&root),
+        "float-casts" => float_casts::static_check(&root),
         "unsafe-audit" => policy::unsafe_audit(&root),
         "csys-audit" => policy::csys_audit(&root),
         "env-audit" => policy::env_audit(&root),
@@ -155,6 +159,7 @@ fn main() -> ExitCode {
         "reexec-audit" => policy::reexec_audit(&root),
         "lab-names" => labnames::check(&root),
         "hottext-check" => hottext::static_check(&root),
+        "hottext-repair" => hottext::repair_cmd(&root, &args[1..]),
         "private-paths" => privpaths::check(&root),
         "csys-gen" => csys::run(&root, args.iter().any(|a| a == "--check")),
         "abi-gen" => abi::run(&root, args.iter().any(|a| a == "--check")),
@@ -184,12 +189,13 @@ fn main() -> ExitCode {
         "rust-dylib" => rust_dylib::run_rust_dylib(&root, args.get(1).map(String::as_str)),
         "plants" => return plants::main(&root, &args[1..]),
         "classed-xref" => classed::run(&root, &args[1..]),
-        "codemap" | "codemap-asm" => codemap::run(&root, args.iter().any(|a| a == "--check")),
+        "codemap" | "codemap-asm" => codemap::run(&root, args.iter().any(|a| a == "--check"), records::in_place_env(&args[1..])),
         "jcc-check" => jcc::run(&root, &args[1..]),
         "partial-write" => partial_write::run(&root, &args[1..]),
         "layout-check" => layout::run(&root, &args[1..]),
+        "startup-ro-plan" => startup_ro::dump(&root, &args[1..]),
         _ => {
-            println!("usage: cargo xtask <stubs [--force] | trace [--untested [--out F]] | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | arch-check | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] [--in-place] | kernel-index [--check] [--in-place] | codemap [--check] | records-gen [--check] [--in-place] | records (check | fmt [--check] | new <decision|compat|saturation> <id> [--section S] [--series S] [--story S]) | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] | sweep (run --out <dir> [--only a,b] | compare --new <class>=<tsv>... (--old <class>=<tsv>... | --old-table <md>) [--label L]) [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; --tunables V, or else a non-empty GLIBC_TUNABLES in the caller's environment, sets it for both sides; the two differing is an error) | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
+            println!("usage: cargo xtask <stubs [--force] | trace [--untested [--out F]] | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | arch-check | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] [--in-place] | kernel-index [--check] [--in-place] | codemap [--check] [--in-place] | records-gen [--check] [--in-place] | records (check | fmt [--check] | new <decision|compat|saturation> <id> [--section S] [--series S] [--story S]) | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] | sweep (run --out <dir> [--only a,b] | compare --new <class>=<tsv>... (--old <class>=<tsv>... | --old-table <md>) [--label L]) [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; --tunables V, or else a non-empty GLIBC_TUNABLES in the caller's environment, sets it for both sides; the two differing is an error) | fuzz <target> --time <minutes> | fuzz-check | so | hottext-repair [--at <rev>] | test | ctest | nextest <args> | affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
             Ok(())
         }
     };
@@ -227,8 +233,8 @@ fn arch_tools() -> arch::Tools {
 /// on Zen 1 host before a long gate. `~/bin/static-checks` on the VMs is the same list.
 fn static_checks(root: &Path) -> Result<(), String> {
     type Check = fn(&Path) -> Result<(), String>;
-    let checks: [(&str, Check); 33] =
-        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("classed-xref", classed::static_check), ("jcc-check", jcc::static_check), ("layout", layout::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("records", records::check), ("records-gen", records::fresh_check), ("register", register::check), ("compat-ids", compat_ids::check), ("lab-names", labnames::check), ("private-paths", privpaths::check), ("reexec-audit", policy::reexec_audit), ("tables-fresh", |r| math::run_tables(r, &["--check".to_string()])), ("lock-fresh", locks::static_check), ("hottext", hottext::static_check), ("codemap", |r| codemap::run(r, true)), ("partial-write", partial_write::static_check)];
+    let checks: [(&str, Check); 34] =
+        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("classed-xref", classed::static_check), ("jcc-check", jcc::static_check), ("layout", layout::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("records", records::check), ("records-gen", records::fresh_check), ("register", register::check), ("compat-ids", compat_ids::check), ("lab-names", labnames::check), ("private-paths", privpaths::check), ("reexec-audit", policy::reexec_audit), ("tables-fresh", |r| math::run_tables(r, &["--check".to_string()])), ("lock-fresh", locks::static_check), ("hottext", hottext::static_check), ("codemap", |r| codemap::run(r, true, false)), ("partial-write", partial_write::static_check), ("float-casts", float_casts::static_check)];
     let failed: Vec<&str> = checks.iter().filter(|(name, f)| f(root).map_err(|e| eprintln!("static: {name} FAILED: {e}")).is_err()).map(|(name, _)| *name).collect();
     if failed.is_empty() { Ok(()) } else { Err(format!("failed: {}", failed.join(", "))) }
 }

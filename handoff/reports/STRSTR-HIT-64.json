@@ -1,0 +1,12 @@
+{"task": "STRSTR-HIT-64", "model": "opus", "tokens": null,
+ "result": "strstr_hit_64 time ratio 1.25 -> 1.00 (Ivy Bridge) and 1.18 -> 0.81 (Alder Lake-N): the 64-byte head runs in strstr's entry with no strpair call; SSE2 132 -> 103, AVX2 103 -> 74 instructions; no strstr row up",
+ "branch": "task/strstr-hit-64", "head": null,
+ "gate": {"affected": "strstr-hit-64-gate2 (clippy all-features, static, affected --base origin/next): see jobs.tsv", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Ivy Bridge strstr_hit_4k 1.05 in time; its SSE2 count went down with this change (2194 -> 2190)", "kotori timing job rc 1 from advisory cycle limits on __memcmpeq rows only", "plant sse-stop32-offset equivalent: an early candidate is rescanned by the Rust continuation"],
+ "refused": [],
+ "improvement": "bench --stage writes its tarball into the role root, where xtask static scans it; stage to ~/work/<story>/",
+ "next_step": "Ivy Bridge strstr_hit_4k: profile the SSE2 64-byte group loop",
+ "report_file": "handoff/strstr-hit-64.md",
+ "jobs": ["keke:strstr-hit-64-gate2", "keke:strstr-hit-64-plants2", "keke:strstr-hit-64-check1", "nozomi:strstr-hit-64-time-nozomi"]}

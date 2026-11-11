@@ -5,7 +5,7 @@ symbol	version	defined at	first implementation call
 @mul	(math-gen)	crates/boundary/src/posix/s10_math.tsv:87	mret::ret
 @sqrt	(math-gen)	crates/boundary/src/posix/s10_math.tsv:89	mret::ret
 @sub	(math-gen)	crates/boundary/src/posix/s10_math.tsv:86	mret::ret
-_Exit	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:64	process::exit_now
+_Exit	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:72	process::exit_now
 _Fork	GLIBC_2.34	crates/boundary/src/posix/s18_processes.rs:66	ret::int32
 _IO_fclose	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:744	
 _IO_fdopen	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:749	
@@ -79,7 +79,7 @@ __backtrace_symbols_fd	GLIBC_2.2.5	crates/boundary/src/posix/s02_diagnostics.rs:
 __bsd_getpgrp	GLIBC_2.2.5	crates/boundary/src/posix/s18_processes.rs:383	ret::int32
 __bzero	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:137	ret::unit
 __chk_fail	GLIBC_2.3.4	crates/boundary/src/posix/s02_diagnostics.rs:51	ret::chk_fail
-__clog10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:188	mret::cplx
+__clog10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:192	mret::cplx
 __clog10	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:19	mret::cplx
 __clog10f	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:24	mret::cplx
 __clone		csys/src/adapter/variadic.c:99	
@@ -91,10 +91,10 @@ __ctype_b_loc	GLIBC_2.3	crates/boundary/src/posix/s05_ctype.rs:556	ret::ptr
 __ctype_get_mb_cur_max	GLIBC_2.2.5	crates/boundary/src/posix/s06_multibyte.rs:187	mb_compat::mb_cur_max
 __ctype_tolower_loc	GLIBC_2.3	crates/boundary/src/posix/s05_ctype.rs:561	ret::ptr
 __ctype_toupper_loc	GLIBC_2.3	crates/boundary/src/posix/s05_ctype.rs:566	ret::ptr
-__cxa_at_quick_exit	GLIBC_2.10	crates/boundary/src/posix/s01_startup.rs:99	ret::registered
-__cxa_atexit	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:94	ret::registered
-__cxa_finalize	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:104	process::finalize
-__cxa_thread_atexit_impl	GLIBC_2.18	crates/boundary/src/posix/s01_startup.rs:109	ret::registered
+__cxa_at_quick_exit	GLIBC_2.10	crates/boundary/src/posix/s01_startup.rs:107	ret::registered
+__cxa_atexit	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:102	ret::registered
+__cxa_finalize	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:112	process::finalize
+__cxa_thread_atexit_impl	GLIBC_2.18	crates/boundary/src/posix/s01_startup.rs:117	ret::registered
 __cyg_profile_func_enter	GLIBC_2.2.5	crates/boundary/src/posix/s28_profiling.rs:370	
 __cyg_profile_func_exit	GLIBC_2.2.5	crates/boundary/src/posix/s28_profiling.rs:374	
 __dcgettext	GLIBC_2.2.5	crates/boundary/src/posix/s07_locale.rs:118	ret::ptr
@@ -148,7 +148,7 @@ __fxstat	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:290	ret::store_
 __fxstat64	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:295	ret::store_into
 __fxstatat	GLIBC_2.4	crates/boundary/src/posix/s13_filesystem.rs:300	ret::store_into
 __fxstatat64	GLIBC_2.4	crates/boundary/src/posix/s13_filesystem.rs:306	ret::store_into
-__getauxval	GLIBC_2.16	crates/boundary/src/posix/s01_startup.rs:163	ret::with_errno
+__getauxval	GLIBC_2.16	crates/boundary/src/posix/s01_startup.rs:171	ret::with_errno
 __getcwd_chk	GLIBC_2.4	crates/boundary/src/posix/s13_filesystem.rs:649	ret::null
 __getdelim	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:288	ret::record
 __getdomainname_chk	GLIBC_2.4	crates/boundary/src/posix/s24_system.rs:325	ret::zero
@@ -246,16 +246,17 @@ __libc_current_sigrtmax	GLIBC_2.2.5	crates/boundary/src/posix/s20_signals.rs:30	
 __libc_current_sigrtmin	GLIBC_2.2.5	crates/boundary/src/posix/s20_signals.rs:25	signal_compat::current_rtmin
 __libc_free	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:40	heap::free_entry
 __libc_freeres	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:187	malloc_compat::inert
-__libc_init_first	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:46	liella_legacy::stubs::nothing
+__libc_init_first	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:54	liella_legacy::stubs::nothing
 __libc_mallinfo	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:167	malloc_compat::mallinfo
 __libc_malloc	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:30	heap::malloc_entry
 __libc_mallopt	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:154	malloc_compat::mallopt
 __libc_memalign	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:106	ret::null
 __libc_pvalloc	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:131	ret::null
 __libc_realloc	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:82	heap::c_realloc_fit
-__libc_start_main	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:32	crate::runtime::start
-__libc_start_main	GLIBC_2.34	crates/boundary/src/posix/s01_startup.rs:32	crate::runtime::start
+__libc_start_main	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:40	crate::runtime::start
+__libc_start_main	GLIBC_2.34	crates/boundary/src/posix/s01_startup.rs:40	crate::runtime::start
 __libc_valloc	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:121	ret::null
+__liella_libc_early_init	LIELLA_PRIVATE	crates/boundary/src/posix/s01_startup.rs:32	crate::runtime::early_init
 __loc_aton	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:917	resolv::loc_aton
 __loc_ntoa	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:923	core::ptr::with_exposed_provenance
 __longjmp_chk	GLIBC_2.11	crates/boundary/src/posix/s21_contexts.rs:23	context::longjmp_chk
@@ -313,7 +314,7 @@ __p_type	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:929	core::ptr
 __pipe	GLIBC_2.2.5	crates/boundary/src/posix/s25_ipc.rs:38	ret::pair
 __poll	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:376	ret::count
 __poll_chk	GLIBC_2.16	crates/boundary/src/posix/s11_lowio.rs:382	cancel::point
-__posix_getopt	GLIBC_2.10	crates/boundary/src/posix/s01_startup.rs:176	options::getopt
+__posix_getopt	GLIBC_2.10	crates/boundary/src/posix/s01_startup.rs:184	options::getopt
 __ppoll_chk	GLIBC_2.16	crates/boundary/src/posix/s11_lowio.rs:394	cancel::point
 __pread64	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:186	ret::ssize
 __pread64_chk	GLIBC_2.4	crates/boundary/src/posix/s11_lowio.rs:228	ret::raw_ssize
@@ -407,8 +408,8 @@ __sched_getparam	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:128	ret::st
 __sched_getscheduler	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:113	ret::int
 __sched_setscheduler	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:103	ret::zero
 __sched_yield	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:163	ret::zero
-__secure_getenv	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:122	ret::ptr
-__secure_getenv	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:128	ret::ptr
+__secure_getenv	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:130	ret::ptr
+__secure_getenv	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:136	ret::ptr
 __select	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:350	ret::count
 __send	GLIBC_2.2.5	crates/boundary/src/posix/s15_sockets.rs:124	ret::ssize
 __setmntent	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:1001	ret::null
@@ -483,6 +484,7 @@ __sysconf	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:211	ret::sysconf
 __sysctl	GLIBC_2.2.5	crates/boundary/src/posix/s29_legacy.rs:555	ret::zero
 __syslog_chk		csys/src/adapter/variadic.c:254	
 __sysv_signal	GLIBC_2.2.5	crates/boundary/src/posix/s20_signals.rs:70	ret::handler
+__tls_get_addr		crates/boundary/src/ld.rs:455	crate::tb::read32
 __toascii_l	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:395	ctype_tables::toascii
 __tolower_l	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:420	locale::case_map_l
 __toupper_l	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:455	locale::case_map_l
@@ -551,7 +553,7 @@ __wprintf_chk		csys/src/adapter/variadic.c:177	liella_vfwprintf4
 __write	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:162	ret::ssize
 __wuflow	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:547	ret::wint_or_weof
 __wunderflow	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:552	ret::wint_or_weof
-__x86_get_cpuid_feature_leaf	GLIBC_2.33	crates/boundary/src/posix/s27_dynlink.rs:153	usize::try_from
+__x86_get_cpuid_feature_leaf	GLIBC_2.33	crates/boundary/src/posix/s27_dynlink.rs:154	usize::try_from
 __xmknod	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:187	ret::zero
 __xmknodat	GLIBC_2.4	crates/boundary/src/posix/s13_filesystem.rs:193	ret::zero
 __xpg_basename	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:918	ret::path_part
@@ -560,8 +562,8 @@ __xpg_strerror_r	GLIBC_2.3.4	crates/boundary/src/posix/s02_diagnostics.rs:80	rep
 __xstat	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:266	ret::store_into
 __xstat64	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:272	ret::store_into
 _authenticate	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_svc.rs:157	
-_dl_find_object	GLIBC_2.35	crates/boundary/src/posix/s27_dynlink.rs:116	Auxv::from_words
-_exit	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:58	process::exit_now
+_dl_find_object	GLIBC_2.35	crates/boundary/src/posix/s27_dynlink.rs:117	Auxv::from_words
+_exit	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:66	process::exit_now
 _flushlbf	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:109	stdio::flushlbf
 _getlong	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:865	resolv::get_be
 _getshort	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:870	resolv::get_be
@@ -584,7 +586,7 @@ _pthread_cleanup_push_defer	GLIBC_2.2.5	crates/boundary/src/posix/s22_threads.rs
 _rpc_dtablesize	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_clnt.rs:382	
 _seterr_reply	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_svc.rs:234	u64::from
 _setjmp		csys/src/machine/setjmp.S:108	liella_machine_sigsetjmp
-_start		csys/src/machine/entry.S:85	liella_start_main_static_pie
+_start		csys/src/machine/entry.S:121	liella_start_main_static_pie
 _sys_errlist	GLIBC_2.12	csys/src/machine/compat_aliases.S:3424	
 _sys_errlist	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3421	
 _sys_errlist	GLIBC_2.3	csys/src/machine/compat_aliases.S:3422	
@@ -598,22 +600,23 @@ _sys_siglist	GLIBC_2.3.3	csys/src/machine/compat_aliases.S:3587
 _tolower	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:415	locale::tolower
 _toupper	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:450	locale::toupper
 a64l	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:1097	ret::must
-abort	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:74	ret::abort
+abort	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:82	ret::abort
 abs	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:1032	num_compat::abs32
 accept	GLIBC_2.2.5	crates/boundary/src/posix/s15_sockets.rs:55	cancel::point
 accept4	GLIBC_2.10	crates/boundary/src/posix/s15_sockets.rs:61	cancel::point
 access	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:363	ret::zero
 acct	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:387	ret::zero
-acos	(math-gen)	crates/boundary/src/posix/s10_math.tsv:135	mret::elem
-acos	(math-gen)	crates/boundary/src/posix/s10_math.tsv:136	mret::elem_fast
+acos	(math-gen)	crates/boundary/src/posix/s10_math.tsv:136	mret::elem
+acos	(math-gen)	crates/boundary/src/posix/s10_math.tsv:137	mret::elem
+acos	(math-gen)	crates/boundary/src/posix/s10_math.tsv:138	mret::elem_fast
 acos	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:181	mret::elem_fast
 acosf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:186	mret::elem
 acosf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:196	mret::elem
 acosf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:201	mret::elem_fast
 acosf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:206	mret::elem_fast
-acosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:153	mret::elem32_fast
-acosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:154	mret::elem_fast
-acosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:155	mret::elem
+acosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:155	mret::elem32_fast
+acosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:156	mret::elem_fast
+acosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:157	mret::elem
 acosh	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:216	mret::elem_fast
 acoshf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:221	mret::elem32_fast
 acoshf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:231	mret::elem32_fast
@@ -664,10 +667,10 @@ arc4random_uniform	GLIBC_2.36	crates/boundary/src/posix/s09_random.rs:45	ret::ar
 arch_prctl	GLIBC_2.2.5	crates/boundary/src/posix/s18_processes.rs:448	ret::int
 argp_error		csys/src/adapter/variadic.c:234	
 argp_failure		csys/src/adapter/variadic.c:235	
-argp_help	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:206	argp::help
-argp_parse	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:201	argp::parse
-argp_state_help	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:211	argp::state_help
-argp_usage	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:216	argp::usage
+argp_help	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:214	argp::help
+argp_parse	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:209	argp::parse
+argp_state_help	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:219	argp::state_help
+argp_usage	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:224	argp::usage
 argz_add	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:972	ret::errnum
 argz_add_sep	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:978	ret::errnum
 argz_append	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:984	ret::errnum
@@ -683,27 +686,28 @@ argz_stringify	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:960	ret::uni
 asctime	GLIBC_2.2.5	crates/boundary/src/posix/s23_time.rs:288	ret::null
 asctime_r	GLIBC_2.2.5	crates/boundary/src/posix/s23_time.rs:293	ret::null
 asin	(math-gen)	crates/boundary/src/posix/s10_math.tsv:133	mret::elem
-asin	(math-gen)	crates/boundary/src/posix/s10_math.tsv:134	mret::elem_fast
+asin	(math-gen)	crates/boundary/src/posix/s10_math.tsv:134	mret::elem
+asin	(math-gen)	crates/boundary/src/posix/s10_math.tsv:135	mret::elem_fast
 asin	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:261	mret::elem_fast
 asinf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:266	mret::elem
 asinf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:276	mret::elem
 asinf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:281	mret::elem_fast
 asinf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:286	mret::elem_fast
-asinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:150	mret::elem32_fast
-asinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:151	mret::elem_fast
-asinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:152	mret::elem
+asinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:152	mret::elem32_fast
+asinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:153	mret::elem_fast
+asinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:154	mret::elem
 asinh	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:296	mret::elem_fast
 asinhf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:301	mret::elem32_fast
 asinhf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:311	mret::elem32_fast
 asinhf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:316	mret::elem_fast
 asinhf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:321	mret::elem_fast
 asprintf		csys/src/adapter/variadic.c:164	liella_vasprintf4
-at_quick_exit	nonshared	crates/boundary/src/posix/s01_startup.rs:84	ret::registered
-atan	(math-gen)	crates/boundary/src/posix/s10_math.tsv:137	mret::elem
-atan	(math-gen)	crates/boundary/src/posix/s10_math.tsv:138	mret::elem_fast
+at_quick_exit	nonshared	crates/boundary/src/posix/s01_startup.rs:92	ret::registered
+atan	(math-gen)	crates/boundary/src/posix/s10_math.tsv:139	mret::elem
+atan	(math-gen)	crates/boundary/src/posix/s10_math.tsv:140	mret::elem_fast
 atan	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:341	mret::elem_fast
-atan2	(math-gen)	crates/boundary/src/posix/s10_math.tsv:139	mret::elem
-atan2	(math-gen)	crates/boundary/src/posix/s10_math.tsv:140	mret::elem_fast
+atan2	(math-gen)	crates/boundary/src/posix/s10_math.tsv:141	mret::elem
+atan2	(math-gen)	crates/boundary/src/posix/s10_math.tsv:142	mret::elem_fast
 atan2	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:346	mret::elem_fast
 atan2f	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:351	mret::elem
 atan2f32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:361	mret::elem
@@ -713,15 +717,15 @@ atanf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:386	mret::elem
 atanf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:396	mret::elem
 atanf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:401	mret::elem_fast
 atanf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:406	mret::elem_fast
-atanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:156	mret::elem32_fast
-atanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:157	mret::elem_fast
-atanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:158	mret::elem
+atanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:158	mret::elem32_fast
+atanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:159	mret::elem_fast
+atanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:160	mret::elem
 atanh	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:416	mret::elem_fast
 atanhf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:421	mret::elem32_fast
 atanhf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:431	mret::elem32_fast
 atanhf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:436	mret::elem_fast
 atanhf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:441	mret::elem_fast
-atexit	nonshared	crates/boundary/src/posix/s01_startup.rs:79	ret::registered
+atexit	nonshared	crates/boundary/src/posix/s01_startup.rs:87	ret::registered
 atof	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:704	num_compat::atof
 atoi	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:686	num_compat::atoi
 atol	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:692	num_compat::atol
@@ -750,19 +754,19 @@ bzero	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:131	ret::unit
 c16rtomb	GLIBC_2.16	crates/boundary/src/posix/s06_multibyte.rs:148	ret::size_or_neg1
 c32rtomb	GLIBC_2.16	crates/boundary/src/posix/s06_multibyte.rs:142	ret::size_or_neg1
 c8rtomb	GLIBC_2.36	crates/boundary/src/posix/s06_multibyte.rs:154	ret::size_or_neg1
-cabs	(math-gen)	crates/boundary/src/posix/s10_math.tsv:177	mret::cplx_real
+cabs	(math-gen)	crates/boundary/src/posix/s10_math.tsv:179	mret::cplx_real
 cabs	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:461	mret::cplx_real
 cabsf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:466	mret::cplx_real
 cabsf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:476	mret::cplx_real
 cabsf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:481	mret::cplx_real
 cabsf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:486	mret::cplx_real
-cacos	(math-gen)	crates/boundary/src/posix/s10_math.tsv:198	mret::cplx
+cacos	(math-gen)	crates/boundary/src/posix/s10_math.tsv:204	mret::cplx
 cacos	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:501	mret::cplx
 cacosf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:506	mret::cplx
 cacosf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:516	mret::cplx
 cacosf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:521	mret::cplx
 cacosf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:526	mret::cplx
-cacosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:201	mret::cplx
+cacosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:207	mret::cplx
 cacosh	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:536	mret::cplx
 cacoshf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:541	mret::cplx
 cacoshf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:551	mret::cplx
@@ -784,31 +788,31 @@ canonicalizef64x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:611	mret::
 canonicalizel	GLIBC_2.25	crates/boundary/src/posix/s10_math_gen.rs:616	mret::canonical
 capget	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:414	ret::zero
 capset	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:420	ret::zero
-carg	(math-gen)	crates/boundary/src/posix/s10_math.tsv:178	mret::cplx_real
+carg	(math-gen)	crates/boundary/src/posix/s10_math.tsv:180	mret::cplx_real
 carg	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:621	mret::cplx_real
 cargf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:626	mret::cplx_real
 cargf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:636	mret::cplx_real
 cargf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:641	mret::cplx_real
 cargf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:646	mret::cplx_real
-casin	(math-gen)	crates/boundary/src/posix/s10_math.tsv:197	mret::cplx
+casin	(math-gen)	crates/boundary/src/posix/s10_math.tsv:203	mret::cplx
 casin	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:661	mret::cplx
 casinf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:666	mret::cplx
 casinf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:676	mret::cplx
 casinf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:681	mret::cplx
 casinf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:686	mret::cplx
-casinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:200	mret::cplx
+casinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:206	mret::cplx
 casinh	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:696	mret::cplx
 casinhf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:701	mret::cplx
 casinhf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:711	mret::cplx
 casinhf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:716	mret::cplx
 casinhf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:721	mret::cplx
-catan	(math-gen)	crates/boundary/src/posix/s10_math.tsv:199	mret::cplx
+catan	(math-gen)	crates/boundary/src/posix/s10_math.tsv:205	mret::cplx
 catan	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:741	mret::cplx
 catanf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:746	mret::cplx
 catanf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:756	mret::cplx
 catanf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:761	mret::cplx
 catanf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:766	mret::cplx
-catanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:202	mret::cplx
+catanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:208	mret::cplx
 catanh	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:776	mret::cplx
 catanhf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:781	mret::cplx
 catanhf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:791	mret::cplx
@@ -826,13 +830,13 @@ cbrtf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:826	mret::elem
 cbrtf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:836	mret::elem
 cbrtf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:841	mret::elem_fast
 cbrtf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:846	mret::elem_fast
-ccos	(math-gen)	crates/boundary/src/posix/s10_math.tsv:192	mret::cplx
+ccos	(math-gen)	crates/boundary/src/posix/s10_math.tsv:198	mret::cplx
 ccos	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:861	mret::cplx
 ccosf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:866	mret::cplx
 ccosf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:876	mret::cplx
 ccosf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:881	mret::cplx
 ccosf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:886	mret::cplx
-ccosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:195	mret::cplx
+ccosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:201	mret::cplx
 ccosh	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:896	mret::cplx
 ccoshf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:901	mret::cplx
 ccoshf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:911	mret::cplx
@@ -844,9 +848,9 @@ ceilf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:947	mret::Soft::ente
 ceilf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:958	mret::Soft::enter
 ceilf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:964	mret::Soft::enter
 ceilf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:970	mret::Soft::enter
-cexp	(math-gen)	crates/boundary/src/posix/s10_math.tsv:183	mret::cplx_fast
-cexp	(math-gen)	crates/boundary/src/posix/s10_math.tsv:184	mret::cplx_fast
-cexp	(math-gen)	crates/boundary/src/posix/s10_math.tsv:185	mret::cplx
+cexp	(math-gen)	crates/boundary/src/posix/s10_math.tsv:185	mret::cplx_fast
+cexp	(math-gen)	crates/boundary/src/posix/s10_math.tsv:186	mret::cplx_fast
+cexp	(math-gen)	crates/boundary/src/posix/s10_math.tsv:187	mret::cplx
 cexp	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:986	mret::cplx_fast
 cexpf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:991	mret::cplx_fast
 cexpf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1001	mret::cplx_fast
@@ -865,13 +869,13 @@ chflags	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:619	ret::zero
 chmod	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:312	ret::zero
 chown	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:335	ret::zero
 chroot	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:683	ret::zero
-cimag	(math-gen)	crates/boundary/src/posix/s10_math.tsv:180	mret::cpart
+cimag	(math-gen)	crates/boundary/src/posix/s10_math.tsv:182	mret::cpart
 cimag	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1026	mret::cpart
 cimagf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1031	mret::cpart
 cimagf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1041	mret::cpart
 cimagf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1046	mret::cpart
 cimagf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1051	mret::cpart
-clearenv	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:151	ret::zero
+clearenv	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:159	ret::zero
 clearerr	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:428	stdio::clearerr
 clearerr_unlocked	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:433	stdio::clearerr
 clnt_broadcast	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_clnt.rs:262	
@@ -899,18 +903,20 @@ clock_nanosleep	GLIBC_2.17	crates/boundary/src/posix/s23_time.rs:166	cancel::poi
 clock_nanosleep	GLIBC_2.2.5	crates/boundary/src/posix/s23_time.rs:166	cancel::point
 clock_settime	GLIBC_2.17	crates/boundary/src/posix/s23_time.rs:90	ret::zero
 clock_settime	GLIBC_2.2.5	crates/boundary/src/posix/s23_time.rs:90	ret::zero
-clog	(math-gen)	crates/boundary/src/posix/s10_math.tsv:186	mret::cplx
-clog	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1066	mret::cplx
-clog10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:187	mret::cplx
+clog	(math-gen)	crates/boundary/src/posix/s10_math.tsv:188	mret::cplx_fast
+clog	(math-gen)	crates/boundary/src/posix/s10_math.tsv:189	mret::cplx_fast
+clog	(math-gen)	crates/boundary/src/posix/s10_math.tsv:190	mret::cplx
+clog	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1066	mret::cplx_fast
+clog10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:191	mret::cplx
 clog10	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1071	mret::cplx
 clog10f	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1076	mret::cplx
 clog10f32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1086	mret::cplx
 clog10f32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1091	mret::cplx
 clog10f64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1096	mret::cplx
-clogf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1111	mret::cplx
-clogf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1121	mret::cplx
-clogf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1126	mret::cplx
-clogf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1131	mret::cplx
+clogf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1111	mret::cplx_fast
+clogf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1121	mret::cplx_fast
+clogf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1126	mret::cplx_fast
+clogf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1131	mret::cplx_fast
 clone		csys/src/adapter/variadic.c:98	
 close	GLIBC_2.2.5	csys/src/machine/points.S:184	liella_close_rest
 close_range	GLIBC_2.34	crates/boundary/src/posix/s11_lowio.rs:120	ret::zero
@@ -930,7 +936,7 @@ cnd_timedwait	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:1305	sync::cnd
 cnd_wait	GLIBC_2.28	crates/boundary/src/posix/s22_threads.rs:1299	sync::cnd_wait
 cnd_wait	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:1299	sync::cnd_wait
 confstr	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:227	ret::size0
-conj	(math-gen)	crates/boundary/src/posix/s10_math.tsv:181	mret::cplx
+conj	(math-gen)	crates/boundary/src/posix/s10_math.tsv:183	mret::cplx
 conj	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1146	mret::cplx
 conjf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1151	mret::cplx
 conjf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1161	mret::cplx
@@ -952,27 +958,27 @@ cosf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1231	mret::elem32_fas
 cosf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1241	mret::elem32_fast
 cosf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1246	mret::elem_fast
 cosf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1251	mret::elem_fast
-cosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:144	mret::elem32_fast
-cosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:145	mret::elem_fast
-cosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:146	mret::elem
+cosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:146	mret::elem32_fast
+cosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:147	mret::elem_fast
+cosh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:148	mret::elem
 cosh	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1261	mret::elem_fast
 coshf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1266	mret::elem32_fast
 coshf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1276	mret::elem32_fast
 coshf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1281	mret::elem_fast
 coshf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1286	mret::elem_fast
-cpow	(math-gen)	crates/boundary/src/posix/s10_math.tsv:189	mret::cplx2
+cpow	(math-gen)	crates/boundary/src/posix/s10_math.tsv:193	mret::cplx2
 cpow	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1306	mret::cplx2
 cpowf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1311	mret::cplx2
 cpowf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1321	mret::cplx2
 cpowf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1326	mret::cplx2
 cpowf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1331	mret::cplx2
-cproj	(math-gen)	crates/boundary/src/posix/s10_math.tsv:182	mret::cplx
+cproj	(math-gen)	crates/boundary/src/posix/s10_math.tsv:184	mret::cplx
 cproj	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1346	mret::cplx
 cprojf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1351	mret::cplx
 cprojf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1361	mret::cplx
 cprojf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1366	mret::cplx
 cprojf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1371	mret::cplx
-creal	(math-gen)	crates/boundary/src/posix/s10_math.tsv:179	mret::cpart
+creal	(math-gen)	crates/boundary/src/posix/s10_math.tsv:181	mret::cpart
 creal	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1386	mret::cpart
 crealf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1391	mret::cpart
 crealf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1401	mret::cpart
@@ -981,31 +987,33 @@ crealf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1411	mret::cpart
 creat	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:42	cancel::point
 creat64	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:48	cancel::point
 create_module	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:442	ret::addr_or_neg1
-csin	(math-gen)	crates/boundary/src/posix/s10_math.tsv:191	mret::cplx
+csin	(math-gen)	crates/boundary/src/posix/s10_math.tsv:197	mret::cplx
 csin	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1426	mret::cplx
 csinf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1431	mret::cplx
 csinf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1441	mret::cplx
 csinf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1446	mret::cplx
 csinf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1451	mret::cplx
-csinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:194	mret::cplx
+csinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:200	mret::cplx
 csinh	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1461	mret::cplx
 csinhf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1466	mret::cplx
 csinhf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1476	mret::cplx
 csinhf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1481	mret::cplx
 csinhf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1486	mret::cplx
-csqrt	(math-gen)	crates/boundary/src/posix/s10_math.tsv:190	mret::cplx
-csqrt	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1506	mret::cplx
-csqrtf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1511	mret::cplx
-csqrtf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1521	mret::cplx
-csqrtf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1526	mret::cplx
-csqrtf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1531	mret::cplx
-ctan	(math-gen)	crates/boundary/src/posix/s10_math.tsv:193	mret::cplx
+csqrt	(math-gen)	crates/boundary/src/posix/s10_math.tsv:194	mret::cplx_fast
+csqrt	(math-gen)	crates/boundary/src/posix/s10_math.tsv:195	mret::cplx_fast
+csqrt	(math-gen)	crates/boundary/src/posix/s10_math.tsv:196	mret::cplx
+csqrt	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1506	mret::cplx_fast
+csqrtf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1511	mret::cplx_fast
+csqrtf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1521	mret::cplx_fast
+csqrtf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1526	mret::cplx_fast
+csqrtf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1531	mret::cplx_fast
+ctan	(math-gen)	crates/boundary/src/posix/s10_math.tsv:199	mret::cplx
 ctan	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1546	mret::cplx
 ctanf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1551	mret::cplx
 ctanf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1561	mret::cplx
 ctanf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1566	mret::cplx
 ctanf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1571	mret::cplx
-ctanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:196	mret::cplx
+ctanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:202	mret::cplx
 ctanh	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1581	mret::cplx
 ctanhf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1586	mret::cplx
 ctanhf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1596	mret::cplx
@@ -1025,7 +1033,7 @@ difftime	GLIBC_2.2.5	crates/boundary/src/posix/s23_time.rs:278	liella::time::dif
 dirfd	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:742	ret::int
 dirname	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:924	ret::path_part
 div	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:1052	pack::div
-dl_iterate_phdr	GLIBC_2.2.5	crates/boundary/src/posix/s27_dynlink.rs:57	Auxv::from_words
+dl_iterate_phdr	GLIBC_2.2.5	crates/boundary/src/posix/s27_dynlink.rs:58	Auxv::from_words
 dngettext	GLIBC_2.2.5	crates/boundary/src/posix/s07_locale.rs:130	ret::ptr
 dprintf		csys/src/adapter/variadic.c:160	liella_vdprintf4
 drand48	GLIBC_2.2.5	crates/boundary/src/posix/s09_random.rs:114	prng_global::drand48
@@ -1073,13 +1081,13 @@ epoll_pwait2	GLIBC_2.35	crates/boundary/src/posix/s11_lowio.rs:427	cancel::point
 epoll_wait	GLIBC_2.3.2	crates/boundary/src/posix/s11_lowio.rs:415	cancel::point
 erand48	GLIBC_2.2.5	crates/boundary/src/posix/s09_random.rs:129	prng_global::erand48
 erand48_r	GLIBC_2.2.5	crates/boundary/src/posix/s09_random.rs:174	ret::int
-erf	(math-gen)	crates/boundary/src/posix/s10_math.tsv:160	mret::elem
-erf	(math-gen)	crates/boundary/src/posix/s10_math.tsv:161	mret::elem_fast
 erf	(math-gen)	crates/boundary/src/posix/s10_math.tsv:162	mret::elem
+erf	(math-gen)	crates/boundary/src/posix/s10_math.tsv:163	mret::elem_fast
+erf	(math-gen)	crates/boundary/src/posix/s10_math.tsv:164	mret::elem
 erf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1679	mret::elem_fast
-erfc	(math-gen)	crates/boundary/src/posix/s10_math.tsv:163	mret::elem
-erfc	(math-gen)	crates/boundary/src/posix/s10_math.tsv:164	mret::elem_fast
 erfc	(math-gen)	crates/boundary/src/posix/s10_math.tsv:165	mret::elem
+erfc	(math-gen)	crates/boundary/src/posix/s10_math.tsv:166	mret::elem_fast
+erfc	(math-gen)	crates/boundary/src/posix/s10_math.tsv:167	mret::elem
 erfc	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1684	mret::elem_fast
 erfcf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:1689	mret::elem
 erfcf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1699	mret::elem
@@ -1112,17 +1120,17 @@ execve	GLIBC_2.2.5	crates/boundary/src/posix/s18_processes.rs:91	ret::zero
 execveat	GLIBC_2.34	crates/boundary/src/posix/s18_processes.rs:127	ret::zero
 execvp	GLIBC_2.2.5	crates/boundary/src/posix/s18_processes.rs:103	ret::zero
 execvpe	GLIBC_2.11	crates/boundary/src/posix/s18_processes.rs:109	ret::zero
-exit	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:53	process::exit
+exit	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:61	process::exit
 exp	(math-gen)	crates/boundary/src/posix/s10_math.tsv:92	mret::elem32_onepass
 exp	(math-gen)	crates/boundary/src/posix/s10_math.tsv:93	mret::elem_fast
 exp	(math-gen)	crates/boundary/src/posix/s10_math.tsv:94	mret::elem
 exp	GLIBC_2.29	crates/boundary/src/posix/s10_math_gen.rs:1759	mret::elem_fast
 exp10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:100	mret::elem
-exp10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:98	mret::elem32_fast
+exp10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:98	mret::elem32_onepass
 exp10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:99	mret::elem_fast
 exp10	GLIBC_2.39	crates/boundary/src/posix/s10_math_gen.rs:1764	mret::elem_fast
-exp10f	GLIBC_2.32	crates/boundary/src/posix/s10_math_gen.rs:1769	mret::elem32_fast
-exp10f32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1779	mret::elem32_fast
+exp10f	GLIBC_2.32	crates/boundary/src/posix/s10_math_gen.rs:1769	mret::elem32_onepass
+exp10f32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1779	mret::elem32_onepass
 exp10f32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1784	mret::elem_fast
 exp10f64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1789	mret::elem_fast
 exp2	(math-gen)	crates/boundary/src/posix/s10_math.tsv:95	mret::elem32_onepass
@@ -1450,7 +1458,7 @@ gai_error	GLIBC_2.34	crates/boundary/src/posix/s16_nameservices.rs:508	gai_async
 gai_strerror	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:146	ret::ptr
 gai_suspend	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:502	gai_async::gai_suspend
 gai_suspend	GLIBC_2.34	crates/boundary/src/posix/s16_nameservices.rs:502	gai_async::gai_suspend
-gamma	(math-gen)	crates/boundary/src/posix/s10_math.tsv:167	mret::lgamma
+gamma	(math-gen)	crates/boundary/src/posix/s10_math.tsv:169	mret::lgamma
 gamma	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:3255	mret::lgamma
 gammaf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:3260	mret::lgamma
 gcvt	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:1020	ret::same
@@ -1468,7 +1476,7 @@ getaliasbyname	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:479	ret
 getaliasbyname_r	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:485	netdb::getaliasbyname_r
 getaliasent	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:468	ret::null
 getaliasent_r	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:473	netdb::getaliasent_r
-getauxval	GLIBC_2.16	crates/boundary/src/posix/s01_startup.rs:158	ret::with_errno
+getauxval	GLIBC_2.16	crates/boundary/src/posix/s01_startup.rs:166	ret::with_errno
 getc	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:161	stdio::getc_c
 getc_unlocked	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:176	stdio::getc_c
 getchar	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:166	stdio::getc_c
@@ -1486,7 +1494,7 @@ getdomainname	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:319	ret::zero
 getdtablesize	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:269	ret::int
 getegid	GLIBC_2.2.5	crates/boundary/src/posix/s17_users.rs:40	
 getentropy	GLIBC_2.25	crates/boundary/src/posix/s09_random.rs:28	ret::zero
-getenv	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:116	ret::ptr
+getenv	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:124	ret::ptr
 geteuid	GLIBC_2.2.5	crates/boundary/src/posix/s17_users.rs:30	
 getfsent	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:1051	ret::entry
 getfsfile	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:1062	ret::entry
@@ -1530,9 +1538,9 @@ getnetent_r	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:263	netdb:
 getnetgrent	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:434	netdb::getnetgrent
 getnetgrent_r	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:439	netdb::getnetgrent_r
 getnetname	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_auth.rs:197	
-getopt	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:170	options::getopt
-getopt_long	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:182	options::getopt
-getopt_long_only	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:188	options::getopt
+getopt	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:178	options::getopt
+getopt_long	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:190	options::getopt
+getopt_long_only	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:196	options::getopt
 getpagesize	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:239	ret::int
 getpass	GLIBC_2.2.5	crates/boundary/src/posix/s17_users.rs:442	ret::null
 getpayload	(math-gen)	crates/boundary/src/posix/s10_math.tsv:60	mret::pure
@@ -1596,7 +1604,7 @@ getspent	GLIBC_2.2.5	crates/boundary/src/posix/s17_users.rs:281	ret::null
 getspent_r	GLIBC_2.2.5	crates/boundary/src/posix/s17_users.rs:286	conv::buf_mut
 getspnam	GLIBC_2.2.5	crates/boundary/src/posix/s17_users.rs:315	ret::null
 getspnam_r	GLIBC_2.2.5	crates/boundary/src/posix/s17_users.rs:321	users::sp_by_r
-getsubopt	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:194	options::getsubopt
+getsubopt	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:202	options::getsubopt
 gettext	GLIBC_2.2.5	crates/boundary/src/posix/s07_locale.rs:94	ret::ptr
 gettid	GLIBC_2.30	crates/boundary/src/posix/s18_processes.rs:46	crate::pthread::gettid
 gettimeofday	GLIBC_2.2.5	crates/boundary/src/posix/s23_time.rs:55	ret::store_both
@@ -1783,19 +1791,19 @@ iswxdigit	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:365	locale::view
 iswxdigit_l	GLIBC_2.3	crates/boundary/src/posix/s05_ctype.rs:375	locale::view_of
 isxdigit	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:350	ret::truth
 isxdigit_l	GLIBC_2.3	crates/boundary/src/posix/s05_ctype.rs:360	ret::truth
-j0	(math-gen)	crates/boundary/src/posix/s10_math.tsv:170	mret::elem
+j0	(math-gen)	crates/boundary/src/posix/s10_math.tsv:172	mret::elem
 j0	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:3425	mret::elem
 j0f	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:3430	mret::elem
 j0f32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3440	mret::elem
 j0f32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3445	mret::elem
 j0f64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3450	mret::elem
-j1	(math-gen)	crates/boundary/src/posix/s10_math.tsv:171	mret::elem
+j1	(math-gen)	crates/boundary/src/posix/s10_math.tsv:173	mret::elem
 j1	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:3465	mret::elem
 j1f	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:3470	mret::elem
 j1f32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3480	mret::elem
 j1f32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3485	mret::elem
 j1f64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3490	mret::elem
-jn	(math-gen)	crates/boundary/src/posix/s10_math.tsv:174	mret::elem
+jn	(math-gen)	crates/boundary/src/posix/s10_math.tsv:176	mret::elem
 jn	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:3505	mret::elem
 jnf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:3510	mret::elem
 jnf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3520	mret::elem
@@ -1830,9 +1838,9 @@ ldexpf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3568	mret::Soft::
 ldexpf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3574	mret::Soft::enter
 ldiv	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:1057	pack::ldiv
 lfind	GLIBC_2.2.5	crates/boundary/src/posix/s14_search.rs:160	ret::found
-lgamma	(math-gen)	crates/boundary/src/posix/s10_math.tsv:166	mret::lgamma
+lgamma	(math-gen)	crates/boundary/src/posix/s10_math.tsv:168	mret::lgamma
 lgamma	GLIBC_2.23	crates/boundary/src/posix/s10_math_gen.rs:3590	mret::lgamma
-lgamma_r	(math-gen)	crates/boundary/src/posix/s10_math.tsv:168	mret::lgamma_r
+lgamma_r	(math-gen)	crates/boundary/src/posix/s10_math.tsv:170	mret::lgamma_r
 lgamma_r	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:3595	mret::lgamma_r
 lgammaf	GLIBC_2.23	crates/boundary/src/posix/s10_math_gen.rs:3600	mret::lgamma
 lgammaf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3615	mret::lgamma
@@ -1866,8 +1874,8 @@ liella_acoshf64x_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:2
 liella_acoshl_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:251	mret::elem
 liella_acosl_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:256	mret::elem
 liella_aio_use_threads	LIELLA_NATIVE_1	crates/boundary/src/native/aio.rs:18	abi::done
-liella_argp_error3	LIELLA_PRIVATE	crates/boundary/src/posix/s01_startup.rs:221	argp::error
-liella_argp_failure5	LIELLA_PRIVATE	crates/boundary/src/posix/s01_startup.rs:227	argp::failure
+liella_argp_error3	LIELLA_PRIVATE	crates/boundary/src/posix/s01_startup.rs:229	argp::error
+liella_argp_failure5	LIELLA_PRIVATE	crates/boundary/src/posix/s01_startup.rs:235	argp::failure
 liella_asinf128_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:271	mret::elem
 liella_asinf64x_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:291	mret::elem
 liella_asinhf128_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:306	mret::elem
@@ -2292,7 +2300,7 @@ liella_j1l_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3500	mr
 liella_jnf128_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3515	mret::elem
 liella_jnf64x_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3535	mret::elem
 liella_jnl_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3540	mret::elem
-liella_ld_start		crates/boundary/src/ld.rs:164	crate::bootstrap::relocate_image
+liella_ld_start		crates/boundary/src/ld.rs:186	crate::bootstrap::relocate_image
 liella_ldexpf128_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3557	mret::ret
 liella_ldexpf64x_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3580	mret::ret
 liella_ldexpl_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3585	mret::ret
@@ -2428,7 +2436,7 @@ liella_sinl_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:4974	m
 liella_sqrtf128_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:4989	mret::sqrt
 liella_sqrtf64x_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:5009	mret::sqrt
 liella_sqrtl_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:5014	mret::sqrt
-liella_start_main_static_pie		crates/boundary/src/posix/s01_startup.rs:41	crate::runtime::start
+liella_start_main_static_pie		crates/boundary/src/posix/s01_startup.rs:49	crate::runtime::start
 liella_strfromf128_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s08_numeric.rs:970	ret::int
 liella_strfroml_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s08_numeric.rs:964	ret::int
 liella_strtof128_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s08_numeric.rs:916	F128Bits::from_bits
@@ -2520,16 +2528,16 @@ localtime_r	GLIBC_2.2.5	crates/boundary/src/posix/s23_time.rs:253	ret::null
 lockf	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:706	ret::zero
 lockf64	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:711	ret::zero
 locs	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3873	
-log	(math-gen)	crates/boundary/src/posix/s10_math.tsv:104	mret::elem32_fast
+log	(math-gen)	crates/boundary/src/posix/s10_math.tsv:104	mret::elem32_onepass
 log	(math-gen)	crates/boundary/src/posix/s10_math.tsv:105	mret::elem_fast
 log	(math-gen)	crates/boundary/src/posix/s10_math.tsv:106	mret::elem
 log	GLIBC_2.29	crates/boundary/src/posix/s10_math_gen.rs:3805	mret::elem_fast
-log10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:110	mret::elem32_fast
+log10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:110	mret::elem32_onepass
 log10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:111	mret::elem_fast
 log10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:112	mret::elem
 log10	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:3810	mret::elem_fast
-log10f	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:3815	mret::elem32_fast
-log10f32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3825	mret::elem32_fast
+log10f	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:3815	mret::elem32_onepass
+log10f32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3825	mret::elem32_onepass
 log10f32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3830	mret::elem_fast
 log10f64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3835	mret::elem_fast
 log1p	(math-gen)	crates/boundary/src/posix/s10_math.tsv:113	mret::elem
@@ -2540,12 +2548,12 @@ log1pf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:3855	mret::elem
 log1pf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3865	mret::elem
 log1pf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3870	mret::elem_fast
 log1pf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3875	mret::elem_fast
-log2	(math-gen)	crates/boundary/src/posix/s10_math.tsv:107	mret::elem32_fast
+log2	(math-gen)	crates/boundary/src/posix/s10_math.tsv:107	mret::elem32_onepass
 log2	(math-gen)	crates/boundary/src/posix/s10_math.tsv:108	mret::elem_fast
 log2	(math-gen)	crates/boundary/src/posix/s10_math.tsv:109	mret::elem
 log2	GLIBC_2.29	crates/boundary/src/posix/s10_math_gen.rs:3890	mret::elem_fast
-log2f	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3895	mret::elem32_fast
-log2f32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3905	mret::elem32_fast
+log2f	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3895	mret::elem32_onepass
+log2f32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3905	mret::elem32_onepass
 log2f32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3910	mret::elem_fast
 log2f64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3915	mret::elem_fast
 logb	(math-gen)	crates/boundary/src/posix/s10_math.tsv:51	mret::ret
@@ -2554,8 +2562,8 @@ logbf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:3936	mret::Soft::ent
 logbf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3947	mret::Soft::enter
 logbf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3953	mret::Soft::enter
 logbf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3959	mret::Soft::enter
-logf	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3975	mret::elem32_fast
-logf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3985	mret::elem32_fast
+logf	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3975	mret::elem32_onepass
+logf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3985	mret::elem32_onepass
 logf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3990	mret::elem_fast
 logf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3995	mret::elem_fast
 login	GLIBC_2.2.5	crates/boundary/src/posix/s17_users.rs:578	ret::unit
@@ -2798,7 +2806,7 @@ ntp_gettimex	GLIBC_2.12	crates/boundary/src/posix/s23_time.rs:141	ret::state_sto
 obstack_free	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:289	ret::unit
 obstack_printf		csys/src/adapter/variadic.c:166	liella_obstack_vprintf4
 obstack_vprintf	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:1213	ret::count
-on_exit	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:89	ret::registered
+on_exit	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:97	ret::registered
 open		csys/src/adapter/variadic.c:28	
 open64		csys/src/adapter/variadic.c:29	
 open_by_handle_at	GLIBC_2.14	crates/boundary/src/posix/s11_lowio.rs:84	ret::fd
@@ -3143,7 +3151,7 @@ putc	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:201	stdio::putc_c
 putc_unlocked	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:216	stdio::putc_c
 putchar	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:206	stdio::putc_c
 putchar_unlocked	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:221	stdio::putc_c
-putenv	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:146	ret::zero
+putenv	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:154	ret::zero
 putgrent	GLIBC_2.2.5	crates/boundary/src/posix/s17_users.rs:257	ret::zero
 putmsg	GLIBC_2.2.5	crates/boundary/src/posix/s29_legacy.rs:519	ret::zero
 putpmsg	GLIBC_2.2.5	crates/boundary/src/posix/s29_legacy.rs:531	ret::zero
@@ -3168,7 +3176,7 @@ pwritev64v2	GLIBC_2.26	crates/boundary/src/posix/s11_lowio.rs:288	cancel::point
 qsort	GLIBC_2.2.5	crates/boundary/src/posix/s14_search.rs:78	ret::unit
 qsort_r	GLIBC_2.8	crates/boundary/src/posix/s14_search.rs:84	ret::unit
 query_module	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:454	ret::int
-quick_exit	GLIBC_2.10	crates/boundary/src/posix/s01_startup.rs:69	process::quick_exit
+quick_exit	GLIBC_2.10	crates/boundary/src/posix/s01_startup.rs:77	process::quick_exit
 quotactl	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:393	ret::zero
 raise	GLIBC_2.2.5	crates/boundary/src/posix/s20_signals.rs:115	ret::zero
 rand	GLIBC_2.2.5	crates/boundary/src/posix/s09_random.rs:50	prng_global::rand
@@ -3299,7 +3307,7 @@ sched_setaffinity	GLIBC_2.3.4	crates/boundary/src/posix/s24_system.rs:168	ret::z
 sched_setparam	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:118	ret::zero
 sched_setscheduler	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:98	ret::zero
 sched_yield	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:158	ret::zero
-secure_getenv	GLIBC_2.17	crates/boundary/src/posix/s01_startup.rs:122	ret::ptr
+secure_getenv	GLIBC_2.17	crates/boundary/src/posix/s01_startup.rs:130	ret::ptr
 seed48	GLIBC_2.2.5	crates/boundary/src/posix/s09_random.rs:149	ret::ptr
 seed48_r	GLIBC_2.2.5	crates/boundary/src/posix/s09_random.rs:194	ret::int
 seekdir	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:727	ret::errno_only
@@ -3342,7 +3350,7 @@ setbuffer	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:94	ret::unit
 setcontext		csys/src/machine/context.S:173	liella_machine_setcontext
 setdomainname	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:337	ret::zero
 setegid	GLIBC_2.2.5	crates/boundary/src/posix/s17_users.rs:90	ret::zero
-setenv	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:134	ret::zero
+setenv	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:142	ret::zero
 seteuid	GLIBC_2.2.5	crates/boundary/src/posix/s17_users.rs:85	ret::zero
 setfsent	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:1046	mntent::setfsent
 setfsgid	GLIBC_2.2.5	crates/boundary/src/posix/s17_users.rs:120	ret::id_int
@@ -3469,9 +3477,9 @@ sinf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:4904	mret::elem32_fas
 sinf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:4914	mret::elem32_fast
 sinf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:4919	mret::elem_fast
 sinf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:4924	mret::elem_fast
-sinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:141	mret::elem32_fast
-sinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:142	mret::elem_fast
-sinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:143	mret::elem
+sinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:143	mret::elem32_fast
+sinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:144	mret::elem_fast
+sinh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:145	mret::elem
 sinh	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:4934	mret::elem_fast
 sinhf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:4939	mret::elem32_fast
 sinhf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:4949	mret::elem32_fast
@@ -3491,6 +3499,8 @@ sqrtf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:4984	mret::sqrt
 sqrtf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:4994	mret::sqrt
 sqrtf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:4999	mret::sqrt
 sqrtf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:5004	mret::sqrt
+sqrtf64x		csys/src/machine/sqrtl.S:30	liella_slow_sqrtl
+sqrtl		csys/src/machine/sqrtl.S:29	liella_slow_sqrtl
 srand	GLIBC_2.2.5	crates/boundary/src/posix/s09_random.rs:56	prng_global::srandom
 srand48	GLIBC_2.2.5	crates/boundary/src/posix/s09_random.rs:144	prng_global::srand48
 srand48_r	GLIBC_2.2.5	crates/boundary/src/posix/s09_random.rs:189	ret::int
@@ -3623,7 +3633,7 @@ strrchr	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:471	ret::found
 strsep	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:882	ret::ptr
 strsignal	GLIBC_2.2.5	crates/boundary/src/posix/s20_signals.rs:285	ret::ptr
 strspn	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:537	ret::must
-strstr	GLIBC_2.2.5	csys/src/machine/scan.S:7677	liella_machine_strpair
+strstr	GLIBC_2.2.5	csys/src/machine/scan.S:7690	liella_machine_strpair_avx_run
 strtod	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:710	ret::with_errno
 strtod_l	GLIBC_2.3	crates/boundary/src/posix/s08_numeric.rs:728	ret::with_errno
 strtof	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:762	ret::with_errno
@@ -3713,9 +3723,9 @@ tanf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:5024	mret::elem32_fas
 tanf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:5034	mret::elem32_fast
 tanf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:5039	mret::elem_fast
 tanf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:5044	mret::elem_fast
-tanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:147	mret::elem32_fast
-tanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:148	mret::elem_fast
-tanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:149	mret::elem
+tanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:149	mret::elem32_fast
+tanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:150	mret::elem_fast
+tanh	(math-gen)	crates/boundary/src/posix/s10_math.tsv:151	mret::elem
 tanh	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:5054	mret::elem_fast
 tanhf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:5059	mret::elem32_fast
 tanhf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:5069	mret::elem32_fast
@@ -3737,7 +3747,7 @@ telldir	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:732	ret::long
 tempnam	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:499	ret::null
 textdomain	GLIBC_2.2.5	crates/boundary/src/posix/s07_locale.rs:142	ret::ptr
 tfind	GLIBC_2.2.5	crates/boundary/src/posix/s14_search.rs:178	ret::null
-tgamma	(math-gen)	crates/boundary/src/posix/s10_math.tsv:169	mret::elem
+tgamma	(math-gen)	crates/boundary/src/posix/s10_math.tsv:171	mret::elem
 tgamma	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:5099	mret::elem
 tgammaf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:5104	mret::elem
 tgammaf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:5114	mret::elem
@@ -3856,7 +3866,7 @@ ungetwc	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:592	ret::wint_written
 unlink	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:109	ret::zero
 unlinkat	GLIBC_2.4	crates/boundary/src/posix/s13_filesystem.rs:115	ret::zero
 unlockpt	GLIBC_2.2.5	crates/boundary/src/posix/s19_terminals.rs:147	ret::zero
-unsetenv	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:140	ret::zero
+unsetenv	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:148	ret::zero
 unshare	GLIBC_2.4	crates/boundary/src/posix/s18_processes.rs:437	ret::zero
 updwtmp	GLIBC_2.2.5	crates/boundary/src/posix/s17_users.rs:505	ret::errno_only
 updwtmpx	GLIBC_2.2.5	crates/boundary/src/posix/s17_users.rs:547	ret::errno_only
@@ -4024,19 +4034,19 @@ xdrstdio_create	GLIBC_2.2.5	crates/boundary/src/posix/s29_xdr_streams.rs:326
 xencrypt	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_auth.rs:69	
 xprt_register	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_svc.rs:125	
 xprt_unregister	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_svc.rs:131	
-y0	(math-gen)	crates/boundary/src/posix/s10_math.tsv:172	mret::elem
+y0	(math-gen)	crates/boundary/src/posix/s10_math.tsv:174	mret::elem
 y0	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:5354	mret::elem
 y0f	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:5359	mret::elem
 y0f32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:5369	mret::elem
 y0f32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:5374	mret::elem
 y0f64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:5379	mret::elem
-y1	(math-gen)	crates/boundary/src/posix/s10_math.tsv:173	mret::elem
+y1	(math-gen)	crates/boundary/src/posix/s10_math.tsv:175	mret::elem
 y1	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:5394	mret::elem
 y1f	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:5399	mret::elem
 y1f32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:5409	mret::elem
 y1f32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:5414	mret::elem
 y1f64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:5419	mret::elem
-yn	(math-gen)	crates/boundary/src/posix/s10_math.tsv:175	mret::elem
+yn	(math-gen)	crates/boundary/src/posix/s10_math.tsv:177	mret::elem
 yn	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:5434	mret::elem
 ynf	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:5439	mret::elem
 ynf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:5449	mret::elem

@@ -1,0 +1,10 @@
+{"task": "LIBM-INVALID-CONVERT-SCAN", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: scan done (17 casts; 3 arc.rs sites raise invalid, 2 on every asinl/acosl call), fixes + float-casts static check + flags test written; gate3/plants3 unread; disassembly, accuracy, counts, Ivy Bridge timing, D-10.95 not done",
+ "branch": "task/libm-invalid-convert-scan", "head": null,
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": false,
+ "rulings": [], "informational": ["crates/core/src/num/parse.rs has 2 f64->i64 casts outside this story's scope, not examined"],
+ "refused": [],
+ "improvement": "sync_role rc 4 after a still-running base build wasted a gate cycle: start the base build only after the code sync, or sync before it",
+ "next_step": "read gate3/plants3 on kanon kn1, disassemble products, write D-10.95, run accuracy, counts and Ivy Bridge timing",
+ "report_file": "handoff/libm-invalid-convert-scan.md",
+ "jobs": ["libm-invalid-convert-scan-gate3", "libm-invalid-convert-scan-plants3"]}

@@ -1,0 +1,12 @@
+{"task": "CODEMAP-TRAIN-OWNED", "model": "opus", "tokens": null,
+ "result": "docs/codemap train-owned: static's codemap check fatal only under LIELLA_TRAIN=1 (advisory line elsewhere); off-train `cargo xtask codemap` writes target/records-views/docs/codemap unless --in-place/LIELLA_TRAIN=1 (D-X.66)",
+ "branch": "task/codemap-train-owned", "head": "f7a1becd6",
+ "gate": {"affected": "pending: escalated to FULL (xtask changed), codemap-train-owned-gate still running on keke r1", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["affected --run escalates any xtask/src change to the FULL tier, so an xtask-only story's direct gate is a full gate (>1 h on keke); the codemap unit tests also ran green in the plants baseline", "clippy rc 0, static rc 0 (codemap: 0 files pending; records fmt --check and records check ok, D-X.66 valid)", "proof rc 0: stale copy advisory off-train (codemap check and full static rc 0), fatal on-train (rc 1), off-train generation left tracked files byte-identical and wrote target/records-views/docs/codemap, in-place regeneration clean on-train", "plants: 3 CAUGHT, 0 SURVIVED, 0 WARN", "coordinator: add `cargo xtask codemap --in-place` to the train generators and docs/codemap/symbols.tsv, docs/codemap/README.md to the train-owned paths (README hand-written part stays story-editable)"],
+ "refused": [],
+ "improvement": "affected could treat an xtask/src change as a direct tier of `cargo test -p xtask` plus static instead of FULL; an xtask-only story waits >1 h for a full gate it does not need",
+ "next_step": "coordinator collects codemap-train-owned-gate (keke), lands, then adds the codemap generator and paths to the train in liella-ops",
+ "report_file": "handoff/CODEMAP-TRAIN-OWNED.md",
+ "jobs": ["codemap-train-owned-clippy", "codemap-train-owned-static", "codemap-train-owned-gate", "codemap-train-owned-plants", "codemap-train-owned-proof"]}

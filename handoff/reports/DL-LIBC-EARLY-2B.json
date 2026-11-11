@@ -1,0 +1,12 @@
+{"task": "DL-LIBC-EARLY-2B", "model": "opus", "tokens": null,
+ "result": "DL-LIBC-EARLY-2 innocent (next and -2 both 20/20 green, mid-search 200); regex_reentry's handler-outlasts-period run at a pending unblock reproduced (old test 5/5 fail, mid 0) and fixed: the handler works only inside a search and the loop ends on the mid-search count",
+ "branch": "task/dl-libc-early-2b", "head": null,
+ "gate": {"affected": "2 passed / 0 failed (dl-libc-early-2b-gate2, direct tier, base origin/task/dl-libc-early-2)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["xtask affected --only takes test targets, not a crate: the brief's `--only liella-boundary` exits 1; the plain `cargo test -p liella-boundary` suite was run instead", "`--base origin/next` on a branch stacked on DL-LIBC-EARLY-2 escalates to FULL (its xtask/src/so.rs); gated on this story's own diff instead", "read next's copy of regex_reentry.rs with `git show origin/next:<path>` for the diagnostic variant (same file as this branch before the change)"],
+ "refused": [],
+ "improvement": "A stacked story's brief should name the gate base as the parent branch: base origin/next pulls the parent's diff in and can escalate to FULL",
+ "next_step": "land with DL-LIBC-EARLY-2",
+ "report_file": "handoff/DL-LIBC-EARLY-2B.md",
+ "jobs": ["dl-libc-early-2b-clippy", "dl-libc-early-2b-gate2", "dl-libc-early-2b-plants", "dl-libc-early-2b-attr-next", "dl-libc-early-2b-attr-e2", "dl-libc-early-2b-attr-fixed"]}

@@ -1133,7 +1133,43 @@ fn s10_3_c_r6() {
     assert_eq!(sp::lgamma(-0.5f64, n).1, -1);
     assert_eq!(sp::lgamma(-1.5f64, n).1, 1);
     assert_eq!(sp::lgamma(-2.5f32, n).1, -1);
+    // float's sign at the ends of the integer-part parity (D-10.95: no conversion to an integer):
+    // |x| < 1, and the spacing-1/2 binade just below 2^23 (past the fast path's domain).
+    assert_eq!(sp::lgamma(-0.5f32, n).1, -1);
+    assert_eq!(sp::lgamma(-1.5f32, n).1, 1);
+    assert_eq!(sp::lgamma(-8_388_606.5f32, n).1, -1);
+    assert_eq!(sp::lgamma(-8_388_605.5f32, n).1, 1);
     assert_eq!(sp::lgamma(7.0f64, n).1, 1);
+    // lgammaf at negative half-integers against the exact value: |Γ(1/2 − n)| = 4^n·n!/(2n)!·√π,
+    // so lgamma(1/2 − n) = n·ln 4 + ln n! − ln (2n)! + ln(π)/2, evaluated to 90 digits and rounded
+    // to nearest (LIBM-INVALID-CONVERT-SCAN-4); the sign of Γ(1/2 − n) is (−1)^n. −2.5 is the
+    // per-call check's operand; −17.5 lies 0.0002 ulp from a rounding boundary; −39.5 is near the
+    // fast path's end. The table also checks the oracle below.
+    for (x, rn, sign) in [
+        (-0.5f32, 0x3fa1_fc4du32, -1),
+        (-1.5, 0x3f5c_2c0b, 1),
+        (-2.5, 0xbd66_5fd0, -1),
+        (-3.5, 0xbfa7_8d88, 1),
+        (-5.5, 0xc090_9215, 1),
+        (-6.5, 0xc0cc_77e2, -1),
+        (-10.5, 0xc172_5b38, -1),
+        (-17.5, 0xc207_31c0, 1),
+        (-39.5, 0xc2d6_a81d, 1),
+    ] {
+        let b = u128::from(x.to_bits());
+        let ((r, _), s) = sp::lgamma(x, n);
+        assert_eq!((r.to_bits(), s), (rn, sign), "lgammaf({x}): exact value rounded to nearest, sign");
+        assert_eq!(cr("lgamma", Fmt::F32, n, &[b]).0, u128::from(rn), "oracle lgammaf({x})");
+    }
+    // The neighbourhood of −2.5 (±4 ulp) in every mode, by the oracle.
+    for k in -4i32..=4 {
+        let x = f32::from_bits((-2.5f32).to_bits().wrapping_add_signed(k));
+        for mode in MODES {
+            let b = u128::from(x.to_bits());
+            let ((r, _), s) = sp::lgamma(x, mode);
+            assert_eq!((u128::from(r.to_bits()), s), (cr("lgamma", Fmt::F32, mode, &[b]).0, -1), "lgammaf({x}) {mode:?}");
+        }
+    }
     // lgamma(1) = lgamma(2) = +0 in every mode; poles at 0 and the negative integers.
     for mode in MODES {
         assert_eq!(sp::lgamma(1.0f64, mode).0, (0.0, Status::OK));

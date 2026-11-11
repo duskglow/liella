@@ -1,0 +1,12 @@
+{"task": "DL-MAP-PROBE", "model": "opus", "tokens": null,
+ "result": "Reference loads 64..30000 PT_LOADs (ld.so PROG and dlopen): LOADS_MAX removed, D-27.15 amended; gate on final head not run, fuzz running, #4189 open (ld -Ttext-segment with -pie gives ET_EXEC)",
+ "branch": "task/dl-map-probe", "head": "4050f6302",
+ "gate": {"affected": "gate3 on b84d12d67: 4 failed (fixed or stale product); final head not gated", "peak": "2.6G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["kanon had no cargo-fuzz; installed 0.13.2 in ~/.cargo/bin", "the affected run used a stale ld.so in the role; gate needs cargo xtask so first", "direct execve of the rewritten programs failed in the kernel (64: SIGSEGV, 65+: ENOEXEC); out of scope"],
+ "refused": [],
+ "jobs": ["kanon:dl-map-probe-ref", "kanon:dl-map-probe-ref2", "kanon:dl-map-probe-fuzz3"],
+ "improvement": "fuzz jobs should not name the role path in their command line, or sync_role reports BUSY for the whole run",
+ "next_step": "after fuzz3 ends: sync, gate (so+clippy+static+affected), plants, then build a real ET_DYN at 6 MiB for #4189",
+ "report_file": "handoff/DL-MAP-PROBE.md"}

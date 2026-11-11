@@ -1,0 +1,13 @@
+{"task": "LIBM-LD-ARC-DIRECT", "model": "opus", "tokens": null,
+ "result": "Step 1 done: the asinl/acosl stall was a hardware invalid flag from the root's as-u64 conversions, now read from the double's bits. Ivy Bridge asinl 641->497, acosl 668->511 cycles (acosl 2.40x, target met), microcode uops 67->6, atan2l unchanged. Steps 2-4 (kernel B) not started.",
+ "branch": "task/libm-ld-arc-direct", "head": "718ba725f",
+ "gate": {"affected": "188 passed / 0 failed", "peak": "1.2G"}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The rethink's named cause was right about where the stall lands (the stmxcsr in mathret::elem's entry) but not why: the root's `as u64` of values in [2^63, 2^64] raised invalid in hardware every call. Any kernel converting doubles >= 2^63 with `as u64` under the envelope pays the same stall (worth a static scan of the math crate).",
+                   "IVB job started while booking 174 was still settling on an idle host (load 0.08-0.59).",
+                   "The step-1 commit message gives asinl's base microcode uops as 77.4 on Broadwell; the recomputed value is 77.2."],
+ "refused": [],
+ "improvement": "Count idq.ms_uops on a build host with a user-mode Intel PMU before booking a timing host: the Broadwell build host reproduced the IVB stall in 4 minutes with no booking.",
+ "next_step": "Continuation for brief steps 2-4: prototype the direct asin table kernel B on Ivy Bridge (go/no-go <= 100 cycles, table <= 8 KiB), wire it, prove it, record D-10.93.",
+ "report_file": "handoff/libm-ld-arc-direct.md",
+ "jobs": ["libm-ld-arc-direct-lint", "libm-ld-arc-direct-gate", "libm-ld-arc-direct-plants2", "libm-ld-arc-direct-counters", "libm-ld-arc-direct-hottext", "kotori:libm-ld-arc-direct-ivb1"]}

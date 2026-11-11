@@ -1,0 +1,13 @@
+{"task": "XTASK-AFFECTED-LOADER", "model": "opus", "tokens": null,
+ "result": "affected follows a dependency's onward edge only through modules the build compiles: a loader-only change no longer selects liella-math's suites (ld root: 88 of 257 targets, no liella-math); math and rt changes still do",
+ "branch": "task/xtask-affected-loader", "head": "2dbc6edac",
+ "gate": {"affected": "344 passed / 0 failed (2 suites)", "peak": "1.4G"}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Gate time before: DL-INIT-ORDER-2 (#4556) 98 min, liella-math 2203 s + 583 s interposed. After: one measured run of `affected --run --files crates/ld/src/lib.rs`, mei:xtask-affected-loader-ldtime-after (evidence, not a JOBS entry): 435 s, 4 suites 3712 passed 0 failed, 127/127 conformance, peak 12G. Different host from the before figure (keke vs mei), so the ratio is indicative only",
+                   "crates/boundary/src/ld.rs in the direct tier selects 0 test targets (1 lib); unchanged here",
+                   "No test has a dependent reached only through a transitive normal edge, so a plant cutting every onward edge would survive; dropped from the plants file"],
+ "refused": [],
+ "improvement": "affected --list could print the dependency path that made a crate a dependent; it would have shown the dev-dependency route in one call",
+ "next_step": "land; optionally a test with a dependent reached only through a transitive normal edge",
+ "report_file": "handoff/XTASK-AFFECTED-LOADER.md",
+ "jobs": ["mei:xtask-affected-loader-lint", "mei:xtask-affected-loader-gate", "mei:xtask-affected-loader-plants"]}

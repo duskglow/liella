@@ -4,8 +4,9 @@
 //! every value within `2^-92` of the approximation rounds alike in the caller's direction, that
 //! rounding is the correctly rounded result; the four directions are four integer roundings (no
 //! MXCSR or x87 control-word traffic, so directed modes cost the same). Otherwise (about `2^-26`
-//! of the operands) the caller takes the 384-bit route of [`crate::wide`]. Only the format with a
-//! 64-bit significand uses the tier; the integer kernel is the one `_Float128` extends by a limb.
+//! of the operands) the caller takes the 384-bit route of [`crate::wide`]. The format with a
+//! 64-bit significand uses this kernel; `_Float128` uses [`quad`], the same method on three limbs
+//! (D-10.85), which shares the `2/π` table, the `SC` table and the products here.
 //!
 //! Method. Payne-Hanek reduction (M. Payne, R. Hanek, "Radian reduction for trigonometric
 //! functions", SIGNUM Newsletter 18(1), 1983) for every operand, Tang's table method (P. T. P.
@@ -60,6 +61,9 @@
     clippy::unreadable_literal
 )] // fixed-point words, exponents and table indices of bounded range (each noted where it is formed)
 
+pub(crate) mod arc;
+pub(crate) mod quad;
+
 use crate::coeffs::tables as t;
 use crate::float::{Float, Kind, Num};
 use crate::status::{Flags, Rounding, Status};
@@ -71,7 +75,7 @@ const B: u32 = 92;
 const ERR: u64 = (1 << (128 - B)) + 4;
 /// `|d|` below `2^-92` (the top 128 bits of its 256-bit form below `2^36`) is refused.
 const MIN_D: u128 = 1 << 36;
-const M64: u128 = (1 << 64) - 1;
+pub(crate) const M64: u128 = (1 << 64) - 1;
 
 // The series of `sin(πd/2)/d` and `cos(πd/2)` in `u = d²` (step 3), each coefficient rounded to
 // nearest in the units noted.
@@ -90,6 +94,9 @@ const C1: u128 = 0x4ef4f326_f9177969_2b71366c_c0460d64; // (π/2)^2/2!, units 2^
 /// sends the caller to the 384-bit route. `n` is finite, nonzero and at least `2^-34` in
 /// magnitude (smaller operands are settled by the caller).
 pub(crate) fn sin_cos<F: Float>(n: &Num, cos: bool, mode: Rounding) -> Option<(F, Status)> {
+    if F::PREC == 113 {
+        return quad::sin_cos::<F>(n, cos, mode);
+    }
     if F::PREC != 64 || !F::EXPLICIT {
         return None;
     }
@@ -192,20 +199,37 @@ fn reduce(m: u64, e: i32) -> (u32, bool, u128, u128) {
 
 /// `⌊a·b/2^128⌋` less at most 2 (the low product and two carries dropped).
 #[inline]
-fn mulhi(a: u128, b: u128) -> u128 {
+pub(crate) fn mulhi(a: u128, b: u128) -> u128 {
     let (ah, al, bh, bl) = (a >> 64, a & M64, b >> 64, b & M64);
     ah * bh + ((ah * bl) >> 64) + ((al * bh) >> 64)
 }
 
 /// `⌊a·b/2^64⌋` less at most 1.
 #[inline]
-fn mul_wide(a: u128, b: u64) -> u128 {
+pub(crate) fn mul_wide(a: u128, b: u64) -> u128 {
     let b = u128::from(b);
     (a >> 64) * b + (((a & M64) * b) >> 64)
 }
 
+/// `v as u64` for an integer-valued `v` in `[2^52, 2^64]` (`2^64` gives `2^64 − 1`, as `as` saturates),
+/// read from the bits: no SSE conversion. `as u64` of a value at or above `2^63` converts it
+/// signed first, which overflows and raises the invalid flag in MXCSR on every call; the
+/// envelope's exit drops that flag again with an MXCSR write, and on Ivy Bridge the next call's
+/// MXCSR read then stalls in microcode (LIBM-LD-ARC-RETHINK-2's attribution: ~58 microcode uops a
+/// call, successive asinl calls no longer overlapping). The root's seed `s0` and its reciprocal
+/// lie in `[2^63, 2^64]` on every call; arc's `div` and quad's `div3` reciprocals reach `2^63` when
+/// the divisor's top word is below `2^63 + 2^11`, and arc's `soft_sqrt` passes `[2^52, 2^54)` (D-10.95).
+#[inline(always)]
+pub(crate) fn big_u64(v: f64) -> u64 {
+    debug_assert!(v >= (1u64 << 52) as f64);
+    let b = v.to_bits();
+    let sh = ((b >> 52) as u32).wrapping_sub(1075); // v = m·2^sh, sh in [0, 12]
+    let m = (b & ((1 << 52) - 1)) | (1 << 52);
+    if sh >= 12 { u64::MAX } else { m << sh }
+}
+
 #[inline]
-fn mulhi64(a: u64, b: u64) -> u64 {
+pub(crate) fn mulhi64(a: u64, b: u64) -> u64 {
     ((u128::from(a) * u128::from(b)) >> 64) as u64
 }
 
@@ -230,7 +254,7 @@ fn cos_poly(u: u128, u1: u64) -> u128 {
 
 /// Step 5: `±m·2^e` rounded into `F` (64-bit significand) in `mode`, or `None` when the bound
 /// does not decide it.
-fn round<F: Float>(neg: bool, m: u128, e: i32, mode: Rounding) -> Option<(F, Status)> {
+pub(crate) fn round<F: Float>(neg: bool, m: u128, e: i32, mode: Rounding) -> Option<(F, Status)> {
     let lo = m as u64;
     // The distance above the last representable value or midpoint must lie in [ERR, 2^63 - ERR].
     if (lo & (u64::MAX >> 1)).wrapping_sub(ERR) > (1 << 63) - 2 * ERR {
@@ -330,7 +354,7 @@ mod tests {
     use crate::float::{self, Exact, F80};
     use crate::mp::{self, Mp};
 
-    const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
+    pub(super) const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
 
     /// `v·2^units` rounded to the nearest integer (these values are irrational: no ties).
     fn fixed(v: Mp, units: i64) -> u128 {
@@ -475,10 +499,10 @@ mod tests {
         }
     }
 
-    struct Rng(u64);
+    pub(super) struct Rng(pub(super) u64);
 
     impl Rng {
-        fn next(&mut self) -> u64 {
+        pub(super) fn next(&mut self) -> u64 {
             let mut x = self.0;
             x ^= x << 13;
             x ^= x >> 7;
@@ -497,11 +521,11 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct Tally {
-        calls: u64,
-        undecided: u64,
-        refused: u64,
-        worst: f64,
+    pub(super) struct Tally {
+        pub(super) calls: u64,
+        pub(super) undecided: u64,
+        pub(super) refused: u64,
+        pub(super) worst: f64,
     }
 
     /// The tier on `n` against the 384-bit route in the four modes, and the kernel's error against
@@ -540,7 +564,7 @@ mod tests {
     /// `frac(2^e·2/π)` gives (Muller, Elementary Functions, 3rd ed. 2016, ch. 11): the last
     /// convergent denominator below 2^62 (as far as the 127-bit expansion's convergents are the
     /// number's own).
-    fn near_multiple(e: i32) -> Option<Num> {
+    pub(super) fn near_multiple(e: i32) -> Option<Num> {
         let (mut num, mut den) = (alpha(e), 1u128 << 127);
         let (mut q2, mut q1) = (1u128, 0u128);
         let mut best = None;

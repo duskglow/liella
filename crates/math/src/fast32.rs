@@ -29,6 +29,7 @@ use crate::status::{Flags, Rounding, Status};
 
 mod bessel;
 mod cexp;
+mod clog_csqrt;
 mod erf;
 mod exp_log;
 mod gamma;
@@ -40,6 +41,7 @@ use bessel::{bessel_core, bessel_finish};
 #[cfg(test)]
 pub(crate) use cexp::{cexp_core, CEXP_DELTA};
 pub use cexp::{cexpf, cexpf_nearest};
+pub use clog_csqrt::{clogf, clogf_nearest, csqrtf, csqrtf_nearest};
 use erf::{erf_core, erfc_core, ERFC_DELTA, ERF_DELTA};
 use exp_log::*;
 pub use gamma::{eval_lgamma, eval_tgamma};
@@ -50,7 +52,7 @@ use trig::*;
 pub use exp_log::{eval_pow, pow};
 pub use hyperbolic::{acosh_nearest_sqrt, asinh_nearest_sqrt};
 pub use inv_trig::{atan2, eval_atan2};
-pub use trig::sincos;
+pub use trig::{cos_nearest_widen, sin_nearest_widen, sincos, tan_nearest_widen};
 
 /// The functions with a fast path.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -405,7 +407,7 @@ include!("fast32_tables.rs");
 /// errno. Subnormal results (rare: x < -87.3 for expf) are left to the accurate path, which keeps
 /// this test to one fixed mask (s = 29).
 #[inline(always)]
-fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32> {
+pub(crate) fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32> {
     const LO: u64 = 0x3810_0000_0000_0000;
     let a = y.to_bits() & !(1 << 63);
     // (low + delta) mod 2^28 ≤ 2·delta exactly when low ≤ delta or low ≥ 2^28 - delta.
@@ -511,6 +513,39 @@ pub fn exp_onepass_any(x: f32) -> Option<f32> {
 #[inline]
 pub fn exp2_onepass_any(x: f32) -> Option<f32> {
     exp_onepass(x, 128.0, 0x42fc_0000) // |x| < 126
+}
+
+/// `exp10f` as [`exp_onepass_any`] (D-10.72): `c` = RN(128·log2 10), |x| < 37.9 (|x·log2 10| <
+/// 125.9, so [`exp_onepass`]'s range and proof hold unchanged: |z| < 2^13.98). 10^n is a `float`
+/// for n = 1..=10 while z = x·c is inexact there, so the operands in [1, 10] with their low 20
+/// bits clear (the integers among them; at most 4 significant bits) are refused on the bits first,
+/// by one compare: d = bits(x) - bits(1) rotated right by 20 is ≤ 0x1a exactly when d's low 20
+/// bits are clear (any set bit lands at 2^12 or above) and d ≤ bits(10) - bits(1) = 0x1a·2^20 (x
+/// below 1 wraps d above). Two separate tests compiled branchless, 5 instructions more (D-10.72).
+#[inline]
+pub fn exp10_onepass_any(x: f32) -> Option<f32> {
+    if x.to_bits().wrapping_sub(0x3f80_0000).rotate_right(20) <= (0x4120_0000 - 0x3f80_0000) >> 20 {
+        return None;
+    }
+    exp_onepass(x, INV_M, 0x4217_999a)
+}
+
+/// `logf` in the caller's rounding direction and MXCSR, unread (D-10.72; proof at [`log_onepass`]).
+#[inline]
+pub fn log_onepass_any(x: f32) -> Option<f32> {
+    log_onepass::<0>(x)
+}
+
+/// `log2f` as [`log_onepass_any`].
+#[inline]
+pub fn log2_onepass_any(x: f32) -> Option<f32> {
+    log_onepass::<1>(x)
+}
+
+/// `log10f` as [`log_onepass_any`].
+#[inline]
+pub fn log10_onepass_any(x: f32) -> Option<f32> {
+    log_onepass::<2>(x)
 }
 
 macro_rules! fast_fn {

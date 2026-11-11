@@ -1,0 +1,12 @@
+{"task": "DL-MULTI-WRITABLE", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: boot::image/Writer accept any number of writable PT_LOADs (unit tests, D-27.25); RELRO across segments, ld.so dynamic e2e tests, plants run, gate and startup counters not done; new conformance test exits 92 (linker did not split with libc.a)",
+ "branch": "task/dl-multi-writable", "head": null,
+ "gate": {"affected": "not run (boot unit tests 5 passed; clippy, static green; conformance s01_static_pie_multi_writable 0 passed / 1 failed)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["GNU ld 2.42 keeps PT_GNU_RELRO inside one PT_LOAD for every source-level split tried; a RELRO-spanning test needs a header-patched program"],
+ "refused": [],
+ "improvement": "the brief's scope (relocator + RELRO + 4 end-to-end programs + plants + counters) does not fit 90 calls / 180k with the probing it needs; split RELRO-across-segments into its own story",
+ "next_step": "fix the conformance split (readelf the libc.a-linked build), add RELRO per-segment protection, ld.so dynamic tests, run plants handoff/DL-MULTI-WRITABLE-plants.txt, gate --base origin/next, cbench_startup vs origin/next",
+ "report_file": "handoff/DL-MULTI-WRITABLE.md",
+ "jobs": ["mei:dl-multi-writable-check3"]}

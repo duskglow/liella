@@ -797,7 +797,10 @@ family!(fam_cproj, "cproj", 8);
 family!(fam_creal, "creal", 8);
 family!(fam_csin, "csin", 8);
 family!(fam_csinh, "csinh", 8);
-family!(fam_csqrt, "csqrt", 8);
+#[test]
+fn fam_csqrt() {
+    assert_eq!(products::math_family("csqrt"), 8);
+}
 family!(fam_ctan, "ctan", 8);
 family!(fam_ctanh, "ctanh", 8);
 #[test]
@@ -1549,10 +1552,22 @@ symbol!(sym___sinh_finite, "__sinh_finite", "10", "2.15", r##""##);
 symbol!(sym___sinhf128_finite, "__sinhf128_finite", "10", "2.26", r##""##);
 symbol!(sym___sinhf_finite, "__sinhf_finite", "10", "2.15", r##""##);
 symbol!(sym___sinhl_finite, "__sinhl_finite", "10", "2.15", r##""##);
-symbol!(sym___sqrt_finite, "__sqrt_finite", "10", "2.15", r##""##);
-symbol!(sym___sqrtf128_finite, "__sqrtf128_finite", "10", "2.26", r##""##);
-symbol!(sym___sqrtf_finite, "__sqrtf_finite", "10", "2.15", r##""##);
-symbol!(sym___sqrtl_finite, "__sqrtl_finite", "10", "2.15", r##""##);
+#[test]
+fn sym___sqrt_finite() {
+    products::math_compat("__sqrt_finite", "GLIBC_2.15");
+}
+#[test]
+fn sym___sqrtf128_finite() {
+    products::math_compat("__sqrtf128_finite", "GLIBC_2.26");
+}
+#[test]
+fn sym___sqrtf_finite() {
+    products::math_compat("__sqrtf_finite", "GLIBC_2.15");
+}
+#[test]
+fn sym___sqrtl_finite() {
+    products::math_compat("__sqrtl_finite", "GLIBC_2.15");
+}
 symbol!(sym___y0_finite, "__y0_finite", "10", "2.15", r##""##);
 symbol!(sym___y0f128_finite, "__y0f128_finite", "10", "2.26", r##""##);
 symbol!(sym___y0f_finite, "__y0f_finite", "10", "2.15", r##""##);
@@ -1702,6 +1717,64 @@ fn complex_float_and_double_members() {
     assert_eq!(observe(|| assert_eq!(m::cpow(z(1.0, 1.0), z(2.0, 0.0)), z(0.0, 2.0))), (0, Flags(0)));
     assert_eq!(observe(|| assert_eq!(m::__clog10(z(100.0, 0.0)), z(2.0, 0.0))), (0, Flags(0)));
     assert_eq!(observe(|| assert_eq!(m::catanh(z(1.0, 0.0)).re, f64::INFINITY)), (34, Flags::DIVBYZERO));
+    fpu::clear(&CSys, Flags::ALL);
+}
+
+/// The in-place entries of `cexp`, `clog`, `csqrt` and their `float` members on the axes (one part
+/// an exact zero, LIBM-CPLX-LOG-SQRT-4, D-10.74): each result's bits, flags and `errno` equal the
+/// 384-bit route's to nearest, for unit, exact-root, ordinary, tiny, huge and overflowing
+/// magnitudes of both signs with both signed zeros, the other axis and the origin included.
+#[test]
+fn complex_axes_in_place_match_the_route() {
+    // Clauses: s10_5_c_0, s10_0_c_0.
+    use liella_boundary::mathret::Complex;
+    use liella_math::{complex as c, MathError, Rounding::Nearest};
+    let errno = |e: MathError| match e {
+        MathError::None => 0,
+        MathError::Domain => 33,
+        MathError::Range => 34,
+    };
+    let fmin = f64::from(f32::MIN_POSITIVE);
+    let mags = [
+        0.0, 1.0, 4.0, 0.25, 2.0, 3.0, 0.1, 0.5, 1.0 + f64::EPSILON, 1e300, f64::MAX, 1e-300, f64::MIN_POSITIVE, 2.0 * f64::MIN_POSITIVE,
+        700.0, 709.9, 1e-20, fmin, 2.0 * fmin, f64::from(f32::MAX), 90.0,
+    ];
+    let mut ops = Vec::new();
+    for m in mags {
+        for v in [m, -m] {
+            for z in [0.0, -0.0] {
+                ops.push((v, z));
+                ops.push((z, v));
+            }
+        }
+    }
+    type D = (&'static str, extern "C" fn(Complex<f64>) -> Complex<f64>, fn(f64, f64, liella_math::Rounding) -> c::Res<f64>);
+    type S = (&'static str, extern "C" fn(Complex<f32>) -> Complex<f32>, fn(f32, f32, liella_math::Rounding) -> c::Res<f32>);
+    let dbl: [D; 3] = [("cexp", m::cexp, c::cexp_route::<f64>), ("clog", m::clog, c::clog_route::<f64>), ("csqrt", m::csqrt, c::csqrt_route::<f64>)];
+    let flt: [S; 3] = [("cexpf", m::cexpf, c::cexp_route::<f32>), ("clogf", m::clogf, c::clog_route::<f32>), ("csqrtf", m::csqrtf, c::csqrt_route::<f32>)];
+    for &(x, y) in &ops {
+        for (name, f, route) in dbl {
+            let mut got = (0, 0);
+            let seen = observe(|| {
+                let r = f(Complex { re: x, im: y });
+                got = (r.re.to_bits(), r.im.to_bits());
+            });
+            let ((wr, wi), st) = route(x, y, Nearest);
+            assert_eq!((name, x, y, got, seen), (name, x, y, (wr.to_bits(), wi.to_bits()), (errno(st.error), st.flags)), "{name} on an axis differs from the route");
+        }
+        // The same magnitudes rounded to `float` (overflow to infinity and underflow to zero are wanted operands).
+        #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+        let (xf, yf) = (x as f32, y as f32);
+        for (name, f, route) in flt {
+            let mut got = (0, 0);
+            let seen = observe(|| {
+                let r = f(Complex { re: xf, im: yf });
+                got = (r.re.to_bits(), r.im.to_bits());
+            });
+            let ((wr, wi), st) = route(xf, yf, Nearest);
+            assert_eq!((name, xf, yf, got, seen), (name, xf, yf, (wr.to_bits(), wi.to_bits()), (errno(st.error), st.flags)), "{name} on an axis differs from the route");
+        }
+    }
     fpu::clear(&CSys, Flags::ALL);
 }
 
@@ -1920,6 +1993,48 @@ fn math_sqrt_hardware_matches_the_software_square_root() {
         }
     }
     fpu::clear(&CSys, Flags::ALL);
+}
+
+#[test]
+fn math_sqrt_stays_out_of_place_under_an_unmasked_trap() {
+    // Clauses: s10_0_f_0.
+    // D-10.22/D-10.71: the in-place `sqrtsd`/`sqrtss` runs only under a word whose exceptions are
+    // all masked. With the denormal-operand exception unmasked, a subnormal operand would trap in
+    // the instruction; the software path answers instead, with the reference bits, flags and
+    // errno, in every direction. The divide-by-zero, overflow and underflow masks (which a square
+    // root never raises) must give the same answers. Invalid and inexact stay masked: the
+    // harness's own arithmetic raises them.
+    use liella_math::{fused, MathError, Rounding};
+    let errno_of = |e: MathError| if e == MathError::Domain { 33 } else { 0 };
+    let modes = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
+    for unmask in [0x100_u32, 0x200, 0x400, 0x800] {
+        for (rc, &mode) in (0u32..).zip(modes.iter()) {
+            let mx = (0x1f80 & !unmask) | (rc << 13);
+            for x in [1e-310, 5e-324, 2.0, 0.5, -1.0] {
+                let (w, st) = fused::sqrt::<f64, f64>(x, mode);
+                let mut got = 0;
+                let seen = observe_with_ctl(mx, || got = m::sqrt(x).to_bits());
+                assert_eq!((mx, x.to_bits(), got, seen), (mx, x.to_bits(), w.to_bits(), (errno_of(st.error), Flags(st.flags.0))));
+            }
+            for x in [1e-40f32, 1e-45, 2.0, 0.5, -1.0] {
+                let (w, st) = fused::sqrt::<f32, f32>(x, mode);
+                let mut got = 0;
+                let seen = observe_with_ctl(mx, || got = m::sqrtf(x).to_bits());
+                assert_eq!((mx, x.to_bits(), got, seen), (mx, x.to_bits(), w.to_bits(), (errno_of(st.error), Flags(st.flags.0))));
+            }
+        }
+    }
+    fpu::clear(&CSys, Flags::ALL);
+}
+
+#[test]
+fn math_sqrtl_entry_tests_its_word_and_class_in_c() {
+    // Clauses: s10_0_f_0.
+    // D-10.71: `sqrtl`'s assembly entry (its own control-word and `fxam` tests) is reached only
+    // from C: the tests above call `liella_sqrtl_bits`. conformance/c/s10_sqrtl_entry.c calls the
+    // exported `sqrtl` statically linked: in place in two directions, a negative operand's EDOM,
+    // -0, and 53-bit precision control keeping the 64-bit root.
+    products::conformance(&["s10_sqrtl_entry"]);
 }
 
 /// `hypotf` in MXCSR direction `rc` (0 nearest, 1 down, 2 up, 3 toward zero): the result's bits,
@@ -2159,9 +2274,13 @@ fn hypotf_oracle(x: f32, y: f32, f: f32, rc: u32) -> bool {
 /// The one-pass `float` entries (LIBM-F32-ONEPASS, D-10.63) and their reference: the full
 /// envelope on the accurate path, the entry they replaced.
 type OnePass = (&'static str, extern "C" fn(f32) -> f32, fn(f32) -> f32);
-const ONEPASS: [OnePass; 2] = [
+const ONEPASS: [OnePass; 6] = [
     ("expf", m::expf, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::exp)),
     ("exp2f", m::exp2f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::exp2)),
+    ("exp10f", m::exp10f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::exp10)),
+    ("logf", m::logf, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::log)),
+    ("log2f", m::log2f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::log2)),
+    ("log10f", m::log10f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::log10)),
 ];
 
 /// Compare `entry` with `reference` on the encoding `b` under MXCSR `mx`: result bits, errno
@@ -2203,10 +2322,15 @@ fn math_expf_onepass_entries_match_the_envelope() {
     // envelope's bits, errno and flags in every rounding direction and under FTZ, DAZ and both
     // (D-10.22), on a sample of every chunk of the encodings, and on the operands at the edges of
     // the one-pass range, the exact results and the special values.
-    let edges: [u32; 20] = [
+    // D-10.72 adds exp10f's range edges (±37.9) and exact powers (1, 9, 10; 11 and 1.125 are not
+    // exact), and the log family's: 1 and its neighbours, the m split at 0.75 and 1.5, the least
+    // normal and the largest finite operand, -1, and the 10^n operands log10 refuses (10, 10^10).
+    let edges: [u32; 36] = [
         0x0000_0000, 0x8000_0000, 0x0000_0001, 0x807f_ffff, 0x327f_ffff, 0x3280_0000, 0xb280_0000, 0x42ae_a8f5,
         0x42ae_a8f6, 0xc2ae_a8f6, 0x42fb_ffff, 0x42fc_0000, 0xc2fc_0000, 0x4040_0000, 0xc0e0_0000, 0x7f80_0000,
-        0xff80_0000, 0x7fc0_0000, 0x7f80_0001, 0xffa0_0005,
+        0xff80_0000, 0x7fc0_0000, 0x7f80_0001, 0xffa0_0005, 0x4217_9999, 0x4217_999a, 0xc217_999a, 0x3f80_0000,
+        0x4110_0000, 0x4120_0000, 0x4130_0000, 0x3f90_0000, 0x3f7f_ffff, 0x3f80_0001, 0x3f40_0000, 0x3fc0_0000,
+        0x0080_0000, 0x7f7f_ffff, 0xbf80_0000, 0x5015_02f9,
     ];
     for p in &ONEPASS {
         for ctl in [0u32, 0x8000, 0x0040, 0x8040] {
@@ -2263,6 +2387,34 @@ fn math_expf_onepass_sweep() {
 fn math_exp2f_onepass_sweep() {
     // Clauses: s10_0_f_0. D-10.63: as math_expf_onepass_sweep.
     onepass_sweep(&ONEPASS[1]);
+}
+
+#[test]
+#[ignore = "exhaustive: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_exp10f_onepass_sweep"]
+fn math_exp10f_onepass_sweep() {
+    // Clauses: s10_0_f_0. D-10.72: as math_expf_onepass_sweep.
+    onepass_sweep(&ONEPASS[2]);
+}
+
+#[test]
+#[ignore = "exhaustive: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_logf_onepass_sweep"]
+fn math_logf_onepass_sweep() {
+    // Clauses: s10_0_f_0. D-10.72: as math_expf_onepass_sweep.
+    onepass_sweep(&ONEPASS[3]);
+}
+
+#[test]
+#[ignore = "exhaustive: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_log2f_onepass_sweep"]
+fn math_log2f_onepass_sweep() {
+    // Clauses: s10_0_f_0. D-10.72: as math_expf_onepass_sweep.
+    onepass_sweep(&ONEPASS[4]);
+}
+
+#[test]
+#[ignore = "exhaustive: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_log10f_onepass_sweep"]
+fn math_log10f_onepass_sweep() {
+    // Clauses: s10_0_f_0. D-10.72: as math_expf_onepass_sweep.
+    onepass_sweep(&ONEPASS[5]);
 }
 
 #[test]
