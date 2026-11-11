@@ -20,7 +20,8 @@
   "startup_data.sh --replace on one profile drops the other profile's keys and the next build of that profile fails STARTUP-DATA-WINDOWS; refresh per profile without --replace.",
   "The tracer cannot see objects already moved into .data1 individually, so keys flip between regenerations (classed::OUTCOME, dispatch::FMA, fast).",
   "One empty heredoc was used in a Bash call, against the no-heredoc rule.",
-  "Superseded: ldc5-regen (fast --replace made the release build fail), ldc5-regen-2 and ldc5-htp (keys before the tracer fix), ldc5-plants (rc 2: baseline failed on the leftovers the new test found; old plant key)."
+  "Superseded: ldc5-regen (fast --replace made the release build fail), ldc5-regen-2 and ldc5-htp (keys before the tracer fix), ldc5-plants (rc 2: baseline failed on the leftovers the new test found; old plant key).",
+  "Evidence, not a proof job: ldc5-htp-2 (rc 1, hot_text_products on this head: the open failures named in the handoff)."
  ],
  "refused": [],
  "improvement": "regen.sh/startup_data.sh should trace from products built without the keyed move, otherwise each regeneration depends on the previous one's keys; a one-shot --both-profiles mode would also avoid the --replace trap.",
@@ -28,7 +29,6 @@
  "report_file": "handoff/LAYOUT-DATA-CLUSTERS-5.md",
  "jobs": [
   "ldc5-next-counts",
-  "ldc5-regen-3",
-  "ldc5-htp-2"
+  "ldc5-regen-3"
  ]
 }
