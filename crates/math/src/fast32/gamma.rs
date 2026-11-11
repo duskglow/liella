@@ -134,12 +134,18 @@ pub(super) fn lgamma_core(x: f32) -> Option<(f64, u64)> {
 #[inline(always)]
 pub fn eval_lgamma(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
     let r = eval(Fast::Lgamma, x, mode)?;
-    // RANGE: clamped to [-2^24, 0] (D-10.95): the compiler may convert before the `x < 0` test,
-    // and an unclamped huge or NaN x would raise invalid in hardware. Every float <= -2^24 is an
-    // even integer, as -2^24 is, so the parity read for x < 0 is unchanged.
-    #[allow(clippy::manual_clamp)] // max, not clamp: a NaN x becomes -2^24, never NaN
-    let n = x.max(-16_777_216.0).min(0.0) as i32;
-    Some((r, if x < 0.0 && n & 1 == 0 { -1 } else { 1 }))
+    Some((r, if x < 0.0 && !trunc_is_odd(x) { -1 } else { 1 }))
+}
+
+/// Whether `trunc(x)` is odd, read from the bits (D-10.95): no float-to-integer conversion, which
+/// the compiler may hoist above the `x < 0` test and which raises invalid in hardware for a huge or
+/// NaN `x`. `|x| < 1` truncates to 0, and every float with `|x| >= 2^24` (inf, NaN) reads as even.
+#[inline(always)]
+fn trunc_is_odd(x: f32) -> bool {
+    let b = x.to_bits();
+    let e = (b >> 23) & 0xff; // biased exponent: |x| in [2^(e-127), 2^(e-126))
+    let m = (b & 0x7f_ffff) | 0x80_0000;
+    (127..=150).contains(&e) && (m >> (150 - e)) & 1 != 0
 }
 
 /// `tgammaf` by the fast path, or `None` (see [`eval`]).

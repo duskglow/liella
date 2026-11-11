@@ -1133,6 +1133,12 @@ fn s10_3_c_r6() {
     assert_eq!(sp::lgamma(-0.5f64, n).1, -1);
     assert_eq!(sp::lgamma(-1.5f64, n).1, 1);
     assert_eq!(sp::lgamma(-2.5f32, n).1, -1);
+    // float's integer-part parity at its ends (D-10.95: read from the bits): |x| < 1, and the
+    // spacing-1/2 binade just below 2^23.
+    assert_eq!(sp::lgamma(-0.5f32, n).1, -1);
+    assert_eq!(sp::lgamma(-1.5f32, n).1, 1);
+    assert_eq!(sp::lgamma(-8_388_606.5f32, n).1, -1);
+    assert_eq!(sp::lgamma(-8_388_605.5f32, n).1, 1);
     assert_eq!(sp::lgamma(7.0f64, n).1, 1);
     // lgamma(1) = lgamma(2) = +0 in every mode; poles at 0 and the negative integers.
     for mode in MODES {
