@@ -10,6 +10,8 @@ use core::ffi::c_int;
 use core::sync::atomic::{AtomicU32, AtomicU8, AtomicUsize};
 
 use liella_rt::thread::{Thread, KEYS, SLOT_SIZE};
+#[cfg(feature = "runtime")]
+use liella_rt::tls::ERRNO_OFFSET;
 use liella_rt::tls::ThreadBlock;
 
 /// The thread pointer (`%fs:0`): the block's self word (`ThreadBlock::tcb`, which holds the
@@ -241,6 +243,21 @@ pub fn current() -> &'static ThreadBlock {
 #[inline(always)]
 pub fn errno_location() -> *mut c_int {
     crate::ffi::liella_machine_errno_location()
+}
+
+/// The library's own `errno` stores and loads in the products (`crate::errno`): the same test
+/// as machine/tp.S, in Rust, so that it inlines (D-X.60). A call to the assembly entry, which
+/// link-time optimisation cannot see into, would add a call and a return to every failing
+/// call and change how the small callers that set `errno` are inlined. The two read the same
+/// state: [`crate::thread::owned`]'s byte is stored with the one tp.S reads, in `init_initial`.
+#[cfg(feature = "runtime")]
+#[inline(always)]
+pub(crate) fn errno_inline() -> *mut c_int {
+    if crate::thread::owned() {
+        core::ptr::with_exposed_provenance_mut(tp().wrapping_add(ERRNO_OFFSET))
+    } else {
+        crate::thread::foreign_errno()
+    }
 }
 
 /// Store `v` in the `errno` cell [`errno_location`] names (D-X.60 tests: the cell Liella's
