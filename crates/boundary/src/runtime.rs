@@ -88,11 +88,10 @@ pub(crate) fn exe_header(at: usize) -> [u8; 64] {
 
 /// A static program's initial thread: map its static TLS and thread block, copy the TLS image,
 /// set the guards from `AT_RANDOM`, and make it the thread pointer. Returns what the headers
-/// said (the TLS image and the RELRO pages), read once, and the header words (for
-/// `protect_relro`'s rare per-segment walk). `PIE`: started by `liella-rcrt1.o`, the
+/// said (the TLS image and the RELRO pages), read once. `PIE`: started by `liella-rcrt1.o`, the
 /// static-PIE start object (D-27.10), which relocates the executable first; the choice is made
 /// at link time, so `liella-crt1.o`'s start pays for no test of the executable's type.
-fn initial_thread<const PIE: bool>(aux: &Auxv<'_>) -> (start::Program, Option<bootstrap::Relocated>, &'static [u64]) {
+fn initial_thread<const PIE: bool>(aux: &Auxv<'_>) -> (start::Program, Option<bootstrap::Relocated>) {
     let as_usize = |v: Option<u64>| v.and_then(|v| usize::try_from(v).ok()).unwrap_or(0);
     let (phdr, phnum) = (as_usize(aux.get(AT_PHDR)), as_usize(aux.get(AT_PHNUM)));
     // UNSAFE(slice): the program headers the kernel mapped with the executable.
@@ -164,7 +163,7 @@ fn initial_thread<const PIE: bool>(aux: &Auxv<'_>) -> (start::Program, Option<bo
     if raw::set_fs(tp).is_err() {
         die(b"cannot set the thread pointer");
     }
-    (prog, pie, words)
+    (prog, pie)
 }
 
 /// A static program's RELRO segment becomes read-only (STATIC-RELRO, D-1.13): the start-up
@@ -175,17 +174,31 @@ fn initial_thread<const PIE: bool>(aux: &Auxv<'_>) -> (start::Program, Option<bo
 /// the one header pass `initial_thread` made (STATIC-RELRO-2: no second walk of the headers or
 /// the auxiliary vector on the start-up path). A `PT_GNU_RELRO` that spans two writable
 /// segments with an unmapped page between them makes that one call fail (D-27.25): only then
-/// are the headers (`words`, the executable's at `bias`) walked again and RELRO protected
-/// segment by segment, so the usual start pays nothing for the rare layout.
+/// does `relro_by_segment` walk the headers again, so the usual start carries nothing more.
 #[inline(always)]
-fn protect_relro(range: Option<((usize, usize), &[u64], usize)>) {
-    if let Some(((addr, len), words, bias)) = range {
-        let prot = i32::try_from(PROT_READ).unwrap_or(1);
-        if raw::mprotect(addr, len, prot).is_err() {
-            // A failure of a piece (not seen in practice) leaves it writable: the program still runs.
-            let _ = start::relro_pieces(words, words.len() / start::PHDR_WORDS, bias, start::PAGE, |a, l| raw::mprotect(a, l, prot));
+fn protect_relro(range: Option<(usize, usize)>, aux: &Auxv<'_>) {
+    if let Some((addr, len)) = range {
+        if raw::mprotect(addr, len, i32::try_from(PROT_READ).unwrap_or(1)).is_err() {
+            relro_by_segment(aux);
         }
     }
+}
+
+/// `PT_GNU_RELRO` made read-only segment by segment (D-27.25), after the single `mprotect` of
+/// the whole range failed: the executable's headers from `AT_PHDR`/`AT_PHNUM`, at its bias
+/// (`EXE_BIAS`: set by a static PIE's start, 0 for a fixed-address program).
+#[cold]
+#[inline(never)]
+fn relro_by_segment(aux: &Auxv<'_>) {
+    let as_usize = |v: Option<u64>| v.and_then(|v| usize::try_from(v).ok()).unwrap_or(0);
+    let (phdr, phnum) = (as_usize(aux.get(AT_PHDR)), as_usize(aux.get(AT_PHNUM)));
+    // UNSAFE(slice): the program headers the kernel mapped with the executable.
+    #[allow(unsafe_code)]
+    // SAFETY: `AT_PHDR`/`AT_PHNUM` describe the loaded headers (⚑ KERN), which stay mapped.
+    let words = unsafe { conv::words_at(phdr, phnum.saturating_mul(start::PHDR_WORDS)) };
+    let prot = i32::try_from(PROT_READ).unwrap_or(1);
+    // A failure of a piece (not seen in practice) leaves it writable: the program still runs.
+    let _ = start::relro_pieces(words, phnum, process::EXE_BIAS.load(Relaxed), start::PAGE, |a, l| raw::mprotect(a, l, prot));
 }
 
 /// Secure mode: drop the unsafe variables from the initial environment array, in place.
@@ -310,13 +323,10 @@ pub fn start<const PIE: bool>(main: Option<Main>, argc: c_int, argv: *mut *mut c
     let mut relro = None;
     let mut pie = None;
     if static_program {
-        let (prog, relocated, words) = initial_thread::<PIE>(&aux);
+        let (prog, relocated) = initial_thread::<PIE>(&aux);
         pie = relocated;
         crate::thread::set_tls_image(prog.tls);
-        // No closure here: `start`'s closures keep their numbers (the hot-text list names them).
-        if let Some(r) = prog.relro {
-            relro = Some((r, words, prog.bias));
-        }
+        relro = prog.relro;
     } else {
         // Another `ld.so` owns the modules' TLS: no threads until phase 14 (D-22.10).
         crate::thread::forbid();
@@ -425,7 +435,7 @@ pub fn start<const PIE: bool>(main: Option<Main>, argc: c_int, argv: *mut *mut c
     // The RELRO segment of a static program becomes read-only before any constructor runs
     // (where the reference library's strace shows its `mprotect`).
     // `relro` is `None` for a dynamically linked program (its loader's, phase 14).
-    protect_relro(relro);
+    protect_relro(relro, &aux);
 
     // 5. Destructors, then constructors.
     if let Some(f) = rtld_fini {
