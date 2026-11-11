@@ -1027,7 +1027,10 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     let bound = check_binding(root, &so)?;
     println!("so: binding of {bound} libc.so.6 exports checked against glibc's (spec/abi/versions.tsv scope)");
     let native_names: BTreeSet<String> = crate::native::symbols(root)?.into_iter().map(|(s, _)| s).collect();
-    let versioned = check_version_sets(root, &so, "libc.so.6", &have, &native_names)?;
+    // The native names and the private start interface (LIELLA_PRIVATE, D-27.22) are Liella's own
+    // nodes: no versions.tsv rows.
+    let own_nodes: BTreeSet<String> = native_names.iter().cloned().chain(LIBC_PRIVATE.iter().map(|s| (*s).to_string())).collect();
+    let versioned = check_version_sets(root, &so, "libc.so.6", &have, &own_nodes)?;
     println!("so: version set and default version of {versioned} libc.so.6 names checked against spec/abi/versions.tsv");
     // The 64-byte entry alignment (D-4.33) is contract FN-ALIGN-EXPORTS, checked with the others at the end.
     publish(&so, &so_final)?;

@@ -219,6 +219,14 @@ pub static __rseq_size: core::sync::atomic::AtomicU32 = core::sync::atomic::Atom
 #[allow(non_upper_case_globals)]
 pub static __rseq_flags: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
+/// `__liella_build_tag@LIELLA_PRIVATE` (L14-10, D-27.22): Liella's `ld.so` refuses a `libc.so.6`
+/// whose tag differs from its own.
+// UNSAFE(export): as above; read only by `ld.so`.
+#[cfg_attr(feature = "runtime", unsafe(no_mangle))]
+#[allow(unsafe_code)]
+#[allow(non_upper_case_globals)]
+pub static __liella_build_tag: [u8; liella_ld::start::private::TAG_LEN] = liella_ld::start::private::TAG;
+
 // ------------------------------------------------------------------------------ §12 objects
 //
 // The standard streams (D-12.11): `_IO_2_1_stdin_`, `_IO_2_1_stdout_` and `_IO_2_1_stderr_` are
