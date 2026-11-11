@@ -1,0 +1,12 @@
+{"task": "RECORDS-STALE-BODIES", "model": "opus", "tokens": null,
+ "result": "D-12.26 body names COMPAT-21 (registered, not implemented); D-10.5 waits for DL-LIBC-START-2 (the #814 skip is still on next)",
+ "branch": "task/records-stale-bodies", "head": "70a61c45a",
+ "gate": {"affected": "records check + static green (records only, no tests touched)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["D-10.5 correction waits: s10_math_symbols.rs still reports the dynamic fpu_control run as a #814 skip on next 28a903a01; DL-LIBC-START-2 is still running"],
+ "refused": [],
+ "jobs": ["records-stale-bodies-static"],
+ "improvement": "A brief whose item depends on another story landing could name that story's landing as a dispatch precondition, so the record fix is done once, after it lands, not split over two runs",
+ "next_step": "After DL-LIBC-START-2 lands: correct the D-10.5 body (the dynamic fpu_control hook runs on Liella), then run records check",
+ "report_file": "handoff/records-stale-bodies.md"}
