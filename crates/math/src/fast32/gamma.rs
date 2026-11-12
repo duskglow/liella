@@ -99,7 +99,9 @@ fn ln64(v: f64) -> f64 {
 /// * otherwise ([`gamma_core`]'s domain): y = ln|G|, absolute error ≤ 55.1u·1.0001 + (1.45 + 2|y|)u
 ///   ≤ (56.7 + 2.1|y|)u, in ulp of y (|y| in [2^E, 2^(E+1))): ≤ 56.7·2^-(E+1) + 2.1: ≤ 30.5 for
 ///   |y| ≥ 1, ≤ 7260 for |y| ≥ 2^-8. Below 2^-8 (next to the negative zeros) the bound is too wide
-///   for the rounding test: refused, as are the poles and |x| < 2^-20.
+///   for the rounding test: those operands and |x| < 2^-20 go to [`lgamma_edge`]; the poles are
+///   refused.
+///
 /// (Tests only: the exports go through [`eval_lgamma`].) The third value says the margin is
 /// [`lgamma_edge`]'s.
 #[cfg(test)]
@@ -283,7 +285,7 @@ mod tests {
         let around = |c: f32| (-512i32..512).map(move |k| f32::from_bits(c.to_bits().wrapping_add_signed(k)));
         let tiny = [1.0e-30f32, -1.0e-30, 8.0e-19, -8.6e-19, f32::from_bits(1), f32::from_bits(0x8000_0001), f32::MIN_POSITIVE];
         let (mut edge, mut refused) = (0u32, 0u32);
-        for x in around(-3.143_825_77).chain(around(-2.457_024_7)).chain(tiny) {
+        for x in around(-3.143_825_8).chain(around(-2.457_024_8)).chain(tiny) {
             edge += u32::from(matches!(lgamma_core(x), Some((_, _, true))));
             for m in MODES {
                 let Some(r) = eval_lgamma(x, m) else {
