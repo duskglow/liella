@@ -537,9 +537,9 @@ pub const ARCHIVE: &[u8] = b"/usr/lib/locale/locale-archive";
 pub const ALIAS_FILE: &[u8] = b"/usr/share/locale/locale.alias";
 
 /// The built-in locale named `name` and the name it reports, if it is one.
-// LAYOUT-HOTKEY-INLINE-STABLE-3: a fixed boundary for its locale-tier hot-text key (a libm growth inlined it away, ruling #5024).
-// LAYOUT-HOTKEY-INLINE-STABLE-4: free: next already called it in both profiles (setlocale rows equal next, wl_percall).
-#[inline(never)]
+// LAYOUT-HOTKEY-INLINE-STABLE-4: always inlined into its callers, so it has no hot-text key a libm growth
+// could kill; a fixed boundary cost about 25 instructions per setlocale(LC_CTYPE, "POSIX") (wl_percall).
+#[inline(always)]
 pub fn builtin(name: &'static [u8]) -> Option<(Data, &'static [u8])> {
     match name {
         b"C" | b"POSIX" => Some((Data::C, C_NAME)),
