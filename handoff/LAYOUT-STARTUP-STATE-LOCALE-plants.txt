@@ -15,7 +15,10 @@ lssl-join-order | xtask/src/so.rs | perl:s/(    let copies = [^\n]*\n)(.*?)(    
 # order test finds no `.lbss` cluster. lssl3-align: the cluster's first section not aligned to a page: the build's
 # own check refuses it. lssl3-true-state: cpu::STATE (every start) declared first-call: the `true` trace names it.
 lssl3-no-cluster | xtask/src/coldbss.rs | perl:s/let lead = zero\.iter\(\)[^\n]*;/let lead: Option<String> = None;/ | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:no first-call cluster \(\.lbss\) from libc\.a
-lssl3-align | xtask/src/coldbss.rs | perl:s/--set-section-alignment=\{first\}=\{FIRST_CALL_ALIGN\}/--set-section-alignment={first}=8/ | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:sections aligned to 4096, want 1
+lssl3-align | xtask/src/coldbss.rs | perl:s/--set-section-alignment=\{first\}=\{FIRST_CALL_ALIGN\}/--set-section-alignment={first}=8/ | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:first \.lbss section aligned to [0-9]+, want 4096
+# -4: lssl4-any-aligned: the build check accepts any page-aligned `.lbss` section (intl::RESOLVED is one by its own
+# type) instead of the cluster's first: the unit test's case with an unaligned first section passes the check.
+lssl4-any-aligned | xtask/src/coldbss.rs | lit:headers.into_iter().find(|s| s.name == FIRST_CALL_SECTION) ==> headers.into_iter().filter(|s| s.name == FIRST_CALL_SECTION).max_by_key(|s| s.align) | cargo test -p xtask -- coldbss::tests::declared_startup_state | msg:unwrap_err.*Ok
 lssl3-true-state | crates/libc-so/startup-state.list | perl:s/\nliella_boundary::cpu::STATE\n(.*\ncluster first-call\n)/\n$1liella_boundary::cpu::STATE\n/s | cargo test -p liella --test hot_text_products -- init_startup_data_accesses | msg:true: first-call cluster \.lbss
 # cargo xtask plants results, head 62fa8c2b9, job layout-startup-state-locale-2-plants (4 plants: 4 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
 # lssl-ascii-keys: CAUGHT, by hot_text_products init_startup_data_accesses_are_in_the_data1_cluster
