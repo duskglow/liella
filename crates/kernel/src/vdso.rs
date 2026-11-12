@@ -223,6 +223,9 @@ impl<'a> Vdso<'a> {
 
     /// Symbol `i`: `Some((Some(name), value))` for a defined global or weak function,
     /// `Some((None, _))` for any other symbol, `None` when the entry or its name cannot be read.
+    // LAYOUT-HOTKEY-INLINE-STABLE-2: inlined in both profiles on next; always inlined into `lookup_many` (itself
+    // always inlined into the pinned `sys::vdso_fn`), so its code keeps that shape and never becomes its own key.
+    #[inline(always)]
     fn defined_function(&self, i: usize) -> Option<(Option<&'a [u8]>, u64)> {
         let sym = self.symtab.checked_add(i.checked_mul(SYM_SIZE)?)?;
         let st_name = usz(u64::from(u32_at(self.image, sym)?))?;
@@ -237,6 +240,9 @@ impl<'a> Vdso<'a> {
 
     /// Whether symbol `i` has `version` (always, without a version table); `None` when its
     /// version index cannot be read.
+    // LAYOUT-HOTKEY-INLINE-STABLE-2: as `defined_function`: inlined in both profiles on next, always inlined
+    // so it stays inside the pinned `sys::vdso_fn`.
+    #[inline(always)]
     fn version_ok(&self, i: usize, version: &[u8]) -> Option<bool> {
         let Some(vs) = self.versym else { return Some(true) };
         let ndx = u16_at(self.image, vs.checked_add(i.checked_mul(2)?)?)?;
