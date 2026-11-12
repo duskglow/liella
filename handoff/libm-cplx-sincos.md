@@ -39,7 +39,8 @@ LIBM-CPLX-SINCOS`, from the module comment of crates/math/src/complex_fast_sinh.
 1. Read job check1 on keke (`~/bin/jobwait libm-cplx-sincos-check1`; log `~/logs/libm-cplx-sincos-check1.log`):
    it runs math-gen, `cargo xtask clippy`, the new unit tests and the release sweep. Fix compile errors (the code
    has never been compiled), copy the regenerated s10_math_gen.rs back, then commit.
-2. `cargo xtask static`, then the gate (`affected --run --base origin/next`), plants (msg: regexes; candidates:
+2. `cargo xtask static` is red on `long-sweeps` ("1 ignored test(s) and runner rows out of step"): register
+   `csinh_quick_tier_sweep` in the long-sweeps runner as `cexp_quick_tier_sweep` is (grep it). Then the gate (`affected --run --base origin/next`), plants (msg: regexes; candidates:
    drop `- e.lo * r0` in the reciprocal, drop `t2` from the series, swap the csin parts, drop the sign of sinh,
    use cosh_core for both float parts), the sweep, and percall (new probe validation/percall/cplx_sin.c modeled on
    cplx_exp.c: csin typical [-3,3]^2, small-|y|, large-|y|, csinf; vs next and glibc, plus `--tunables
