@@ -289,8 +289,11 @@ const ASIN_SPLIT: u32 = 0x3f00_0000;
 /// g ≥ 2^-25 and s ≥ 2^-12.5 are normal. `sqrt` as at [`asin_onepass_any`].
 #[inline(always)]
 fn asin_half(a: f64, sqrt: impl Fn(f64) -> f64) -> f64 {
-    let g = 0.5 - 0.5 * a;
-    let s = sqrt(g);
+    // g twice, as two expressions (both exact: 1 - a is exact by Sterbenz too): the root's own
+    // operand then dies at the root, so `sqrtsd` writes the register it reads (no merge into a
+    // register last written elsewhere, D-10.68), and the polynomial's g does not wait for it.
+    let s = sqrt(0.5 - 0.5 * a);
+    let g = (1.0 - a) * 0.5;
     s + asin_tail(s, g)
 }
 
