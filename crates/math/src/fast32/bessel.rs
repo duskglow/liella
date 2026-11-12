@@ -386,8 +386,9 @@ fn large_delta(y: f64, b: f64) -> Option<u64> {
 }
 
 /// The large band: the core and the rounding test, else the table (J1 odd: the value at -x is
-/// the negated one).
-#[inline(always)]
+/// the negated one). Out of line: inlined, its u128 reduction's registers widened `bessel_eval`'s
+/// frame for every band (12 to 27 more instructions a call on the mid and tiny rows).
+#[inline(never)]
 fn bessel_large(f: usize, x: f32, mode: Rounding, name: &'static str) -> Option<(f32, Status)> {
     let a = x.to_bits() & 0x7fff_ffff;
     let (y, b) = large_core(f, a);
