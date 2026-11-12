@@ -5,3 +5,10 @@ restmap | crates/math/src/special.rs | perl:s/2 => y0_accurate\(x, mode\),/2 => 
 table | crates/math/src/fast32/bessel_tab.rs | perl:s/(const LG_Y1: \[u64; )57(\] = \[\n)    0x[0-9a-f]{16},\n/${1}56$2/ | cargo test -p liella-math --lib bessel_large_table_is_the_refused_set -- --include-ignored | msg:large band's table is not the refused set
 margin | crates/math/src/fast32/bessel.rs | perl:s/const LG_B: f64 = 8\.0;/const LG_B: f64 = 4.0;/ | cargo test -p liella-math --lib bessel_large_table_entries | msg:entry 0x[0-9a-f]+ is not refused
 sweepband | crates/math/src/fast32/bessel.rs | perl:s/(\n    let \(y, b\) = large_core\(f, a\);\n)/$1    let y = -y;\n/ | LIELLA_SWEEP_STRIDE=65537 cargo test -p liella-math --release --lib j0f_fast_path_agrees_exhaustively -- --ignored | msg:j0f_fast_path_agrees_exhaustively.*FAILED|left: \(J0,
+# cargo xtask plants results (6 plants: 6 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# yneg: CAUGHT, caught by liella_math fast32::bessel::tests::bessel_large_band_edges
+# offset: CAUGHT, caught by liella_math fast32::bessel::tests::bessel_large_table_entries
+# restmap: CAUGHT, caught by liella_math fast32::bessel::tests::bessel32_rest_is_each_functions_path
+# table: CAUGHT, caught by liella_math fast32::bessel::tests::bessel_large_table_is_the_refused_set
+# margin: CAUGHT, caught by liella_math fast32::bessel::tests::bessel_large_table_entries
+# sweepband: CAUGHT, caught by liella_math fast32::bessel::tests::j0f_fast_path_agrees_exhaustively
