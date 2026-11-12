@@ -1,0 +1,11 @@
+{"task": "LIBM-CPLX-SINCOS", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: csinh/csin quick tier (double, float) written and pushed as WIP; not yet compiled or tested (context checkpoint)",
+ "branch": "task/libm-cplx-sincos", "head": "b7f59d625",
+ "gate": {"affected": "not run", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["no cargo on the agent host: math-gen output must come back from the role (job check1)"],
+ "refused": [],
+ "improvement": "Brief-level context budget: reading two handoffs plus kernel docs cost about 100k before any code was written; a per-story kernel API digest (signatures and bounds) would save most of it",
+ "next_step": "read job libm-cplx-sincos-check1 on keke, fix compile errors, commit the regenerated s10_math_gen.rs, then static, gate, plants, sweep, percall",
+ "report_file": "handoff/libm-cplx-sincos.md",
+ "jobs": ["libm-cplx-sincos-check1"]}
