@@ -1,75 +1,55 @@
-# LAYOUT-HOTKEY-INLINE-STABLE (-2): handoff
+# LAYOUT-HOTKEY-INLINE-STABLE (-3): handoff
 
-State: branch `task/layout-hotkey-inline-stable-2` (base next d1b3a596c), head in the report json
-(handoff/reports/LAYOUT-HOTKEY-INLINE-STABLE-2.json). Build role mei:~/w/s2. Jobs and results: section "Verification".
+State: branch `task/layout-hotkey-inline-stable-3` (base next d1b3a596c, not merged), head in
+handoff/reports/LAYOUT-HOTKEY-INLINE-STABLE-3.json. Build role keke:~/w/n1 (Zen 1). Scratch scripts on keke:
+`~/work/LAYOUT-HOTKEY-INLINE-STABLE-3/` (probe-job.sh, faultdiag.sh, faultrun.sh, dummy-bessel.rs, fmap-*/syms-*/sec-* outputs).
+-1/-2 history: the -2 version of this file (on `task/layout-hotkey-inline-stable-2`).
 
-## What the branch does
+## Decisions in force
 
-1. **Check** (`cargo xtask static`, xtask/src/hottext.rs `check_pinned`): every Rust key of the `startup` and `fork`
-   tiers of crates/libc-so/hot-text.list must name a workspace function that is `#[inline(never)]` in the source
-   (free, generic, inherent or trait method), or have a line in `crates/libc-so/hot-text.unpinned` (`<key>\t<reason>`,
-   ruling #4997: a ratchet, lines may only be removed). A line whose key gained a boundary or left the tiers is an
-   error. Unit tests: `listed_plain_functions_must_be_inline_never`,
-   `startup_keys_without_a_fixed_boundary_fail_unless_listed`.
-2. **Boundaries** (choice per key, brief item 2):
-   - `#[inline(never)]` (start-up/fork-only, runs once per process): `Vdso::lookup_many` (the #4986 key; -2 changed it
-     from always to never, see below), `sys::vdso_fn`, `cpu::init_with`, `runtime::{start, run_fini}`,
-     `process::exit`, `stdio::new_slot`, `KernelPages::map`, `exit_handlers::{Registry::register, run_all}`,
-     `stdio_compat::each_stream`.
-   - `#[inline(always)]`, keys dropped at the regen (release already inlined them; the code lives in a pinned keyed
-     caller in both profiles): `Vdso::{parse, version_name, defined_function, version_ok}`,
-     `runtime::apply_irelative`, `Features::detect`, `stdio_compat::setup_standard`, `Heap::park_others` (fork).
-   - Listed in hot-text.unpinned (30 keys, a reason each): hot paths, shared generics, closures, core/alloc,
-     `refresh_words` and both `run_thread_dtors`.
-3. **global_locale::GLOBAL**: its placement is declared in `crates/libc-so/startup-state.list` (matches split parts
-   `GLOBAL.0`), not by startup-data.keys; both trace keys (`GLOBAL` fast, `GLOBAL.0` release) are still in
-   startup-data.keys after the regen. Nothing to restore; per-phase probes below.
-4. **Regen** (56832561f; one per profile, merge mode, `--allow-drop`): dropped exactly the 6 always-inlined keys plus
-   `with_list<flush_all closure>` (its code is now inside the pinned `each_stream<flush_all closure>` /
-   `run_fini`; its unpinned line removed) and the probe-text key `TscGate::fresh<select closure>` (fast; inlined into
-   the `time_compat::select` closure, symbol evidence in mei `~/logs/lhis2-regen3.log`). startup-data.keys only gains
-   objects. Both profiles rebuild with the dead-key check; all 12 layout contracts hold.
+- Rulings #4997, #5024 (the check covers every tier; ratchet), #5025 (record pending:
+  `records/pending/LAYOUT-HOTKEY-INLINE-STABLE-3-1.toml`, D-X series, id to be assigned by the coordinator).
+- `cargo xtask static` (`hottext`, `check_pinned`): every Rust key of EVERY tier names an `#[inline(never)]` workspace
+  function or has a line `<key>\t<tier>\t<reason>` in `crates/libc-so/hot-text.unpinned`; a stale line (boundary
+  gained, key gone, tier changed) fails. One file with a tier column (not one per tier): one check, one stale rule,
+  and a key changing tier shows as one edited line that has to be justified again.
+- Pinned in -3: `locale::builtin`, `nscache::real_secs`, `iconv::load` (the keys a dummy libm growth killed).
+- hot-text.unpinned: 30 start-up lines from -1/-2, plus 41 closure/other-crate lines and 298 lines for the newly
+  checked tiers (stdio 26, locale 42, tool 50, extra 180, generics included): plain functions say "boundary cost
+  not measured yet", generics give the generic reason. The ratchet's starting point, not settled reasons (RULING below).
 
-## Things not to redo (evidence)
+## Done in -3 (evidence, keke logs `~/logs/<label>.log`)
 
-- Always-inlining `lookup_many` (the first -2 attempt, regen1/regen2 on mei): `defined_function`/`version_ok` became
-  new unpinned start-up keys, and making them always-inline too moved fat-LTO inlining elsewhere: regen2 lost four
-  tool-tier keys (`intl::bind`, `intl::textdomain`, `getopt::next`, `stdio_compat::close`) and killed the extra key
-  `with_list<unlink closure>` in fast. Pinning `lookup_many` (one call per process in release, next's fast shape) gave
-  the same small drop set as the first regen.
-- Dummy code growth (scratch only, mei `~/work/LAYOUT-HOTKEY-INLINE-STABLE-2/dummy-bessel.rs`: a 2048-entry table
-  function, 128 unrolled steps, always inlined into `fast32::bessel_eval` behind a guard never true at run time):
-  on **next** it fails the fast products build: dead keys `liella::locale::builtin` (locale tier) and
-  `nscache::real_secs` (tool tier). Neither is a start-up/fork key: this story's check does not cover those tiers.
-
-## Verification (head 56832561f + handoff commits; all on mei, logs `~/logs/<label>.log`)
-
-- `lhis2-lint` rc 0: `cargo clippy --workspace --all-targets --all-features -D warnings` + `cargo xtask static`
-  (the new check clean on the real lists).
-- `lhis2-plants` rc 0: 3 plants, 3 CAUGHT, no WARN (handoff/LAYOUT-HOTKEY-INLINE-STABLE-2-plants.txt).
-- `lhis2-gate` (affected --run --base origin/next): still running at hand-back.
-- `lhis2-probe-head` rc 0: products (dead-key check) + hot_text_products in both profiles. Per-phase vs next
-  (`lhis2-probe-base`, same host, same script `~/work/LAYOUT-HOTKEY-INLINE-STABLE-2/probe-job.sh`): fast identical
-  at every text and data phase; release identical except the **tool** probe, **53 -> 54 faults at all 10 data
-  phases** (true 10, fork 5, .data1, text phases mktime/strings/rebind 0: unchanged).
-- `lhis2-probe-olddata` rc 0 (diagnostic): head with next's startup-data.keys: release tool still 54, so the +1 is
-  NOT the regen's 19 added data objects; it comes from the code-shape change (pins and always-inlines).
-- Dummy growth: `lhis2-probe-nextdummy` (next + dummy) rc 1: fast products dead keys `locale::builtin` (locale),
-  `nscache::real_secs` (tool). `lhis2-probe-headdummy` (head + dummy) rc 1: fast dead keys `iconv::load` (extra),
-  `nscache::real_secs` (tool). No start-up or fork key died in either; release passes in both. So the start-up tier
-  holds, but a libm growth still needs a regen for the other tiers (the coordinator's "products check passes without
-  a regen" is NOT met; see RULING below).
+- `lhis3-lint0` rc 0: clippy + static on the inherited head (green).
+- #5026 root cause (`lhis3-fd-base`, `lhis3-fd-head`, `lhis3-fr-rel`, `lhis3-fr-fast`: perf page-fault map of
+  the `tool` probe, tools/hottext/faultmap.py): release base 52 / head 53 recorded faults, the only difference is
+  ONE `.text` page: `liella_sys_fstat` (stdio tier, hot-text.list position 104, called for the locale archive and
+  stdout). The text VMA starts at 0x408000, so the kernel's first fault-around window is 0x408000..0x417fff (clipped
+  to the VMA start, then 16 pages). Base puts fstat at 0x417e00 (inside), head at 0x418040 (0x240 bytes of start-up
+  growth from -2's pins: one page past the window), so head takes a fault at 0x418000. NOT a data object (the -2
+  note's "data phases" were the test's labels; the extra page is text at every phase). Fast: base = head (51).
+  strace -k: both call fstat through `liella_sys_fstat` (same syscalls).
+- Check extended + tier column + unpinned lines + pins + pending record (commits 8be97fb77, 69f19a54d).
+  `lhis3-lint1` rc 0 (xtask hottext tests 19 pass, clippy -D warnings, static), `lhis3-lint2` rc 0 (records check,
+  static) on the committed tree.
+- Dummy growth on the new code (`lhis3-probe-headdummy` rc 0, head + dummy-bessel.rs): fast AND release `so` pass
+  (no dead key in any tier), hot_text_products 23/23 in both. Tool probe: fast 52, release 54 (bound 56).
 
 ## Exact next step
 
-1. Find the extra release data page of the `tool` probe: tools/hottext/faultmap.py on base vs head (release, data phase
-   cold 0x800), name the object, and place it (startup-state.list / data cluster) or change the code shape that moved
-   it. ALWAYS FORWARD: the branch must not land at 54.
-2. Then rerun hot_text_products per phase (probe-job.sh) and the gate on the final head.
+1. #5026 (must be fixed before landing, ALWAYS FORWARD): give back the 0x240+ bytes of the release start-up text that
+   pushed `liella_sys_fstat` out of the first window, or place fstat inside a window the tool run already touches.
+   The cliff is structural (whatever sits at 0x418000 jitters): the robust fix is to pin the first window's end, e.g.
+   the start-up group sized/aligned so the keys first touched by every probe end before VMA start + 64 KiB, with a
+   test that `liella_sys_fstat` (and the start-up group) lie below it. Check the fault map with faultrun.sh at each
+   phase, both profiles; the counts must equal base (release tool 53 in the relay harness, fast 51/52).
+2. Counts for the 3 new pins (setlocale rows for `locale::builtin`, NSS cache rows for `real_secs`, iconv rows for
+   `iconv::load`): `cargo xtask bench --compare --counters <bench>`; revert any pin that costs.
+3. Then the direct gate, plants (check_pinned tier rules: stale tier line, extended tier) via `cargo xtask plants`,
+   hot_text_products per phase on the final head.
 
 ## Open / RULING NEEDED
 
-- The locale and tool tiers are as inlining-sensitive as the start-up tier was (dummy result above). Recommend a
-  follow-up story extending `check_pinned` to the `locale` and `tool` tiers with its own unpinned ratchet, pinning
-  `locale::builtin` and `nscache::real_secs` first (counts needed: both are reached from setlocale/NSS paths).
-- Decision record: none reserved; recommend a D-X row (static check + hot-text.unpinned ratchet) via the coordinator.
+- The 241 plain locale/tool/extra/stdio functions in the ratchet with "boundary cost not measured yet": accept as the
+  ratchet's start (recommended: pin them in batches later, each with counts), or require counts for each before landing.
+- Pinning `iconv::load` adds a call per iconv() call: counts pending (step 2).
