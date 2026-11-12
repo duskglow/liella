@@ -531,6 +531,7 @@ pub mod fused {
     #[target_feature(enable = "fma")]
     #[inline]
     fn erf_linear_fma(x: f64, ax: f64) -> f64 {
+        // ARCH(x86_64): the scalar FMA intrinsic (vfmadd); aarch64 would use fmadd from the base ISA
         use core::arch::x86_64::{_mm_cvtsd_f64, _mm_fmadd_sd, _mm_set_sd};
         if ax < f64::MIN_POSITIVE {
             return super::erf_linear_int(x, ax);
