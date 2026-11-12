@@ -149,3 +149,17 @@ liella::time::zone::NEXT_ID
 liella_legacy::time_compat::HEAD
 liella_legacy::time_compat::CURRENT
 section .data.rel.local.__tzname  # C: __tzname, tzname
+# The rest of what setenv("TZ"), the first localtime_r and the first mktime touch (LAYOUT-STARTUP-STATE-TIME, #4901):
+# left in `.bss`/`.data`, their page followed emission order, and with unrelated code growth the first localtime_r
+# took the read fault of time_compat::GENERATION and the write fault of sys::TSC_STATE on a page start-up leaves
+# untouched (+2). hot_text_products `init_startup_data_accesses_are_in_the_data1_cluster` traces `localtime_mktime`.
+liella_legacy::time_compat::GENERATION
+liella_boundary::sys::TSC_STATE
+symbol __daylight  # C: __daylight, daylight
+symbol __timezone  # C: __timezone, timezone
+# setenv's environment table (the first setenv builds it).
+liella_boundary::process::TABLE_ON
+liella_boundary::process::ENV_OWNED
+liella_boundary::process::ENV_CAP
+liella_boundary::process::ENV_VALUES
+liella_boundary::process::ENV_REPLACED
