@@ -749,7 +749,8 @@ fn init_startup_group_ends_inside_the_first_fault_around_window() {
     let inputs = text_inputs(&map);
     let group_end = inputs.iter().filter(|(n, _, s, _)| *s > 0 && (n.starts_with(".text.startup") || position(n).is_some_and(|p| p < group))).map(|(_, a, s, _)| a + s).max().expect("no start-up group in the link map");
     let fstat = inputs.iter().find(|(n, _, s, _)| *s > 0 && n.starts_with(".text.sorted.h") && n.ends_with(".liella_sys_fstat")).map(|(_, a, s, _)| (*a, a + s));
-    let margin = end as i64 - group_end as i64;
+    // Bytes left in the window; negative when the group ends past it.
+    let margin = i128::from(end) - i128::from(group_end);
     eprintln!("first window {start:#x}..{end:#x}: start-up group ({group} list keys) ends {group_end:#x}, margin {margin} bytes; liella_sys_fstat {fstat:x?}");
     const PROBES: &str = "the tool, locale, localtime and localtime_mktime probes each take one more text fault";
     let mut bad = Vec::new();
