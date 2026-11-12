@@ -480,7 +480,8 @@ mod tests {
     /// (transitively), is scaled; one reading a string, or calling no reader, is not.
     #[test]
     fn scaled_tests_follow_helpers() {
-        let src = "fn per() -> usize {\n    std::env::var(\"A_N\").ok().and_then(|v| v.parse().ok()).unwrap_or(1)\n}\nfn ops() -> usize {\n    2 * per()\n}\n#[test]\nfn direct() {\n    let n: u32 = std::env::var(\"B_N\").ok().and_then(|s| s.parse().ok()).unwrap_or(3);\n}\n#[test]\n#[ignore = \"x\"]\nfn via_helper() {\n    let _ = ops();\n}\n#[test]\nfn string_only() {\n    let _ = std::env::var(\"CHILD\").is_ok();\n    let _ = super_per();\n}\n";
+        // The test comes before the helpers it reaches (two calls deep), so one pass over the file is not enough.
+        let src = "#[test]\n#[ignore = \"x\"]\nfn via_helper() {\n    let _ = ops();\n}\nfn ops() -> usize {\n    2 * per()\n}\nfn per() -> usize {\n    std::env::var(\"A_N\").ok().and_then(|v| v.parse().ok()).unwrap_or(1)\n}\n#[test]\nfn direct() {\n    let n: u32 = std::env::var(\"B_N\").ok().and_then(|s| s.parse().ok()).unwrap_or(3);\n}\n#[test]\nfn string_only() {\n    let _ = std::env::var(\"CHILD\").is_ok();\n    let _ = super_per();\n}\n";
         let got = scaled_tests(src);
         let want: BTreeMap<String, BTreeSet<String>> =
             [("direct", "B_N"), ("via_helper", "A_N")].into_iter().map(|(t, v)| (t.to_string(), [v.to_string()].into())).collect();
