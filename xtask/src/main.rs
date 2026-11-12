@@ -62,6 +62,7 @@ mod classed;
 mod codemap;
 mod jcc;
 mod layout;
+mod layout_verdict;
 mod benchstage;
 mod float_casts;
 mod forkalloc;

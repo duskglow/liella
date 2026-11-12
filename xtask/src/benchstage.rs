@@ -69,7 +69,7 @@ impl Manifest {
 }
 
 /// The sha256 of each file (paths relative to `root`), in order, from `sha256sum` (coreutils, on every host).
-fn sha256_files(root: &Path, rel: &[String]) -> Result<Vec<String>, String> {
+pub(crate) fn sha256_files(root: &Path, rel: &[String]) -> Result<Vec<String>, String> {
     let mut out = Vec::with_capacity(rel.len());
     for chunk in rel.chunks(512) {
         if let Some(p) = chunk.iter().find(|p| !root.join(p).is_file()) {
@@ -89,7 +89,7 @@ fn sha256_files(root: &Path, rel: &[String]) -> Result<Vec<String>, String> {
     Ok(out)
 }
 
-fn sha256_text(text: &str) -> Result<String, String> {
+pub(crate) fn sha256_text(text: &str) -> Result<String, String> {
     use std::io::Write;
     let mut c = Command::new("sha256sum").stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().map_err(|e| format!("sha256sum: {e}"))?;
     c.stdin.take().ok_or("sha256sum: no stdin")?.write_all(text.as_bytes()).map_err(|e| format!("sha256sum: {e}"))?;
