@@ -1,6 +1,7 @@
 //! The tiered oracle's double-double estimate of J0, J1, Y0, Y1 (LIBM-F32-BESSEL, ruling #2889),
-//! on the fast path's range [2^-20, 2^19) (any other operand is [`Est::Unknown`]: the fast path
-//! does not take it). Every bound is absolute and first order in `U`, with the slack noted.
+//! on every finite operand from 2^-149 to `FLT_MAX` (Y: x > 0; anything else is [`Est::Unknown`]):
+//! the fast path's whole range, the tiny band (D-10.106) and the large band from 2^19 (D-10.109)
+//! included. Every bound is absolute and first order in `U`, with the slack noted.
 //!
 //! Below 24, the power series (DLMF 10.2.2 and 10.8.1): `t_k = (−1)^k (x/2)^(2k+n)/(k!(k+n)!)`,
 //! `J_n = Σ t_k`, `Y_n = (2/π)·[(ln(x/2) + γ)·J_n − [n = 1]/x − ½·Σ (H_k + H_(k+n))·t_k]`. From
@@ -18,8 +19,9 @@ use std::sync::OnceLock;
 
 /// Where the series hands over to Hankel's form.
 const SWITCH: f64 = 24.0;
-/// The fast path's range (`fast32::bessel`'s `BES_MIN`, `BES_MAX`).
-const LO: f64 = 1.401_298_464_324_817e-45; // 2^-149: the series serves the tiny band too (D-10.106)
+/// The smallest operand estimated (the series serves the tiny band too, D-10.106), and where the
+/// phase reduction turns to fixed point (`large_reduce`, the fast path's large band, D-10.109).
+const LO: f64 = 1.401_298_464_324_817e-45; // 2^-149
 const HI: f64 = 524_288.0; // 2^19
 /// A series stops at the first term below this fraction of the terms' magnitude sum.
 const TINY: f64 = 7.703_719_777_548_943e-34; // 2^-110
