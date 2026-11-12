@@ -1,5 +1,4 @@
-id = "D-NEW"
-series = "D-X"
+id = "D-X.75"
 section = "x"
 status = "active"
 story = "LIBM-HYPOT-DIRECTED"
