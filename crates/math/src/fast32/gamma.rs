@@ -166,6 +166,7 @@ const EDGE_MAX_MARGIN: f64 = 67_108_864.0;
 ///   |y| in [2^E, 2^(E+1)), E ≥ 5; ln64's (1.45 + 2|y|)u is ≤ 1.45·2^-(E+1) + 2 ≤ 2.03 ulp(y); the
 ///   dropped γx + R ≤ 2^-59.9 against ulp(y) ≥ 2^-47 adds < 0.001: ≤ 2.04 ulp, so LGAMMA_DELTA
 ///   (72) holds. Γ(x) has the sign of x.
+///
 /// Flags: inexact, as every piece ([`super::finish`]); [`eval_lgamma`] widens the hardware hint
 /// [`Status::hw`] to [`Status::HW_ANY`] for these results, as the `double` tier does for the same
 /// kernel, so the in-place envelope always writes MXCSR after a call that came here (no proof
@@ -190,7 +191,7 @@ fn lgamma_edge(xd: f64) -> Option<(f64, u64, i32, bool)> {
         return None;
     }
     let q = eps / (f64::from_bits(e) / 4_503_599_627_370_496.0);
-    if !(q < EDGE_MAX_MARGIN) {
+    if q.is_nan() || q >= EDGE_MAX_MARGIN {
         return None;
     }
     Some((v, q as u64 + 2, sign, true))
