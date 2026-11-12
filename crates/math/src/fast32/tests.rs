@@ -384,8 +384,8 @@ fn inverse_trig_cores_are_within_their_bounds() {
 /// within the band), every 509th over the rest of the range, and every 61st atanf operand in
 /// [1, 64), across the table's bins and its end at 32. Above 1 atanf is held to its own proof's
 /// 5.4u (relative, u = 2^-53), not the shared bound: a table point read from the wrong bin or
-/// cut short leaves |u| up to 1/16 outside the fit's interval, about 30u, inside the shared 24
-/// ulp. The agreement sweeps see such a loss only next to a `float` boundary. (No spec clause:
+/// cut short leaves |u| up to 1/16 outside the fit's interval, about 16u, inside the shared
+/// bound. The agreement sweeps see such a loss only next to a `float` boundary. (No spec clause:
 /// LIBM-ASINF-NODIV, D-10.103.)
 #[test]
 fn inverse_trig_onepass_kernels_are_within_their_bound() {
