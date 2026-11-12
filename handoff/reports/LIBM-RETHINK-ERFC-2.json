@@ -1,0 +1,11 @@
+{"task": "LIBM-RETHINK-ERFC-2", "model": "opus", "tokens": null,
+ "result": "Red plants baseline was a stale test expectation (eval now answers 2^-149 by the direct paths; test asserts that dispatch); fixed ERF_TINY_MAX (0x716ff6 -> 0x716fe1: wrong underflow at 0x716fe2); plants 5/5 caught, gate green; erfcf_tiny 143.3 vs 35.0, erff_sub 134.0 vs 47.0 instructions per call (were ~18k and ~13k)",
+ "branch": "task/libm-rethink-erfc-2", "head": "d10e80d88",
+ "gate": {"affected": "1570 passed / 0 failed", "peak": "2.8G"}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Inherited ERF_TINY_MAX = 0x716ff6 did not match its documented bound (c*n <= 8388606.56 holds for 0x716fe1): erf_tiny raised underflow for the normal result 2^-126 at +-0x716fe2 rounded away from zero; fixed and planted", "Target not reached for the f32 tiny rows: 4.1x (erfcf_tiny) and 2.85x (erff_sub) glibc by instructions"],
+ "refused": [],
+ "improvement": "A plants baseline that fails is a test or code defect to classify before anything else; an exact-arithmetic recheck of the proof's constants (minutes) found a band-end slip that the stride tests could not reach.",
+ "next_step": "f64 erf for |x| < 2^-55 (232 vs 35 instructions): round(c*m) with a 128-bit c, exact by D-10.107's bound; open: raising exactly inexact/underflow in the in-place nearest entry",
+ "report_file": "handoff/LIBM-RETHINK-ERFC.md",
+ "jobs": ["libm-rethink-erfc-2-gate", "libm-rethink-erfc-2-plants", "libm-rethink-erfc-2-counts", "libm-rethink-erfc-2-sweeps"]}

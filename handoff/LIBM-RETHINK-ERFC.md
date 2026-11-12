@@ -1,39 +1,45 @@
 # LIBM-RETHINK-ERFC: erfcf/erff/erf at tiny and subnormal x (handoff + report)
 
-State: branch task/libm-rethink-erfc (head: see `git log -1`). Decision: D-10.107 (records/decisions/D-10/D-10.107.toml).
-Role kanon:~/w/kn1. Status: INCOMPLETE (context ceiling reached; the verification jobs were still running at hand-back).
+State: branch task/libm-rethink-erfc-2 (continues task/libm-rethink-erfc; head: `git log -1`). Decision in
+force: D-10.107 (records/decisions/D-10/D-10.107.toml). Last run: LIBM-RETHINK-ERFC-2, role shiki:~/w/sh1.
 
-## Step 1: traces (kanon, validation/percall/libm_erf_tiny.c, wl_trace.sh, call 11)
-* erfcf_tiny: 17975 instructions: fast32::erfc -> `round` refuses (y within ERFC_DELTA of the float 1) ->
-  special::erfc::<f32> -> special::erf_mp (Mp::mul 52%, pack 25%, div_u64 8%).
-* erff_sub: 12966: fast32::erf -> `round` refuses (subnormal result, outside [2^-126, FLT_MAX]) -> special::erf_mp.
-* erf_sub (f64): 250: erf_nearest refuses \|x\| < 2^-55 (LINEAR) -> elem_fast_cold -> special::erf::<f64> ->
-  fast_special::erf + fast64::settle. The probe's 1.5-3e5 is gone on next (a later story).
+## What is done (do not redo)
+* erff subnormal results and erfcf for 0 < \|x\| < 2^-26 answered by exact direct paths on the rounding test's
+  refusal side (crates/math/src/fast32/erf.rs `erf_tiny`, `erfc_tiny`; fast32.rs `eval` calls them only when
+  `finish` refuses; `round`, `finish` and the cores are unchanged). Method and proof: D-10.107 (continued
+  fractions of 2/√π; Khinchin ch. II, Hardy & Wright 10.15).
+* -2: the predecessor's red plants baseline (`erf_fast_path_agrees_with_the_accurate_path`, "1e-45 refused") was a
+  STALE expectation (case a): for x = 2^-149 the cores answer, `round` refuses (subnormal erf; erfc within its
+  margin of 1) exactly as before, and `eval` now answers by the direct paths where it used to fall to the
+  accurate path. The test now keeps ±0, ±inf, NaN refused and asserts, for ±n·2^-149 (n = 1 and the 12 n whose
+  c·n lies closest to a half-integer or integer on each side), that `eval` equals `erf_tiny`/`erfc_tiny` in
+  every mode and agrees with the accurate path; both band ends joined the edge list.
+* -2 found and fixed a defect: ERF_TINY_MAX was 0x716ff6 (c·n = 8388630.26 > 2^23), not the documented
+  c·n ≤ 8388606.56 (that is n = 0x716fe1). `round` refuses n = 0x716fe2 (c·n = 8388607.69, y < 2^-126), so
+  `erf_tiny` answered it with underflow although rounding up (+x) / down (-x) gives the normal 2^-126, not tiny
+  after rounding (the accurate path, float.rs: tininess after rounding, as x86). Now 0x716fe1; 0x716fe2 goes
+  to the accurate path (one operand per sign). The plant `erf-tiny-band-end` (0x716fe2) is CAUGHT.
+* Independent exact check (scratch cf_check.py, c to 128 bits by Machin's formula, integer arithmetic): C is c
+  rounded to nearest; min distance of c·n (n < 2^23) to a half-integer 2^-24.405, to an integer 2^-23.405 (the
+  record's numbers); RN_double(C·n) rounds like c·n in every mode for every n ≤ 0x716ff6 (0 mismatches).
 
-## Before (libm_tail probe u32/u64, kanon; Liella / glibc mean instructions per input)
-erfcf tiny + 11126.8 / 21.0, tiny - 11166.8 / 21.0, typical 630.9 / 42.9; erff subnormal-result 13139.5 / 33.0,
-typical 114.3 / 29.9; erf (f64) subnormal 253.6 / 30.7, tiny normal 2^-1022..2^-28 217.4 / 21.1 (u64:erf:4).
-Raw: kanon ~/work/LIBM-RETHINK-ERFC/tail-before, log ~/logs/libm-rethink-erfc-base.log.
+## Results (final head, shiki; labels in ~/logs/jobs.tsv there)
+* lint0 (inherited head a0c354947): clippy + static rc 0. quick (d10e80d88): clippy + erf/oracle tests rc 0.
+* plants (handoff/LIBM-RETHINK-ERFC-plants.txt, 5 plants): 5 CAUGHT, 0 SURVIVED, 0 WARN. The c-precision and
+  round-toward-zero plants are now caught deterministically by the closest-to-boundary operands.
+* gate (affected --run, d10e80d88): rc 0, 6 suites ok, 1570 passed, 0 failed, 254 ignored; peak 2.8G.
+* sweeps (every float, every mode, erff and erfcf, against the tiered oracle): PENDING.
+* counts (wl_percall --base none, validation/percall/libm_erf_tiny.c, instructions per call, Liella / glibc):
+  erfcf_tiny 143.3 / 35.0; erff_sub 134.0 / 47.0; erff_typ 170.4 / 127.9; erfcf_typ 182.7 / 145.8;
+  f64 erf_sub 265.9 / 44.6; f64 erf_tiny 232.0 / 35.0. Before (Zen 1 host traces, LIBM-RETHINK-ERFC step 1):
+  erfcf_tiny 17975, erff_sub 12966. percall against the merge-base: PENDING.
 
-## Design (RETHINK) and change
-Three approaches (D-10.107): direct exact path per band (adopted), a subnormal/representable-aware rounding test,
-per-mode constant tables. Proofs by the continued fractions of 2/sqrt(pi) (scratch tool cf.py: convergents, exact
-integer arithmetic): f32 n < 2^23: RN boundary distance >= 2^-24.40, directed >= 2^-23.40; f64 n < 2^52:
-2^-56.36; m < 2^53: 2^-56.36 (same binade), 2^-57.36 (next binade). Code: crates/math/src/fast32/erf.rs
-`erf_tiny`, `erfc_tiny`; fast32.rs `eval` calls them only when `finish` refuses (typical path unchanged).
-
-## Jobs (kanon) and what to check
-* libm-rethink-erfc-verify: clippy, static, quick erf tests, the two exhaustive sweeps (every float, every mode),
-  then the after-counts (percall --base none, tail-after + bands.py). Check `SWEEP-FAILED`/`QUICK-FAILED` lines
-  and the band means at the end of ~/logs/libm-rethink-erfc-verify.log.
-* libm-rethink-erfc-plants: handoff/LIBM-RETHINK-ERFC-plants.txt (4 plants: erfc mode table, c precision,
-  round-toward-zero step, underflow flag). No exception table exists (the bounds hold for every operand), so the
-  brief's "table entry removed" plant has no target; the c-precision plant is the margin analogue.
-* NOT STARTED: the gate (`cargo xtask affected --run --base origin/next` under ~/bin/gate). Start it after verify.
+## Open questions / rulings
+None for the f32 bands. Target not reached for the f32 tiny rows (4.1x and 2.85x glibc by instructions; the
+fast tier's fixed cost: kernel, rounding test, then the direct path).
 
 ## Next step
-1. Read verify + plants; start the gate; fix what they find. 2. f64 erf for \|x\| < 2^-55 (50% of bit patterns,
-217-254 vs 21-31): RN(erf x) = round(c*m) with round(c*2^127) = 0x906eba8214db688d_71d48a7f6bfec344 (two 64x64
-products, error < 2^-62 units), exact by the bounds above. Open problem: raising exactly inexact (and underflow for
-subnormal results) in hardware in the in-place nearest entry: x*C_hi is exact for x = 2^k; x*C_lo underflows for
-\|x\| < 2^-966; scaling, or the cold entry with a Status, are the candidates.
+f64 erf for \|x\| < 2^-55 (232 / 35 above; subnormal x 266 / 45): RN(erf x) = round(c·m) with a 128-bit c,
+exact by the record's bound (2^-57.36 ulp); open problem is raising exactly inexact (and underflow for
+subnormal results) in the in-place nearest entry. Plan rows: D-10.107. Then, for the f32 rows, answer the
+tiny bands before the kernel (an exponent test ahead of erf_core) if the typical rows stay unchanged.
