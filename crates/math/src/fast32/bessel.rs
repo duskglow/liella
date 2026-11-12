@@ -781,6 +781,22 @@ mod tests {
         }
     }
 
+    /// `special::bessel32_rest`, the functions' path once the fast one refused, answers each
+    /// function as its accurate path does, off the band (1e-30 and 3.5, where the four values
+    /// differ) and on it (2^19, 1e30). (No spec clause: LIBM-F32-BESSEL-LARGE-3, D-10.109.)
+    #[test]
+    fn bessel32_rest_is_each_functions_path() {
+        for f in 0..4 {
+            for x in [1e-30f32, 3.5, 524_288.0, 1e30] {
+                for m in MODES {
+                    let want = accurate(BES[f], x, m);
+                    let got = crate::special::bessel32_rest(f, BES_NAMES[f], x, m);
+                    assert_eq!((got.0.to_bits(), got.1), (want.0.to_bits(), want.1), "rest {}({x:e}) {m:?}", BES_NAMES[f]);
+                }
+            }
+        }
+    }
+
     /// The table is exactly the set of band operands the core's rounding test refuses (an
     /// exhaustive enumeration of 2^19 ≤ x < 2^128; J0 even, J1 odd, so x > 0 decides). On a
     /// mismatch it prints the table to paste into bessel_tab.rs, the nearest value and its side from

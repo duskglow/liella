@@ -880,7 +880,7 @@ pub fn j0<F: Float>(x: F, mode: Rounding) -> (F, Status) {
 /// large band (D-10.109), else the accurate path. One out-of-line call, as the accurate path
 /// alone was, so the fast path pays nothing for the band (LIBM-F32-BESSEL-LARGE-3).
 #[inline(never)]
-fn bessel32_rest<F: Float>(n: usize, name: &'static str, x: F, mode: Rounding) -> (F, Status) {
+pub(crate) fn bessel32_rest<F: Float>(n: usize, name: &'static str, x: F, mode: Rounding) -> (F, Status) {
     if let Some((r, s)) = crate::fast32::bessel_large(n, f32::from_bits(x.to_bits() as u32), mode, name) {
         return (F::from_bits(u128::from(r.to_bits())), s);
     }
