@@ -171,6 +171,84 @@ pub(super) fn bessel_core(f: usize, x: f32) -> Option<(f64, f64)> {
     Some((sign * y, e))
 }
 
+/// The start of the tiny band, 2^-20, as `float` bits of |x|.
+const BES_TINY_BITS: u32 = 0x3580_0000;
+/// γ - ln 2 and γ - ln 2 - 1/2 (Y0 and Y1 below 2^-20).
+const BES_C0: f64 = -0.115_931_515_658_412_45;
+const BES_C1: f64 = -0.615_931_515_658_412_4;
+/// Y1's overflow threshold on w = 2/(πx): 2^128·(1 + 2^-43). At or past it |Y1| > w·(1 - 2^-34)
+/// exceeds FLT_MAX + ulp/2 = 2^128·(1 - 2^-25); the few w just below it go to the accurate path.
+const BES_Y1_OVF: f64 = 3.402_823_669_209_694_5e38;
+
+/// j0f, j1f, y0f, y1f: the tiny band 0 < |x| < 2^-20 (LIBM-RETHINK-BESSEL, D-10.106), else
+/// [`bessel_core`] and [`bessel_finish`]. Below 2^-20 the leading series terms decide (DLMF
+/// 10.2.2, 10.8.1-2; L = ln(x/2) + γ): J0 = 1 - x²/4 + O(x⁴), J1 = (x/2)(1 - x²/8 + O(x⁴)),
+/// Y0 = (2/π)(L(1 - x²/4) + x²/4) + O(x⁴L), Y1 = -2/(πx) + (x/π)(L - 1/2) + O(x³L). J0 and J1
+/// are answered from their bracket alone (no rounding test: 1 - 2^-42 < J0 < 1, |x|/2·(1 - 2^-43)
+/// < |J1| < |x|/2), Y0 and Y1 with a relative bound through the usual test.
+#[inline(always)]
+pub(super) fn bessel_eval(f: usize, x: f32, mode: Rounding, name: &'static str) -> Option<(f32, Status)> {
+    let a = x.to_bits() & 0x7fff_ffff;
+    if a == 0 || a >= BES_TINY_BITS || (f >= 2 && x < 0.0) {
+        return bessel_finish(x, bessel_core(f, x)?, mode, name);
+    }
+    let neg = x < 0.0;
+    let xd = f64::from(x);
+    match f {
+        0 => {
+            stats::record(name, true);
+            let v = if matches!(mode, Rounding::Down | Rounding::Zero) { f32::from_bits(0x3f7f_ffff) } else { 1.0 };
+            Some((v, Status::flags(Flags::INEXACT)))
+        }
+        1 => {
+            // |x| near 2^-125: whether the result underflows depends on the direction's
+            // tininess after rounding; the accurate path decides those two operands.
+            if (0x00ff_ffff..=0x0100_0000).contains(&a) {
+                return None;
+            }
+            // The floats lo < |J1| < hi: below 2^-125 |x| = a·2^-149 and |x|/2 is a float (a even,
+            // nearest = hi) or a midpoint (a odd, nearest = lo, |J1| lies below it).
+            let (lo, hi, near) = if a > 0x0100_0000 {
+                (a - 0x0080_0001, a - 0x0080_0000, a - 0x0080_0000)
+            } else {
+                let lo = (a - 1) >> 1;
+                (lo, lo + 1, if a & 1 == 0 { lo + 1 } else { lo })
+            };
+            let m = match mode {
+                Rounding::Nearest => near,
+                Rounding::Zero => lo,
+                Rounding::Up => if neg { lo } else { hi },
+                Rounding::Down => if neg { hi } else { lo },
+            };
+            stats::record(name, true);
+            let v = f32::from_bits(m | (x.to_bits() & 0x8000_0000));
+            let fl = if a < 0x00ff_ffff { Flags::INEXACT.union(Flags::UNDERFLOW) } else { Flags::INEXACT };
+            Some((v, Status::flags(fl).range_errno()))
+        }
+        2 => {
+            // ln x correctly rounded (0.5u of |ln| ≥ 13.8), + c (|c| < 0.12, same sign: ≤ 1.01u of
+            // |L|), 1 - z and the products and sum 4u, 2/π 1u: ≤ 7u relative, no cancellation.
+            let l = crate::fast64::log_nearest(xd)? + BES_C0;
+            let z = 0.25 * xd * xd; // exact: x² of a float has 48 bits, ≥ 2^-298
+            let y = TWO_OVER_PI * (l * (1.0 - z) + z);
+            bessel_finish(x, (y, 8.0 * U53 * y.abs()), mode, name)
+        }
+        _ => {
+            // w = RN(RN(2/π)/x) within 2u; (x/π)(L - 1/2) ≤ 2^-35·w (any error in it is lost
+            // below 2^-80·w); the difference 1u: ≤ 4u relative.
+            let w = TWO_OVER_PI / xd;
+            if w >= BES_Y1_OVF {
+                stats::record(name, true);
+                let v = if matches!(mode, Rounding::Down | Rounding::Nearest) { f32::NEG_INFINITY } else { -f32::MAX };
+                return Some((v, Status::flags(Flags::INEXACT.union(Flags::OVERFLOW)).range_errno()));
+            }
+            let l = crate::fast64::log_nearest(xd)? + BES_C1;
+            let y = INV_PI_D * xd * l - w;
+            bessel_finish(x, (y, 4.0 * U53 * y.abs()), mode, name)
+        }
+    }
+}
+
 /// The rounding test for an absolute bound e: margin e/ulp(y) < e·2^53/|y| (ulp(y) > |y|·2^-53),
 /// refused at or beyond 2^26 (the test's mask is 2^28; y near a zero lands here).
 #[inline(always)]

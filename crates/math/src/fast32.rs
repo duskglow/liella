@@ -37,7 +37,7 @@ mod hyperbolic;
 mod inv_trig;
 mod trig;
 
-use bessel::{bessel_core, bessel_finish};
+use bessel::bessel_eval;
 #[cfg(test)]
 pub(crate) use cexp::{cexp_core, CEXP_DELTA};
 pub use cexp::{cexpf, cexpf_nearest};
@@ -373,10 +373,10 @@ pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)> {
             let (y, d) = lgamma_core(x)?;
             (y, d, "lgammaf")
         }
-        Fast::J0 => return bessel_finish(x, bessel_core(0, x)?, mode, "j0f"),
-        Fast::J1 => return bessel_finish(x, bessel_core(1, x)?, mode, "j1f"),
-        Fast::Y0 => return bessel_finish(x, bessel_core(2, x)?, mode, "y0f"),
-        Fast::Y1 => return bessel_finish(x, bessel_core(3, x)?, mode, "y1f"),
+        Fast::J0 => return bessel_eval(0, x, mode, "j0f"),
+        Fast::J1 => return bessel_eval(1, x, mode, "j1f"),
+        Fast::Y0 => return bessel_eval(2, x, mode, "y0f"),
+        Fast::Y1 => return bessel_eval(3, x, mode, "y1f"),
     };
     finish(x, y, delta, mode, name)
 }
