@@ -24,7 +24,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::benchstage::{sha256_files, sha256_text};
+use crate::sha256::{sha256_files, sha256_text};
 
 /// Where the verdicts live, relative to the workspace root.
 pub const DIR: &str = "target/layout-verdicts";

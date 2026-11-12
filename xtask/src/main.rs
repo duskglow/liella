@@ -64,6 +64,7 @@ mod jcc;
 mod layout;
 mod layout_verdict;
 mod benchstage;
+mod sha256;
 mod float_casts;
 mod forkalloc;
 mod fs_order;
