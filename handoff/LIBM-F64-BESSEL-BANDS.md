@@ -22,7 +22,20 @@ the build). The counts below come from wl_percall instead. Next run: trace the 2
 (`bes_j0_large`, small) first, not the 1.4e5 one.
 
 ## Counts
-See the report json / the percall job log (`~/logs/libm-f64-bessel-bands-percall1.log` on keke).
+wl_percall, instructions per call, Zen 1 (keke), base next fe4c4893d (percall1 on the first code head; percall3
+re-ran it on the final head 198dd501e, whose later fixes touch only boundary operands outside the probe):
+| case | glibc | base | new | new/glibc |
+|---|---|---|---|---|
+| bes_j0_tiny | 49.0 | 481.0 | 128.0 | 2.61 |
+| bes_j1_tiny | 62.0 | 530.0 | 151.9 | 2.45 |
+| bes_y0_tiny | 100.3 | 7325.7 | 470.5 | 4.69 |
+| bes_y1_tiny | 57.2 | 7747.7 | 550.3 | 9.61 |
+| bes_j0_large | 821.5 | 2712.9 | 2688.9 | 3.27 (band 2, untouched) |
+| bes_j0_zero / bes_y1_zero | 433 / 436 | 146788 / 464227 | same | band 3, untouched |
+Self-check MISMATCH on bes_y1_zero (y1(2.0), base and new alike) and bes_y0_tiny (y0(1e-10) vs the reference's
+last place; the new test checks y0(1e-10) against the 384-bit path in all modes).
+Fixes found by the new test: j1(2^-1021) Down/Zero needs underflow (420cbca69); y1 near its overflow threshold
+(settle raises no overflow: 198dd501e, window to the 384-bit path). Jobs gate1/2, plants1/2 ran on older heads.
 
 ## Next step (bands 2 and 3, designed, not started)
 1. Large x >= 32 (2705 / 830 instructions): `hankel_kernel` spends on `trig::sin_cos` (Payne-Hanek above 1500) and
