@@ -1,8 +1,24 @@
 # LAYOUT-CHECK-VERDICT-CACHE (#5085): the layout contract check in a no-change `xtask so`
 
-State: branch `task/layout-check-verdict-cache`, stacked on origin/next 9b2a0c029. Code: 27b54c8ce and e25ef4554
-(the jcc test order, plants, pending record), then this report. Decision: `records/pending/LAYOUT-CHECK-VERDICT-CACHE-1.toml`
+State: branch `task/layout-check-verdict-cache-2` (continues `task/layout-check-verdict-cache`), stacked on
+origin/next 9b2a0c029. Code: 27b54c8ce and e25ef4554 (the jcc test order, plants, pending record), e73060404 (the -2
+fix below), b2c37d82b (plants file), then the reports. Decision: `records/pending/LAYOUT-CHECK-VERDICT-CACHE-1.toml`
 (D-NEW, series D-X; the coordinator assigns the id).
+
+## LAYOUT-CHECK-VERDICT-CACHE-2: why lcvc-gate2 was red, and the fix
+
+lcvc-gate2 (keke, rc 1) failed one test: `xtask affected::tests::tool_modules_stay_off_the_product_path`. Cause:
+`layout_verdict.rs` (called by `cargo xtask so`, the product path) imported `sha256_files` / `sha256_text` from
+`benchstage`, which `affected::XTASK_TOOLS` lists as a tool module (a change to it alone does not escalate the gate
+to FULL). A change to those helpers would have skipped the full gate while changing the verdict cache key. Not a
+stale cached pass; the cache key was not involved. Fix (e73060404): the helpers moved to a new module
+`xtask/src/sha256.rs`, used by both; `benchstage` stays a tool module, the test is unchanged. New plant
+`verdict-uses-tool-module` in `handoff/LAYOUT-CHECK-VERDICT-CACHE-2-plants.txt` (with the nine earlier ones).
+Jobs on shiki `~/w/sh2`: `layout-check-verdict-cache-2-lint` (clippy workspace + xtask clippy + static, rc 0),
+`layout-check-verdict-cache-2-xtask-unit` (97 xtask unit tests incl. the failing one, rc 0),
+`layout-check-verdict-cache-2-gate` (escalated to FULL: 32 suites, 11661 passed, 0 failed, rc 0),
+`layout-check-verdict-cache-2-plants` (10 plants: 10 CAUGHT, 0 SURVIVED, 0 WARN).
+The timing figures below are from the first run (keke) and were not re-measured: the fix moves two functions only.
 
 ## Where the 126 s (here 241 s) went
 
