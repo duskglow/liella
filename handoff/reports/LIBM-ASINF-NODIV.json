@@ -1,0 +1,11 @@
+{"task": "LIBM-ASINF-NODIV", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: asinf/acosf one sqrt and no division, atanf one division (D-10.103); timing verdict and counts not done (context checkpoint)",
+ "branch": "task/libm-asinf-nodiv", "head": "1311439b3",
+ "gate": {"affected": "running (libm-asinf-nodiv-gate2)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "Zen 1 timing leg: keke is not timing-capable (ops timing-book refuses)", "recommendation": "accept Ivy Bridge + N100 timing as the verdict, or name a bookable Zen 1 host"}],
+ "informational": ["New half-angle code first failed the D-10.68 partial-register check in cargo xtask so (sqrtsd merge); fixed in 1311439b3"],
+ "refused": [],
+ "improvement": "The partial-register check only runs inside cargo xtask so; running it in the first clippy/test job would have saved a plants and a gate cycle.",
+ "next_step": "Read gate2/plants2/sweeps; run counts and booked timing (Ivy Bridge, N100) against glibc and next per handoff/LIBM-ASINF-NODIV.md",
+ "report_file": "handoff/LIBM-ASINF-NODIV.md",
+ "jobs": ["shiki:libm-asinf-nodiv-gate2", "shiki:libm-asinf-nodiv-plants2", "shiki:libm-asinf-nodiv-sweeps"]}
