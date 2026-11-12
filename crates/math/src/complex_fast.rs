@@ -130,30 +130,6 @@ pub fn cexp_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
     Some((round(re, er, m, Rounding::Nearest)?, round(im, ei, m, Rounding::Nearest)?))
 }
 
-/// [`cexp_nearest`]'s second attempt, which the boundary makes (cold, out of line) only after
-/// the first declined: the quick tier again, and the middle tier for a part its test declines
-/// (D-10.99), to nearest and in place as [`cexp_nearest`] (the middle tier's `settle` raises
-/// inexact itself). `None` sends the operand to the envelope and the 384-bit route.
-///
-/// # Safety
-///
-/// As [`cexp_nearest`].
-$(#[$a])*
-#[cold]
-#[inline(never)]
-pub fn cexp_nearest_middle(x: f64, y: f64) -> Option<(f64, f64)> {
-    let ([(re, er), (im, ei)], m) = parts(x, y)?;
-    let a = match round(re, er, m, Rounding::Nearest) {
-        Some(v) => v,
-        None => middle(x, y, Part::Re, Rounding::Nearest)?,
-    };
-    let b = match round(im, ei, m, Rounding::Nearest) {
-        Some(v) => v,
-        None => middle(x, y, Part::Im, Rounding::Nearest)?,
-    };
-    Some((a, b))
-}
-
 /// `cexp(x ± 0i) = (e^x, ±0)` for the in-place entry (LIBM-CPLX-LOG-SQRT-4, D-10.74; C Annex
 /// G.6.3.1: the imaginary part is `e^x·sin(±0)`): `e^x` from the real function's in-place kernel
 /// (correctly rounded, normal and finite for `2^-60 <= |x| < 708`, inexact raised in hardware),
@@ -180,7 +156,7 @@ cexp_kernels!(; #[inline(always)]; dd::two_prod; fast64; kernel);
 // ARCH(x86_64): the run-time FMA build (D-10.25); FMA is base ISA on aarch64, so one build there
 #[cfg(target_arch = "x86_64")]
 pub mod fused {
-    use super::{fast64, middle, round, t, trig, Dd, Part, Rounding, PROD, WIDEN, X_MAX, X_MIN, Y_MAX, Y_MIN};
+    use super::{fast64, round, t, trig, Dd, Rounding, PROD, WIDEN, X_MAX, X_MIN, Y_MAX, Y_MIN};
     use crate::dd;
 
     cexp_kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma; fast64::fused; trig::kernel_fma);
@@ -223,15 +199,26 @@ pub fn cexp(x: f64, y: f64, mode: Rounding) -> Option<((f64, f64), Status)> {
     Some(((a, b), Status::flags(Flags::INEXACT)))
 }
 
+/// [`cexp_nearest`]'s second attempt, which the boundary makes (cold, out of line) only after
+/// the first declined: [`cexp`] to nearest (the quick tier again, and the middle tier for a part
+/// its test declines, D-10.99), in place as [`cexp_nearest`] (hardware arithmetic on normal
+/// values; each rounding test raises inexact itself). The baseline build for both dispatch
+/// choices: the builds agree bit for bit. `None` sends the operand to the envelope.
+#[cold]
+#[inline(never)]
+pub fn cexp_nearest_middle(x: f64, y: f64) -> Option<(f64, f64)> {
+    Some(cexp(x, y, Rounding::Nearest)?.0)
+}
+
 // ---------------------------------------------------------------------------------------------
 // The middle tier of `cexp` (LIBM-CEXP-ROUTE, D-10.99). A part whose quick rounding test cannot
 // decide (its exact value within about `2^-66` of a rounding boundary: about one part in a
 // thousand) is evaluated again near `2^-99` before the 384-bit route is consulted; only a part
-// within that of a boundary still reaches the route. [`cexp`] (the envelope's tier) and both
-// builds of [`cexp_nearest_middle`] call this one out-of-line baseline code, so their results
-// stay bit-identical. The hot in-place [`cexp_nearest`] never calls it: it declines such a part,
-// and the boundary then calls [`cexp_nearest_middle`] from its cold side (LIBM-CEXP-COLD-MIDDLE:
-// the hot kernel keeps no operand live for the call).
+// within that of a boundary still reaches the route. Only [`cexp`] calls this out-of-line code
+// (the envelope's tier, and in place [`cexp_nearest_middle`]). The hot in-place [`cexp_nearest`]
+// never calls it: both its builds decline such a part, and the boundary then calls
+// [`cexp_nearest_middle`] from its cold side (LIBM-CEXP-COLD-MIDDLE: the hot kernel keeps no
+// operand live for the call, and its `parts` keeps a single caller in the FMA build).
 //
 // * `e^x = V·2^s` from [`wide_dd::exp_dd`] within `2^-100·|V|` (its module comment: below
 //   `2^-103` proved), for `|x| < 2^14`.
