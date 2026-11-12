@@ -21,7 +21,8 @@
 //!   limit, with up to three other rows on the host's other CPUs (load 20 to 30 of 35 CPUs). The one-pass `float`
 //!   sweeps take 14 to 23 min each, so the group as a whole runs for hours: longer than one jobrun slot allows.
 //!
-//! `cargo xtask long-sweeps [--group long|exhaustive|count|all] [--only <test>]... [--list]` (default `long`; `--only`
+//! `cargo xtask long-sweeps [--group long|exhaustive|count|all] [--only <test>]... [--list|--table]` (default `long`; `--list` prints the
+//! row names one per line and runs nothing, `--table` the rows in full; `--only`
 //! keeps the rows of those full test names) runs each sweep of the group once, in release, in its crate's package, by its exact name (`-- --include-ignored --exact
 //! --nocapture`) with the row's environment, prints its output and one `long-sweep: <test> ok|FAILED <seconds>s`
 //! line, and fails naming every sweep that failed or that did not run exactly one test (a renamed test would
@@ -479,15 +480,17 @@ fn run_rows(root: &Path, rows: Vec<&Sweep>) -> Result<(), String> {
     if failed.is_empty() { Ok(()) } else { Err(format!("long sweeps failed: {}", failed.join(", "))) }
 }
 
-/// `cargo xtask long-sweeps [--group long|exhaustive|count|all] [--only <test>]... [--list]`.
+/// `cargo xtask long-sweeps [--group long|exhaustive|count|all] [--only <test>]... [--list|--table]`.
 pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let mut groups = vec![Group::Long];
     let mut list = false;
+    let mut table = false;
     let mut only: Vec<String> = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--list" => list = true,
+            "--table" => table = true,
             "--group" => {
                 groups = match it.next().map(String::as_str) {
                     Some("long") => vec![Group::Long],
@@ -498,15 +501,11 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
                 }
             }
             "--only" => only.push(it.next().ok_or("--only: a test name")?.clone()),
-            _ => return Err(format!("usage: long-sweeps [--group long|exhaustive|count|all] [--only <test>]... [--list]; unknown {a}")),
+            _ => return Err(format!("usage: long-sweeps [--group long|exhaustive|count|all] [--only <test>]... [--list|--table]; unknown {a}")),
         }
     }
-    if let Some(o) = only.iter().find(|o| !SWEEPS.iter().any(|s| s.test == o.as_str() && groups.contains(&s.group))) {
-        return Err(format!("--only {o}: no row of the group(s) has that test name"));
-    }
-    let rows: Vec<&Sweep> =
-        SWEEPS.iter().filter(|s| groups.contains(&s.group) && (only.is_empty() || only.iter().any(|o| o == s.test))).collect();
-    if list {
+    let rows = select(&groups, &only)?;
+    if table {
         for s in rows {
             let env: Vec<String> = s.env.iter().map(|(v, x)| format!("{v}={x}")).collect();
             let secs = match s.secs {
@@ -518,7 +517,24 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         }
         return Ok(());
     }
+    if list {
+        print!("{}", list_text(&rows));
+        return Ok(());
+    }
     run_rows(root, rows)
+}
+
+/// The rows of `groups` that `only` keeps (all when it is empty), in run order; fails for a name no row of the groups has.
+fn select(groups: &[Group], only: &[String]) -> Result<Vec<&'static Sweep>, String> {
+    if let Some(o) = only.iter().find(|o| !SWEEPS.iter().any(|s| s.test == o.as_str() && groups.contains(&s.group))) {
+        return Err(format!("--only {o}: no row of the group(s) has that test name"));
+    }
+    Ok(SWEEPS.iter().filter(|s| groups.contains(&s.group) && (only.is_empty() || only.iter().any(|o| o == s.test))).collect())
+}
+
+/// The text `--list` prints on stdout: one row name per line, the names `--only` accepts, in run order.
+fn list_text(rows: &[&Sweep]) -> String {
+    rows.iter().map(|s| format!("{}\n", s.test)).collect()
 }
 
 #[cfg(test)]
@@ -609,6 +625,26 @@ mod tests {
         for bad in [r(Group::Exhaustive, Secs::Took(59)), r(Group::Long, Secs::Took(60)), r(Group::Long, Secs::Over(1800))] {
             let why = mismatches(&f, &[bad], &[]);
             assert!(why.len() == 1 && why[0].contains("the row `m::t`"), "{why:?}");
+        }
+    }
+
+    /// No spec clause: `--list` prints, for each group, exactly its rows' names (one per line, nothing else), each
+    /// accepted by `--only`, in run order.
+    #[test]
+    fn list_prints_the_groups_rows_and_only_accepts_each() {
+        for g in [Group::Long, Group::Exhaustive, Group::Count] {
+            let rows = select(&[g], &[]).unwrap();
+            let text = list_text(&rows);
+            let want: Vec<&str> = SWEEPS.iter().filter(|s| s.group == g).map(|s| s.test).collect();
+            assert!(!want.is_empty(), "group {g:?} has no rows");
+            assert!(text.ends_with('\n'), "{g:?}: {text:?}");
+            let got: Vec<&str> = text.lines().collect();
+            assert_eq!(got, want, "{g:?}: the list differs from the group's rows");
+            for name in &got {
+                assert!(!name.is_empty() && !name.contains(char::is_whitespace), "{g:?}: not a bare row name: {name:?}");
+                let one = select(&[g], &[name.to_string()]).unwrap_or_else(|e| panic!("{g:?}: --only {name}: {e}"));
+                assert!(one.len() == 1 && one[0].test == *name, "{g:?}: --only {name} kept {} rows", one.len());
+            }
         }
     }
 
