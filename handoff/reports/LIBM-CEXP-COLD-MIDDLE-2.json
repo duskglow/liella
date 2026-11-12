@@ -1,12 +1,32 @@
-{"task": "LIBM-CEXP-COLD-MIDDLE-2", "model": "opus", "tokens": null,
+{
+ "task": "LIBM-CEXP-COLD-MIDDLE-2",
+ "model": "opus",
+ "tokens": null,
  "result": "INCOMPLETE: hot cexp_nearest no longer calls the middle tier (cexp 397 -> 396) but cexp_bench 400.4 -> 402.1; two in-place cold-attempt designs measured 412/417 and were reverted",
- "branch": "task/libm-cexp-cold-middle-2", "head": "see git: handoff-only commit on top of 1611683ce",
- "gate": {"affected": "libm-cexp-cold-middle-2-gate4 (direct tier, base origin/next): see hand-back", "peak": null},
+ "branch": "task/libm-cexp-cold-middle-2",
+ "head": "1611683ce (code); handoff-only commits on top",
+ "gate": {
+  "affected": "1518 passed / 0 failed (6 suites ok, 1 skipped; libm-cexp-cold-middle-2-gate4)",
+  "peak": "1.8G"
+ },
  "accepted_first_attempt": null,
- "rulings": [{"item": "design 1 meets cexp typical 396 but cexp_bench is 402.1 (> 400.4)", "recommendation": "do not land alone; a -3 continuation puts the second attempt inside a cexp-only cold fallback (design 4 in the handoff), or accept design 1"}],
- "informational": ["a cold call after the kernel in hot::cexp_nearest (inlined into the export) cost every cexp call ~15 instructions (designs 2 and 3, not disassembled)"],
+ "rulings": [
+  {
+   "item": "design 1 meets cexp typical 396 but cexp_bench is 402.1 (> 400.4)",
+   "recommendation": "do not land alone; a -3 continuation puts the second attempt inside a cexp-only cold fallback (design 4 in the handoff), or accept design 1"
+  }
+ ],
+ "informational": [
+  "a cold call after the kernel in hot::cexp_nearest (inlined into the export) cost every cexp call ~15 instructions (designs 2 and 3, not disassembled)"
+ ],
  "refused": [],
  "improvement": "a percall run of a branch tree takes 5-11 min; a per-function objdump diff tool for own products (base vs new) would have shown the export's +15 in one call instead of a second blind design",
  "next_step": "design 4: cexp-only cplx_fast variant whose cold function tries complex_fast::cexp_nearest_middle before the envelope (via cargo xtask math-gen), objdump the export first",
  "report_file": "handoff/libm-cexp-cold-middle.md",
- "jobs": ["libm-cexp-cold-middle-2-check4", "libm-cexp-cold-middle-2-gate4", "libm-cexp-cold-middle-2-plants4", "libm-cexp-cold-middle-2-percall4"]}
+ "jobs": [
+  "libm-cexp-cold-middle-2-check4",
+  "libm-cexp-cold-middle-2-gate4",
+  "libm-cexp-cold-middle-2-plants4",
+  "libm-cexp-cold-middle-2-percall4"
+ ]
+}
