@@ -63,11 +63,7 @@ fn compare(n: usize, seed: u64) -> [usize; 5] {
                         // a part (the middle tier runs on the cold side, through `cexp`).
                         match cexp_nearest(x, y) {
                             Some((a, b)) => assert_eq!((a.to_bits(), b.to_bits()), (r.0 .0.to_bits(), r.0 .1.to_bits()), "cexp in place differs"),
-                            None => {
-                                assert!(quick_declines(x, y), "cexp in place declined ({x:e}, {y:e}) although the quick test decides both parts");
-                                let c = cexp_nearest_middle(x, y).map(|(a, b)| (a.to_bits(), b.to_bits()));
-                                assert_eq!(c, Some((r.0 .0.to_bits(), r.0 .1.to_bits())), "cexp's cold in-place attempt differs");
-                            }
+                            None => assert!(quick_declines(x, y), "cexp in place declined ({x:e}, {y:e}) although the quick test decides both parts"),
                         }
                     }
                 }
@@ -240,13 +236,10 @@ fn cexp_middle_tier_decides_the_bench_hard_case() {
         let Some(((a, b), st)) = got else { continue };
         assert_eq!((a.to_bits(), b.to_bits(), st), (w.0 .0.to_bits(), w.0 .1.to_bits(), w.1), "cexp middle tier differs in {mode:?}");
     }
-    // In place: the hot kernel declines the part (no spec clause, performance guard, ruling #4885:
-    // it keeps no operand live for an out-of-line call), and the boundary's cold second attempt
-    // answers it with the route's bits.
+    // no spec clause (performance guard, ruling #4885): the in-place kernel declines the part
+    // and leaves the middle tier to the cold fallback (`cexp` above), so the hot kernel keeps no
+    // operand live for an out-of-line call.
     assert_eq!(cexp_nearest(x, y), None, "the in-place kernel answered a quick-test decline");
-    let c = cexp_nearest_middle(x, y).map(|(a, b)| (a.to_bits(), b.to_bits()));
-    let w = cexp_route(x, y, Rounding::Nearest).0;
-    assert_eq!(c, Some((w.0.to_bits(), w.1.to_bits())), "cexp's cold in-place attempt differs or declined");
 }
 
 #[test]

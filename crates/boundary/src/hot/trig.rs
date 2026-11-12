@@ -79,17 +79,7 @@ pub(crate) fn cexp_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
     if crate::dispatch::fma() {
         // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
         #[allow(unsafe_code)]
-        let r = unsafe { liella_math::complex_fast::fused::cexp_nearest(x, y) };
-        if r.is_some() {
-            return r;
-        }
-        return liella_math::complex_fast::cexp_nearest_middle(x, y);
+        return unsafe { liella_math::complex_fast::fused::cexp_nearest(x, y) };
     }
-    let r = liella_math::complex_fast::cexp_nearest(x, y);
-    if r.is_some() {
-        return r;
-    }
-    // The cold second attempt with the middle tier (LIBM-CEXP-COLD-MIDDLE, D-10.99), out of line
-    // so the hot kernel keeps no operand live for it (the export holds the operand anyway).
-    liella_math::complex_fast::cexp_nearest_middle(x, y)
+    liella_math::complex_fast::cexp_nearest(x, y)
 }
