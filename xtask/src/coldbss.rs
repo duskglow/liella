@@ -39,8 +39,11 @@ fn cold_sections(members: &[(String, Vec<Shdr>)]) -> BTreeMap<String, Vec<String
 }
 
 /// Rename the sections `renames` names (member -> (from, to)) in `archive`, in place, through
-/// `work` (scratch), and check every rename took effect. Returns the number renamed.
-fn rename(ar: &str, archive: &Path, work: &Path, what: &str, renames: &BTreeMap<String, Vec<(String, String)>>) -> Result<usize, String> {
+/// `work` (scratch), and check every rename took effect. Returns the number renamed. With `order`
+/// (member -> section names), each listed member's sections are first put in that order
+/// ([`order_sections`]), so the linker, which takes the input sections of one output pattern in
+/// section-table order, places them in that order whatever order the compiler emitted them in.
+fn rename(ar: &str, archive: &Path, work: &Path, what: &str, renames: &BTreeMap<String, Vec<(String, String)>>, order: Option<&BTreeMap<String, Vec<String>>>) -> Result<usize, String> {
     if renames.is_empty() {
         return Ok(0);
     }
@@ -57,6 +60,12 @@ fn rename(ar: &str, archive: &Path, work: &Path, what: &str, renames: &BTreeMap<
     let members: Vec<&String> = renames.keys().collect();
     run(Command::new(ar).current_dir(work).arg("x").arg(archive).args(&members))?;
     for (m, list) in renames {
+        if let Some(names) = order.and_then(|o| o.get(m)) {
+            let path = work.join(m);
+            let mut obj = fs::read(&path).map_err(|e| format!("{what}: {m}: {e}"))?;
+            order_sections(&mut obj, names).map_err(|e| format!("{what}: {m}: {e}"))?;
+            fs::write(&path, obj).map_err(|e| format!("{what}: {m}: {e}"))?;
+        }
         let mut cmd = Command::new("objcopy");
         for (from, to) in list {
             cmd.arg("--rename-section").arg(format!("{from}={to}"));
@@ -73,7 +82,164 @@ fn rename(ar: &str, archive: &Path, work: &Path, what: &str, renames: &BTreeMap<
 pub fn move_cold_bss(ar: &str, archive: &Path, work: &Path) -> Result<usize, String> {
     let cold = cold_sections(&archive_headers(archive)?);
     let renames = cold.into_iter().map(|(m, list)| (m, list.into_iter().map(|s| (s.clone(), format!(".lbss{}", &s[".bss".len()..]))).collect())).collect();
-    rename(ar, archive, work, "coldbss", &renames)
+    rename(ar, archive, work, "coldbss", &renames, None)
+}
+
+const SHT_SYMTAB: u32 = 2;
+const SHT_RELA: u32 = 4;
+const SHT_REL: u32 = 9;
+const SHT_GROUP: u32 = 17;
+const SHT_SYMTAB_SHNDX: u32 = 18;
+const SHF_INFO_LINK: u64 = 0x40;
+const SHF_LINK_ORDER: u64 = 0x80;
+const SHN_LORESERVE: u32 = 0xff00;
+const SHN_XINDEX: u32 = 0xffff;
+
+fn rd<const N: usize>(b: &[u8], at: usize) -> Result<[u8; N], String> {
+    b.get(at..at.wrapping_add(N)).and_then(|s| s.try_into().ok()).ok_or_else(|| format!("ELF: read past the end at {at:#x}"))
+}
+fn u16_at(b: &[u8], at: usize) -> Result<u32, String> {
+    Ok(u32::from(u16::from_le_bytes(rd(b, at)?)))
+}
+fn u32_at(b: &[u8], at: usize) -> Result<u32, String> {
+    Ok(u32::from_le_bytes(rd(b, at)?))
+}
+fn u64_at(b: &[u8], at: usize) -> Result<u64, String> {
+    Ok(u64::from_le_bytes(rd(b, at)?))
+}
+fn put_u16(b: &mut [u8], at: usize, v: u32) -> Result<(), String> {
+    let v = u16::try_from(v).map_err(|_| format!("ELF: {v:#x} does not fit 16 bits"))?;
+    b.get_mut(at..at.wrapping_add(2)).ok_or("ELF: write past the end")?.copy_from_slice(&v.to_le_bytes());
+    Ok(())
+}
+fn put_u32(b: &mut [u8], at: usize, v: u32) -> Result<(), String> {
+    b.get_mut(at..at.wrapping_add(4)).ok_or("ELF: write past the end")?.copy_from_slice(&v.to_le_bytes());
+    Ok(())
+}
+fn usz(v: u64) -> Result<usize, String> {
+    usize::try_from(v).map_err(|_| format!("ELF: {v:#x} out of range"))
+}
+
+/// LAYOUT-STARTUP-STATE-LOCALE (ruling #4923): put the sections named `want` (each name exactly once
+/// in the object) in `want`'s order, in place, in the ELF64 little-endian relocatable object `obj`.
+/// They swap places among the section-table slots they already hold, so every other section keeps
+/// its index; the data stays where it is (each header carries its offset). What refers to a moved
+/// section by index follows it: symbols (`st_shndx`, or their `SHT_SYMTAB_SHNDX` entry), the target
+/// of relocation sections (`sh_info`), group members and `SHF_LINK_ORDER` links. Any other
+/// `sh_link` naming a moved section is refused. Returns the number of sections whose slot changed.
+pub(crate) fn order_sections(obj: &mut [u8], want: &[String]) -> Result<usize, String> {
+    if obj.get(..7) != Some(&[0x7f, b'E', b'L', b'F', 2, 1, 1][..]) || u16_at(obj, 16)? != 1 {
+        return Err("not an ELF64 little-endian relocatable object".into());
+    }
+    let (shoff, entsize) = (usz(u64_at(obj, 0x28)?)?, u16_at(obj, 0x3a)?);
+    if entsize != 64 {
+        return Err(format!("section header size {entsize}, want 64"));
+    }
+    let hdr = |i: usize| shoff + i * 64;
+    let mut shnum = usz(u64::from(u16_at(obj, 0x3c)?))?;
+    if shnum == 0 {
+        shnum = usz(u64_at(obj, hdr(0) + 32)?)?;
+    }
+    let mut shstrndx = usz(u64::from(u16_at(obj, 0x3e)?))?;
+    if shstrndx == SHN_XINDEX as usize {
+        shstrndx = usz(u64::from(u32_at(obj, hdr(0) + 40)?))?;
+    }
+    if shstrndx >= shnum {
+        return Err(format!("section name table {shstrndx} of {shnum}"));
+    }
+    let strtab = usz(u64_at(obj, hdr(shstrndx) + 24)?)?;
+    let mut names = Vec::with_capacity(shnum);
+    for i in 0..shnum {
+        let at = strtab + usz(u64::from(u32_at(obj, hdr(i))?))?;
+        let tail = obj.get(at..).ok_or("ELF: section name past the end")?;
+        names.push(&tail[..tail.iter().position(|&c| c == 0).ok_or("ELF: unterminated section name")?]);
+    }
+    let mut from = Vec::with_capacity(want.len());
+    for w in want {
+        let hits: Vec<usize> = (0..shnum).filter(|&i| names[i] == w.as_bytes()).collect();
+        match hits[..] {
+            [i] => from.push(i),
+            _ => return Err(format!("{} sections named {w}, want exactly one", hits.len())),
+        }
+    }
+    let mut slots = from.clone();
+    slots.sort_unstable();
+    if slots.windows(2).any(|p| p[0] == p[1]) {
+        return Err("a section is named twice in the order".into());
+    }
+    // map[old index] = new index; identity outside the moved set.
+    let mut map: Vec<u32> = (0..shnum).map(|i| u32::try_from(i).map_err(|_| "ELF: too many sections".to_string())).collect::<Result<_, _>>()?;
+    for (k, &old) in from.iter().enumerate() {
+        map[old] = u32::try_from(slots[k]).map_err(|_| "ELF: too many sections")?;
+    }
+    let moved = from.iter().zip(&slots).filter(|(a, b)| a != b).count();
+    if moved == 0 {
+        return Ok(0);
+    }
+    let remap = |i: u32| map.get(i as usize).copied().unwrap_or(i);
+    let is_moved = |i: u32| (i as usize) < shnum && map[i as usize] as usize != i as usize;
+    // Every header's references, then the symbol and group contents, then the headers themselves.
+    let mut xindex: BTreeMap<usize, usize> = BTreeMap::new();
+    for i in 0..shnum {
+        let (kind, flags, link) = (u32_at(obj, hdr(i) + 4)?, u64_at(obj, hdr(i) + 8)?, u32_at(obj, hdr(i) + 40)?);
+        if kind == SHT_SYMTAB_SHNDX {
+            xindex.insert(link as usize, i);
+        }
+        if is_moved(link) {
+            if flags & SHF_LINK_ORDER == 0 {
+                return Err(format!("section {i} (type {kind:#x}) links to a reordered section"));
+            }
+            put_u32(obj, hdr(i) + 40, remap(link))?;
+        }
+        if kind == SHT_REL || kind == SHT_RELA || flags & SHF_INFO_LINK != 0 {
+            let info = u32_at(obj, hdr(i) + 44)?;
+            put_u32(obj, hdr(i) + 44, remap(info))?;
+        }
+        if kind == SHT_GROUP {
+            let (off, size) = (usz(u64_at(obj, hdr(i) + 24)?)?, usz(u64_at(obj, hdr(i) + 32)?)?);
+            for at in (off + 4..off + size).step_by(4) {
+                let v = u32_at(obj, at)?;
+                put_u32(obj, at, remap(v))?;
+            }
+        }
+    }
+    for i in 0..shnum {
+        if u32_at(obj, hdr(i) + 4)? != SHT_SYMTAB {
+            continue;
+        }
+        let (off, size) = (usz(u64_at(obj, hdr(i) + 24)?)?, usz(u64_at(obj, hdr(i) + 32)?)?);
+        let ext = match xindex.get(&i) {
+            Some(&x) => Some(usz(u64_at(obj, hdr(x) + 24)?)?),
+            None => None,
+        };
+        for n in 0..size / 24 {
+            let at = off + n * 24 + 6;
+            let raw = u16_at(obj, at)?;
+            let (old, via_ext) = match (raw, ext) {
+                (SHN_XINDEX, Some(e)) => (u32_at(obj, e + n * 4)?, true),
+                (SHN_XINDEX, None) => return Err(format!("symbol {n}: SHN_XINDEX without a SHT_SYMTAB_SHNDX section")),
+                (r, _) if r == 0 || r >= SHN_LORESERVE => continue,
+                (r, _) => (r, false),
+            };
+            if !is_moved(old) {
+                continue;
+            }
+            let new = remap(old);
+            match ext {
+                Some(e) if new >= SHN_LORESERVE || via_ext => {
+                    put_u16(obj, at, SHN_XINDEX)?;
+                    put_u32(obj, e + n * 4, new)?;
+                }
+                _ if new < SHN_LORESERVE => put_u16(obj, at, new)?,
+                _ => return Err(format!("symbol {n}: section {new} needs SHN_XINDEX and there is no SHT_SYMTAB_SHNDX section")),
+            }
+        }
+    }
+    let old_headers: Vec<[u8; 64]> = from.iter().map(|&i| rd(obj, hdr(i))).collect::<Result<_, _>>()?;
+    for (k, h) in old_headers.iter().enumerate() {
+        obj.get_mut(hdr(slots[k])..hdr(slots[k]) + 64).ok_or("ELF: header past the end")?.copy_from_slice(h);
+    }
+    Ok(moved)
 }
 
 /// STARTUP-FAULTS-RESTORE: the small statics every static process writes (or reads, then writes)
@@ -167,8 +333,9 @@ fn split_stem(name: &str) -> &str {
 /// The declared start-up state sections per archive member ([`STATE_LIST_FILE`]), from the members'
 /// section headers (whole names). Every entry not marked `fast-only` must name at least one section: a
 /// renamed or removed static is an error, not a silent return to a page of its own.
-fn state_sections(members: &[(String, Vec<Shdr>)], list: &[(Declared, String, bool)]) -> Result<BTreeMap<String, Vec<String>>, String> {
-    let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
+/// Each section comes with the position of its entry in the list.
+fn state_sections(members: &[(String, Vec<Shdr>)], list: &[(Declared, String, bool)]) -> Result<BTreeMap<String, Vec<(String, usize)>>, String> {
+    let mut out: BTreeMap<String, Vec<(String, usize)>> = BTreeMap::new();
     let (mut seen, mut big) = (vec![0usize; list.len()], Vec::new());
     for (member, s) in members.iter().flat_map(|(m, h)| h.iter().map(move |s| (m, s))) {
         let name = s.name.as_str();
@@ -189,7 +356,7 @@ fn state_sections(members: &[(String, Vec<Shdr>)], list: &[(Declared, String, bo
         if s.size > STATE_DECLARED_MAX {
             big.push(format!("{name} ({} bytes)", s.size));
         }
-        out.entry(member.clone()).or_default().push(name.to_string());
+        out.entry(member.clone()).or_default().push((name.to_string(), i));
     }
     let missing: Vec<&str> = list.iter().zip(&seen).filter(|((_, _, optional), n)| !optional && **n == 0).map(|((_, l, _), _)| l.as_str()).collect();
     if !missing.is_empty() {
@@ -206,8 +373,26 @@ fn state_sections(members: &[(String, Vec<Shdr>)], list: &[(Declared, String, bo
 pub fn move_startup_state(ar: &str, archive: &Path, root: &Path, work: &Path) -> Result<usize, String> {
     let list = declared(&fs::read_to_string(root.join(STATE_LIST_FILE)).map_err(|e| format!("{STATE_LIST_FILE}: {e}"))?)?;
     let state = state_sections(&archive_headers(archive)?, &list)?;
-    let renames = state.into_iter().map(|(m, list)| (m, list.into_iter().map(|s| (s, STATE_SECTION.to_string())).collect())).collect();
-    rename(ar, archive, work, "start-up state", &renames)
+    let order = state_order(&state);
+    let renames = state.into_iter().map(|(m, list)| (m, list.into_iter().map(|(s, _)| (s, STATE_SECTION.to_string())).collect())).collect();
+    rename(ar, archive, work, "start-up state", &renames, Some(&order))
+}
+
+/// LAYOUT-STARTUP-STATE-LOCALE (ruling #4923): the order of each member's start-up state in
+/// [`STATE_SECTION`]: list order, then section name (the split parts of one static). The whole
+/// library is one LTO object, whose compiler emitted the same objects in an order that changed with
+/// any code change anywhere; the `.data1` pages then held other objects and the start-up probes'
+/// counts moved with unrelated changes (tool 54 -> 55 at 9 of the pads measured). In list order the
+/// cluster's layout depends only on the list and the objects' sizes.
+fn state_order(state: &BTreeMap<String, Vec<(String, usize)>>) -> BTreeMap<String, Vec<String>> {
+    state
+        .iter()
+        .map(|(m, secs)| {
+            let mut v: Vec<&(String, usize)> = secs.iter().collect();
+            v.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+            (m.clone(), v.into_iter().map(|(s, _)| s.clone()).collect())
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -224,16 +409,48 @@ mod tests {
         assert_eq!(list.len(), 5);
         assert_eq!(list[0].0, Declared::Path("C15liella_boundary4heap4HEAP".into()));
         let mut members = vec![
-            ("a.o".to_string(), vec![sec(".bss._RNvNtCsAbC12_15liella_boundary4heap4HEAP", SHT_NOBITS, 5376), sec(".data._RNvNtCsQ9_15liella_boundary5timer5EPOLL.0.llvm.42", 1, 8), sec(".data._RNvNtCsQ9_15liella_boundary5timer5EPOLL.1", 1, 8)]),
+            ("a.o".to_string(), vec![sec(".data._RNvNtCsQ9_15liella_boundary5timer5EPOLL.1", 1, 8), sec(".bss._RNvNtCsAbC12_15liella_boundary4heap4HEAP", SHT_NOBITS, 5376), sec(".data._RNvNtCsQ9_15liella_boundary5timer5EPOLL.0.llvm.42", 1, 8)]),
             ("b.o".to_string(), vec![sec(".bss.__rseq_size", SHT_NOBITS, 4), sec(".bss.environ", SHT_NOBITS, 8), sec(".data._RNvNtCsQ9_15liella_boundary4heap5OTHER", 1, 8), sec(".bss._RNvNtCsQ9_15liella_boundary5xheap4HEAP", SHT_NOBITS, 8)]),
         ];
         let got = state_sections(&members, &list).unwrap();
         assert_eq!((got["a.o"].len(), got["b.o"].len()), (3, 2));
-        assert!(!got["b.o"].iter().any(|n| n.contains("OTHER") || n.contains("xheap")));
+        assert!(!got["b.o"].iter().any(|(n, _)| n.contains("OTHER") || n.contains("xheap")));
+        // LAYOUT-STARTUP-STATE-LOCALE (#4923): list order, then name, whatever the headers' order.
+        let order = state_order(&got);
+        assert_eq!(order["a.o"], [".bss._RNvNtCsAbC12_15liella_boundary4heap4HEAP", ".data._RNvNtCsQ9_15liella_boundary5timer5EPOLL.0.llvm.42", ".data._RNvNtCsQ9_15liella_boundary5timer5EPOLL.1"]);
+        assert_eq!(order["b.o"], [".bss.__rseq_size", ".bss.environ"]);
         assert!(state_sections(&members[1..], &list).unwrap_err().contains("for liella_boundary::heap::HEAP, liella_boundary::timer::EPOLL ("));
         members[0].1[0].size = STATE_DECLARED_MAX + 1;
         assert!(state_sections(&members, &list).unwrap_err().contains("over 8192 bytes"));
         assert!(declared("liella_boundary::_x::Y\n").is_err() && declared("foo bar\n").is_err());
+    }
+
+    #[test]
+    fn reordered_sections_keep_their_symbols_and_relocations() {
+        // LAYOUT-STARTUP-STATE-LOCALE (#4923; no spec clause, layout of the products): the sections named
+        // are linked in the order given, and every symbol and relocation still reaches its own data: the
+        // program checks the values through pointers (relocations in moved sections and against moved
+        // sections, a local and a global symbol) and the addresses follow the order.
+        let dir = std::env::temp_dir().join(format!("liella-order-sections-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let (src, obj, exe) = (dir.join("o.c"), dir.join("o.o"), dir.join("o"));
+        let c = "int a = 1; int b = 2; static int s = 4; int *pa = &a; int *ps = &s;\n\
+                 int main(void) { return *pa == 1 && b == 2 && *ps == 4 && s == 4 && pa == &a ? 0 : 1; }\n";
+        fs::write(&src, c).unwrap();
+        assert!(Command::new("cc").args(["-c", "-O0", "-fdata-sections", "-fno-pie", "-o"]).arg(&obj).arg(&src).status().unwrap().success());
+        let want: Vec<String> = [".data.ps", ".data.b", ".data.pa", ".data.s", ".data.a"].iter().map(|s| (*s).to_string()).collect();
+        let mut bytes = fs::read(&obj).unwrap();
+        assert!(order_sections(&mut bytes, &want).unwrap() > 0);
+        assert_eq!(order_sections(&mut bytes.clone(), &want).unwrap(), 0, "a second pass moves nothing");
+        assert!(order_sections(&mut bytes.clone(), &[".data.nope".to_string()]).unwrap_err().contains("0 sections named .data.nope"));
+        fs::write(&obj, &bytes).unwrap();
+        assert!(Command::new("cc").args(["-no-pie", "-o"]).arg(&exe).arg(&obj).status().unwrap().success());
+        assert_eq!(Command::new(&exe).status().unwrap().code(), Some(0), "a reordered symbol or relocation lost its data");
+        let nm = Command::new("nm").arg("-n").arg(&exe).output().unwrap();
+        let ours: Vec<String> = String::from_utf8_lossy(&nm.stdout).lines().filter_map(|l| l.split_whitespace().nth(2)).filter(|n| ["a", "b", "s", "pa", "ps"].contains(n)).map(str::to_string).collect();
+        let _ = fs::remove_dir_all(&dir);
+        assert_eq!(ours, ["ps", "b", "pa", "s", "a"], "linked order");
     }
 
     fn sec(name: &str, kind: u32, size: u64) -> Shdr {
