@@ -1,6 +1,6 @@
 # LIBM-F32-REST(-4): one-pass inverse trig; lgammaf profiled; merged with next (handoff, one page)
 
-State: branch `task/libm-f32-rest-3` (continues `task/libm-f32-rest-2`, base origin/next), role shiki:~/w/sh1. Run 1
+State: branch `task/libm-f32-rest-5` (run 5, role shiki:~/w/sh2; continues -4, -3, -2, base origin/next). Run 1
 moved asinf, acosf, atanf, atan2f to the one-pass `float` form (D-10.82; code, proofs and per-call spec as below). Run 2
 (LIBM-F32-REST-2) changed no product code: it settled run 1's two plant survivors and profiled lgammaf. Run 3
 (LIBM-F32-REST-3, merge only) resolved CI's merge conflict; see the last section.
@@ -62,6 +62,21 @@ negative zeros, |x| < 2^-20) straight to `lgamma_accurate`; the `double` tier (`
   `de0e27553` keeps both (this branch's inv_trig line, next's trig line). Final-head jobs, detached on keke and named
   for the dispatcher: `libm-f32-rest-4-gate2` (math-gen reproduces s10_math_gen.rs byte for byte, so, clippy, static,
   affected --run --base origin/next, hot_text_products) and `libm-f32-rest-4-plants2` (same seven plants).
+
+## Run 5 (LIBM-F32-REST-5): merge with next only (coordinator scope 11-10)
+- Branch `task/libm-f32-rest-5`, role shiki:~/w/sh2. CI stopped on run 4's head `04f3cfd95` with a conflict in
+  `crates/boundary/src/posix/s10_math.tsv`. Inherited head: clippy + static ok (job `libm-f32-rest-5-lint0`).
+- Conflict: next folded binary128 asin/acos into the long double rows (`asin lq` / `acos lq` through
+  `math::wide::asin_sqrt` / `acos_sqrt`); this branch had split the base's `fq` rows into `f` (one-pass) and `q`.
+  Merge `edec3a13a` keeps this story's `f` rows and next's `lq` rows; the branch's `q` rows are dropped (next's `lq`
+  covers binary128). `cargo xtask math-gen` on the merged tree reproduces the auto-merged `s10_math_gen.rs` byte for
+  byte (job `libm-f32-rest-5-mathgen`, sha256 963fd130...).
+- Final-head jobs on shiki: `libm-f32-rest-5-gate` (math-gen, so, clippy, static, affected --run --base
+  origin/next, hot_text_products) and `libm-f32-rest-5-plants` (handoff/LIBM-F32-REST-4-plants.txt, the seven
+  plants, unchanged), both on merge head `edec3a13a`. Gate rc 0: math-gen hash unchanged, 4192 passed / 0 failed
+  (1163 ignored), conformance 21/21, hot_text_products 22/22, peak 14G (page cache), oom_kill 0. Plants rc 0: 7 CAUGHT,
+  0 SURVIVED, 0 WARN (results in handoff/LIBM-F32-REST-5-plants.txt; asin-partial-write is caught by the
+  partial-write finding, which names no test). No exhaustive rerun: the merge changed no line of the one-pass kernels.
 
 ## Next step (a new story the coordinator queues after this lands; not this branch)
 1. lgammaf: in `lgamma_core`, replace the near-zero `None` (and gamma_core's |x| < 2^-20 refusal) by a `#[cold]`
