@@ -308,15 +308,17 @@ fn cexp_fma_build_matches_baseline_bit_for_bit() {
     }
     let mut s = 0x6a09_e667_f3bc_c908u64;
     let mut u = |lo: f64, hi: f64| lo + (next(&mut s) >> 11) as f64 * 2f64.powi(-53) * (hi - lo);
-    let zs: Vec<(f64, f64)> = (0..24_000)
-        .map(|i| match i % 5 {
-            0 => (u(-30.0, 30.0), u(-12.0, 12.0)),
-            1 => (u(-5.0, 5.0), (u(-64.0, 64.0).round() + 0.5) * core::f64::consts::PI + u(-1e-9, 1e-9)),
-            2 => (u(700.0, 746.0), u(-4.0, 4.0)),
-            3 => (u(-746.0, -700.0), u(-4.0, 4.0)),
-            _ => (u(-2.0, 2.0), u(-1.1e6, 1.1e6)),
-        })
-        .collect();
+    // First, route-checked: cbench_libm's operand whose real part the quick test declines, which
+    // the cold in-place attempt with the middle tier answers in each build (D-10.99).
+    let hard = (f64::from_bits(0xbff9_c127_e0e2_1690), f64::from_bits(0xbffe_c14d_45bc_5e2d));
+    let mut zs: Vec<(f64, f64)> = vec![hard];
+    zs.extend((0..24_000).map(|i| match i % 5 {
+        0 => (u(-30.0, 30.0), u(-12.0, 12.0)),
+        1 => (u(-5.0, 5.0), (u(-64.0, 64.0).round() + 0.5) * core::f64::consts::PI + u(-1e-9, 1e-9)),
+        2 => (u(700.0, 746.0), u(-4.0, 4.0)),
+        3 => (u(-746.0, -700.0), u(-4.0, 4.0)),
+        _ => (u(-2.0, 2.0), u(-1.1e6, 1.1e6)),
+    }));
     let fused: Vec<(u64, u64)> = zs.iter().map(|&z| cexp_bits(z)).collect();
     assert!(selftest::set_math_fma(false));
     for (i, &z) in zs.iter().enumerate() {
