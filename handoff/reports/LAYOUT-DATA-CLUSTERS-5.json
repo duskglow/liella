@@ -1,0 +1,34 @@
+{
+ "task": "LAYOUT-DATA-CLUSTERS-5",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: start-up data keys regenerated per profile, .data-phase pad region and a perf-traced stale-key test added; the test found 3 unkeyed statics (tracer alias/marker flaw, fixed) and then a tracer oscillation (objects already in .data1 drop out of the next trace); release fork child 7-8 with the new keys; release strings 1 mapped to the probe's own .data page",
+ "branch": "task/layout-data-clusters-5",
+ "head": "e06a6c9dd",
+ "gate": {
+  "affected": "not run (hot_text_products on the final keys: fast 1 failed / release 3 failed, ldc5-htp-2)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "#4631 release strings 1 vs 0: the fault is the probe's own .data page (len_fn), which on next shared a page with heap::DEBUG that start-up touches; libc's start-up data now lives in .data1",
+   "recommendation": "treat it as a probe artefact: page_faults.c reads its function pointers before f0 (the row measures libc's string calls); the alternative, placing .data1 next to the program's .data, costs a layout redesign for one coincidental page"
+  }
+ ],
+ "informational": [
+  "startup_data.sh --replace on one profile drops the other profile's keys and the next build of that profile fails STARTUP-DATA-WINDOWS; refresh per profile without --replace.",
+  "The tracer cannot see objects already moved into .data1 individually, so keys flip between regenerations (classed::OUTCOME, dispatch::FMA, fast).",
+  "One empty heredoc was used in a Bash call, against the no-heredoc rule.",
+  "Superseded: ldc5-regen (fast --replace made the release build fail), ldc5-regen-2 and ldc5-htp (keys before the tracer fix), ldc5-plants (rc 2: baseline failed on the leftovers the new test found; old plant key).",
+  "Evidence, not a proof job: ldc5-htp-2 (rc 1, hot_text_products on this head: the open failures named in the handoff)."
+ ],
+ "refused": [],
+ "improvement": "regen.sh/startup_data.sh should trace from products built without the keyed move, otherwise each regeneration depends on the previous one's keys; a one-shot --both-profiles mode would also avoid the --replace trap.",
+ "next_step": "Trace from unclustered products (skip coldbss::move_startup_state for the trace build), regenerate both profiles, map the release fork child, then plants, clippy, static and affected --base origin/next.",
+ "report_file": "handoff/LAYOUT-DATA-CLUSTERS-5.md",
+ "jobs": [
+  "ldc5-next-counts",
+  "ldc5-regen-3"
+ ]
+}

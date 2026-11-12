@@ -184,13 +184,40 @@ pub fn cexp_route<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
     ziv(|| n::cexp(x, y, mode), || w::cexp(x, y, mode), || wx::cexp(x, y, mode), || wy::cexp(x, y, mode))
 }
 
+/// `clog`: the quick tier of `float` and `double` ([`crate::complex_fast`], D-10.74) when it can
+/// prove both parts, else the 384-bit route.
+pub fn clog<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
+    if let Some(r) = crate::complex_fast::clog_any(x, y, mode) {
+        return r;
+    }
+    clog_route(x, y, mode)
+}
+
+/// `csqrt`: the quick tier of `float` and `double` ([`crate::complex_fast`], D-10.74) when it can
+/// prove both parts, else the 384-bit route.
+pub fn csqrt<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
+    if let Some(r) = crate::complex_fast::csqrt_any(x, y, mode) {
+        return r;
+    }
+    csqrt_route(x, y, mode)
+}
+
+/// `clog` by the 384-bit route and its ladder alone (the quick tier's fallback, and its
+/// reference in the tests); not part of the ABI.
+#[doc(hidden)]
+pub fn clog_route<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
+    ziv(|| n::clog(x, y, mode), || w::clog(x, y, mode), || wx::clog(x, y, mode), || wy::clog(x, y, mode))
+}
+
+/// `csqrt` by the 384-bit route and its ladder alone (as [`clog_route`]).
+#[doc(hidden)]
+pub fn csqrt_route<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
+    ziv(|| n::csqrt(x, y, mode), || w::csqrt(x, y, mode), || wx::csqrt(x, y, mode), || wy::csqrt(x, y, mode))
+}
+
 ziv_fns! {
-    /// `clog`.
-    clog;
     /// `clog10`.
     clog10;
-    /// `csqrt`.
-    csqrt;
     /// `csinh`.
     csinh;
     /// `ccosh`.

@@ -63,6 +63,8 @@ static LOCK_ALONE: AtomicBool = AtomicBool::new(false);
 static FORBIDDEN: AtomicBool = AtomicBool::new(false);
 /// Liella owns the threads' rseq registration (D-22.7).
 pub(crate) static RSEQ_OWNED: AtomicBool = AtomicBool::new(false);
+/// Set by [`set_loader_rseq`]: the loader registered the initial thread's rseq area.
+static LOADER_RSEQ: AtomicBool = AtomicBool::new(false);
 /// The executable's TLS segment: address, file size, memory size, alignment (all 0: none).
 static TLS_IMAGE: [AtomicUsize; 4] = [const { AtomicUsize::new(0) }; 4];
 /// Process-wide defaults (`pthread_setattr_default_np`): 0 means "not decided yet".
@@ -183,13 +185,20 @@ pub(crate) fn init_initial(static_program: bool) {
     OWNED_HERE.store(true, Release);
     LOCK_ALONE.store(SINGLE_THREADED.load(Acquire) != 0, Release);
     LIVE.store(1, Release);
-    register_kernel_areas(d);
+    register_kernel_areas(d, RSEQ_OWNED.load(Acquire));
     list_insert(d);
 }
 
-fn register_kernel_areas(d: &'static Thread) {
+/// A dynamically linked program under Liella's `ld.so`, which registered the initial thread's rseq
+/// area: the threads created here register theirs (D-27.26).
+#[cfg_attr(not(feature = "runtime"), allow(dead_code))]
+pub(crate) fn set_loader_rseq(on: bool) {
+    LOADER_RSEQ.store(on, Release);
+}
+
+fn register_kernel_areas(d: &'static Thread, rseq: bool) {
     let _ = raw::set_robust_list(addr_of(&d.robust), 24);
-    if RSEQ_OWNED.load(Acquire) && CSys.rseq(rseq_static(d), 0, RSEQ_SIG).is_ok() {
+    if rseq && CSys.rseq(rseq_static(d), 0, RSEQ_SIG).is_ok() {
         d.flags.fetch_or(DESC_RSEQ, AcqRel);
         // Published once registration works (§22.9); 0 means "none" to applications.
         crate::data::__rseq_offset.store(isize::try_from(liella_rt::tls::RSEQ_OFFSET).unwrap_or(0), Release);
@@ -883,7 +892,7 @@ fn entry_addr() -> usize {
 extern "C" fn entry(daddr: usize) -> i32 {
     claim_own();
     let d = tb::desc_at(daddr);
-    register_kernel_areas(d);
+    register_kernel_areas(d, RSEQ_OWNED.load(Acquire) || LOADER_RSEQ.load(Acquire));
     if d.started.load(Relaxed) == 0 && (d.sched_policy.load(Relaxed) != 0 || d.affinity.load(Relaxed) != 0) {
         let verdict = apply_start_attrs(d).err().map_or(0, |e| u32::try_from(e.get()).unwrap_or(22));
         d.start_error.store(verdict, Release);

@@ -1063,10 +1063,22 @@ fn s10_3_c_r4() {
         let (r, st) = f(f64::NEG_INFINITY, n);
         assert!(r.is_nan() && st.error == MathError::Domain && st.flags == Flags::INVALID);
     }
-    // sincos: both at once, each as the single function computes it.
-    for x in [0.5f64, -3.0, 1e22, 7.0e-12] {
-        let ((s, c), _) = trig::sincos(x, n);
-        assert_eq!((s.to_bits(), c.to_bits()), (trig::sin(x, n).0.to_bits(), trig::cos(x, n).0.to_bits()));
+    // sincos: both at once from one reduction (LIBM-SINCOS-SHARED, D-10.89), each result and
+    // the flags as the single functions give them, in every mode: the fast tier's operands, the
+    // double-double path's (|x| above the fast limit, and `float`, which has no fast tier here),
+    // the tiny ones and the specials.
+    let modes = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
+    for m in modes {
+        for x in [0.5f64, -3.0, 1e22, -2.5e300, 7.0e-12, 1e-300, 0.0, -0.0, f64::INFINITY, f64::NAN] {
+            let ((s, c), st) = trig::sincos(x, m);
+            let ((ws, wt), (wc, wu)) = (trig::sin(x, m), trig::cos(x, m));
+            assert_eq!((s.to_bits(), c.to_bits(), st), (ws.to_bits(), wc.to_bits(), wt.and(wu)), "sincos({x:e}) {m:?}");
+        }
+        for x in [0.5f32, -3.0, 1e22, -3.0e38, 7.0e-12, 1e-40, 0.0, f32::INFINITY] {
+            let ((s, c), st) = trig::sincos(x, m);
+            let ((ws, wt), (wc, wu)) = (trig::sin(x, m), trig::cos(x, m));
+            assert_eq!((s.to_bits(), c.to_bits(), st), (ws.to_bits(), wc.to_bits(), wt.and(wu)), "sincos({x:e}) {m:?}");
+        }
     }
     // atan2: the signed-zero and infinity quadrants of Annex F.
     let (pi, half, quarter) = (std::f64::consts::PI, std::f64::consts::FRAC_PI_2, std::f64::consts::FRAC_PI_4);
@@ -1133,7 +1145,43 @@ fn s10_3_c_r6() {
     assert_eq!(sp::lgamma(-0.5f64, n).1, -1);
     assert_eq!(sp::lgamma(-1.5f64, n).1, 1);
     assert_eq!(sp::lgamma(-2.5f32, n).1, -1);
+    // float's sign at the ends of the integer-part parity (D-10.95: no conversion to an integer):
+    // |x| < 1, and the spacing-1/2 binade just below 2^23 (past the fast path's domain).
+    assert_eq!(sp::lgamma(-0.5f32, n).1, -1);
+    assert_eq!(sp::lgamma(-1.5f32, n).1, 1);
+    assert_eq!(sp::lgamma(-8_388_606.5f32, n).1, -1);
+    assert_eq!(sp::lgamma(-8_388_605.5f32, n).1, 1);
     assert_eq!(sp::lgamma(7.0f64, n).1, 1);
+    // lgammaf at negative half-integers against the exact value: |Γ(1/2 − n)| = 4^n·n!/(2n)!·√π,
+    // so lgamma(1/2 − n) = n·ln 4 + ln n! − ln (2n)! + ln(π)/2, evaluated to 90 digits and rounded
+    // to nearest (LIBM-INVALID-CONVERT-SCAN-4); the sign of Γ(1/2 − n) is (−1)^n. −2.5 is the
+    // per-call check's operand; −17.5 lies 0.0002 ulp from a rounding boundary; −39.5 is near the
+    // fast path's end. The table also checks the oracle below.
+    for (x, rn, sign) in [
+        (-0.5f32, 0x3fa1_fc4du32, -1),
+        (-1.5, 0x3f5c_2c0b, 1),
+        (-2.5, 0xbd66_5fd0, -1),
+        (-3.5, 0xbfa7_8d88, 1),
+        (-5.5, 0xc090_9215, 1),
+        (-6.5, 0xc0cc_77e2, -1),
+        (-10.5, 0xc172_5b38, -1),
+        (-17.5, 0xc207_31c0, 1),
+        (-39.5, 0xc2d6_a81d, 1),
+    ] {
+        let b = u128::from(x.to_bits());
+        let ((r, _), s) = sp::lgamma(x, n);
+        assert_eq!((r.to_bits(), s), (rn, sign), "lgammaf({x}): exact value rounded to nearest, sign");
+        assert_eq!(cr("lgamma", Fmt::F32, n, &[b]).0, u128::from(rn), "oracle lgammaf({x})");
+    }
+    // The neighbourhood of −2.5 (±4 ulp) in every mode, by the oracle.
+    for k in -4i32..=4 {
+        let x = f32::from_bits((-2.5f32).to_bits().wrapping_add_signed(k));
+        for mode in MODES {
+            let b = u128::from(x.to_bits());
+            let ((r, _), s) = sp::lgamma(x, mode);
+            assert_eq!((u128::from(r.to_bits()), s), (cr("lgamma", Fmt::F32, mode, &[b]).0, -1), "lgammaf({x}) {mode:?}");
+        }
+    }
     // lgamma(1) = lgamma(2) = +0 in every mode; poles at 0 and the negative integers.
     for mode in MODES {
         assert_eq!(sp::lgamma(1.0f64, mode).0, (0.0, Status::OK));

@@ -1,0 +1,12 @@
+{"task": "LIBM-INVALID-CONVERT-SCAN-5", "model": "opus", "tokens": null,
+ "result": "origin/next merged (quad.rs use-line conflict resolved, both sides kept); new quad/arc.rs cast ranged; refused plant line fixed; lint, static, flags green; gate, plants, accuracy, counts pending",
+ "branch": "task/libm-invalid-convert-scan-5", "head": "04bbff653",
+ "gate": {"affected": "pending (libm-invalid-convert-scan-5-h2-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["wide_dd ignored tier sweep fails (Expm1 error 2^-100 at bound 2^-100, wide_dd.rs:745); file not changed by this branch",
+                   "lgammaf negative operands 21x reference by instructions: LIBM-F32-REST-NEXT"],
+ "refused": [],
+ "improvement": "A job chain's hot_text_products step needs `cargo xtask so` first, and a long-sweep filter must use --exact names; the -4 script had neither",
+ "next_step": "Read h2-plants, h2-gate, h2-accuracy2, h2-counts2 on shiki; green means COMPLETE",
+ "report_file": "handoff/libm-invalid-convert-scan.md",
+ "jobs": ["libm-invalid-convert-scan-5-h2-clippy", "libm-invalid-convert-scan-5-h2-static", "libm-invalid-convert-scan-5-h2-flags", "libm-invalid-convert-scan-5-h2-plants", "libm-invalid-convert-scan-5-h2-gate", "libm-invalid-convert-scan-5-h2-accuracy2", "libm-invalid-convert-scan-5-h2-counts2"]}

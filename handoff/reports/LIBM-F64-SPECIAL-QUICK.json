@@ -1,0 +1,11 @@
+{"task": "LIBM-F64-SPECIAL-QUICK", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: erf/erfc quick phase (proved 2^-62 / 2^-61) cuts erf_table SSE2 235->143 (glibc 174), FMA 162->118 (159); erfc_above1 +4/+6 and erf_series +2/+4 from repeated range checks block landing; fix named",
+ "branch": "task/libm-f64-special-quick", "head": "baeb0fbe6",
+ "gate": {"affected": "running at hand-back (libm-f64-special-quick-gate)", "peak": null}, "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["plants rc 1: quick-last-term-dropped CAUGHT; quick-rounding-test-skipped SURVIVED (math unit test's 63k Weyl operands never land where zh != RN(erf); the continuation needs near-midpoint operands, e.g. the tier's hard cases, in quick_phase_rounds_correctly)","percall erfc bench row shows MISMATCH in the check column before and after (pre-existing, not investigated)"],
+ "refused": [],
+ "improvement": "a story covering 8 functions with proofs, plants, counts and two booked timings does not fit 90 calls/180k context; cut one family per story",
+ "next_step": "LIBM-F64-SPECIAL-QUICK-2: move the quick call inside erf_nearest/erfc_nearest (handoff 'Blocking'), rerun gate/plants/counts, book IVB+N100 timing; then erfc above 1, lgamma, tgamma, Bessel",
+ "report_file": "handoff/LIBM-F64-SPECIAL-QUICK.md",
+ "jobs": ["shiki:libm-f64-special-quick-gate", "shiki:libm-f64-special-quick-plants", "shiki:libm-f64-special-quick-counts"]}
