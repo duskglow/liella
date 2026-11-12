@@ -31,13 +31,15 @@ fn operand(st: &mut u64, regime: usize) -> (f64, f64) {
 }
 
 /// `n` operands per regime and mode for `f` (`csinh` or `csin`) against `route`: the tier's
-/// answers equal the route's; returns the answers per regime (nearest).
-fn compare((f, route, nearest): Fns, n: usize, seed: u64) -> [usize; 5] {
+/// answers equal the route's; returns the answers per regime (nearest). The regimes shape the
+/// hyperbolic argument, so `csin` (`swap`) takes the operand with its parts exchanged.
+fn compare((f, route, nearest, swap): Fns, n: usize, seed: u64) -> [usize; 5] {
     let mut out = [0; 5];
     for (regime, o) in out.iter_mut().enumerate() {
         let mut st = seed ^ (regime as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15);
         for _ in 0..n {
-            let (x, y) = operand(&mut st, regime);
+            let (h, t) = operand(&mut st, regime);
+            let (x, y) = if swap { (t, h) } else { (h, t) };
             for mode in MODES {
                 let Some(((a, b), _)) = f(x, y, mode) else { continue };
                 let ((ra, rb), rs) = route(x, y, mode);
@@ -53,10 +55,11 @@ fn compare((f, route, nearest): Fns, n: usize, seed: u64) -> [usize; 5] {
     out
 }
 
-type Fns = (fn(f64, f64, Rounding) -> Option<((f64, f64), Status)>, fn(f64, f64, Rounding) -> ((f64, f64), Status), fn(f64, f64) -> Option<(f64, f64)>);
+type Fns = (fn(f64, f64, Rounding) -> Option<((f64, f64), Status)>, fn(f64, f64, Rounding) -> ((f64, f64), Status), fn(f64, f64) -> Option<(f64, f64)>, bool);
 
-/// `csinh` and `csin`: the tier, the route, the in-place entry.
-const FNS: [Fns; 2] = [(csinh, csinh_route::<f64>, csinh_nearest), (csin, csin_route::<f64>, csin_nearest)];
+/// `csinh` and `csin`: the tier, the route, the in-place entry, whether the hyperbolic argument
+/// is the imaginary part.
+const FNS: [Fns; 2] = [(csinh, csinh_route::<f64>, csinh_nearest, false), (csin, csin_route::<f64>, csin_nearest, true)];
 
 #[test]
 fn csinh_quick_tier_matches_the_384_bit_route_in_every_mode() {
@@ -100,8 +103,8 @@ fn csinh_quick_tier_hard_cases() {
     for x in xs.into_iter().flat_map(|x| [x, -x]) {
         for y in ys.into_iter().flat_map(|y| [y, -y]) {
             for mode in MODES {
-                for (k, (f, route, _)) in FNS.into_iter().enumerate() {
-                    let (a, b) = if k == 1 { (y, x) } else { (x, y) };
+                for (f, route, _, swap) in FNS {
+                    let (a, b) = if swap { (y, x) } else { (x, y) };
                     if let Some((v, _)) = f(a, b, mode) {
                         let (r, _) = route(a, b, mode);
                         assert_eq!((v.0.to_bits(), v.1.to_bits()), (r.0.to_bits(), r.1.to_bits()), "({a:e}, {b:e}) {mode:?}");
