@@ -2,6 +2,7 @@
 
 State: branch task/libm-rethink-erfc-2 (continues task/libm-rethink-erfc; head: `git log -1`). Decision in
 force: D-10.107 (records/decisions/D-10/D-10.107.toml). Last run: LIBM-RETHINK-ERFC-2, role shiki:~/w/sh1.
+Status: INCOMPLETE (typical rows slower than base; see below). Plants file: handoff/LIBM-RETHINK-ERFC-plants.txt.
 
 ## What is done (do not redo)
 * erff subnormal results and erfcf for 0 < \|x\| < 2^-26 answered by exact direct paths on the rounding test's
@@ -28,18 +29,25 @@ force: D-10.107 (records/decisions/D-10/D-10.107.toml). Last run: LIBM-RETHINK-E
 * plants (handoff/LIBM-RETHINK-ERFC-plants.txt, 5 plants): 5 CAUGHT, 0 SURVIVED, 0 WARN. The c-precision and
   round-toward-zero plants are now caught deterministically by the closest-to-boundary operands.
 * gate (affected --run, d10e80d88): rc 0, 6 suites ok, 1570 passed, 0 failed, 254 ignored; peak 2.8G.
-* sweeps (every float, every mode, erff and erfcf, against the tiered oracle): PENDING.
-* counts (wl_percall --base none, validation/percall/libm_erf_tiny.c, instructions per call, Liella / glibc):
-  erfcf_tiny 143.3 / 35.0; erff_sub 134.0 / 47.0; erff_typ 170.4 / 127.9; erfcf_typ 182.7 / 145.8;
-  f64 erf_sub 265.9 / 44.6; f64 erf_tiny 232.0 / 35.0. Before (Zen 1 host traces, LIBM-RETHINK-ERFC step 1):
-  erfcf_tiny 17975, erff_sub 12966. percall against the merge-base: PENDING.
+* sweeps (d10e80d88; every float, every mode, erff and erfcf, against the tiered oracle): rc 0, 1716 s.
+* percall (validation/percall/libm_erf_tiny.c, instructions per call, same host; glibc / base c32adc349 /
+  d10e80d88 [percall] / 102fe360e [percall3]): erfcf_tiny 35.0 / 11789.2 / 143.3 / 134.3; erff_sub
+  47.0 / 13151.0 / 134.0 / 127.0; erff_typ 127.9 / 161.4 / 170.4 / 169.4; erfcf_typ 145.8 / 173.7 /
+  182.7 / 178.7; f64 erf_sub 44.6 / 265.9 (unchanged); f64 erf_tiny 35.0 / 232.0 (unchanged).
 
-## Open questions / rulings
-None for the f32 bands. Target not reached for the f32 tiny rows (4.1x and 2.85x glibc by instructions; the
-fast tier's fixed cost: kernel, rounding test, then the direct path).
+## Status: INCOMPLETE, must not land as it stands
+The typical rows are SLOWER than base: erff_typ +8.0, erfcf_typ +5.0 instructions per call (the predecessor's
+"typical path unchanged" was never measured; the first base comparison is this run's). 102fe360e inlined the
+tiny paths (they were `#[inline(never)]` and called before the accurate path's tail call): every row improved
+(-1/-4 typical, -9/-7 tiny) but that explains under half; the model of the cause is incomplete. gate, plants and
+sweeps ran on d10e80d88; 102fe360e changes only inline attributes and a comment (lint1 checks it).
 
 ## Next step
-f64 erf for \|x\| < 2^-55 (232 / 35 above; subnormal x 266 / 45): RN(erf x) = round(c·m) with a 128-bit c,
-exact by the record's bound (2^-57.36 ulp); open problem is raising exactly inexact (and underflow for
-subnormal results) in the in-place nearest entry. Plan rows: D-10.107. Then, for the f32 rows, answer the
-tiny bands before the kernel (an exponent test ahead of erf_core) if the typical rows stay unchanged.
+1. Profile erff_typ on base vs head (validation/wl_trace.sh in a git tree, `--spec
+   validation/percall/libm_erf_tiny.c`) before another design. 2. Likely fix: leave `eval` exactly as on base
+   (refusal = None) and answer the tiny bands in the entry's refusal arm, one `#[cold]` out-of-line function
+   tail-called like base's `special::erf` (direct path, else the accurate path), so the typical path is
+   base's code; then the dispatch test asserts the entry (`fast32::erf`/`erfc`) answers ±n·2^-149 by the
+   direct paths, and the sweeps must run through the entry (they compare `eval` today). Re-run plants, gate,
+   sweeps, percall (no row slower than base). 3. Then f64 erf for \|x\| < 2^-55 (232 / 35): round(c·m) with a
+   128-bit c, exact by D-10.107's bound; open: raising exactly inexact/underflow in the in-place nearest entry.
