@@ -81,6 +81,7 @@
 
 use crate::coeffs::tables as t;
 use crate::dd::{self, fast_two_sum, two_sum, Dd};
+use crate::status::{Flags, MathError, Rounding, Status};
 
 const C3: f64 = -1.0 / 3.0;
 const C5: f64 = 1.0 / 5.0;
@@ -103,6 +104,16 @@ const ROUNDER: f64 = 6_755_399_441_055_744.0;
 pub const EPS: f64 = f64::from_bits(pow2_bits(-62));
 /// `2^-98`: the relative bound of the `hypot` rounding test.
 pub const EPS_HYPOT: f64 = f64::from_bits(pow2_bits(-98));
+/// The bits of `+inf`: a magnitude at or above it is an infinity or a NaN.
+const INF_BITS: u64 = 0x7ff << 52;
+/// Exponent-field gap from which `hypot` lies strictly inside `(a, a + ulp(a)/2)` (D-10.104):
+/// `r − a < b^2/(2a) < 2^(2Eb+1−Ea) <= 2^(Ea−53)` when `Ea − Eb >= 27` (unbiased; `Eb = −1023` for a subnormal).
+pub const HYPOT_GAP: u64 = 27;
+/// `1 + 2^-60`: `a` times it rounds to `a` and raises inexact.
+const ONE_PLUS_2M60: f64 = 1.0 + TWO_M60;
+/// Ziv's rounding test factor (ACM TOMS 17(3), 1991): `yh + yl·(1 + 2^-40) == yh` leaves a
+/// margin `> 2^-94.1 yh` to the rounding boundary on `yl`'s side, above the root's `2^-104`.
+const ZIV_HYPOT: f64 = 1.0 + f64::from_bits(pow2_bits(-40));
 
 /// A table of 65 double-doubles indexed by `j`, `0 <= j <= 64`.
 type Table = [[u64; 2]; 65];
@@ -427,8 +438,25 @@ macro_rules! kernels {
             Some((th, tl, tab, sg))
         }
 
-        /// `hypot(x, y)` to nearest, for `2^-450 <= |x|, |y| < 2^450` within a factor `2^61` of
-        /// each other, when the root is certainly not a `double`.
+        /// `sqrt(a^2 + b^2)` for normal `a >= b` with `a` in `[1, 4)`, `b >= 2^-77` (D-10.104):
+        /// two exact products, an exact Fast2Sum (`a^2 >= b^2`), the root of the double-double
+        /// with one correction step; within `2^-104` relative (module comment), normalized.
+        $(#[$a])* $(#[$i])*
+        fn hypot_root(a: f64, b: f64, sqrt: impl Fn(f64) -> f64) -> Dd {
+            let (pa, pb) = ($prod(a, a), $prod(b, b));
+            let s = fast_two_sum(pa.hi, pb.hi);
+            sqrt_dd(fast_two_sum(s.hi, s.lo + (pa.lo + pb.lo)), sqrt)
+        }
+
+        /// `hypot(x, y)` to nearest on the default MXCSR (D-10.104), or `None`: a NaN or an
+        /// infinity, a subnormal smaller operand within the gap, the top binade (the result may
+        /// overflow), and every root within `2^-98` of a `double` or of a midpoint (an exact
+        /// root, a tie, too close to tell; `hypot_rounded` settles those exactly). A zero
+        /// operand gives the other's magnitude with no operation; a gap of 27 or more binades
+        /// gives `a·(1 + 2^-60)`, which rounds to `a` and raises inexact only; otherwise the
+        /// root of the operands scaled by `2^(1023 − Ea)` (exact) is tested by Ziv's rounding
+        /// test and scaled back (exact). An answered root is not a `double`, so an operation
+        /// was inexact in hardware; no other flag can rise (every operand and term is normal).
         ///
         /// # Safety
         ///
@@ -436,21 +464,176 @@ macro_rules! kernels {
         $(#[$a])* #[inline]
         pub fn hypot_nearest(x: f64, y: f64, sqrt: impl Fn(f64) -> f64) -> Option<f64> {
             let (ab, bb) = (x.to_bits() & !SIGN, y.to_bits() & !SIGN);
-            let win = pow2_bits(-450)..pow2_bits(450);
-            if !(win.contains(&ab) && win.contains(&bb)) || (ab >> 52).abs_diff(bb >> 52) > 60 {
+            let (hi, lo) = if ab >= bb { (ab, bb) } else { (bb, ab) };
+            if hi >= INF_BITS || lo == 0 {
+                return if hi >= INF_BITS { None } else { Some(f64::from_bits(hi)) };
+            }
+            let (ea, eb) = (hi >> 52, lo >> 52);
+            let a = f64::from_bits(hi);
+            if ea >= eb + HYPOT_GAP {
+                return Some(a * ONE_PLUS_2M60);
+            }
+            if eb == 0 || ea == 0x7fe {
                 return None;
             }
-            let (a, b) = (f64::from_bits(ab), f64::from_bits(bb));
-            let (pa, pb) = ($prod(a, a), $prod(b, b));
-            let s = two_sum(pa.hi, pb.hi);
-            let r = sqrt_dd(fast_two_sum(s.hi, s.lo + (pa.lo + pb.lo)), sqrt);
-            let eps = EPS_HYPOT * r.hi;
-            settle(r, eps, eps)
+            let scale = f64::from_bits((0x7fe - ea) << 52);
+            let r = hypot_root(a * scale, f64::from_bits(lo) * scale, sqrt);
+            if dd::abs(r.lo) > EPS_HYPOT * r.hi && r.hi + r.lo * ZIV_HYPOT == r.hi {
+                return Some(r.hi * f64::from_bits(ea << 52));
+            }
+            None
         }
     };
 }
 
 kernels!(; #[inline(always)]; dd::two_prod, prod_small, prod_short);
+
+/// `sqrt(x)` for a normal `x > 0` within `2^-50` relative, in software (this crate cannot issue
+/// `sqrtsd`): the inverse root from the halved exponent (within 3.4%), four Newton steps (each
+/// `1.5 e^2` plus about `2^-52` of rounding), times `x`. `sqrt_dd` with a first root within
+/// `d <= 2^-50` stays within `d^2/2 + 6·2^-53 d + 2^-105 < 2^-99.5` relative, under the test's `2^-98`.
+#[inline]
+fn sqrt_soft(x: f64) -> f64 {
+    let mut y = f64::from_bits(0x5fe6_eb50_c7b5_37a9u64.wrapping_sub(x.to_bits() >> 1));
+    for _ in 0..4 {
+        y *= 1.5 - 0.5 * x * y * y;
+    }
+    x * y
+}
+
+/// The significand and exponent field of a normal `double`: `v = M·2^(E − 1075)`.
+fn parts(v: f64) -> (u128, i32) {
+    let b = v.to_bits();
+    (u128::from((b & MANT) | (1 << 52)), i32::from(u16::try_from(b >> 52).unwrap_or(0)))
+}
+
+/// The sign of `a^2 + b^2 − m^2` for normal `a`, `b` and `m = mm·2^(me − 1075)`, exactly, in
+/// wrapping 128-bit integers (D-10.104): every term is scaled to the smallest exponent; a shift
+/// of 128 or more is `0` modulo `2^128`. Exact because the true difference is below `2^127` in
+/// those units wherever it is asked (a root within `2^-97` of `m`, `b >= 2^-28 a` near a
+/// midpoint; `m = a` and the difference `b^2` otherwise).
+#[allow(clippy::as_conversions, clippy::cast_possible_wrap, clippy::cast_sign_loss)] // a two's-complement reading
+fn sq_cmp(a: f64, b: f64, mm: u128, me: i32) -> core::cmp::Ordering {
+    let ((am, ae), (bm, be)) = (parts(a), parts(b));
+    let base = ae.min(be).min(me);
+    let sh = |m: u128, e: i32| (m * m).checked_shl(2 * (e - base) as u32).unwrap_or(0);
+    let d = sh(am, ae).wrapping_add(sh(bm, be)).wrapping_sub(sh(mm, me)) as i128;
+    d.cmp(&0)
+}
+
+/// `hypot` of two subnormal magnitudes `A·2^-1074`, `B·2^-1074` (bits `hi >= lo > 0`): the root
+/// in units of `2^-1074` is `sqrt(N)`, `N = A^2 + B^2 < 2^105`; `q = floor(sqrt(N))` from the
+/// software root (within 7 of it) fixed by exact squares; the grid is the integers below
+/// `2^53`, so the result's bits are the rounded integer. Underflow is detected after rounding
+/// (x86): tiny unless the root rounded to 53 bits reaches `2^52` (D-10.104).
+#[allow(clippy::as_conversions, clippy::cast_possible_truncation, clippy::cast_precision_loss, clippy::cast_sign_loss)] // n < 2^105, its root < 2^53
+fn hypot_tiny(hi: u64, lo: u64, mode: Rounding) -> (f64, Status) {
+    let n = u128::from(hi) * u128::from(hi) + u128::from(lo) * u128::from(lo);
+    let mut q = sqrt_soft(n as f64) as u64; // RANGE: the root of 2 <= n < 2^105 is in [1, 2^53)
+    while u128::from(q) * u128::from(q) > n {
+        q -= 1;
+    }
+    while u128::from(q + 1) * u128::from(q + 1) <= n {
+        q += 1;
+    }
+    let sq = u128::from(q) * u128::from(q);
+    if sq == n {
+        return (f64::from_bits(q), Status::OK);
+    }
+    let r = match mode {
+        Rounding::Nearest => q + u64::from(n > sq + u128::from(q)),
+        Rounding::Up => q + 1,
+        Rounding::Down | Rounding::Zero => q,
+    };
+    let edge = 1u128 << 104;
+    let tiny = r < 1 << 52
+        || (r == 1 << 52
+            && match mode {
+                Rounding::Nearest => n <= edge - (1 << 51),
+                Rounding::Up => n <= edge - (1 << 52),
+                Rounding::Down | Rounding::Zero => false,
+            });
+    let flags = if tiny { Flags::INEXACT.union(Flags::UNDERFLOW) } else { Flags::INEXACT };
+    (f64::from_bits(r), Status::flags(flags))
+}
+
+/// `hypot(x, y)` correctly rounded in `mode`, with its flags and `errno` (D-10.104); `None`
+/// only for a NaN or an infinity. The arithmetic runs in round-to-nearest (the default
+/// environment). Every finite pair: a zero operand, the both-subnormal integer root, the gap
+/// exit (`a`, or its successor upward), else the scaled root with Ziv's test (`2^-98`) and,
+/// within it, the exact integer sign of `a^2 + b^2 − m^2` at `yh` or at the midpoint (a tie
+/// goes to even); scaled back, an overflow is `inf` (nearest, upward; `ERANGE`) or `DBL_MAX`.
+pub fn hypot_rounded(x: f64, y: f64, mode: Rounding) -> Option<(f64, Status)> {
+    use core::cmp::Ordering::{Equal, Greater, Less};
+    let (ab, bb) = (x.to_bits() & !SIGN, y.to_bits() & !SIGN);
+    let (hi, lo) = if ab >= bb { (ab, bb) } else { (bb, ab) };
+    if hi >= INF_BITS {
+        return None;
+    }
+    if lo == 0 {
+        return Some((f64::from_bits(hi), Status::OK));
+    }
+    let (ea, eb) = (hi >> 52, lo >> 52);
+    if ea == 0 {
+        return Some(hypot_tiny(hi, lo, mode));
+    }
+    let up = mode == Rounding::Up;
+    if ea >= eb + HYPOT_GAP {
+        return Some(hypot_finish(hi + u64::from(up), 1.0, false, mode));
+    }
+    let k = ea.min(0x7fd);
+    let scale = f64::from_bits((0x7fe - k) << 52);
+    let (a, b) = (f64::from_bits(hi) * scale, f64::from_bits(lo) * scale);
+    let r = hypot_root(a, b, sqrt_soft);
+    let (yb, eta, t) = (r.hi.to_bits(), EPS_HYPOT * r.hi, dd::abs(r.lo));
+    let (ym, ye) = parts(r.hi);
+    let at_y = |_: ()| if t > eta { if r.lo > 0.0 { Greater } else { Less } } else { sq_cmp(a, b, ym, ye) };
+    let (q, exact) = if mode == Rounding::Nearest {
+        let half = f64::from_bits((yb & !MANT) - (53 << 52));
+        let pow2_below = yb & MANT == 0 && r.lo < 0.0;
+        let gap = if pow2_below { 0.5 * half } else { half };
+        if t <= eta {
+            (yb, sq_cmp(a, b, ym, ye) == Equal)
+        } else if gap - t > eta {
+            (yb, false)
+        } else {
+            let (mm, me, other) = if r.lo > 0.0 {
+                (2 * ym + 1, ye - 1, yb + 1)
+            } else if pow2_below {
+                (4 * ym - 1, ye - 2, yb - 1)
+            } else {
+                (2 * ym - 1, ye - 1, yb - 1)
+            };
+            let q = match (sq_cmp(a, b, mm, me), r.lo > 0.0) {
+                (Equal, _) => if yb & 1 == 0 { yb } else { other },
+                (Greater, true) | (Less, false) => other,
+                _ => yb,
+            };
+            (q, false)
+        }
+    } else {
+        match (at_y(()), up) {
+            (Equal, _) => (yb, true),
+            (Greater, true) => (yb + 1, false),
+            (Less, false) => (yb - 1, false),
+            _ => (yb, false),
+        }
+    };
+    Some(hypot_finish(q, f64::from_bits(k << 52), exact, mode))
+}
+
+/// A scaled result `q` (bits) times `unscale` (exact unless it overflows), with its flags.
+fn hypot_finish(q: u64, unscale: f64, exact: bool, mode: Rounding) -> (f64, Status) {
+    let v = f64::from_bits(q) * unscale;
+    if v.is_infinite() {
+        let range = Status::flags(Flags::OVERFLOW.union(Flags::INEXACT));
+        return match mode {
+            Rounding::Nearest | Rounding::Up => (v, range.with(MathError::Range)),
+            Rounding::Down | Rounding::Zero => (f64::MAX, range),
+        };
+    }
+    (v, if exact { Status::OK } else { Status::flags(Flags::INEXACT) })
+}
 
 /// The FMA build of the kernels (MATH-F64-FMA-PATH, D-10.25): the same arithmetic with every
 /// exact product one FMA, so the same results bit for bit (module comment). Every function here
@@ -459,7 +642,8 @@ kernels!(; #[inline(always)]; dd::two_prod, prod_small, prod_short);
 // ARCH(x86_64): the run-time FMA build (D-10.25); FMA is base ISA on aarch64, so one build there
 #[cfg(target_arch = "x86_64")]
 pub mod fused {
-    use super::{comb, done, settle, index, two_sum, fast_two_sum, t, Dd, Table, dd, pow2_bits};
+    use super::{comb, done, index, two_sum, fast_two_sum, t, Dd, Table, dd, pow2_bits};
+    use super::{HYPOT_GAP, INF_BITS, ONE_PLUS_2M60, ZIV_HYPOT};
     use super::{C3, C5, C7, C9, EPS_HYPOT, HALF_MINUS, HALF_PLUS, PI_HI, PI_LO, PI_MINUS, RECIP, SIGN, TWO_M60};
 
     kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma, dd::two_prod_fma, dd::two_prod_fma);
