@@ -386,7 +386,8 @@ impl V0<'_> {
                 if self.at(named)? != b'N' {
                     return None;
                 }
-                let ty = self.name(self.path(named + 2, &mut String::new())?)?.0;
+                let parent_end = self.path(named + 2, &mut String::new())?;
+                let ty = self.name(parent_end)?.0;
                 if c == b'X' {
                     e = self.path(e, &mut String::new())?;
                 }
