@@ -59,7 +59,7 @@ fn consts() -> &'static Consts {
 pub(crate) fn bessel_est(f: usize, x: f32) -> Est {
     let a = f64::from(x).abs();
     let (n, want_y) = ((f & 1) as u32, f >= 2);
-    if !(LO..HI).contains(&a) || (want_y && x < 0.0) {
+    if !(LO..=f64::from(f32::MAX)).contains(&a) || (want_y && x < 0.0) {
         return Est::Unknown;
     }
     let (v, err) = if a < SWITCH { series(n, a, want_y) } else { hankel(n, a, want_y) };
@@ -170,12 +170,16 @@ fn hankel(n: u32, x: f64, want_y: bool) -> (Dd, f64) {
     };
     let c = consts();
     let [p1, p2, p3] = c.quarter_pi;
-    // k = round(2x/π − ½); the estimate's error only moves |r| by far less than 0.01.
-    let kq = (x * c.two_over_pi.hi - 0.5).round();
-    let odd = 2.0 * kq + 1.0;
-    let h = two_prod(odd, p1);
-    let g = two_prod(odd, p2);
-    let r = Dd::from(x - h.hi).sub(Dd::from(h.lo)).sub(g).sub(Dd::from(odd * p3));
+    let (kq, r, cut) = if x >= HI {
+        large_reduce(x)
+    } else {
+        // k = round(2x/π − ½); the estimate's error only moves |r| by far less than 0.01.
+        let kq = (x * c.two_over_pi.hi - 0.5).round();
+        let odd = 2.0 * kq + 1.0;
+        let h = two_prod(odd, p1);
+        let g = two_prod(odd, p2);
+        (kq.rem_euclid(4.0) as i64, Dd::from(x - h.hi).sub(Dd::from(h.lo)).sub(g).sub(Dd::from(odd * p3)), 0.0)
+    };
     let r2 = r.sqr();
     let (mut s, mut cs) = (r, Dd::from(1.0));
     let (mut ts, mut tc) = (r, Dd::from(1.0));
@@ -186,7 +190,7 @@ fn hankel(n: u32, x: f64, want_y: bool) -> (Dd, f64) {
         s = s.add(ts);
         cs = cs.add(tc);
     }
-    let (cos_w, sin_w) = match (kq as i64 - i64::from(n)).rem_euclid(4) {
+    let (cos_w, sin_w) = match (kq - i64::from(n)).rem_euclid(4) {
         0 => (cs, s),
         1 => (s.neg(), cs),
         2 => (cs.neg(), s.neg()),
@@ -195,6 +199,59 @@ fn hankel(n: u32, x: f64, want_y: bool) -> (Dd, f64) {
     let amp = crate::dd::sqrt(c.two_over_pi.div(Dd::from(x)));
     let v = if want_y { p.mul(sin_w).add(qs.mul(cos_w)) } else { p.mul(cos_w).sub(qs.mul(sin_w)) };
     let kk = f64::from(k);
-    let err = SLACK * amp.hi * ((128.0 * U + 8.0 * (kk + 3.0) * U) * ba + tail);
+    let err = SLACK * amp.hi * ((128.0 * U + 8.0 * (kk + 3.0) * U) * ba + tail + cut * (ba + 1.0));
     (amp.mul(v), err)
 }
+
+/// The bits of 2/π after the point, 320 of them, most significant first, from the 384-bit
+/// constant (independent of the fast path's `coeffs::trig::TWO_OVER_PI`).
+fn two_over_pi_words() -> &'static [u64; 5] {
+    static W: OnceLock<[u64; 5]> = OnceLock::new();
+    W.get_or_init(|| {
+        let mut v = mp::pi().recip().ldexp(1);
+        let mut w = [0u64; 5];
+        for word in &mut w {
+            for _ in 0..2 {
+                v = v.ldexp(32);
+                let mut d = v.to_f64().floor();
+                let mut rem = v.sub(Mp::from_f64(d));
+                if rem.to_f64() < 0.0 {
+                    d -= 1.0;
+                    rem = rem.add(Mp::from_f64(1.0));
+                }
+                *word = (*word << 32) | d as u64;
+                v = rem;
+            }
+        }
+        w
+    })
+}
+
+/// From 2^19 (LIBM-F32-BESSEL-LARGE, D-10.109): `x·2/π − ½ = k + r·2/π` in fixed point (Payne and
+/// Hanek): x = m·2^(e − 23), m < 2^24, times the 128 bits of 2/π ending at bit e + 103 (the bits
+/// before them add multiples of 4), a wrapping product in units of 2^-126 within m·2^-126 < 2^-102.
+/// Returns k mod 4, r = g·π/2 with g ∈ [−½, ½) (g to 106 bits, π/2 within 2^-160, two Dd
+/// roundings: within 4U of r) and the absolute bound on r of the 2/π cut, 2^-101.
+fn large_reduce(x: f64) -> (i64, Dd, f64) {
+    let a = (x as f32).to_bits();
+    let m = u128::from((a & 0x007f_ffff) | 0x0080_0000);
+    let p = (a >> 23) as usize - 24;
+    let t = two_over_pi_words();
+    let w = if p <= 128 {
+        ((u128::from(t[0]) << 64) | u128::from(t[1])) >> (128 - p)
+    } else {
+        let (j, s) = (p / 64 - 2, (p % 64) as u32);
+        (u128::from(t[j]) << (64 + s)) | (u128::from(t[j + 1]) << s) | u128::from((t[j + 2] >> 1) >> (63 - s))
+    };
+    // − ½ for the phase, + ½ to round: they cancel.
+    let v = m.wrapping_mul(w);
+    let g = ((v & ((1 << 126) - 1)) as i128) - (1 << 125);
+    let hi = g as f64;
+    let gd = Dd { hi, lo: (g - hi as i128) as f64 };
+    let [p1, p2, _] = consts().quarter_pi;
+    let half_pi = Dd { hi: 2.0 * p1, lo: 2.0 * p2 };
+    let r = Dd { hi: gd.hi * TWO_M126, lo: gd.lo * TWO_M126 }.mul(half_pi);
+    ((v >> 126) as i64, r, 4.0e-31)
+}
+
+const TWO_M126: f64 = 1.175_494_350_822_287_5e-38; // 2^-126
