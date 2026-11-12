@@ -9,3 +9,9 @@ other-tree-read | xtask/src/hotlists.rs | lit:    if stamp.trim() != here { ==> 
 hand-written-from-copy | xtask/src/hotlists.rs | lit:        Some(name) if GENERATED.contains(&name) => path(root, name), ==>         Some(name) => path(root, name), | cargo test -p xtask --bin xtask hotlists:: | msg:branch_reads_the_fresh_copy_with_an_info_line.*(FAILED|panicked)|panicked.*branch_reads_the_fresh_copy
 # dead-key-branch: a dead key is not enforced off the train (the stale check moved to the train, the dead-key check must not).
 dead-key-branch | xtask/src/hottext.rs | lit:        Some(e) if regen => Ok(Some(e)), ==>         Some(e) if regen || !crate::hotlists::train() => Ok(Some(e)), | cargo test -p xtask --bin xtask regen_mode_is_one_explicit_flag | msg:regen_mode_is_one_explicit_flag_for_regen_sh_only.*(FAILED|panicked)|panicked.*regen_mode_is_one_explicit_flag
+# cargo xtask plants results (5 plants: 5 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# train-stale-passes: CAUGHT, caught by xtask hotlists::tests::train_fails_on_a_stale_tracked_list
+# branch-stale-fails: CAUGHT, caught by xtask hotlists::tests::branch_reads_the_fresh_copy_with_an_info_line
+# other-tree-read: CAUGHT, caught by xtask hotlists::tests::a_regeneration_of_another_tree_is_not_read
+# hand-written-from-copy: CAUGHT, caught by xtask hotlists::tests::branch_reads_the_fresh_copy_with_an_info_line
+# dead-key-branch: CAUGHT, caught by xtask hottext::tests::regen_mode_is_one_explicit_flag_for_regen_sh_only

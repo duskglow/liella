@@ -35,7 +35,19 @@ Earlier work: handoff on `task/hotlist-train-regen` (inventory, cost) and handof
 - A missing STAMP is not an error on the train, so the generator list can change before or after this lands.
 
 ## Results
-(filled in below by the run: jobs htr2-lint1, htr2-hotlists, htr2-plants, htr2-gate on kanon)
+All on kanon role kn1 (Zen 1-class host, 35 threads; jobs in `~/logs/<label>.log`, scripts in ~/work/hotlist-train-regen-2/).
+- htr2-lint1, rc 0: `cargo xtask clippy`, `cargo xtask static`, the three hotlists unit tests (on 43c799f1b; later
+  commits touch only handoff/, records/pending/ and CONTRIBUTING.md).
+- htr2-hotlists, rc 0: `cargo xtask hot-lists` out of tree, **284 s wall** for both profiles. The tracked lists
+  stayed byte-identical (sha256 against the worktree). Fresh copy against next's tracked one: hot-text.list 12 diff
+  lines, the three .keys files identical. Then `cargo xtask so` and `LIELLA_FULL_PROFILE=1 cargo xtask so` each
+  printed the `hot-lists:` info line, read target/hot-lists and passed the grouping and dead-key check.
+- htr2-plants3, rc 0: 5 plants, 5 CAUGHT, no WARN (handoff/HOTLIST-TRAIN-REGEN-2-plants.txt carries the results).
+- htr2-gate: `affected --run --base origin/next` escalated to FULL (xtask sources); left running at hand-back.
+  The role holds the stamped target/hot-lists from htr2-hotlists (handoff/ is not in the stamp), so this gate builds
+  and tests with the fresh lists: a branch gate that commits no list.
+- SUPERSEDED: htr2-plants (rc 3, plants file had a line split in two, refused), htr2-plants2 (rc 3, started while
+  the sync was BUSY, same old file).
 
 ## Not done (next step)
 - The brief's proof (a)/(b) (two dummy branches that move start-up code, each gated without committing lists; merged,
