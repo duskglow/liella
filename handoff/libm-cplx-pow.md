@@ -1,76 +1,45 @@
-# LIBM-CPLX-POW handoff: cpow/cpowf quick tier (design done, no code yet)
+# LIBM-CPLX-POW handoff: cpow/cpowf quick + middle tiers (envelope path landed on the branch)
 
-State: branch task/libm-cplx-pow, cut from origin/next d1b3a596c; this note is the only change (run 1 hit the
-180k context checkpoint while reading: complex_body.rs / complex_fast.rs / trig.rs / fast64.rs are large). Role
-shiki:~/w/sh2. Decisions in force: D-10.53 (design), D-10.74, D-10.99, D-10.25, D-10.17. No jobs run.
+State: branch task/libm-cplx-pow-2 (stacks on task/libm-cplx-pow), code head 0b8e2fd51; role keke:~/w/n2.
+Run 2 (LIBM-CPLX-POW-2) stopped at the 180k context checkpoint after the code, its tests and the jobs below.
+Decisions in force: D-10.53, D-10.74, D-10.99, D-10.25, D-10.17. No decision record for this tier yet (next step).
 
-## Where things are (do not re-read whole files)
+## What is in
 
-* Route: `complex.rs:253` `cpow` = ziv ladder over `complex_body.rs:1764` (special operands -> `cpow_naive`;
-  `d = 0` on an axis -> `pow_axis`; `d = 0`, integer `|c| <= 64` -> `pow_int` (EXACT parts, no inexact);
-  `d = 0, c = 0.5` -> csqrt; `d = 0`, `|x| = |y|` diagonal and the bases -1, ±i -> exact angle reduction;
-  else `pow_general` (always inexact)). Add `cpow_route` in complex.rs (as `cexp_route`, complex.rs:182) and
-  make `cpow` try the tier first, as `cexp`/`clog` do (complex.rs:172-206).
-* clog internal form: `complex_fast.rs:568` `clog_parts(x, y) -> Option<[(Dd, abs eps); 2]>` = [(ln|z|, er),
-  (arg z, ei)]; window `2^-400 <= |x|,|y| < 2^400` (zeros/axes excluded). ARG_EPS = 2^-65 rel (the bottleneck),
-  log ~2^-70 rel, near |z| = 1 `2^-63` rel of ln|z|.
-* exp of a double-double: `fast64.rs:415` `reduce_pow(z: Dd, kf)` (private: make `pub(crate)`), `kf =
-  nearest_int(z.hi * f64::from_bits(t::SCALES[0]))`, then `fast64::exp_kernel(r, to_i32(kf)) -> (V, m, tail)`,
-  bound `fast64::exp_eps(V, tail)` = |V|(2^-49|tail| + 2^-70); needs |z.hi| <= 746. Adding `z.lo` into `l`
-  costs <= 2^-97 absolute (|z.lo| <= 2^-44, |l| <= 2^-61).
-* sin/cos of a double-double Φ (|Φ.hi| < 2^20): `trig::kernel::{reduce, poly, assemble}` + `trig::eps(sh, y)`
-  (see complex_fast.rs:100-111 for the call shape). Fold the low part: `(n, r) = reduce(Φ.hi)`,
-  `s = two_sum(r.hi, Φ.lo)`, `r' = two_sum(s.hi, s.lo + r.lo)` (two_sum, NOT fast_two_sum: r.hi may cancel
-  with Φ.lo). Adds <= 2^-110 to the reduction error (2^-89.9 -> still < A_RED = 2^-89) and |r'| <= π/128 +
-  2^-34 < 2^-5.34 (the kernel proof's limit), so `trig::eps` holds unchanged.
-* Rounding/scaling helpers to reuse (private in complex_fast.rs; put the new code in a child module
-  `#[path = "complex_fast_pow.rs"] pub mod pow;` so `super::` reaches them): `round(p, eps, m, mode)` (near +
-  settle + `scale`), `round_root` pattern (decline when |P.lo| <= eps), `PROD` = 2^-99 (Dd::mul 2^-102.6).
-* Boundary: `crates/boundary/src/mathret.rs:1219` `cplx2`; add `cplx2_fast` + cold fallback mirroring
-  `cplx_fast` (mathret.rs:1191-1216). Table: `crates/boundary/src/posix/s10_math.tsv:196`
-  (`cpow fdlq mret::cplx2(...)`): split into `f`, `d` rows with `mret::cplx2_fast({x}, {y}, {E}, <nearest fn>,
-  math::complex::cpow)` and `lq` unchanged; regenerate with `cargo xtask math-gen` (never edit the _gen.rs).
-* Tests: `complex_fast_tests.rs` has the xorshift `uniform`, regimes, route compare and the ignored 10^7
-  sweep pattern (lines 12-171); copy that shape into `complex_fast_pow_tests.rs`.
+* `crates/math/src/complex_fast_pow.rs` (child module `complex_fast::pow`, reaches the private helpers by
+  `super::`): quick tier (`clog_parts` + `fast64::exp_kernel(reduce_pow)` + trig kernels with `Φ.lo` folded),
+  a per-part strict test (`|P.lo| > eps`, then `round`: the interval holds no double and no midpoint), a cold
+  middle tier near 2^-99 per declined part (`exp_log::log_dd`, `trig::atan_dd`, `wide_dd::exp_dd` with `E.lo`
+  folded, `sin_or_cos_dd`), `cpowf` by the 25-bit-grid test `round32` (all modes), `cpow_any`. The module
+  comment holds the error analysis (E/Φ absolute errors carried through exp; part bound).
+* `complex.rs`: `cpow` tries `cpow_any` first; `cpow_route` = the old ziv ladder (tests' reference).
+* `fast64::reduce_pow` made `pub(crate)`.
+* Tests `complex_fast_pow_tests.rs`: tiers = route bit for bit (values + flags) in 4 modes, double and float,
+  5 bands (typical, |z| within 1e-6 of 1, branch cut, |w| up to 64, real exponents); the middle tier must
+  decide every sampled part; exact parts ((3+4i)^1.5, ^2, ^0.5) decline in every mode.
+* Plants: handoff/LIBM-CPLX-POW-2-plants.txt (strict test dropped; arg bound loosened to 2^-60).
 
-## Design (method of the brief; error bound proved here, to go in the module comment and a D-NEW record)
+## Decline rates (from the bounds; NOT yet measured)
 
-`cpow(z, w) = e^E cis Φ`, `E = c·Lr − d·Li`, `Φ = d·Lr + c·Li`, `L = clog_parts(z)`.
-1. Ranges (in-place safety: no overflow/underflow in hardware): z in clog's window; `|c|, |d|` each 0 or in
-   `[2^-60, 2^20]`; `|ℓr.hi|, |ℓi.hi| >= 2^-60` (else decline; keeps every product and its Dekker error term
-   normal); `w = 0` -> decline early (route gives the exact 1). `|Ê.hi| <= 708` for exp, `|Φ̂.hi| < 2^20`.
-   **Large-|w| / large-|L| band:** `M_E = |c·ℓr| + |d·ℓi|`, `M_Φ = |d·ℓr| + |c·ℓi|`; above 2^10 decline
-   at once (the amplified error, about M·2^-63, cannot decide a 53-bit part): that band keeps the route.
-2. Products: `A = ℓr.mul_f64(c)` etc. (2^-104.4 rel each), `Ê = A − B`, `Φ̂ = C + D` by `Dd::add` (Joldes,
-   Muller, Popescu, ACM TOMS 44(2) 2017, Alg. 6: 2^-104.4 of the result). So
-   `eE = |c|·er + |d|·ei + 2^-100·M_E + 2^-96`, `eΦ = |d|·er + |c|·ei + 2^-100·M_Φ`.
-3. Part bound (A = |V.hi|, B = |T.hi|, T = cos or sin Dd, eT = trig::eps): `|part·2^-m − V⊗T| <=
-   A·((eE + exp_rel)·B + eΦ + eT)·(1 + 2^-30) + PROD·A·B` with `exp_rel = 2^-49|tail| + 2^-70`, valid while
-   eE, eΦ + eT <= 2^-30 (second-order terms and eps's own rounding inside the 2^-30). Real part error scales
-   with |result| (relative E error); the angle error eΦ is absolute, as the brief says.
-4. **Strict test (proved, no transcendence assumption):** per part decline if `|P.lo| <= eps`, then `round`.
-   The interval then holds no double and no midpoint, so the value is correctly rounded AND inexact is right.
-   This covers every exact case (d = 0 with dyadic c: (3+4i)^1.5 = 2 + 11i; integer c), zero parts (decline),
-   and d != 0, where Gelfond–Schneider makes z^w transcendental but NOT its parts (rationality of Re z^w is
-   open), so the cexp-style "never a double" argument is unavailable. Cost: decline rate ~2^-10 per part.
-5. cpowf: same parts from the f32 operands (exact in double); f32 strict test, nearest only (directed -> None
-   -> route): `v = scale(P.hi, m)`, require `2^-126 <= |v| <= f32::MAX`, `r = v as f32`,
-   `δ = (v − r) + lo·2^m` (Sterbenz-exact first step), `h` = half ulp32 of r (h/2 below a power of two when
-   δ points to zero), `thr = eps·2^m·(1 + 2^-50) + h·2^-20`; answer r iff `thr < |δ| < h_side − thr`
-   (h·2^-20 also forces `v != r`, so the conversion itself raises inexact in place).
-6. Optional cheap exact paths (brief: only proved and measured): `d = 0, c = 0.5` -> `csqrt` tier; integer
-   c = 2 by exact two_prod parts. Not designed further.
+Quick: about 2^-10 per part (atan2's 2^-65 dominates). Middle: bound about 2^-97 relative for |w log z| <= 2^4,
+so about 2^-44 per quick decline (2^-54 per part) to the route; it grows with |c|, |d| (absolute ℓ errors times
+|w|): about 2^-37 at |w| = 2^10. The coordinator's target (<= 2^-30 per part to the 384-bit route) holds by the
+bound in every band; the measured per-band table is the next step (sweep below).
 
-Expected decline rate ~2^-9 per call (atan2's 2^-65 dominates); each decline costs the route (~10^5 instr):
-a later middle tier (~2^-100 clog + `wide_dd::exp_dd` + `sin_or_cos`, as D-10.99) would remove that.
+## Open / not verified
 
-## Next step (continuation, fresh context; suggested budget 120 calls / 200k)
+* Middle-tier constants LR_REL/LR_ABS/LI_REL rest on an a-priori estimate of `log_dd` and `atan_dd` (no
+  stated bound in their files) with a factor 2+ margin; the tests compare against the route only. A test that
+  measures their errors against `crate::mp` is still to write.
+* The ignored decline-rate sweep was dropped: `xtask static` (long-sweeps) needs a runner row for every
+  ignored test. Re-add it with that row (see how `cexp_quick_tier_sweep` is registered).
 
-1. Write `complex_fast_pow.rs` (parts + `cpow_nearest` + `cpow` + `cpowf_nearest` + `cpow_any`), make
-   `reduce_pow` pub(crate), wire complex.rs and the boundary, math-gen.
-2. Tests: tier vs `cpow_route` bit-for-bit (values + flags) in all four modes, regimes: typical
-   `[-3,3]^2 x [-3,3]^2`, |z| within 2^-20 of 1, x < 0 with |y| < 2^-20 (branch cut), |w| in [2^6, 2^12];
-   exact cases decline ((3+4i)^1.5, (1+i)^2.5 diagonal, c = 2); ignored 10^7 sweep; plants (strict test,
-   eΦ term, r' fold, range checks) with `msg:` regexes using [0-9]+.
-3. Jobs: clippy, static, gate (`affected --run --base origin/next`), plants, sweep, percall (typical + hard
-   rows, with and without `--tunables glibc.cpu.hwcaps=-FMA`) vs next and glibc.
+## Next step (continuation)
+
+1. Read the gate and plants results (JOBS in the hand-back); fix any red.
+2. Decision record: `cargo xtask records new decision D-NEW --series D-10 --story LIBM-CPLX-POW-2` (method,
+   bounds, strict test, rates; cite Joldes-Muller-Popescu 2017, Lindemann-Weierstrass caveat).
+3. Decline-rate sweep with a long-sweeps row; per-band table here; mp-based bound tests for log_dd/atan_dd.
+4. In-place entry: `cplx2_fast` in crates/boundary/src/mathret.rs (mirror `cplx_fast`), rows `cpow f`/`d` in
+   posix/s10_math.tsv, `cargo xtask math-gen`; an in-place `cpow_nearest` needs every intermediate normal.
+5. percall typical and hard rows (with and without `--tunables glibc.cpu.hwcaps=-FMA`) vs next and glibc.
