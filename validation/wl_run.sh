@@ -44,6 +44,7 @@ WL=${WL:-$HOME/wl}
 out=$1
 shift
 . "$(dirname "$0")/wl_workloads.sh"
+. "$(dirname "$0")/wl_lock.sh"   # wl_key: a commit's kit is keyed by sha and products profile (WL-PREP-RELEASE-PROFILE)
 work=$WL/work
 tmp=$WL/tmp.$$
 mkdir -p "$tmp"
@@ -66,7 +67,7 @@ for d in "${WL_DEFS[@]}"; do
     refmd5=
     refcmd=
     for v in "$@"; do
-        c=${cmd//@/$WL/kit/${v%%@*}/bin}
+        c=${cmd//@/$WL/kit/$(wl_vkey "${v%%@*}")/bin}
         (cd "$work" && sh -c "$c" > /dev/null 2>&1)    # warm-up
         stat=$(cd "$work" && perf stat -r 5 -x, -e task-clock,instructions:u,page-faults,cycles,cycles:u,cycles:k sh -c "$c" 2>&1 > /dev/null)
         ms=$(ev task-clock 1)

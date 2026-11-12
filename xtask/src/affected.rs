@@ -1772,7 +1772,9 @@ fn xtask_module(path: &str) -> Option<&str> {
 const VALIDATION_RUN_TEST: &str = "validation/wl_run_test.sh";
 const VALIDATION_STATS_TEST: &str = "validation/wl_stats_test.sh";
 const VALIDATION_MTMEM_TEST: &str = "validation/wl_mtmem_test.sh";
-pub(crate) const VALIDATION_SELF_TESTS: &[&str] = &[VALIDATION_RUN_TEST, VALIDATION_STATS_TEST, VALIDATION_MTMEM_TEST];
+/// WL-PREP-RELEASE-PROFILE: the products profile and cache key of `wl_lock.sh` (a stand-in `cargo`, no build; 0.1 s).
+const VALIDATION_LOCK_TEST: &str = "validation/wl_lock_test.sh";
+pub(crate) const VALIDATION_SELF_TESTS: &[&str] = &[VALIDATION_RUN_TEST, VALIDATION_STATS_TEST, VALIDATION_MTMEM_TEST, VALIDATION_LOCK_TEST];
 
 /// GATE-VALIDATION-SH-TESTS: a `validation/` script -> the self-tests that exercise it (each self-test also covers
 /// itself). A change to a script here selects those self-tests in every tier. `wl_run.sh` and `wl_count_run.sh` are
@@ -1786,6 +1788,9 @@ const VALIDATION_COVERED: &[(&str, &[&str])] = &[
     (VALIDATION_RUN_TEST, &[VALIDATION_RUN_TEST]),
     (VALIDATION_STATS_TEST, &[VALIDATION_STATS_TEST]),
     (VALIDATION_MTMEM_TEST, &[VALIDATION_MTMEM_TEST]),
+    // The products profile and the cache key every lab script reads the products and kits by.
+    ("validation/wl_lock.sh", &[VALIDATION_LOCK_TEST]),
+    (VALIDATION_LOCK_TEST, &[VALIDATION_LOCK_TEST]),
 ];
 
 /// GATE-VALIDATION-SH-TESTS: the `validation/wl_*.sh` scripts with no self-test the gate can run, each with why. The
@@ -1804,7 +1809,6 @@ const VALIDATION_UNCOVERED: &[(&str, &str)] = &[
     ("validation/wl_install.sh", "installs the lab tools on a host; no self-test"),
     ("validation/wl_launch.sh", "detached lab launcher; no self-test"),
     ("validation/wl_local.sh", "role-directory variant of the lab drivers; no self-test"),
-    ("validation/wl_lock.sh", "build lock of the lab hosts; no self-test"),
     ("validation/wl_percall.sh", "its check wl_percall_tunables_test.sh is a lab count job (built products, minutes), not a gate step"),
     ("validation/wl_percall_run.sh", "host side of wl_percall.sh (built products); no self-test"),
     ("validation/wl_percall_tunables_test.sh", "a lab count job (built products, minutes), not a gate step"),
