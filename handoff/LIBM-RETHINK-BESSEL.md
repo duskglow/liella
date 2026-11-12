@@ -1,36 +1,47 @@
-# LIBM-RETHINK-BESSEL handoff (run 1)
+# LIBM-RETHINK-BESSEL handoff (run 2: LIBM-RETHINK-BESSEL-2)
 
-State: branch `task/libm-rethink-bessel`, head 285b4a1dd (code db3ad7964 + test/record), on next c32adc349. Decision in
-force: D-10.106 (new; amends D-10.49's range). Role keke:~/w/r5. Context budget hit at ~165k of 180k: hand-back
-PENDING JOBS, with the f32 large band and the f64 bands left as follow-up briefs (below).
+State: branch `task/libm-rethink-bessel-2`, code head 9d9f58f63 (on next c32adc349; this note and the report json
+are the commits after it). Decision in force: D-10.106 (f32 j0f/j1f/y0f/y1f below 2^-20 from the leading series
+terms; body corrected in run 2: errno rule). Role mei:~/w/s1. Report: handoff/reports/LIBM-RETHINK-BESSEL-2.json.
 
-## Evidence (LIBM-TAIL-PROBE, before)
-f32 per binade (Liella / glibc mean): tiny |x| < 2^-20: j0f 736-19253 / 41, j1f 14669-18703 / 55, y0f 146925 / 83,
-y1f 150626 / 51; mid [2^-20, 2^19): 152-288 / 94-348 (already at or under glibc, D-10.49); large >= 2^19:
-1.67e5-2.87e5 / 269-356. f64: |x| >= 32 2705 / 830; y0 x < 9.3e-302 1.38e5 / 89; y1 x < 5.6e-17 4466 / 41; j0, j1
-tiny 469-504 / 37-50; the probe's hard points near zeros (2.40, 3.83, 0.89, 2.20 ...) 5e4-2.2e5 / 416-525.
-Path (from the code, not traced): D-10.49's `bessel_core` returns None outside [2^-20, 2^19) (`BES_MIN`; `trig_core`
-stops at 2^19), so `eval` falls to `special::{j0..y1}` -> `*_accurate` (multi-precision). The wl_trace job
-(libm-rethink-bessel-before) ended rc 2 (role synced dirty: spec uncommitted) and was not rerun: NOT VERIFIED by trace.
+## What run 2 found (run 1's jobs, keke)
+- gate rc 1: `cargo xtask static` (records: bare `|` in D-10.106), fixed by run 1's 9d2108944. Its `affected` stage
+  never ran, so run 1's code was never gated. Step 0 on mei: clippy and static clean on 9d2108944.
+- percall rc 2: `--base c32adc349` is not a 40-hex sha. Rerun with c32adc3499f1318e0524f767220dd21c6e8d82ae.
+- sweeps: j1f and y1f FAILED on errno; plants: baseline test failing (below). Both ended or were stopped by run 2.
 
-## Design (RETHINK)
-Tiny band, two approaches: (A) leading series terms in closed form (DLMF 10.2.2, 10.8.1-2), (B) extend D-10.49's
-fits to 2^-149. B keeps an absolute bound (useless for J1/Y1 relative accuracy) and refuses on subnormal or
-overflowing results. A adopted: J0/J1 from brackets (no rounding test), Y0/Y1 via the correctly rounded double log
-with 8u/4u relative margins, Y1 overflow and J1 subnormal results by bits. Expected cost ~15 (J) to ~60 (Y) instr.
-Large band, two approaches: (A) modulus-phase J = M cos θ, Y = M sin θ (DLMF 10.18.17-18) with an exact fixed-point
-Payne-Hanek reduction of x·2/π (24-bit mantissa x a 128-bit window of 2/π, subtract (2n+1)/2 in fixed point, one
-sin or cos of |t| <= π/4 + 3/(8x)), (B) Hankel P/Q (D-10.49's form) with the same reduction. B cancels near zeros
-(P cos - Q sin), so its refusals stay ~5e-6; A keeps the phase exact to ~2^-70 absolute, relative error ~2^-50,
-so ~30-60 refusals per function: an exception table, no MP. A recommended, estimate 70-100 instructions vs glibc 280.
+## Fixes (run 2)
+- 94cf124ab: the tiny band set ERANGE for any underflow or overflow (`Status::range_errno`). Spec
+  (spec/behaviour/libm-exact.md, and the recorded probes in libm-special.glibc.txt.gz: `j1f U 00000001 = 00000001
+  ---UX 0`, `y1f U 00000001 = ff7fffff --O-X 0`, `y1f N 00000001 = ff800000 --O-X ERANGE`): ERANGE only for an
+  underflow to zero or an overflow to -inf. J1 now checks m == 0, Y1 the directions that round to -inf (cheap local
+  tests, the rule of `crate::float::range_errno`); D-10.106's body states the rule.
+- 9d9f58f63: `bessel_tiny_band_agrees_with_the_accurate_path` compared the statuses' Debug text, which includes
+  `Status::hw` (a hint: any superset is correct; `finish` reports inexact + denormal, the accurate path every bit), so
+  it failed on Y0(0x1p-149) with equal value, flags and errno. It now uses Status's equality (flags, errno), as the
+  sweeps do.
 
-## Jobs on head 285b4a1dd (keke, started detached; PENDING)
-libm-rethink-bessel-gate (clippy, static, affected --base origin/next), -percall (bands, base c32adc349 vs head vs
-glibc), -sweeps (exhaustive j0f/j1f/y0f/y1f against the oracle, now from 2^-149), -plants (5: 4 CAUGHT expected,
-1 EQUIVALENT: margin halved, reason in the plants file).
+## Counts (wl_percall, instructions per call, Skylake-SP, deterministic; glibc dynamic; base = next c32adc349)
+| case | glibc | base | new 9d9f58f63 | new/glibc |
+|---|---|---|---|---|
+| bes_j0f_tiny | 54.3 | 6401.4 | 94.0 | 1.73 |
+| bes_j1f_tiny | 67.8 | 16447.4 | 119.7 | 1.76 |
+| bes_y0f_tiny | 98.2 | 148628.2 | 340.9 | 3.47 |
+| bes_y1f_tiny | 64.5 | 152382.9 | 313.6 | 4.86 |
+
+Before the errno fix (9d2108944, never landed): j1f 123.9, y1f 305.5; the +8.1 on y1f is not analysed (NOT
+VERIFIED where it goes). Self-check MISMATCH on y0f/y1f(1e-10f): base and new agree and differ from glibc in the
+last place; by hand Liella's are the nearest floats (Y1: true -6366197638.7, ulp 512, Liella -6366197760, glibc
+-6366197248). Pre-existing, not from this change.
+
+## Jobs on 9d9f58f63 (mei)
+libm-rethink-bessel-2-gate3 rc 0 (clippy, static, affected --base origin/next: 6 suites ok, 1 skipped, 1571 passed,
+0 failed; peak 3.3G), -plants2 rc 0 (handoff/LIBM-RETHINK-BESSEL-2-plants.txt: 8 CAUGHT, 0 SURVIVED, 1 EQUIVALENT,
+no WARN), -percall3 rc 0 (the table above), -sweeps2 PENDING at hand-back (exhaustive j0f/j1f/y0f/y1f against the
+oracle from 2^-149; y0f done clean, the rest running with no failure).
 
 ## Next step
-1. Collect the four jobs: `~/bin/jobwait libm-rethink-bessel-gate libm-rethink-bessel-plants libm-rethink-bessel-percall libm-rethink-bessel-sweeps` on keke.
-   A sweep mismatch on status (underflow ERANGE for j1f subnormals) is the likeliest red.
-2. Follow-up briefs: handoff/LIBM-RETHINK-BESSEL/LIBM-F32-BESSEL-LARGE.md, handoff/LIBM-RETHINK-BESSEL/LIBM-F64-BESSEL-BANDS.md.
-Not to redo: the probe (its data is the before); the tiny-band series derivation (D-10.106).
+1. If -sweeps2 is red: read its panics (`grep -A3 panicked ~/logs/libm-rethink-bessel-2-sweeps2.log` on mei).
+2. Then the follow-up briefs, in order: handoff/LIBM-RETHINK-BESSEL/LIBM-F32-BESSEL-LARGE.md (rank 4),
+   handoff/LIBM-RETHINK-BESSEL/LIBM-F64-BESSEL-BANDS.md (ruling #4953). The y1f +8 can go with the first (same function).
+Not to redo: the probe (run 1's before data); the series derivation (D-10.106); the errno rule (settled by the probes).
