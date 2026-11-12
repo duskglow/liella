@@ -24,16 +24,18 @@
 //! more, inside [`trig::eps`]'s `2^-89` reduction term; `|r| < 2^-5.34` still).
 //!
 //! **Middle tier** (cold; only a part the quick test declines): `ℓr = ln(s)/2`, `s = x² + y²`
-//! ([`super::sum_squares`], `2^-104.4`) by [`crate::exp_log::log_dd`] (table reduction, exact
-//! `m·c − 1`, the `atanh` series: relative `2^-100.2` on the series part, `2^-104.4` per
-//! addition of the `e·ln 2` and table terms): `er = LR_REL·|ℓr| + LR_ABS`; `ℓi` by
-//! [`crate::trig::atan_dd`] of `|y|/|x|` ([`Dd::div`], `π − θ` for `x < 0`): within `2^-99.5`
-//! relative (atan is 1-conditioned in `t`), `ei = LI_REL·|ℓi|`. `V = e^E` from
+//! ([`super::sum_squares`], `2^-104.4` relative, so `ℓr` moves by at most `2^-105.4 < 1.52u²`)
+//! by [`crate::exp_log::log_dd`] (proved [`crate::exp_log::LOG_DD_REL`] `= 32u²` relative):
+//! `er = LR_REL·|ℓr| + LR_ABS`; `ℓi` by [`crate::trig::atan_dd`] (proved
+//! [`crate::trig::ATAN_DD_REL`] `= 36u²`) of `|y|/|x|` ([`Dd::div`], `5u²`, which moves atan by
+//! at most as much relative), then `π − θ` for `x < 0` (`θ <= π/2 <= π − θ`; the subtraction
+//! `3u²`, `2·PI_2` within `2u²`): `ei = LI_REL·|ℓi|`, `LI_REL = ATAN_DD_REL + 10.01u²`, all
+//! times `1 + 2^-49` for `|ℓ.hi|` standing for `|ℓ|`. `V = e^E` from
 //! [`crate::wide_dd::exp_dd`] (`2^-103`) times `1 + E.lo + E.lo²/2` (`|E.lo| <= 2^-44`), `T` by
 //! [`sin_or_cos_dd`] (`2^-100` absolute: `cexp`'s middle proof, `Φ.lo` added to the reduced
 //! argument, `2^-105` more), the part bound `(A·B + A)·MID_EPS` of `cexp`'s middle tier plus
-//! the argument terms. The constants carry a factor 2 or more over the estimates; the tests pin
-//! the observed errors against the 384-bit route.
+//! the argument terms. The tests recheck each proof's table facts and that every constant
+//! covers its proof (a bound made 2x too small fails), and pin the tiers to the 384-bit route.
 //!
 //! **Strict test** ([`strict`]): a part is answered only when the interval `P ± eps` holds no
 //! `double` and no midpoint (`|P.lo| > eps`, then [`super::round`]). The parts of `z^w` may be
@@ -65,11 +67,14 @@ const ARG_MAX: f64 = f64::from_bits(0x3e10_0000_0000_0000);
 const W30: f64 = f64::from_bits(0x3ff0_0000_0080_0000);
 /// `2^-100`: the strict test's slack (as [`fast64::settle`]'s).
 const SLACK: f64 = f64::from_bits(0x39b0_0000_0000_0000);
-/// The middle tier's logarithm bounds: `2^-99` relative and `2^-102` absolute for `ℓr`, `2^-98`
-/// relative for `ℓi`.
-const LR_REL: f64 = f64::from_bits(0x39c0_0000_0000_0000);
-const LR_ABS: f64 = f64::from_bits(0x3990_0000_0000_0000);
-const LI_REL: f64 = f64::from_bits(0x39d0_0000_0000_0000);
+/// `u² = 2^-106` and `1 + 2^-49` (covers `|ℓ.hi|` standing for `|ℓ|`).
+const U2: f64 = f64::from_bits(0x3950_0000_0000_0000);
+const W49: f64 = f64::from_bits(0x3ff0_0000_0000_0008);
+/// The middle tier's logarithm bounds, from the proved ones (module comment): `ℓr` within
+/// `LR_REL·|ℓr| + LR_ABS`, `ℓi` within `LI_REL·|ℓi|`.
+const LR_REL: f64 = crate::exp_log::LOG_DD_REL * W49;
+const LR_ABS: f64 = 1.52 * U2 * W49;
+const LI_REL: f64 = (crate::trig::ATAN_DD_REL + 10.01 * U2) * W49;
 /// `2^-60` and `2^20`: the range of a nonzero `|c|`, `|d|` (every product stays normal).
 const W_LO: f64 = f64::from_bits(0x3c30_0000_0000_0000);
 const W_HI: f64 = 1_048_576.0;
