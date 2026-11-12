@@ -83,3 +83,14 @@ pub(crate) fn cexp_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
     }
     liella_math::complex_fast::cexp_nearest(x, y)
 }
+
+/// The `double` `cexp` second in-place attempt (LIBM-CEXP-COLD-MIDDLE, D-10.99): the quick tier
+/// with its middle tier, run from the boundary's cold fallback ([`mret::cplx_fast_retry`]) after
+/// [`cexp_nearest`] declines a part (about one operand in a thousand). The baseline build only:
+/// the builds agree bit for bit and this path is cold. Both parts or `None`.
+///
+/// [`mret::cplx_fast_retry`]: crate::mathret::cplx_fast_retry
+#[inline(always)]
+pub(crate) fn cexp_middle(x: f64, y: f64) -> Option<(f64, f64)> {
+    liella_math::complex_fast::cexp(x, y, liella_math::Rounding::Nearest).map(|(p, _)| p)
+}

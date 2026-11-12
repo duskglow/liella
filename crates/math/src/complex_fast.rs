@@ -119,8 +119,8 @@ fn parts(x: f64, y: f64) -> Option<([(Dd, f64); 2], i32)> {
 /// `#[target_feature]` contract); the baseline build is safe.
 ///
 /// A part the quick test declines makes this decline too: the middle tier is reached from the
-/// boundary's cold fallback ([`cexp`] through the envelope), never from here, so no operand has
-/// to stay live across the kernel for it (LIBM-CEXP-COLD-MIDDLE, D-10.99).
+/// boundary's cold fallback ([`cexp`] in place, then the envelope), never from here, so no
+/// operand has to stay live across the kernel for it (LIBM-CEXP-COLD-MIDDLE, D-10.99).
 $(#[$a])*
 $(#[$i])*
 pub fn cexp_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
@@ -203,10 +203,11 @@ pub fn cexp(x: f64, y: f64, mode: Rounding) -> Option<((f64, f64), Status)> {
 // The middle tier of `cexp` (LIBM-CEXP-ROUTE, D-10.99). A part whose quick rounding test cannot
 // decide (its exact value within about `2^-66` of a rounding boundary: about one part in a
 // thousand) is evaluated again near `2^-99` before the 384-bit route is consulted; only a part
-// within that of a boundary still reaches the route. Only [`cexp`] (the envelope's tier) calls
-// this out-of-line code: both builds of the in-place [`cexp_nearest`] decline such a part, and
-// the boundary's cold fallback then runs [`cexp`] (LIBM-CEXP-COLD-MIDDLE: the hot kernel keeps no
-// operand live for the call), so the in-place results stay bit-identical between the builds.
+// within that of a boundary still reaches the route. Only [`cexp`] (the envelope's tier, and the
+// boundary's in-place second attempt) calls this out-of-line code: both builds of the in-place
+// [`cexp_nearest`] decline such a part, and the boundary's cold fallback then runs [`cexp`] in
+// place before the envelope (LIBM-CEXP-COLD-MIDDLE: the hot kernel keeps no operand live for the
+// call), so the in-place results stay bit-identical between the builds.
 //
 // * `e^x = V·2^s` from [`wide_dd::exp_dd`] within `2^-100·|V|` (its module comment: below
 //   `2^-103` proved), for `|x| < 2^14`.
