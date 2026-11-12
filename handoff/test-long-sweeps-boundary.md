@@ -38,7 +38,9 @@ same problem: its measured rows add up to 13 508 s (3.75 h: s10 12 922 incl. the
   row13. Stopped before they started their test: row03, row09, row14, xt1. row05 (logf, 1087 s) shared CPUs for
   about 2 min at its start; it was retimed alone in chain4 (941 s, the recorded figure).
 - `tlsb2-xt2`: `cargo test -p xtask --bin xtask longsweeps::` 7 passed, and `--list`.
-- Final head: lint, gate and plants labels are in the report json.
+- Code head 38a1c74f3: `tlsb2-lint1` (workspace clippy -D warnings, xtask clippy, static) rc 0; `tlsb2-plants1`
+  5 plants, 5 CAUGHT, 0 WARN; `tlsb2-gate1` (affected --run --base origin/next) rc 0: 32 suites, 11658 passed,
+  0 failed, conformance 125 passed, peak 16G with page cache, no OOM.
 
 ## Open
 
