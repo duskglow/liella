@@ -24,10 +24,14 @@ follow it). Role shiki:~/w/sh1. Reserved decision id: D-10.109 (record NOT writt
   `bessel_large_table_entries` (every entry refused by the core and equal to the accurate path in every mode, +-x).
 - Plants: handoff/LIBM-F32-BESSEL-LARGE-plants.txt (table entry removed, margin halved, x^-3 term dropped).
 
-## Jobs (shiki), started on 22bd8683c, verdicts NOT read at this checkpoint
-libm-f32-bessel-large-gate (clippy, static, affected --base origin/next), -plants, -sweeps (waits for the gate,
-then the four exhaustive oracle sweeps + the enumeration). Earlier: -enum (compile error, superseded), -enum2
-(rc 101 by design: printed the table, 3 other large tests ok).
+## Jobs (shiki)
+On code head c33609c90, verdicts NOT read: libm-f32-bessel-large-gate2 (clippy, static, affected --base
+origin/next), -sweeps2 (waits for gate2, then the four exhaustive oracle sweeps + the enumeration).
+Superseded: -gate rc 1 (clippy::panic in the new bound test, fixed in c33609c90), -plants rc 2 (BASELINE FAILED
+in `cargo xtask so`: "hot-text.list: 1 key(s) match no function section of the fast-profile libc.a", a vdso
+`lookup_many` key in liella_boundary; not touched by this change, not analysed: compare on origin/next before any
+regen), -sweeps (stopped to sync), -enum (compile error), -enum2 (rc 101 by design: printed the table; the
+other three large tests ok). Plants still to run once `so` builds.
 
 ## Next step (continuation)
 1. Read the three jobs (`~/bin/jobwait <label>` on shiki; `grep -E "panicked|SURVIVED|WARN" ~/logs/<label>.log`).
