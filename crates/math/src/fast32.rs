@@ -349,10 +349,10 @@ pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)> {
         Fast::Log2 => (log_core(x)? * INV_LN2, LOG_DELTA, "log2f"),
         Fast::Log10 => (log_core(x)? * INV_LN10, LOG_DELTA, "log10f"),
         Fast::Log1p => (log1p_core(x)?, LOG1P_DELTA, "log1pf"),
-        Fast::Sin => (trig_core(x)?.0, TRIG_DELTA, "sinf"),
-        Fast::Cos => (trig_core(x)?.1, TRIG_DELTA, "cosf"),
+        Fast::Sin => (trig_core_wide(x)?.0, TRIG_DELTA, "sinf"),
+        Fast::Cos => (trig_core_wide(x)?.1, TRIG_DELTA, "cosf"),
         Fast::Tan => {
-            let (s, c) = trig_core(x)?;
+            let (s, c) = trig_core_wide(x)?;
             (s / c, TAN_DELTA, "tanf")
         }
         Fast::Expm1 => (expm1_core(x)?, EXPM1_DELTA, "expm1f"),
@@ -457,13 +457,14 @@ pub fn eval_nearest(f: Fast, x: f32) -> Option<f32> {
         Fast::Asinh => (asinh_core(x)?, ASINH_DELTA),
         Fast::Acosh => (acosh_core(x)?, ACOSH_DELTA),
         Fast::Atanh => (atanh_core(x)?, ATANH_DELTA),
-        // trig_core takes only normal x (2^-26 ≤ |x| < 2^19, so no denormal-operand), keeps every
+        // trig_core_wide takes only normal x (2^-26 ≤ |x| < 2^19 converted, so no denormal-operand;
+        // |x| ≥ 2^19 read from its bits by reduce_large, one inexact `cvtsi2sd`), keeps every
         // intermediate a normal `double` or zero (its proof) and |c| ≥ 2^-37, so s/c raises no
         // divide-by-zero, overflow or underflow: inexact only (LIBM-F32-SINF-SHRINK).
-        Fast::Sin => (trig_core(x)?.0, TRIG_DELTA),
-        Fast::Cos => (trig_core(x)?.1, TRIG_DELTA),
+        Fast::Sin => (trig_core_wide(x)?.0, TRIG_DELTA),
+        Fast::Cos => (trig_core_wide(x)?.1, TRIG_DELTA),
         Fast::Tan => {
-            let (s, c) = trig_core(x)?;
+            let (s, c) = trig_core_wide(x)?;
             (s / c, TAN_DELTA)
         }
         // No in-place nearest entry yet (their flags on subnormal operands are unproven here):
