@@ -51,7 +51,7 @@ use inv_trig::*;
 use trig::*;
 pub use exp_log::{eval_pow, pow};
 pub use hyperbolic::{acosh_nearest_sqrt, asinh_nearest_sqrt};
-pub use inv_trig::{atan2, eval_atan2};
+pub use inv_trig::{acos_onepass_any, asin_onepass_any, atan2, atan2_onepass_any, atan_onepass_any, eval_atan2};
 pub use trig::{cos_nearest_widen, sin_nearest_widen, sincos, sincos_nearest_widen, tan_nearest_widen};
 
 /// The functions with a fast path.

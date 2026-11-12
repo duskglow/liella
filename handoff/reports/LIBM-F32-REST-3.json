@@ -1,0 +1,25 @@
+{
+ "task": "LIBM-F32-REST-3",
+ "model": "opus",
+ "tokens": null,
+ "result": "Merge-only run: origin/next merged, fast32.rs conflict resolved by keeping both re-export lines (next's trig widen kernels and this branch's one-pass inverse trig); generated s10_math_gen.rs matches math-gen; no other change",
+ "branch": "task/libm-f32-rest-3",
+ "head": "9b3103cdf",
+ "gate": {
+  "affected": "4085 passed / 0 failed (conformance 20/20; libm-f32-rest-3-gate on shiki, with so + static: partial-write 0 findings)",
+  "peak": "12G, oom_kill 0"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "No exhaustive job rerun: the merge changed only the pub use line of fast32.rs, no kernel or export code of asinf/acosf/atanf/atan2f; next's trig change is proved on its own branch."
+ ],
+ "refused": [],
+ "improvement": "A CI conflict confined to a single re-export line could be resolved by the merge tool itself (union of the two use lists) and re-gated, without a full agent run.",
+ "next_step": "After landing: the coordinator's new story (lgammaf near-zero through fast_gamma::lgamma_kernel, booked timing of asinf/acosf/atanf/atan2f, erff/erfcf/hypotf one-pass), per handoff/LIBM-F32-REST.md.",
+ "report_file": "handoff/LIBM-F32-REST.md",
+ "jobs": [
+  "libm-f32-rest-3-gate",
+  "libm-f32-rest-3-plants"
+ ]
+}
