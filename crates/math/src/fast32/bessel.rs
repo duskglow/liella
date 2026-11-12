@@ -223,7 +223,10 @@ pub(super) fn bessel_eval(f: usize, x: f32, mode: Rounding, name: &'static str) 
             stats::record(name, true);
             let v = f32::from_bits(m | (x.to_bits() & 0x8000_0000));
             let fl = if a < 0x00ff_ffff { Flags::INEXACT.union(Flags::UNDERFLOW) } else { Flags::INEXACT };
-            Some((v, Status::flags(fl).range_errno()))
+            // ERANGE only for an underflow to zero (m == 0, which needs a <= 2), never for a
+            // subnormal result: `crate::float::range_errno`'s rule (spec/behaviour/libm-exact.md).
+            let st = Status::flags(fl);
+            Some((v, if m == 0 { st.with(crate::status::MathError::Range) } else { st }))
         }
         2 => {
             // ln x correctly rounded (0.5u of |ln| ≥ 13.8), + c (|c| < 0.12, same sign: ≤ 1.01u of
@@ -239,8 +242,14 @@ pub(super) fn bessel_eval(f: usize, x: f32, mode: Rounding, name: &'static str) 
             let w = TWO_OVER_PI / xd;
             if w >= BES_Y1_OVF {
                 stats::record(name, true);
-                let v = if matches!(mode, Rounding::Down | Rounding::Nearest) { f32::NEG_INFINITY } else { -f32::MAX };
-                return Some((v, Status::flags(Flags::INEXACT.union(Flags::OVERFLOW)).range_errno()));
+                // ERANGE only where the overflow rounds to -inf (nearest, down), not where it
+                // rounds to -FLT_MAX (up, toward zero): `crate::float::range_errno`'s rule.
+                let st = Status::flags(Flags::INEXACT.union(Flags::OVERFLOW));
+                return Some(if matches!(mode, Rounding::Down | Rounding::Nearest) {
+                    (f32::NEG_INFINITY, st.with(crate::status::MathError::Range))
+                } else {
+                    (-f32::MAX, st)
+                });
             }
             let l = crate::fast64::log_nearest(xd)? + BES_C1;
             let y = INV_PI_D * xd * l - w;
