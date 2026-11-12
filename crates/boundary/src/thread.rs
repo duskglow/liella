@@ -242,9 +242,21 @@ pub(crate) fn leave_lock_alone() {
 
 /// Whether the runtime started this process (so every thread it runs library code in is
 /// listed: the initial thread at startup, every other at creation).
+///
+/// A plain read, not an atomic load: the compiler folds it into one `cmpb $0, X(%rip)` on every
+/// gated path (an atomic byte load is always `movzbl` + `test`), D-X.58, ruling #4888.
 #[inline(always)]
 pub(crate) fn owned() -> bool {
-    OWNED_HERE.load(Acquire)
+    // UNSAFE(process-flag): the write-once ownership byte, read without an atomic (ruling #4888).
+    #[allow(unsafe_code)]
+    // UNSAFE(process-flag) SAFETY: `init_initial` is the only writer of `OWNED_HERE`, and it
+    // stores the byte once, on the initial thread, before the runtime or the program creates any
+    // other thread; every thread made later starts after that store (thread creation orders it),
+    // and a fork child copies the settled byte. So no store can run concurrently with this read
+    // (no data race), and the pointer is a static's, always valid and aligned for a `bool`.
+    unsafe {
+        *OWNED_HERE.as_ptr()
+    }
 }
 
 // ------------------------------------------------------------------------------ whose block (D-X.58)
