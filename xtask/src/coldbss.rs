@@ -122,7 +122,8 @@ fn usz(v: u64) -> Result<usize, String> {
 
 /// LAYOUT-STARTUP-STATE-LOCALE (ruling #4923): put the sections named `want` (each name exactly once
 /// in the object) in `want`'s order, in place, in the ELF64 little-endian relocatable object `obj`.
-/// They swap places among the section-table slots they already hold, so every other section keeps
+/// They and their relocation sections (each right after its target) swap places among the
+/// section-table slots they already hold, so every other section keeps
 /// its index; the data stays where it is (each header carries its offset). What refers to a moved
 /// section by index follows it: symbols (`st_shndx`, or their `SHT_SYMTAB_SHNDX` entry), the target
 /// of relocation sections (`sh_info`), group members and `SHF_LINK_ORDER` links. Any other
@@ -154,11 +155,25 @@ pub(crate) fn order_sections(obj: &mut [u8], want: &[String]) -> Result<usize, S
         let tail = obj.get(at..).ok_or("ELF: section name past the end")?;
         names.push(&tail[..tail.iter().position(|&c| c == 0).ok_or("ELF: unterminated section name")?]);
     }
+    // A wanted section's relocation sections move with it, right after it. BFD (objcopy, ld) makes a
+    // relocation section's target when it reads the relocation section, so a target left in a later
+    // slot than its relocations is taken in the relocations' place, the emission order (the `ld -r`
+    // join and the C member kept `stdout` and `__tzname` there).
+    let mut relocs: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for i in 0..shnum {
+        let kind = u32_at(obj, hdr(i) + 4)?;
+        if kind == SHT_REL || kind == SHT_RELA {
+            relocs.entry(usz(u64::from(u32_at(obj, hdr(i) + 44)?))?).or_default().push(i);
+        }
+    }
     let mut from = Vec::with_capacity(want.len());
     for w in want {
         let hits: Vec<usize> = (0..shnum).filter(|&i| names[i] == w.as_bytes()).collect();
         match hits[..] {
-            [i] => from.push(i),
+            [i] => {
+                from.push(i);
+                from.extend(relocs.get(&i).into_iter().flatten());
+            }
             _ => return Err(format!("{} sections named {w}, want exactly one", hits.len())),
         }
     }
@@ -430,27 +445,41 @@ mod tests {
         // LAYOUT-STARTUP-STATE-LOCALE (#4923; no spec clause, layout of the products): the sections named
         // are linked in the order given, and every symbol and relocation still reaches its own data: the
         // program checks the values through pointers (relocations in moved sections and against moved
-        // sections, a local and a global symbol) and the addresses follow the order.
+        // sections, a local and a global symbol) and the addresses follow the order. As in the build, the
+        // sections are then renamed to one name (objcopy) and joined (`ld -r`) before the link: both read the
+        // object through BFD, which takes a section where its relocations are. The pointers sit at both ends
+        // of the emitted order and the order is reversed, so a relocated section always lands after its
+        // relocation section's slot unless that moves with it.
         let dir = std::env::temp_dir().join(format!("liella-order-sections-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        let (src, obj, exe) = (dir.join("o.c"), dir.join("o.o"), dir.join("o"));
-        let c = "int a = 1; int b = 2; static int s = 4; int *pa = &a; int *ps = &s;\n\
-                 int main(void) { return *pa == 1 && b == 2 && *ps == 4 && s == 4 && pa == &a ? 0 : 1; }\n";
+        let (src, obj, joined, exe) = (dir.join("o.c"), dir.join("o.o"), dir.join("j.o"), dir.join("o"));
+        let c = "extern int a; static int s; int *pa = &a; int a = 1; int b = 2; static int s = 4; int c = 3; int *ps = &s;\n\
+                 int main(void) { return *pa == 1 && b == 2 && c == 3 && *ps == 4 && s == 4 && pa == &a ? 0 : 1; }\n";
         fs::write(&src, c).unwrap();
         assert!(Command::new("cc").args(["-c", "-O0", "-fdata-sections", "-fno-pie", "-o"]).arg(&obj).arg(&src).status().unwrap().success());
-        let want: Vec<String> = [".data.ps", ".data.b", ".data.pa", ".data.s", ".data.a"].iter().map(|s| (*s).to_string()).collect();
+        let headers = Command::new("readelf").arg("-SW").arg(&obj).output().unwrap();
+        let mut want: Vec<String> = String::from_utf8_lossy(&headers.stdout).lines().filter_map(|l| l.split_once("] ").and_then(|(_, r)| r.split_whitespace().next())).filter(|n| n.starts_with(".data.")).map(str::to_string).collect();
+        assert_eq!(want.len(), 6, "emitted .data sections: {want:?}");
+        want.reverse();
         let mut bytes = fs::read(&obj).unwrap();
         assert!(order_sections(&mut bytes, &want).unwrap() > 0);
         assert_eq!(order_sections(&mut bytes.clone(), &want).unwrap(), 0, "a second pass moves nothing");
         assert!(order_sections(&mut bytes.clone(), &[".data.nope".to_string()]).unwrap_err().contains("0 sections named .data.nope"));
         fs::write(&obj, &bytes).unwrap();
-        assert!(Command::new("cc").args(["-no-pie", "-o"]).arg(&exe).arg(&obj).status().unwrap().success());
+        let mut objcopy = Command::new("objcopy");
+        for w in &want {
+            objcopy.arg("--rename-section").arg(format!("{w}=.data1"));
+        }
+        assert!(objcopy.arg(&obj).status().unwrap().success());
+        assert!(Command::new("ld").arg("-r").arg("-o").arg(&joined).arg(&obj).status().unwrap().success());
+        assert!(Command::new("cc").args(["-no-pie", "-o"]).arg(&exe).arg(&joined).status().unwrap().success());
         assert_eq!(Command::new(&exe).status().unwrap().code(), Some(0), "a reordered symbol or relocation lost its data");
         let nm = Command::new("nm").arg("-n").arg(&exe).output().unwrap();
-        let ours: Vec<String> = String::from_utf8_lossy(&nm.stdout).lines().filter_map(|l| l.split_whitespace().nth(2)).filter(|n| ["a", "b", "s", "pa", "ps"].contains(n)).map(str::to_string).collect();
+        let names: Vec<String> = want.iter().map(|w| w[".data.".len()..].to_string()).collect();
+        let ours: Vec<String> = String::from_utf8_lossy(&nm.stdout).lines().filter_map(|l| l.split_whitespace().nth(2)).filter(|n| names.iter().any(|w| w == n)).map(str::to_string).collect();
         let _ = fs::remove_dir_all(&dir);
-        assert_eq!(ours, ["ps", "b", "pa", "s", "a"], "linked order");
+        assert_eq!(ours, names, "linked order");
     }
 
     fn sec(name: &str, kind: u32, size: u64) -> Shdr {
