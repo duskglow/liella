@@ -1,0 +1,20 @@
+{"task": "HOTLIST-TRAIN-REGEN", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: stopped at the brief's cost gate. One full hot-list regen (both profiles, merge mode #4839) took 19.4 and 22.9 min on mei (another story's runs today) and 28.7 min on a 7-core slot (79% product builds, 21% gdb traces). Inventory, per-phase numbers and a proposal are in the handoff; no code changed",
+ "branch": "task/hotlist-train-regen", "head": "b67efbd69",
+ "gate": {"affected": "not run: no code changed (the brief says stop at step 1 when one regen exceeds about 15 min on mei)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "One regen costs 19-23 min on mei and 28.7 min on a 7-core slot, above the 15 min line, so it cannot be added to every train as it is", "recommendation": "a story first that builds libc.a only for the traces, reruns only the grouping and dead-key step instead of a second full so, and runs the traces in parallel (estimated 6-7 min for both profiles, to be measured on mei); then resume this story. If both profiles still exceed 15 min on mei: fast on every train, release on a schedule"},
+  {"item": "startup-data.keys regenerated from next differs from the tracked copy on 26 lines, so byte-identical output from the same tree is not established", "recommendation": "run the data trace twice on one host and once on mei and compare, before the train owns startup-data.keys"}
+ ],
+ "informational": [
+  "A no-change cargo xtask so rebuilds nothing in cargo (fingerprint log: no dirty unit) yet takes 282-284 s fast and 386 s release on a 7-core slot. The layout contract check is 126 s of the fast run (45%), and every gate and plant baseline pays it",
+  "build_tag hashes crates/ including the lists, so a list change changes LIELLA_BUILD_TAG; it measured only +8 s (292 vs 284 s) and is not the cost",
+  "hot-text.unpinned (LAYOUT-HOTKEY-INLINE-STABLE) is not on next 9b2a0c029",
+  "Role sh1 holds regenerated lists and fast products built from them after the measurement; re-sync it before using it again"
+ ],
+ "refused": [],
+ "improvement": "The layout contract check is 45% of every no-change cargo xtask so (126 of 282 s, fast). Caching its verdict by product hash, or running it only where layout matters, would save about 2 min in every gate, plant baseline and regen",
+ "next_step": "Ruling on the proposal (handoff section 3); then a cheap-regen story (libc-only regen build, check without a second full so, parallel traces, measured on mei); then resume this brief at step 2",
+ "report_file": "handoff/HOTLIST-TRAIN-REGEN.md",
+ "jobs": ["hotlist-train-regen-cost", "hotlist-train-regen-so-cost", "hotlist-train-regen-so-lines"]}
