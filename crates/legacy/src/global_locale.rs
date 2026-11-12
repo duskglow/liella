@@ -518,7 +518,7 @@ fn replace_changed<M: Mapper>(m: &M, current: &Locale, cats: &[Cat], names: &[&[
     let mut changed = [Cat::Ctype; 12];
     let mut n = 0;
     for &c in cats {
-        if locale::reported(names.get(c.index()).copied()?) != current.name(c) {
+        if names.get(c.index()).copied()? != current.name(c) {
             *changed.get_mut(n)? = c;
             n = n.saturating_add(1);
         }

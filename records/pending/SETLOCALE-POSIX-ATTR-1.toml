@@ -1,0 +1,9 @@
+id = "D-NEW"
+series = "D-X"
+section = "x"
+status = "active"
+story = "SETLOCALE-POSIX-ATTR"
+date = "2026-11-12"
+body = '''
+**`setlocale` compares the name a request reports, not the name as given, with the current name: a repeated `setlocale(cat, "POSIX")` takes the no-change path like `"C"`** (SETLOCALE-POSIX-ATTR, fix-forward of the +170 instructions per call seen after LAYOUT-HOTKEY-INLINE-STABLE; spec s7_1_c_p1, s7_2_c_4; no ABI or behaviour change: the result, the reported name `"C"` and the locale data are the same). `"POSIX"` selects the built-in locale that reports itself as `"C"`. The lock-free fast path of `setlocale` compared the requested name with the cached reported name, so `"POSIX"` never matched and every call took the lock, rebuilt the locale, compared it with the interned locales and copied it. A one-call trace (Skylake-SP host) gave 2490 instructions: about 1140 in memmove of `Locale` values, 490 in `Locale::eq`, 424 in `replace`; `"C"` again costs about 180. The memmove share depends on the alignment of the stack buffers, which is why the count moved with unrelated layout changes (+170 and a spread of 7-8 on a Zen 1 host) and why the cause was not in the changes that showed it. `liella::locale::reported` maps `"POSIX"` to `"C"`; the fast path compares that (`replace_changed` is left as it is: only a first call from a locale with some categories already `"C"` reaches it with `"POSIX"`, and it then replaces C with the same built-in C). This survives later layout and start-up growth because the repeated call no longer runs any copy or compare whose cost follows addresses. Test: `crates/boundary/tests/setlocale_posix_repeat.rs` (user-mode instruction count: `"POSIX"` again at most a quarter over `"C"` again, for `LC_CTYPE` and `LC_ALL`).
+'''
