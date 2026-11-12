@@ -26,7 +26,7 @@ fn triples(s0: u64, n: u64, ties: bool) -> Vec<(f64, f64)> {
 }
 
 /// Every pair of the kernel test (module comment), deterministic.
-pub fn hard_pairs() -> Vec<(f64, f64)> {
+pub(crate) fn hard_pairs() -> Vec<(f64, f64)> {
     let mut st = 0x243f_6a88_85a3_08d3u64;
     let mut next = move || {
         st ^= st << 13;

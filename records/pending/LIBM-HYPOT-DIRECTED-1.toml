@@ -1,0 +1,9 @@
+id = "D-NEW"
+series = "D-X"
+section = "x"
+status = "active"
+story = "LIBM-HYPOT-DIRECTED"
+date = "2026-11-12"
+body = '''
+**Hardware math operations reach `liella_math` through a trait** (owner ruling 2026-11-12, #4967; LIBM-HYPOT-DIRECTED): a kernel that needs an instruction `liella_math` cannot issue without `unsafe` (S1), first `sqrtsd`, is generic over `liella_math::hwop::HwOps`; each method's contract is the weaker of its implementations (`sqrt`: within `2^-50` relative for a normal positive operand, under the environment in force), and a kernel's proof may assume only that contract. `SoftOps` is the safe software default (any target; the crate's own callers and tests); `liella_boundary::hot::Hw` implements it through the existing `hot-kernel` category (S2) on `hot::sqrtsd`, no new `unsafe` site or category. The methods are associated functions on a zero-sized type, so after monomorphisation and inlining a call is the instruction (no function pointer, no call; checked by disassembly of the release `libc.so.6`). Tests: the math crate runs a kernel on `SoftOps`, the boundary's tests on `Hw` (the same hard cases, shared from `crates/math/tests/support/`). Later operations (fused multiply-add, ...) are added as methods with a software default; when `core_float_math` is stable the default `sqrt` may become `core`'s safe one (not depended on). First user: the `double` `hypot` kernel (D-10.104, amended by the companion record of this story).
+'''

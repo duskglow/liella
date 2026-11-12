@@ -1,0 +1,12 @@
+id = "D-NEW"
+series = "D-10"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+amends = ["D-10.104"]
+story = "LIBM-HYPOT-DIRECTED"
+date = "2026-11-12"
+body = '''
+**`double` `hypot`: the kernel's first root is the hardware `sqrtsd` at the entry** (owner ruling #4967; LIBM-HYPOT-DIRECTED; amends D-10.104): `invtrig::hypot_rounded` and its both-subnormal integer root take the first root from `O: HwOps` (the trait record of this story) instead of the fixed software root; `pow::hypot_with::<F, O>` names it, `pow::hypot` keeps `SoftOps` (cabs, cpow and the crate's callers, unchanged), and the `double` `hypot` entry's fallback (directed modes through the switch, refusals of the fast tier, DAZ/FTZ/unmasked traps) passes `hot::Hw`. Why the D-10.104 proofs hold: both fallbacks run in the default MXCSR, so `sqrtsd` is correctly rounded to nearest, within `2^-53` relative, inside the `d <= 2^-50` that `sqrt_dd`'s bound assumes (`d^2/2 + 6·2^-53 d + 2^-105 < 2^-99.5`, under Ziv's `2^-98`); the integer root is still fixed by exact squares (a closer first root only shortens the loops); a normal positive operand raises at most inexact, which the entry's flag settlement already handles. Cost (Zen 1 build host, instructions per call, `validation/percall/hypot.c`): `hypot_near_up` (upward) 355.6 before; the after figure and glibc's 68.8 are in the story's handoff. Round-to-nearest rows unchanged (the fast tier already used `sqrtsd`). Tests: the kernel's hard pairs on `SoftOps` (math crate) and on `Hw` plus the entry under all four `fesetround` directions (boundary).
+'''
