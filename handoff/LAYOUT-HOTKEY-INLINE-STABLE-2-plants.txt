@@ -1,0 +1,8 @@
+# LAYOUT-HOTKEY-INLINE-STABLE-2 plants (cargo xtask plants; docs/plants.md). Direct tests: `cargo xtask static`
+# (xtask/src/hottext.rs check_pinned on the real lists) and the xtask hottext unit tests.
+# 1. A keyed start-up function loses its fixed boundary (sys::vdso_fn, the home of the vdso lookup code).
+vdso-fn-unpinned | crates/boundary/src/sys.rs | perl:s/#\[inline\(never\)\]\n(fn vdso_fn\()/$1/ | cargo xtask static | msg:fn vdso_fn is not #\[inline\(never\)\]
+# 2. A key the check guards loses its hot-text.unpinned line (rust_alloc, a start-up key with no boundary).
+unpinned-rust-alloc | crates/libc-so/hot-text.unpinned | perl:s/^_RNvNtC15liella_boundary4heap10rust_alloc\t[^\n]*\n//m | cargo xtask static | msg:fn rust_alloc is not #\[inline\(never\)\]
+# 3. The check keeps an unpinned line whose key gained a boundary (the list must only shrink).
+stale-unpinned-kept | xtask/src/hottext.rs | lit:(None, true) if e.key.starts_with("_R") => ==> (None, true) if false => | cargo test -p xtask --bin xtask hottext | msg:fail_unless_listed' [(][0-9]+[)] panicked at xtask/src/hottext.rs:[0-9]+
