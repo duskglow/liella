@@ -292,13 +292,14 @@ mod tests {
         let hard = hard.into_iter().flat_map(|n| [f32::from_bits(n), -f32::from_bits(n)]).map(|x| (x, true));
         for (x, is_hard) in hard.chain(edges.into_iter().filter(|x| x.is_subnormal()).map(|x| (x, false))) {
             for m in MODES {
-                assert!(eval(Fast::Erf, x, m).is_none() && eval(Fast::Erfc, x, m).is_none(), "{x:e} {m:?}: refused by the rounding test");
                 let paths = [(Fast::Erf, super::super::erf(x, m), erf_tiny(x, m)), (Fast::Erfc, super::super::erfc(x, m), erfc_tiny(x, m))];
                 for (f, got, direct) in paths {
                     let (want, key) = (accurate(f, x, m), (f, m, x.to_bits()));
                     assert_eq!((key, got.0.to_bits(), got.1), (key, want.0.to_bits(), want.1), "the entry agrees with the accurate path");
                     assert!(direct.is_some() || !is_hard, "{key:?}: inside the direct path's band");
                     if let Some(d) = direct {
+                        // Past erf_tiny's band end the result is normal and `eval` may answer.
+                        assert!(eval(f, x, m).is_none(), "{key:?}: refused by the rounding test");
                         assert_ne!(want.1.hw, d.1.hw, "{key:?}: hw tells the paths apart");
                         assert_eq!((key, got.1.hw), (key, d.1.hw), "{key:?}: answered by the direct path");
                     }
