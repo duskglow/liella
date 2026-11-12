@@ -34,6 +34,15 @@ static void dzero(double z) {
 }
 #define LOOPD(fp) { double (*f)(double) = fp; double acc = 0; for (long i = 0; i < n; i++) acc += f(dt[i & 63]); pc_sink += (long)(acc * 1e3); }
 #define LOOPF(fp) { float (*f)(float) = fp; double acc = 0; for (long i = 0; i < n; i++) acc += f(ft[i & 63]); pc_sink += (long)(acc * 1e3); }
+/* Self-check against an oracle value (LIBM-BESSEL-SELFCHECK): `want` is the true value rounded to nearest, from mpmath
+ * 1.4.1 (bessely at 400 bits) and agreeing with Liella's 384-bit path. The two libraries' results for y1(2.0) and
+ * y0(1e-10) differ in the last place in round-to-nearest (Liella's is `want`), so printing 17 digits flagged a
+ * mismatch that is no disagreement about the function. These checks print whether the result lies within 1 ulp of
+ * `want`, and `want`: a library computing something else still prints `far`. */
+static void pc_check_near(double r, double want) {
+    int near = r >= nextafter(want, -INFINITY) && r <= nextafter(want, INFINITY);
+    pc_check("%s %.17g", near ? "within-1ulp-of" : "far-from", want);
+}
 
 CASE(bes_j0f_tiny, 1000000, 1) { ftiny(); LOOPF(fj0); PC_CHECKING { pc_check("%.9g", (double)fj0(1e-10f)); } }
 CASE(bes_j1f_tiny, 1000000, 1) { ftiny(); LOOPF(fj1); PC_CHECKING { pc_check("%.9g", (double)fj1(1e-10f)); } }
@@ -47,10 +56,10 @@ CASE(bes_y0f_large, 1000000, 1) { flarge(); LOOPF(fy0); PC_CHECKING { pc_check("
 CASE(bes_y1f_large, 1000000, 1) { flarge(); LOOPF(fy1); PC_CHECKING { pc_check("%.9g", (double)fy1(1e6f)); } }
 CASE(bes_j0_tiny, 1000000, 1) { dtiny(); LOOPD(dj0); PC_CHECKING { pc_check("%.17g", dj0(1e-10)); } }
 CASE(bes_j1_tiny, 1000000, 1) { dtiny(); LOOPD(dj1); PC_CHECKING { pc_check("%.17g", dj1(1e-10)); } }
-CASE(bes_y0_tiny, 1000000, 1) { dtiny(); LOOPD(dy0); PC_CHECKING { pc_check("%.17g", dy0(1e-10)); } }
+CASE(bes_y0_tiny, 1000000, 1) { dtiny(); LOOPD(dy0); PC_CHECKING { pc_check_near(dy0(1e-10), -0x1.d770c5f760b81p+3); } }
 CASE(bes_y1_tiny, 1000000, 1) { dtiny(); LOOPD(dy1); PC_CHECKING { pc_check("%.17g", dy1(1e-10)); } }
 CASE(bes_j0_mid, 1000000, 1) { dmid(); LOOPD(dj0); PC_CHECKING { pc_check("%.17g", dj0(1.5)); } }
 CASE(bes_j0_large, 1000000, 1) { dlarge(); LOOPD(dj0); PC_CHECKING { pc_check("%.17g", dj0(1e6)); } }
 CASE(bes_y1_large, 1000000, 1) { dlarge(); LOOPD(dy1); PC_CHECKING { pc_check("%.17g", dy1(1e6)); } }
 CASE(bes_j0_zero, 100000, 1) { dzero(11.791534439014281); LOOPD(dj0); PC_CHECKING { pc_check("%.17g", dj0(2.0)); } }
-CASE(bes_y1_zero, 100000, 1) { dzero(8.5960058683311689); LOOPD(dy1); PC_CHECKING { pc_check("%.17g", dy1(2.0)); } }
+CASE(bes_y1_zero, 100000, 1) { dzero(8.5960058683311689); LOOPD(dy1); PC_CHECKING { pc_check_near(dy1(2.0), -0x1.b667a39146647p-4); } }
