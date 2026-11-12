@@ -1,7 +1,7 @@
 #!/bin/bash
 # LAB-ONLY: the LIBM-TAIL-PROBE measurement set (no spec clause), in groups that run as separate jobs:
 #   bash validation/libm_tail/suite.sh <group> <liella-tree> <outdir>
-#   x32a x32b x32c  every f32 input of the unary f32 functions (batches of 1024 consecutive inputs)
+#   x32a x32b x32c  every f32 input of 24 unary f32 functions (batches of 1024 consecutive inputs; see below)
 #   s32             per-input f32 sample (one input per 1024) for percentiles; f32 binary 2-D samples
 #   f64             f64 unary (64 sub-blocks per binade, 256 inputs each, batched; 4 per input), hard points, binary
 #   analyze         validation/libm_tail/analyze.py over <outdir> -> <outdir>/report-*.tsv
@@ -46,7 +46,14 @@ declare -A P=(
 )
 case $g in
 x32a | x32b | x32c)
-    case $g in x32a) L=$F32A ;; x32b) L=$F32B ;; *) L=$F32C ;; esac
+    # Not here: lgammaf tgammaf j0f j1f y0f y1f erfcf. Liella spends 1e5-1e6 instructions on 20-80% of their
+    # inputs (whole binades), so an exhaustive run is ~30 h per function on a 4-core slot; their slow regions span
+    # whole binades and the per-input sample (s32) resolves them.
+    case $g in
+    x32a) L="acosf acoshf asinf asinhf atanf atanhf cbrtf cosf sqrtf" ;;
+    x32b) L="coshf erff expf exp10f exp2f expm1f logf log10f" ;;
+    *) L="log1pf log2f sinf sinhf tanf tanhf sincosf" ;;
+    esac
     specs=()
     for f in $L; do specs+=("x32:$f:1024"); done
     bash "$here/run.sh" "$tree" "$out" "${specs[@]}"
