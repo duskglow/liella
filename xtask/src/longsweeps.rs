@@ -139,6 +139,14 @@ pub const SWEEPS: &[Sweep] = &[
     lib("crates/math/src/complex_fast_tests.rs", "complex_fast::tests::cexp_quick_tier_sweep", Group::Long),
     lib("crates/math/src/complex_fast_ls_tests.rs", "complex_fast::ls_tests::clog_csqrt_quick_tier_sweep", Group::Long),
     it("crates/math/tests/fast_bessel_n.rs", "fast_bessel_n", "bessel_n_tier_sweep", Group::Long).env(&[("LIELLA_BESSEL_N_SWEEP", "10000000")]),
+    // The double special-function fast tiers against their 384-bit paths at 10^5 operands per function and mode
+    // (ruling #5061; the gate runs 1500 to 2000).
+    it("crates/math/tests/fast_special.rs", "fast_special", "double_erf_erfc_fast_tier_matches_the_accurate_path", Group::Long)
+        .env(&[("LIELLA_ERF_SWEEP", "100000")]),
+    it("crates/math/tests/fast_bessel.rs", "fast_bessel", "double_bessel_fast_tier_matches_the_accurate_path", Group::Long)
+        .env(&[("LIELLA_BESSEL_SWEEP", "100000")]),
+    it("crates/math/tests/fast_gamma.rs", "fast_gamma", "double_gamma_fast_tier_matches_the_accurate_path", Group::Long)
+        .env(&[("LIELLA_GAMMA_SWEEP", "100000")]),
     lib("crates/math/src/fast32/erf.rs", "fast32::erf::tests::erff_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/erf.rs", "fast32::erf::tests::erfcf_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/gamma.rs", "fast32::gamma::tests::tgammaf_fast_path_agrees_exhaustively", Group::Exhaustive),
@@ -214,9 +222,6 @@ pub const NOT_SWEEPS: &[(&str, &str, &str)] = &[
     ("crates/core/tests/no_proc_lane.rs", "link_max_without_proc", "LIELLA_NPL_LINK_MAX is the expected value the test hands its re-executed child, not a size"),
     ("crates/core/tests/no_proc_lane.rs", "getauxval_hosted_without_proc", "LIELLA_NPL_PAGESZ is the expected value the test hands its re-executed child, not a size"),
     ("crates/core/tests/s25_ipc_clauses.rs", "s25_2_c_3", "LIELLA_C25_UNDO is the semaphore id the test hands its re-executed child, not a size"),
-    ("crates/math/tests/fast_special.rs", "double_erf_erfc_fast_tier_matches_the_accurate_path", "LIELLA_ERF_SWEEP only widens a run by hand (its comment); the gate's default size is the test"),
-    ("crates/math/tests/fast_bessel.rs", "double_bessel_fast_tier_matches_the_accurate_path", "LIELLA_BESSEL_SWEEP widens a run by hand; no long size is documented, and the gate's default size is the test"),
-    ("crates/math/tests/fast_gamma.rs", "double_gamma_fast_tier_matches_the_accurate_path", "LIELLA_GAMMA_SWEEP widens a run by hand; no long size is documented, and the gate's default size is the test"),
 ];
 
 /// The identifier at the start of `s` (a `$` for a `macro_rules!` metavariable).
