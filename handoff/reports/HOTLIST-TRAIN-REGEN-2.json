@@ -2,7 +2,7 @@
  "result": "cargo xtask hot-lists regenerates the four generated start-up lists into a stamped target/hot-lists (or in place on the train); every reader uses that copy while the stamp matches; a stale tracked list is fatal only under LIELLA_TRAIN=1",
  "branch": "task/hotlist-train-regen-2", "head": "529b4063b",
  "gate": {"affected": "FULL gate htr2-gate running at hand-back", "peak": null}, "accepted_first_attempt": null,
- "rulings": [{"item": "so --hottext-regen refuses under CI, so the train command fails if the train sets CI", "recommendation": "run the train command with CI unset, or allow the regen mode under LIELLA_TRAIN=1"},
+ "rulings": [{"item": "the regen mode of cargo xtask so (hottext.rs regen_mode) refuses under CI, so the train command fails if the train sets CI", "recommendation": "run the train command with CI unset, or allow the regen mode under LIELLA_TRAIN=1"},
              {"item": "a missing target/hot-lists/STAMP is not fatal on the train", "recommendation": "make it fatal once the train runs cargo xtask hot-lists --in-place"}],
  "informational": ["next's tracked hot-text.list differs by 12 lines from a fresh regen of next plus this branch; the train's first hot-lists run will refresh it",
                    "proof (a)/(b) of the brief (two dummy branches, merged, train command, hot_text_products at every phase) not run: budget"],
