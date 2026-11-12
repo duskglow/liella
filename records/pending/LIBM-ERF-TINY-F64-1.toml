@@ -1,0 +1,12 @@
+id = "D-NEW"
+series = "D-10"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+story = "LIBM-ERF-TINY-F64"
+date = "2026-11-12"
+body = '''
+**`double` `erf` for \|x\| < 2^-55 in place: `c·x` rounded** (LIBM-ERF-TINY-F64, #4957). The in-place entry refused the band (about half of all bit patterns) and ran the scaled double-double path through the cold fallback. In the band `erf x` lies below `c·x` (`c = 2/√π`) by less than `2^-110/3` relative (alternating series), and by the best-approximation property of the continued fraction of `c` (Khinchin, *Continued Fractions*; the convergent `q = 3414567582477941 ≈ 2^51.6`, next `≈ 2^56.35`) no `q ≤ 2^54` has `‖q·c‖ < 2^-56.36`, so no result significand `c·x` comes within `2^-57.36` ulps of a breakpoint (midpoint or representable number, every mode, subnormal results included). Two evaluations: (I) integer, `n = round(X'·c/2)` from a 128-bit product with `round(c·2^127)` (`X' = X`, `2X` or `2m` in `[2^53/c, 2^54/c)`), error `≤ 2^-75` ulps, used by the SSE2 build and for subnormal `x` in both builds; (F) FMA build, normal `x`: `fma(x, c_hi·2^64, x·c_lo·2^64)·2^-64` (all intermediates normal, last product exact), error `≤ 2^-53.8` ulps, so every significand within that of a breakpoint is enumerated from the lattice basis of two consecutive convergents (one: `X = 0x18430fefa15cea`) and simulated exactly in all four modes. Proof tool: tools/proofs/erf_tiny_f64.py. Flags: x86 tininess after rounding; exactly one subnormal `x`, `M0 = 0xe2dfc48da77b5·2^-1074`, rounds to `2^-1022` yet is tiny at 53 bits, and raises underflow in round-to-nearest (black-box probe of the reference: the same flags). The band test sits inside the range test the entry already makes (as D-10.107's refusal-arm placement): the typical path has no new compare. Directed modes keep the existing path.
+'''
+tests = ["crates/boundary/tests/math_fma_paths.rs::erf_tiny_band_rounds_correctly_with_its_flags_in_every_mode"]
