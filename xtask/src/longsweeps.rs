@@ -13,7 +13,7 @@
 //! - `exhaustive` (every `float` operand, 10^8 to 10^9 operands, or 2^32 to 2^34 calls each: minutes to hours):
 //!   run only by `cargo xtask long-sweeps --group exhaustive`, a weekly job on an idle build host (ruling #4750).
 //!   A row's `secs` is the test time of one run where it was measured (the libtest `finished in` figure rounded
-//!   up, build excluded; TEST-LONG-SWEEPS-BOUNDARY on mei, Xeon Platinum 8151, a 6-CPU jobrun slot at load
+//!   up, build excluded; TEST-LONG-SWEEPS-BOUNDARY on a Skylake-SP build host, Xeon Platinum 8151, a 6-CPU jobrun slot at load
 //!   15 to 25), so that job can budget its slot.
 //!
 //! `cargo xtask long-sweeps [--group long|exhaustive|count|all] [--only <test>]... [--list]` (default `long`; `--only`
