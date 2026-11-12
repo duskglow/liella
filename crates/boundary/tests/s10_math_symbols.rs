@@ -1852,9 +1852,12 @@ fn cexp_cold_fallback_matches_the_route() {
         (2.0, f64::MAX),
     ];
     for (x, y) in ops {
-        let mut got = (0, 0);
+        use liella_kernel::machine::Machine;
+        let (mut got, mut word) = ((0, 0), 0);
         let seen = observe(|| {
             let r = m::cexp(Complex { re: x, im: y });
+            // ARCH(x86_64): the MXCSR flag bits after the call, the denormal-operand bit included
+            word = CSys.mxcsr() & 0x3f;
             got = (r.re.to_bits(), r.im.to_bits());
         });
         let ((wr, wi), st) = c::cexp_route(x, y, Nearest);
@@ -1864,6 +1867,11 @@ fn cexp_cold_fallback_matches_the_route() {
             MathError::Range => 34,
         };
         assert_eq!((x, y, got, seen), (x, y, (wr.to_bits(), wi.to_bits()), (errno, st.flags)), "cexp's cold fallback differs from the route");
+        // Where the second attempt answers, MXCSR holds exactly the caller's word with inexact:
+        // the attempts' own intermediate bits (the denormal-operand bit too) are dropped.
+        if (x, y) == bench {
+            assert_eq!((x, y, word), (x, y, u32::from(st.flags.0)), "cexp's cold fallback left an attempt's flag in MXCSR");
+        }
     }
     fpu::clear(&CSys, Flags::ALL);
 }
