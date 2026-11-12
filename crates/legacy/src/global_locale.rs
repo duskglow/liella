@@ -627,17 +627,19 @@ pub fn setlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: Reque
         }
         Request::Environment(_) => {}
     }
-    setlocale_locked(sys, m, cat, req)
+    setlocale_locked(sys, m, cat, &req)
 }
 
-/// [`setlocale`] when the query cache did not answer: under [`LOCK`].
+/// [`setlocale`] when the query cache did not answer: under [`LOCK`]. `req` by reference, so
+/// that the call from [`setlocale`] can be a jump: the locked path's stack buffers then sit where
+/// they sat when it was part of `setlocale` (memmove counts there follow their alignment).
 #[inline(never)]
-fn setlocale_locked<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: Request<'_>) -> Option<&'static [u8]> {
+fn setlocale_locked<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: &Request<'_>) -> Option<&'static [u8]> {
     let _g = LOCK.lock(sys);
     let current = *global(m);
     let one = [cat.unwrap_or(Cat::Ctype)];
     let cats: &[Cat] = if cat.is_some() { &one } else { &Cat::ALL };
-    let next = match req {
+    let next = match *req {
         Request::Query => current,
         Request::Name(n) => {
             let names = match (cat, name::parse_composite(n)) {
