@@ -1,0 +1,10 @@
+{"task": "LIBM-F32-BESSEL-LARGE", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: f32 Bessel |x| >= 2^19 by fixed-point phase + table (202 entries), no runtime MP; D-10.109 record and counts pending (context checkpoint)",
+ "branch": "task/libm-f32-bessel-large", "head": "22bd8683c",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["the oracle module comment still describes the range as ending at 2^19"],
+ "refused": [],
+ "improvement": "a story that needs an exhaustive table plus a decision record and counts outgrows a 180k context; split the record and counts into a follow-up",
+ "next_step": "read gate/plants/sweeps on shiki, write D-10.109, run wl_percall for bes_*f_large",
+ "report_file": "handoff/LIBM-F32-BESSEL-LARGE.md",
+ "jobs": ["libm-f32-bessel-large-gate", "libm-f32-bessel-large-plants", "libm-f32-bessel-large-sweeps"]}
