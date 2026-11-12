@@ -10,6 +10,9 @@
 //! 1994): the first step's 17-bit reciprocals `c1'` of `1 + (i + 1/2)/128` and `−ln c1`, the
 //! second step's reciprocals `c2` of `1 + i2/4096` and `−ln c2`, the series `1/k`, `ln 2`,
 //! `1/ln 2` and `1/ln 10`. The tier's module doc holds the error analysis that fixes each unit.
+//! The binary128 tier (`liella_math::wide_int::quad::explog`) reuses these words and adds a
+//! signed third limb below `2^(j/128)`, `−ln c1`, `−ln c2`, `ln2/128` and `ln 2` (192 bits), and the
+//! coefficients of its longer series (`1/k!` to `k = 12`, `1/k` to `k = 11`).
 
 use crate::mp::{self, Big, Round};
 
@@ -42,6 +45,20 @@ fn hex128(v: u128) -> String {
 
 fn shex128(v: i128) -> String {
     if v < 0 { format!("-{}", hex128(v.unsigned_abs())) } else { hex128(v.unsigned_abs()) }
+}
+
+fn shex64(v: i64) -> String {
+    if v < 0 { format!("-{:#018x}", v.unsigned_abs()) } else { format!("{v:#018x}") }
+}
+
+/// The third limb of `v` in units `2^-units`: `round(v·2^(units + 64)) − round(v·2^units)·2^64`,
+/// the signed word below the `ufixed`/`ifixed` word, so that `word·2^64 + limb` is `v` in units
+/// `2^-(units + 64)` within half a unit (subtracting an integer commutes with rounding).
+fn third(v: &Big, units: i64) -> i64 {
+    let r = v.mul_pow2(units);
+    let lo = r.sub(&r.round_int()).mul_pow2(64).round_int().to_i64().unwrap_or(i64::MIN);
+    assert!(lo != i64::MIN, "a third limb does not fit in 63 bits");
+    lo
 }
 
 /// `1/k!` as a `Big`.
@@ -149,6 +166,52 @@ pub(crate) fn emit(src: &mut String) {
         let c = Big::from_i64((c >> 1) as i64).mul_pow2(-62).add(&Big::from_i64((c & 1) as i64).mul_pow2(-63));
         let l = if c.sub(&one).is_zero() { Big::zero(false) } else { mp::log(&c, P).value.neg() };
         w(format!("    {},\n", shex128(ifixed(&l, 133))));
+    }
+    w("];\n".into());
+
+    // The binary128 tier (`wide_int::quad::explog`) carries the same tables to 192 bits: a third
+    // limb below each word, and the longer series' coefficients.
+    w("\n// The binary128 tier (`wide_int::quad::explog`, steps X1-X6 and L1-L4 of its proof).\n".into());
+    for (name, doc, v, units) in [
+        ("WQ_L_LO", "`WI_L`'s third limb: `WI_L·2^64 + WQ_L_LO` is `ln2/128` in units 2^-199.", ln2.mul_pow2(-7), 135),
+        ("WQ_LN2_LO", "`WI_LN2_113`'s third limb: `WI_LN2_113·2^64 + WQ_LN2_LO` is `ln 2` in units 2^-177.", ln2.clone(), 113),
+    ] {
+        w(format!("\n/// {doc}\npub(crate) const {name}: i64 = {};\n", shex64(third(&v, units))));
+    }
+    for (k, units) in [(12, 92), (11, 89)] {
+        let v = u64::try_from(ufixed(&inv_fact(k), units)).unwrap_or(0);
+        w(format!("\n/// `1/{k}!`, units 2^-{units}.\npub(crate) const WQ_E{k}: u64 = {v:#018x};\n"));
+    }
+    for (k, units) in [(7, 140), (6, 137), (5, 134)] {
+        let v = hex128(ufixed(&inv_fact(k), units));
+        w(format!("\n/// `1/{k}!`, units 2^-{units}.\npub(crate) const WQ_E{k}: u128 = {v};\n"));
+    }
+    for k in [11, 10, 9] {
+        let v = u64::try_from(ufixed(&one.div(&Big::from_i64(k), P, Round::Nearest), 67)).unwrap_or(0);
+        w(format!("\n/// `1/{k}`, units 2^-67.\npub(crate) const WQ_G{k}: u64 = {v:#018x};\n"));
+    }
+    for k in [7, 6, 5] {
+        let v = hex128(ufixed(&one.div(&Big::from_i64(k), P, Round::Nearest), 130));
+        w(format!("\n/// `1/{k}`, units 2^-130.\npub(crate) const WQ_G{k}: u128 = {v};\n"));
+    }
+    w("\n/// `WI_EXP2T`'s third limbs: `WI_EXP2T·2^64 + WQ_EXP2T_LO` is `2^(j/128)` in units 2^-191.\npub(crate) static WQ_EXP2T_LO: [i64; 128] = [\n".into());
+    for j in 0..128 {
+        let t = mp::exp2(&Big::from_i64(j).mul_pow2(-7), P).value;
+        w(format!("    {},\n", shex64(third(&t, 127))));
+    }
+    w("];\n".into());
+    w("\n/// `WI_L1`'s third limbs: `WI_L1·2^64 + WQ_L1_LO` is `−ln c1` in units 2^-191.\npub(crate) static WQ_L1_LO: [i64; 128] = [\n".into());
+    for (i, &c) in c1s.iter().enumerate() {
+        let c = Big::from_i64(c as i64).mul_pow2(if i >= 64 { -16 } else { -17 });
+        let l = if c.sub(&one).is_zero() { Big::zero(false) } else { mp::log(&c, P).value.neg() };
+        w(format!("    {},\n", shex64(third(&l, 127))));
+    }
+    w("];\n".into());
+    w("\n/// `WI_L2`'s third limbs: `WI_L2·2^64 + WQ_L2_LO` is `−ln c2` in units 2^-197.\npub(crate) static WQ_L2_LO: [i64; 65] = [\n".into());
+    for &c in &c2s {
+        let c = Big::from_i64((c >> 1) as i64).mul_pow2(-62).add(&Big::from_i64((c & 1) as i64).mul_pow2(-63));
+        let l = if c.sub(&one).is_zero() { Big::zero(false) } else { mp::log(&c, P).value.neg() };
+        w(format!("    {},\n", shex64(third(&l, 133))));
     }
     w("];\n".into());
 }

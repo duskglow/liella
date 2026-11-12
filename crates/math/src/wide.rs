@@ -33,7 +33,9 @@ use crate::wide_int_el;
 /// The fast tiers of the exponentials and logarithms in order: the integer fixed-point tier
 /// (x87 only, D-10.73), then the double-double tier; `None` leaves the 384-bit route.
 fn tiers<F: Float>(k: wide_dd::Kernel, n: &Num, mode: Rounding) -> Option<(F, Status)> {
-    wide_int_el::eval::<F>(k, n, mode).or_else(|| wide_dd::eval::<F>(k, n, mode))
+    wide_int_el::eval::<F>(k, n, mode)
+        .or_else(|| wide_int::quad::explog::eval::<F>(k, n, mode))
+        .or_else(|| wide_dd::eval::<F>(k, n, mode))
 }
 
 /// The value of a finite or zero operand.

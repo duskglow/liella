@@ -68,6 +68,7 @@ pub const SWEEPS: &[Sweep] = &[
     lib("crates/math/src/wide_int/quad.rs", "wide_int::quad::tests::tier_agrees_with_the_wide_route_long", Group::Long),
     lib("crates/math/src/wide_int/arc.rs", "wide_int::arc::tests::arc_tier_agrees_with_the_wide_route_long", Group::Long),
     lib("crates/math/src/wide_int/quad/arc.rs", "wide_int::quad::arc::tests::tier_agrees_with_the_wide_route_long", Group::Long),
+    lib("crates/math/src/wide_int/quad/explog.rs", "wide_int::quad::explog::tests::tier_agrees_with_the_wide_route_long", Group::Long),
     lib("crates/math/src/wide_int/quad/arc.rs", "wide_int::quad::arc::tests::arc_sine_agrees_with_the_wide_route_long", Group::Long),
     lib("crates/math/src/complex_fast_tests.rs", "complex_fast::tests::cexp_quick_tier_sweep", Group::Long),
     lib("crates/math/src/complex_fast_ls_tests.rs", "complex_fast::ls_tests::clog_csqrt_quick_tier_sweep", Group::Long),
