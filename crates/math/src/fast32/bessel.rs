@@ -663,7 +663,11 @@ mod tests {
                 let err = crate::dd::Dd::from(y).sub(want).to_f64().abs() / (y.abs() * U53);
                 assert!(err <= b, "{}({x:e}) = {y:e}: error {err} > bound {b}", BES_NAMES[f]);
                 worst[f] = worst[f].max(err / b);
-                let Est::Near { v, err: oe } = bessel_est(f, x) else { panic!("{} at {x:e}: no estimate", BES_NAMES[f]) };
+                // No estimate: a NaN that fails the assertion below.
+                let (v, oe) = match bessel_est(f, x) {
+                    Est::Near { v, err } => (v, err),
+                    _ => (crate::dd::Dd::from(f64::NAN), 0.0),
+                };
                 let d = v.sub(want).to_f64().abs();
                 assert!(d <= oe + 2.47e-32 * want.hi.abs() && oe < 8.9e-16 * want.hi.abs(), "{} oracle at {x:e}: {d:e} > {oe:e}", BES_NAMES[f]);
             }
