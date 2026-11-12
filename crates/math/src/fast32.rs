@@ -585,8 +585,8 @@ fast_fn!(acosh, Fast::Acosh, hyper);
 fast_fn!(atanh, Fast::Atanh, hyper);
 
 /// `erf` for `float`: the fast path, else [`erf_refused`] (the tiny operands' direct path, else
-/// the accurate path). The tiny operands are reached only from the refusal arm, out of line and
-/// cold, so a typical operand runs the fast path's code alone (LIBM-RETHINK-ERFC-3, D-10.107).
+/// the accurate path). The tiny operands are reached only from the refusal arm, out of line, so
+/// a typical operand runs the fast path's code alone (LIBM-RETHINK-ERFC-3, D-10.107).
 pub fn erf(x: f32, mode: Rounding) -> (f32, Status) {
     match eval(Fast::Erf, x, mode) {
         Some(r) => r,

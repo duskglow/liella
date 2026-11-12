@@ -179,10 +179,11 @@ pub(super) fn erfc_tiny(x: f32, mode: Rounding) -> Option<(f32, Status)> {
 }
 
 /// erff where [`super::eval`] refused: [`erf_tiny`]'s band, else the accurate path. Out of line
-/// and cold (LIBM-RETHINK-ERFC-3): the entry reaches it only from its refusal arm, so a typical
-/// operand pays no compare or branch for the band (inside `eval`, after the rounding test, the
-/// band cost a typical call 5 to 8 instructions more: D-10.107).
-#[cold]
+/// (LIBM-RETHINK-ERFC-3): the entry calls it from its refusal arm where it called the accurate
+/// path, so a typical operand runs the same code as without the band. Not `#[cold]`: that
+/// changed the entry's block layout (erfcf lost a duplicated rounding block on one piece, one
+/// jump more per call there); inside `eval`, after the rounding test, the band cost a typical
+/// call 5 to 8 instructions more (D-10.107).
 #[inline(never)]
 pub(super) fn erf_refused(x: f32, mode: Rounding) -> (f32, Status) {
     match erf_tiny(x, mode) {
@@ -193,7 +194,6 @@ pub(super) fn erf_refused(x: f32, mode: Rounding) -> (f32, Status) {
 
 /// erfcf where [`super::eval`] refused: [`erfc_tiny`]'s band, else the accurate path (as
 /// [`erf_refused`]).
-#[cold]
 #[inline(never)]
 pub(super) fn erfc_refused(x: f32, mode: Rounding) -> (f32, Status) {
     match erfc_tiny(x, mode) {
