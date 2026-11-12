@@ -1,0 +1,11 @@
+{"task": "LAYOUT-HOTKEY-INLINE-STABLE", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE checkpoint: static check for unpinned start-up/fork keys + inline(never/always) marks + hot-text.unpinned committed, not yet compiled, regenerated or gated",
+ "branch": "task/layout-hotkey-inline-stable", "head": "a61fb95aa36b",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "33 start-up keys stay unpinned (hot paths, closures, core/alloc, shared generics, measured-cost functions)", "recommendation": "accept with reasons in crates/libc-so/hot-text.unpinned; pin more only with counts showing no cost"}],
+ "informational": ["global_locale::GLOBAL placement comes from startup-state.list (declared), not startup-data.keys; the #4991 regen drop did not lose it (to be confirmed by the per-phase probes)", "no local cargo: nothing compiled in this run"],
+ "refused": [],
+ "improvement": "the role is single-tree: a base measurement job blocks syncing the change; a read-only base product per next revision (like wl_prime_base) for hot_text_products phases would remove that wait",
+ "next_step": "jobwait lhis-phases-base, sync, clippy + xtask unit tests, regen both profiles (--allow-drop, check only the 7 always-inlined keys drop), static, gate, phases vs base, plants",
+ "report_file": "handoff/LAYOUT-HOTKEY-INLINE-STABLE.md",
+ "jobs": ["lhis-phases-base"]}
