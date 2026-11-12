@@ -1,0 +1,11 @@
+{"task": "LIBM-RETHINK-BESSEL", "model": "opus", "tokens": null,
+ "result": "f32 j0f/j1f/y0f/y1f tiny band (|x| < 2^-20, probe ranks 5 and 9) answered from DLMF series terms instead of the MP path (D-10.106); large band and f64 bands designed, left as follow-up briefs",
+ "branch": "task/libm-rethink-bessel", "head": "285b4a1dd",
+ "gate": {"affected": "pending (libm-rethink-bessel-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "f32 large band (|x| >= 2^19) and f64 bands not done in this run", "recommendation": "cut handoff/LIBM-RETHINK-BESSEL/LIBM-F32-BESSEL-LARGE.md first (rank 4), then LIBM-F64-BESSEL-BANDS.md"}],
+ "informational": ["step-1 trace job ended rc 2 (role synced with the spec uncommitted); paths named from the code, not traced", "margin-halved plant marked EQUIVALENT: the tiny-band bounds are not tight enough for a sampled test to see it"],
+ "refused": [],
+ "improvement": "wl_percall/wl_trace refuse a dirty role: sync_role.sh could warn when the synced tree has uncommitted files",
+ "next_step": "collect the four keke jobs, then LIBM-F32-BESSEL-LARGE",
+ "report_file": "handoff/LIBM-RETHINK-BESSEL.md",
+ "jobs": ["libm-rethink-bessel-gate", "libm-rethink-bessel-plants", "libm-rethink-bessel-percall", "libm-rethink-bessel-sweeps"]}

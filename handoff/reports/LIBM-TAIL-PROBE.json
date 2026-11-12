@@ -1,0 +1,12 @@
+{"task": "LIBM-TAIL-PROBE", "model": "opus", "tokens": null,
+ "result": "Per-input cost profile of 31 f32 + 31 f64 unary and 10 binary libm functions vs glibc: glibc max <= 1025 instructions (except f64 fmod/remainder), Liella has 1e5-5e5-instruction bands on 20-80% of inputs of lgamma/tgamma/Bessel (f32 and f64), erfcf 22%, hypot 98% at ~3.7k; ranked bands in handoff/LIBM-TAIL-PROBE.md",
+ "branch": "task/libm-tail-probe", "head": null,
+ "gate": {"affected": "not run (measurement tool + report; clippy and static green)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "RETHINK stories for lgammaf/tgammaf (tiny and large |x|), Bessel j0f..y1f (large |x|, tiny x), erfcf/erf tiny and subnormal x, f64 hypot (every input ~3.7k)", "recommendation": "one RETHINK story per family in score order; brief files not written in this run"}],
+ "informational": ["exhaustive f32 done for 24 unary functions; lgammaf tgammaf j0f j1f y0f y1f erfcf sampled per input (1 in 1024) because an exhaustive Liella run projects to ~30 h each", "rdpmc traps on the Zen 1 build VM (~35 us per counter read)", "Liella ld.so has no library search, so Liella was measured statically linked (liella-cc), as cbench does", "glibc tail: f64 fmod/remainder with large exponent gaps, 4% of the sample over 2000 (max 3082)", "paths named by exported entry; multi-precision fallback inside math::special inferred from cost, not traced"],
+ "refused": [],
+ "improvement": "rdpmc traps on the build VMs: per-input instruction counting needs batching; a bare-metal or rdpmc-passthrough host would make exhaustive per-input runs feasible",
+ "next_step": "RETHINK lgamma/tgamma tiny-|x| band (41.8% of f32 inputs at ~4e5 instructions), then Bessel large-|x|; re-run validation/libm_tail/suite.sh after each fix",
+ "report_file": "handoff/LIBM-TAIL-PROBE.md",
+ "jobs": ["libm-tail-probe-clippy", "libm-tail-probe-s32", "libm-tail-probe-f64", "libm-tail-probe-ex1", "libm-tail-probe-ex2", "libm-tail-probe-ex3", "libm-tail-probe-analyze"]}

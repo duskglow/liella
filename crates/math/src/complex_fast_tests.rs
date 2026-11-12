@@ -42,6 +42,11 @@ fn operand(st: &mut u64, regime: usize) -> (f64, f64) {
 /// `n` operands per regime, all four modes, both types: every answer of the tier equals the
 /// route's (value bits and status), the in-place entries agree with mode Nearest; returns how
 /// many `double` operands (nearest) the tier answered in each regime.
+/// Whether the quick rounding test (to nearest) declines a part of an operand inside the tier.
+fn quick_declines(x: f64, y: f64) -> bool {
+    parts(x, y).is_some_and(|([(re, er), (im, ei)], m)| round(re, er, m, Rounding::Nearest).is_none() || round(im, ei, m, Rounding::Nearest).is_none())
+}
+
 fn compare(n: usize, seed: u64) -> [usize; 5] {
     let mut st = seed;
     let mut hits = [0usize; 5];
@@ -54,7 +59,12 @@ fn compare(n: usize, seed: u64) -> [usize; 5] {
                     assert_eq!((x, y, mode, r.0 .0.to_bits(), r.0 .1.to_bits(), r.1), (x, y, mode, w.0 .0.to_bits(), w.0 .1.to_bits(), w.1), "cexp quick tier differs");
                     if mode == Rounding::Nearest {
                         *hit += 1;
-                        assert_eq!(cexp_nearest(x, y).map(|(a, b)| (a.to_bits(), b.to_bits())), Some((r.0 .0.to_bits(), r.0 .1.to_bits())));
+                        // In place: the same bits, or a decline where the quick test declines
+                        // a part (the middle tier runs on the cold side, through `cexp`).
+                        match cexp_nearest(x, y) {
+                            Some((a, b)) => assert_eq!((a.to_bits(), b.to_bits()), (r.0 .0.to_bits(), r.0 .1.to_bits()), "cexp in place differs"),
+                            None => assert!(quick_declines(x, y), "cexp in place declined ({x:e}, {y:e}) although the quick test decides both parts"),
+                        }
                     }
                 }
                 // float: the threshold regimes scaled by 1/8 (x in ±[87.5, 93.75), across
@@ -176,7 +186,8 @@ fn cexp_quick_tier_declines_the_bench_box_only_when_forced() {
     let mut declined = 0;
     for _ in 0..256 {
         let (x, y) = (-3.0 + 6.0 * next(), -3.0 + 6.0 * next());
-        if cexp_nearest(x, y).is_some() {
+        // The tier with its middle part (the boundary's in-place attempt and cold fallback).
+        if cexp(x, y, Rounding::Nearest).is_some() {
             continue;
         }
         declined += 1;
@@ -225,9 +236,10 @@ fn cexp_middle_tier_decides_the_bench_hard_case() {
         let Some(((a, b), st)) = got else { continue };
         assert_eq!((a.to_bits(), b.to_bits(), st), (w.0 .0.to_bits(), w.0 .1.to_bits(), w.1), "cexp middle tier differs in {mode:?}");
     }
-    let n = cexp_nearest(x, y).map(|(a, b)| (a.to_bits(), b.to_bits()));
-    let w = cexp_route(x, y, Rounding::Nearest).0;
-    assert_eq!(n, Some((w.0.to_bits(), w.1.to_bits())), "cexp middle tier differs in place");
+    // no spec clause (performance guard, ruling #4885): the in-place kernel declines the part
+    // and leaves the middle tier to the cold fallback (`cexp` above), so the hot kernel keeps no
+    // operand live for an out-of-line call.
+    assert_eq!(cexp_nearest(x, y), None, "the in-place kernel answered a quick-test decline");
 }
 
 #[test]

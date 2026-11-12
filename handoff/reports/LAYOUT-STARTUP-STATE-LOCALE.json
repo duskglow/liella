@@ -1,0 +1,11 @@
+{"task": "LAYOUT-STARTUP-STATE-LOCALE", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE (context checkpoint): order pass + extended check + 19 list entries in WIP; locale/tool flat and lower across pads, but true +2 and the order test fails (ld -r join after the rename); do not land",
+ "branch": "task/layout-startup-state-locale", "head": null,
+ "gate": {"affected": "not run", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["copies::merge_codegen_units (ld -r) runs after move_startup_state and merges every .data1 input into one section in member order, release included (a c- and a liella_mem- member)", "one python heredoc used for a test edit early in the run, against the no-heredoc rule (content unaffected)"],
+ "refused": [],
+ "improvement": "the diag test printed every touched object's full archive path (one 60-line read cost ~8k tokens); print the member's short name, and keep the extended check's output to the bad set",
+ "next_step": "run move_startup_state after direct_internal_copies, find why csys_7's order did not stick, then find true's +2 (32 KiB .data1 alignment or the catalog tier), then plants/gate/pads",
+ "report_file": "handoff/LAYOUT-STARTUP-STATE-LOCALE.md",
+ "jobs": ["shiki:lssl-diag", "shiki:lssl-branch"]}
