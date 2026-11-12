@@ -2044,27 +2044,30 @@ fn math_sqrt_hardware_matches_the_software_square_root() {
 }
 
 #[test]
-fn math_sqrt_stays_out_of_place_under_an_unmasked_trap() {
+fn math_sqrt_runs_in_place_under_every_mask() {
     // Clauses: s10_0_f_0.
-    // D-10.22/D-10.71: the in-place `sqrtsd`/`sqrtss` runs only under a word whose exceptions are
-    // all masked. With the denormal-operand exception unmasked, a subnormal operand would trap in
-    // the instruction; the software path answers instead, with the reference bits, flags and
-    // errno, in every direction. The divide-by-zero, overflow and underflow masks (which a square
-    // root never raises) must give the same answers. Invalid and inexact stay masked: the
-    // harness's own arithmetic raises them.
+    // D-10.101 (probed: the reference's `sqrt`/`sqrtf` are the instruction on the caller's word):
+    // `sqrtsd`/`sqrtss` run in place under every word, with no MXCSR read on entry. With the
+    // divide-by-zero, overflow or underflow exception unmasked (a square root never raises them)
+    // the answer is the reference's bits, flags and errno in every direction, subnormal operands
+    // included; with the denormal-operand exception unmasked, a normal operand answers the same
+    // (a subnormal one traps in the instruction: conformance/c/s10_sqrt_env.c). Invalid and
+    // inexact stay masked: the harness's own arithmetic raises them.
     use liella_math::{fused, MathError, Rounding};
     let errno_of = |e: MathError| if e == MathError::Domain { 33 } else { 0 };
     let modes = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
     for unmask in [0x100_u32, 0x200, 0x400, 0x800] {
         for (rc, &mode) in (0u32..).zip(modes.iter()) {
             let mx = (0x1f80 & !unmask) | (rc << 13);
-            for x in [1e-310, 5e-324, 2.0, 0.5, -1.0] {
+            let sub64: &[f64] = if unmask == 0x100 { &[] } else { &[1e-310, 5e-324] };
+            let sub32: &[f32] = if unmask == 0x100 { &[] } else { &[1e-40, 1e-45] };
+            for &x in sub64.iter().chain(&[2.0, 0.5, -1.0, 3.0]) {
                 let (w, st) = fused::sqrt::<f64, f64>(x, mode);
                 let mut got = 0;
                 let seen = observe_with_ctl(mx, || got = m::sqrt(x).to_bits());
                 assert_eq!((mx, x.to_bits(), got, seen), (mx, x.to_bits(), w.to_bits(), (errno_of(st.error), Flags(st.flags.0))));
             }
-            for x in [1e-40f32, 1e-45, 2.0, 0.5, -1.0] {
+            for &x in sub32.iter().chain(&[2.0f32, 0.5, -1.0, 3.0]) {
                 let (w, st) = fused::sqrt::<f32, f32>(x, mode);
                 let mut got = 0;
                 let seen = observe_with_ctl(mx, || got = m::sqrtf(x).to_bits());

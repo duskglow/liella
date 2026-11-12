@@ -514,51 +514,42 @@ pub trait Sqrt: CVal {
 impl Sqrt for f64 {
     #[inline(always)]
     fn sqrt_c(self) -> f64 {
-        // The inline MXCSR read (D-X.44) and `sqrtsd` in a register, no call on the path (D-10.71).
-        let mx = fpregs::mxcsr();
-        if fpu::is_sqrt_in_place(mx) {
-            // The barrier keeps the root behind the mode test: a caller with an unmasked
-            // exception must never see the instruction run (D-X.44).
-            let x = self.pin();
-            // The root takes its own pinned copy of x, dead after it, so `sqrtsd` writes its
-            // operand's register: x stays live for the EDOM test, and a root into any other
-            // register merges that register's upper lane, waiting on its last writer (in a
-            // loop of calls, the previous root).
-            let r = crate::hot::sqrtsd(x.pin());
-            // EDOM exactly when a non-NaN operand gave NaN, that is for x < 0 as the caller's
-            // DAZ reads x (D-10.22: -0, a negative subnormal under DAZ and negative NaNs give none).
-            if r.is_nan() && !x.is_nan() {
-                sqrt_domain();
-            }
-            r
-        } else {
-            let x = if fpu::is_daz(mx) { self.daz() } else { self };
-            ret(liella_math::fused::sqrt::<f64, f64>(x, fpu::rounding_of(mx)))
+        // No MXCSR read (D-10.101): `sqrtsd` on the caller's own MXCSR is the operation in
+        // every environment the caller can set, by whatever means (fenv, a direct `ldmxcsr`, a
+        // thread's or signal handler's own word): correctly rounded in its direction, DAZ read
+        // by the hardware, FTZ never acting (a non-zero root is normal), its flags raised and an
+        // unmasked exception trapping at the instruction, before the EDOM store (probed).
+        let x = self;
+        // The root takes its own pinned copy of x, dead after it, so `sqrtsd` writes its
+        // operand's register: x stays live for the EDOM test, and a root into any other
+        // register merges that register's upper lane, waiting on its last writer (in a
+        // loop of calls, the previous root). The root is pinned too, so the EDOM test reads the
+        // instruction's own result: the compiler cannot derive it from x (x < 0) and store EDOM
+        // before an unmasked invalid exception traps in the instruction.
+        let r = crate::hot::sqrtsd(x.pin()).pin();
+        // EDOM exactly when a non-NaN operand gave NaN, that is for x < 0 as the caller's
+        // DAZ reads x (D-10.22: -0, a negative subnormal under DAZ and negative NaNs give none).
+        if r.is_nan() && !x.is_nan() {
+            sqrt_domain();
         }
+        r
     }
 }
 
 impl Sqrt for f32 {
     #[inline(always)]
     fn sqrt_c(self) -> f32 {
-        // The inline MXCSR read (D-X.44) and `sqrtss` in a register, no call on the path (D-10.71).
-        let mx = fpregs::mxcsr();
-        if fpu::is_sqrt_in_place(mx) {
-            // The barrier keeps the root behind the mode test: a caller with an unmasked
-            // exception must never see the instruction run (D-X.44).
-            let x = self.pin();
-            // Its own copy of x for the root, as in `sqrt` (no merge with another register).
-            let r = crate::hot::sqrtss(x.pin());
-            // EDOM exactly when a non-NaN operand gave NaN, that is for x < 0 as the caller's
-            // DAZ reads x (D-10.22: -0, a negative subnormal under DAZ and negative NaNs give none).
-            if r.is_nan() && !x.is_nan() {
-                sqrt_domain();
-            }
-            r
-        } else {
-            let x = if fpu::is_daz(mx) { self.daz() } else { self };
-            ret(liella_math::fused::sqrt::<f32, f32>(x, fpu::rounding_of(mx)))
+        // No MXCSR read (D-10.101), as in `sqrt`: `sqrtss` on the caller's own MXCSR.
+        let x = self;
+        // Its own copy of x for the root, as in `sqrt` (no merge with another register).
+        // The root pinned as in `sqrt`: EDOM is stored only after the instruction.
+        let r = crate::hot::sqrtss(x.pin()).pin();
+        // EDOM exactly when a non-NaN operand gave NaN, that is for x < 0 as the caller's
+        // DAZ reads x (D-10.22: -0, a negative subnormal under DAZ and negative NaNs give none).
+        if r.is_nan() && !x.is_nan() {
+            sqrt_domain();
         }
+        r
     }
 }
 
