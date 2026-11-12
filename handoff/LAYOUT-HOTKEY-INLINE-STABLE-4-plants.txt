@@ -1,9 +1,11 @@
-# LAYOUT-HOTKEY-INLINE-STABLE-4 plants (cargo xtask plants; docs/plants.md): the -3 pins and the check_pinned tier rules.
-# Direct tests: `cargo xtask static` (xtask/src/hottext.rs check_pinned on the real lists) and the xtask hottext unit tests.
-# 1-3. Each -3 pin (one per newly checked tier) loses its fixed boundary: static must name the function and its tier.
-iconv-load-unpinned | crates/boundary/src/iconv.rs | perl:s/#\[inline\(never\)\]\n(fn load\()/$1/ | cargo xtask static | msg:fn load is not #\[inline\(never\)\].*extra key
-real-secs-unpinned | crates/legacy/src/nscache.rs | perl:s/#\[inline\(never\)\]\n(fn real_secs<)/$1/ | cargo xtask static | msg:fn real_secs is not #\[inline\(never\)\].*tool key
-locale-builtin-unpinned | crates/core/src/locale/mod.rs | perl:s/#\[inline\(never\)\]\n(pub fn builtin\()/$1/ | cargo xtask static | msg:fn builtin is not #\[inline\(never\)\].*locale key
+# LAYOUT-HOTKEY-INLINE-STABLE-4 plants (cargo xtask plants; docs/plants.md): the -3 pin kept (nscache::real_secs) and the
+# check_pinned tier rules. Direct tests: `cargo xtask static` (xtask/src/hottext.rs check_pinned on the real lists) and the
+# xtask hottext unit tests. iconv::load and locale::builtin are #[inline(always)] now (no key): nothing to plant on them.
+# 1. The kept tool-tier pin loses its fixed boundary: static must name the function and its tier.
+real-secs-unpinned | crates/legacy/src/nscache.rs | perl:s/#\[inline\(never\)\]\n(fn real_secs<)/$1/ | cargo xtask static | msg:tool key\): .*fn real_secs is not #\[inline\(never\)\]
+# 2-3. A locale-tier and an extra-tier key lose their hot-text.unpinned line (the check covers those tiers, ruling #5024).
+unlisted-locale-setlocale | crates/libc-so/hot-text.unpinned | perl:s/^_RNvNtC15liella_boundary6locale9setlocale\tlocale\t[^\n]*\n//m | cargo xtask static | msg:locale key\): .*fn setlocale is not #\[inline\(never\)\]
+unlisted-extra-iconv-open | crates/libc-so/hot-text.unpinned | perl:s/^_RNvNtC15liella_boundary5iconv4open\textra\t[^\n]*\n//m | cargo xtask static | msg:extra key\): .*fn open is not #\[inline\(never\)\]
 # 4. An unpinned line names the wrong tier (a key that moved tier must be justified again).
 unpinned-wrong-tier | crates/libc-so/hot-text.unpinned | perl:s/^(_RNvNtC6liella5iconv7builtin)\textra\t/$1\tlocale\t/m | cargo xtask static | msg:listed under tier locale but is a extra key now
 # 5. The check falls back to the start-up tiers only (the pre-#5024 scope).
