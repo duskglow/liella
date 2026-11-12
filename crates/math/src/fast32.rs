@@ -42,7 +42,7 @@ use bessel::{bessel_core, bessel_finish};
 pub(crate) use cexp::{cexp_core, CEXP_DELTA};
 pub use cexp::{cexpf, cexpf_nearest};
 pub use clog_csqrt::{clogf, clogf_nearest, csqrtf, csqrtf_nearest};
-use erf::{erf_core, erf_tiny, erfc_core, erfc_tiny, ERFC_DELTA, ERF_DELTA};
+use erf::{erf_core, erf_refused, erfc_core, erfc_refused, ERFC_DELTA, ERF_DELTA};
 use exp_log::*;
 pub use gamma::{eval_lgamma, eval_tgamma};
 use gamma::{gamma_core, lgamma_core, TGAMMA_DELTA};
@@ -366,11 +366,8 @@ pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)> {
         Fast::Asinh => (asinh_core(x)?, ASINH_DELTA, "asinhf"),
         Fast::Acosh => (acosh_core(x)?, ACOSH_DELTA, "acoshf"),
         Fast::Atanh => (atanh_core(x)?, ATANH_DELTA, "atanhf"),
-        // Tiny operands the rounding test refuses (subnormal erf, erfc next to 1) take their
-        // own exact path on the refusal side (LIBM-RETHINK-ERFC, D-10.107), inlined: an
-        // out-of-line call there gave the entry a frame on every call (+9 instructions typical).
-        Fast::Erf => return finish(x, erf_core(x)?, ERF_DELTA, mode, "erff").or_else(|| erf_tiny(x, mode)),
-        Fast::Erfc => return finish(x, erfc_core(x)?, ERFC_DELTA, mode, "erfcf").or_else(|| erfc_tiny(x, mode)),
+        Fast::Erf => (erf_core(x)?, ERF_DELTA, "erff"),
+        Fast::Erfc => (erfc_core(x)?, ERFC_DELTA, "erfcf"),
         Fast::Tgamma => (gamma_core(f64::from(x))?, TGAMMA_DELTA, "tgammaf"),
         Fast::Lgamma => {
             let (y, d) = lgamma_core(x)?;
@@ -586,8 +583,24 @@ fast_fn!(tanh, Fast::Tanh, hyper);
 fast_fn!(asinh, Fast::Asinh, hyper);
 fast_fn!(acosh, Fast::Acosh, hyper);
 fast_fn!(atanh, Fast::Atanh, hyper);
-fast_fn!(erf, Fast::Erf, special);
-fast_fn!(erfc, Fast::Erfc, special);
+
+/// `erf` for `float`: the fast path, else [`erf_refused`] (the tiny operands' direct path, else
+/// the accurate path). The tiny operands are reached only from the refusal arm, out of line and
+/// cold, so a typical operand runs the fast path's code alone (LIBM-RETHINK-ERFC-3, D-10.107).
+pub fn erf(x: f32, mode: Rounding) -> (f32, Status) {
+    match eval(Fast::Erf, x, mode) {
+        Some(r) => r,
+        None => erf_refused(x, mode),
+    }
+}
+
+/// `erfc` for `float`: the fast path, else [`erfc_refused`] (as [`erf`]).
+pub fn erfc(x: f32, mode: Rounding) -> (f32, Status) {
+    match eval(Fast::Erfc, x, mode) {
+        Some(r) => r,
+        None => erfc_refused(x, mode),
+    }
+}
 
 #[cfg(test)]
 mod tests;

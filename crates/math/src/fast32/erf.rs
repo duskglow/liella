@@ -178,24 +178,50 @@ pub(super) fn erfc_tiny(x: f32, mode: Rounding) -> Option<(f32, Status)> {
     Some((f32::from_bits(bits), Status::flags(Flags::INEXACT).hw(hw)))
 }
 
+/// erff where [`super::eval`] refused: [`erf_tiny`]'s band, else the accurate path. Out of line
+/// and cold (LIBM-RETHINK-ERFC-3): the entry reaches it only from its refusal arm, so a typical
+/// operand pays no compare or branch for the band (inside `eval`, after the rounding test, the
+/// band cost a typical call 5 to 8 instructions more: D-10.107).
+#[cold]
+#[inline(never)]
+pub(super) fn erf_refused(x: f32, mode: Rounding) -> (f32, Status) {
+    match erf_tiny(x, mode) {
+        Some(r) => r,
+        None => crate::special::erf(x, mode),
+    }
+}
+
+/// erfcf where [`super::eval`] refused: [`erfc_tiny`]'s band, else the accurate path (as
+/// [`erf_refused`]).
+#[cold]
+#[inline(never)]
+pub(super) fn erfc_refused(x: f32, mode: Rounding) -> (f32, Status) {
+    match erfc_tiny(x, mode) {
+        Some(r) => r,
+        None => crate::special::erfc(x, mode),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::tests::{accurate, agree_in, exhaustive_oracle, MODES};
+    use super::super::tests::{accurate, agree_in, exhaustive_oracle_by, MODES};
 
     /// erff on every `float` operand in every mode, against the tiered oracle (whose mp tier is
-    /// the accurate path). (No spec clause: LIBM-F32-ERF.)
+    /// the accurate path): what the entry answers before the accurate path, the fast path and,
+    /// where it refuses, the tiny operands' direct path. (No spec clause: LIBM-F32-ERF,
+    /// LIBM-RETHINK-ERFC.)
     #[test]
     #[ignore]
     fn erff_fast_path_agrees_exhaustively() {
-        exhaustive_oracle(Fast::Erf, "erff", crate::oracle32::erf_est);
+        exhaustive_oracle_by(Fast::Erf, "erff", crate::oracle32::erf_est, |x, m| eval(Fast::Erf, x, m).or_else(|| erf_tiny(x, m)));
     }
 
     /// erfcf on every `float` operand in every mode (as for erff). (No spec clause.)
     #[test]
     #[ignore]
     fn erfcf_fast_path_agrees_exhaustively() {
-        exhaustive_oracle(Fast::Erfc, "erfcf", crate::oracle32::erfc_est);
+        exhaustive_oracle_by(Fast::Erfc, "erfcf", crate::oracle32::erfc_est, |x, m| eval(Fast::Erfc, x, m).or_else(|| erfc_tiny(x, m)));
     }
 
     /// The tiered oracle's decided answers equal the accurate path's in every mode: a stride over
@@ -249,26 +275,36 @@ mod tests {
                 }
             }
         }
-        assert!(agree_in(&fs, edges.into_iter()) > 900);
+        assert!(agree_in(&fs, edges.iter().copied()) > 900);
         for x in [0.0f32, -0.0, f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
             assert!(MODES.into_iter().all(|m| eval(Fast::Erf, x, m).is_none() && eval(Fast::Erfc, x, m).is_none()), "{x:e} refused");
         }
         // Subnormal erff results and erfcf next to 1 (D-10.107): the rounding test refuses them
-        // and the direct paths answer, exactly. x = ±n·2^-149 for the least subnormal and, on
-        // each side of a half-integer and of an integer, the three n ≤ ERF_TINY_MAX whose c·n
-        // (c = 2/√π) lies closest to it (2^-24.4 below a half-integer at n = 145635, 2^-23.4
-        // below an integer at 291270: the record's convergents), where an error in C or in a
-        // directed step shows first.
+        // and the entry answers them from its refusal arm, by the direct paths inside their
+        // bands, exactly. x = the subnormal edges above (erf_tiny's band end) and the hard
+        // operands ±n·2^-149: the least subnormal and, on each side of a half-integer and of an
+        // integer, the three n ≤ ERF_TINY_MAX whose c·n (c = 2/√π) lies closest to it (2^-24.4
+        // below a half-integer at n = 145635, 2^-23.4 below an integer at 291270: the record's
+        // convergents), where an error in C or in a directed step shows first. The direct paths
+        // narrow the hardware flags (`Status::hw`) and the accurate path does not, so `hw` shows
+        // which path the entry took.
         let hard = [1u32, 145_635, 436_905, 728_175, 291_270, 582_540, 873_810, 6_784_882, 7_076_152, 7_367_422, 6_639_247, 6_930_517, 7_221_787];
-        let tiny: std::vec::Vec<f32> = hard.into_iter().flat_map(|n| [f32::from_bits(n), -f32::from_bits(n)]).collect();
-        for &x in &tiny {
+        let hard = hard.into_iter().flat_map(|n| [f32::from_bits(n), -f32::from_bits(n)]).map(|x| (x, true));
+        for (x, is_hard) in hard.chain(edges.into_iter().filter(|x| x.is_subnormal()).map(|x| (x, false))) {
             for m in MODES {
-                let direct = (erf_tiny(x, m), erfc_tiny(x, m));
-                assert!(direct.0.is_some() && direct.1.is_some(), "{x:e} {m:?}: inside the direct paths' bands");
-                assert_eq!((eval(Fast::Erf, x, m), eval(Fast::Erfc, x, m)), direct, "{x:e} {m:?}: answered by the direct paths");
+                assert!(eval(Fast::Erf, x, m).is_none() && eval(Fast::Erfc, x, m).is_none(), "{x:e} {m:?}: refused by the rounding test");
+                let paths = [(Fast::Erf, super::super::erf(x, m), erf_tiny(x, m)), (Fast::Erfc, super::super::erfc(x, m), erfc_tiny(x, m))];
+                for (f, got, direct) in paths {
+                    let (want, key) = (accurate(f, x, m), (f, m, x.to_bits()));
+                    assert_eq!((key, got.0.to_bits(), got.1), (key, want.0.to_bits(), want.1), "the entry agrees with the accurate path");
+                    assert!(direct.is_some() || !is_hard, "{key:?}: inside the direct path's band");
+                    if let Some(d) = direct {
+                        assert_ne!(want.1.hw, d.1.hw, "{key:?}: hw tells the paths apart");
+                        assert_eq!((key, got.1.hw), (key, d.1.hw), "{key:?}: answered by the direct path");
+                    }
+                }
             }
         }
-        assert_eq!(agree_in(&fs, tiny.into_iter()), 2 * 4 * 26);
     }
 
     /// erf_core and erfc_core within ERF_BOUND and ERFC_BOUND against the correctly rounded

@@ -928,11 +928,11 @@ fn fast_path_agrees_exhaustively() {
 /// `f` against the tiered oracle (ruling #2889) on `xs`, `est` its family's estimator: one
 /// oracle call per operand the fast path takes in any mode, the accurate path only for the
 /// modes the double-double tier leaves undecided; the number of calls taken.
-pub(super) fn agree_oracle(f: Fast, est: impl Fn(f32) -> crate::oracle32::Est, xs: impl Iterator<Item = f32>, tally: &crate::oracle32::Tally) -> u64 {
+pub(super) fn agree_oracle(f: Fast, get: impl Fn(f32, Rounding) -> Option<(f32, Status)>, est: impl Fn(f32) -> crate::oracle32::Est, xs: impl Iterator<Item = f32>, tally: &crate::oracle32::Tally) -> u64 {
     use crate::oracle32 as o;
     let mut taken = 0;
     for x in xs {
-        let got = o::MODES.map(|m| eval(f, x, m));
+        let got = o::MODES.map(|m| get(x, m));
         if got.iter().all(Option::is_none) {
             continue;
         }
@@ -952,7 +952,13 @@ pub(super) fn agree_oracle(f: Fast, est: impl Fn(f32) -> crate::oracle32::Est, x
 /// estimator; `LIELLA_SWEEP_STRIDE` thins the sweep); prints the calls taken and how often the
 /// oracle needed the mp path.
 pub(super) fn exhaustive_oracle(f: Fast, name: &str, est: impl Fn(f32) -> crate::oracle32::Est + Sync) {
+    exhaustive_oracle_by(f, name, est, |x, m| eval(f, x, m));
+}
+
+/// [`exhaustive_oracle`] with `get` in place of [`eval`]: the fast path and what its entry adds
+/// before the accurate path (erff and erfcf: the tiny operands' direct paths, D-10.107).
+pub(super) fn exhaustive_oracle_by(f: Fast, name: &str, est: impl Fn(f32) -> crate::oracle32::Est + Sync, get: impl Fn(f32, Rounding) -> Option<(f32, Status)> + Sync) {
     let tally = crate::oracle32::Tally::default();
-    let taken = exhaustive_by(|xs| agree_oracle(f, &est, xs.iter().copied(), &tally));
+    let taken = exhaustive_by(|xs| agree_oracle(f, &get, &est, xs.iter().copied(), &tally));
     std::println!("{name} fast path taken {taken} of {} calls; oracle: {}", 4u64 << 32, tally.summary());
 }
