@@ -1,0 +1,11 @@
+id = "D-10.114"
+section = "s10"
+spec = "§10.2"
+ann = "—"
+status = "active"
+amends = ["D-10.64", "D-10.65"]
+story = "PERF-SSE2-COUNT-AUDIT"
+date = "2026-11-12"
+body = '''
+**SSE2-build instruction counts for D-10.64 and D-10.65** (PERF-SSE2-COUNT-AUDIT). Both rows say their SSE2-build counts were NOT VERIFIED: before D-X.39, `cargo xtask bench` dropped a caller's `GLIBC_TUNABLES`, so those passes printed `tunables: GLIBC_TUNABLES=(unset)` and ran the FMA build. Recount on next with `--tunables glibc.cpu.hwcaps=-FMA` (`bench --compare --counters --runs 3 cbench_libm`, Haswell-EP host, both sides at the same level; Liella / glibc instructions per call): exp2 100.4 / 51.1, exp10 120.8 / 56.1, expm1 149.7 / 104.3; asinh 197.5 / 115.1, acosh 184.6 / 98.8, atanh 191.3 / 130.7. Default build on the same run: exp2 86.2 / 51.1, exp10 101.9 / 56.1, expm1 125.3 / 86.4, asinh 133.6 / 99.4, acosh 122.6 / 83.6, atanh 140.2 / 112.7. Neither row's conclusion changes. D-10.64's SSE2 choice (keep the low part off the reduction product, fallback 1.14%) rests on a fallback-rate estimate that these counts do not test. The SSE2 build of the D-10.65 entries costs 51 to 64 more instructions than the FMA build, against 14 to 33 more in the exp and log families. Table and method: handoff/reports/PERF-SSE2-COUNT-AUDIT.md.
+'''
