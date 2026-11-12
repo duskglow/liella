@@ -23,6 +23,10 @@ DO NOT LAND as it stands: the mid and tiny rows are slower than next (below).
 - tiny: j0f 94.0 -> 102.0, j1f 119.7 -> 129.7, y0f 340.9 -> 347.9, y1f 313.6 -> 318.3 (+4.7..+10).
 
 ## Next step (continuation)
+0. gate4 (80f128b5a, shiki) rc 1: only `liella::hot_text_products init_data_clusters_hold_at_every_text_phase`
+   failed (clippy, static ok). The change touches no start-up code: run that test on origin/next fe4c4893d in the
+   same way first; if next fails too, or it moves with code growth, it is LAYOUT-JITTER (ruling #4347: do not
+   chase, hand back `INCOMPLETE: LAYOUT-JITTER` with the numbers). Not analysed in run 2 (context checkpoint).
 1. Profile first: `validation/wl_trace.sh --spec validation/percall/libm_bessel.c . bes_j0f_mid j0f` on head and on
    base fe4c4893d (primed on shiki); find where the +17.7 goes. Likely: the large-band test now sits at the top of
    `bessel_eval` (every band pays its compare and the `f < 2 || x > 0` test) and the out-of-line call changes the
