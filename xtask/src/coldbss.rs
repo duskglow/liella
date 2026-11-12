@@ -531,14 +531,14 @@ mod tests {
         // The zero-filled ones of the member with the most such bytes go to the page-aligned `.lbss` cluster,
         // in list order, ahead of that member's cold tables; an initialised one, and another member's, stay
         // in `.data1` after the every-process tier.
-        let list = declared("liella_boundary::heap::HEAP\ncluster first-call\nliella_legacy::intl::RESOLVED\nsymbol stdout\nsymbol __daylight\nliella_legacy::intl::LOCK\n").unwrap();
-        assert_eq!(list.iter().map(|e| e.3).collect::<Vec<_>>(), [false, true, true, true, true]);
+        let fc_list = declared("liella_boundary::heap::HEAP\ncluster first-call\nliella_legacy::intl::RESOLVED\nsymbol stdout\nsymbol __daylight\nliella_legacy::intl::LOCK\n").unwrap();
+        assert_eq!(fc_list.iter().map(|e| e.3).collect::<Vec<_>>(), [false, true, true, true, true]);
         assert!(declared("cluster first-call\ncluster first-call\n").unwrap_err().contains("a second"));
-        let members = vec![
+        let fc_members = vec![
             ("r.o".to_string(), vec![sec(".bss.big", SHT_NOBITS, 2048), sec(".bss._RNvNtCs1_13liella_legacy4intl4LOCK", SHT_NOBITS, 4), sec(".data.stdout", 1, 8), sec(".bss._RNvNtCs1_13liella_legacy4intl8RESOLVED", SHT_NOBITS, 4096), sec(".bss._RNvNtCs1_15liella_boundary4heap4HEAP", SHT_NOBITS, 5376)]),
             ("c.o".to_string(), vec![sec(".bss.__daylight", SHT_NOBITS, 4)]),
         ];
-        let plan = state_plan(&members, &list).unwrap();
+        let plan = state_plan(&fc_members, &fc_list).unwrap();
         let to = |m: &str, s: &str, want: &str| plan.renames[m].iter().any(|(f, t)| f.ends_with(s) && t == want);
         assert!(to("r.o", "4HEAP", ".data1") && to("r.o", "RESOLVED", ".lbss") && to("r.o", "4LOCK", ".lbss") && to("r.o", "stdout", ".data1") && to("c.o", "__daylight", ".data1"), "{:?}", plan.renames);
         assert_eq!(plan.order["r.o"], [".bss._RNvNtCs1_15liella_boundary4heap4HEAP", ".data.stdout", ".bss._RNvNtCs1_13liella_legacy4intl8RESOLVED", ".bss._RNvNtCs1_13liella_legacy4intl4LOCK", ".bss.big"]);
