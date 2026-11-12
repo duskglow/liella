@@ -1,0 +1,17 @@
+{"task": "TB-FOREIGN-SAFETY-8", "model": "opus", "tokens": null,
+ "result": "D-X.58 gate is one cmpb: owned() reads OWNED_HERE non-atomically (unsafe category process-flag, ruling #4888, audited: thread.rs only, one body); #4779 met on Release: +2 per call on mb_cur_max/toupper/iswalpha/towupper vs next (Fast +3)",
+ "branch": "task/tb-foreign-safety-8", "head": "4d6206d76",
+ "gate": {"affected": "keke tb-foreign-safety-8-gate-3 (pending at hand-back)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "Release per-call counts measured without tooling: LIELLA_FULL_PROFILE=1 wl_percall --rev <sha>-release --base none; next's tip counted from a scratch copy of ~/wl/src/<sha> with a minimal .synced marker (wl_percall takes only a git tree or role dir)",
+  "merge of origin/next needed two list fixes: startup-state.list (thread::OWNED -> OWNED_HERE + symbol liella_machine_owned) and five hot-text.absent keys inlined in one profile",
+  "the process-flag category is recorded in D-X.58 (this story's own unlanded record), no D-NEW",
+  "mbrtowc/mbstowcs/wcrtomb are +6..+12 in Release (several owned() reads per call): hoist one per entry if #4779 extends to them"
+ ],
+ "refused": [],
+ "jobs": ["tb-foreign-safety-8-gate-3", "tb-foreign-safety-8-plants-4", "tb-foreign-safety-8-percall-3", "tb-foreign-safety-8-percall-rel-new3", "tb-foreign-safety-8-percall-rel-base2"],
+ "improvement": "wl_percall should take a primed ~/wl/src/<sha> directly and a --profile release flag; a plant that inserts code must compile before an audit-only cmd can see it",
+ "next_step": "land; follow-up: hoist owned() in mbrtowc/mbstowcs/wcrtomb; wl_prep Release profile option (#4889)",
+ "report_file": "handoff/TB-FOREIGN-SAFETY.md"}

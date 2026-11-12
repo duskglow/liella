@@ -1,72 +1,58 @@
 # TB-FOREIGN-SAFETY: Liella's thread-block words never trusted or written in a block Liella did not make
 
-State: branch `task/tb-foreign-safety-7` (run 7; continues -6 at 70eeb1619, no merge; merge-base with origin/next
-ca8aa835a). HEAD: the report commit on top of e8c366306 (code: 5f02254fb, then three test-only commits). Decision in
-force: **D-X.58** (records/decisions/D-X/D-X.58.toml; rulings #4212, #4213, #4214, #4241, #4253, #4287, #4779, #4828).
-**Ruling #4779's condition (<= +2 per one-access call) is still not met: +4 on every row in the counts (Fast-profile
-products), down from +4..+7.** Do not land until RULING NEEDED 1 below is decided.
+State: branch `task/tb-foreign-safety-8` (run 8; continues -7; origin/next 9042cc44f merged in 100c3b9d6, allowed by
+the brief). Code head 4d6206d76 (then handoff/report commits). Decision in force: **D-X.58**
+(records/decisions/D-X/D-X.58.toml; rulings #4212, #4213, #4214, #4241, #4253, #4287, #4779, #4828, #4888, #4889).
+**Ruling #4779 is met on the Release build (#4889): +2 instructions per call on mb_cur_max, toupper, iswalpha and
+towupper against next's tip.**
 
 ## The design (D-X.58, short)
-Ownership = process-level byte `liella_machine_owned` (csys/src/machine/points.S, `.hidden`), set by `init_initial`
-(crates/boundary/src/thread.rs) when the runtime started the process. Rust reads a crate-private mirror
-`thread::OWNED_HERE` (`thread::owned()`). In a process another C library started, `thread::words()` /
-`foreign_words()` give the thread's registry words. 0x9c flags and 0x138 view are never read in a foreign process.
-Gated sites: see the table in -6's note (unchanged): points.S entries, locale.rs view/ctype words/uselocale/lconv,
-netdb/resolv, ld.rs `__tls_get_addr`.
+Ownership = process-level byte `liella_machine_owned` (csys/src/machine/points.S, `.hidden`, now in its own
+`.data.liella_machine_owned`), set by `init_initial` (crates/boundary/src/thread.rs) when the runtime started the
+process. Rust reads the crate-private mirror `thread::OWNED_HERE` through `thread::owned()`, now a **plain read**
+(`*OWNED_HERE.as_ptr()`, unsafe category *process-flag*, owner ruling #4888), so the gate is one `cmpb`. In a process
+another C library started, `thread::words()` / `foreign_words()` give the thread's registry words. Gated sites: see
+-6's table (unchanged).
 
-## Run 7 (ruling #4828: make the gate cheap)
-- Step 0 on 70eeb1619: clippy + static green (mei tb-foreign-safety-7-lint-0).
-- 5f02254fb: **tail-call shape.** `locale::with_view(f)` / `with_current(f)`: the foreign case hands the entry's
-  last step (a closure, by value) to the cold generic `foreign_with_view`, a `jmp`, so the owned path keeps no frame.
-  Used by `MB_CUR_MAX`, `wcwidth`, `btowc`, `wctob`, `towctrans`, `iswctype`. `isw_int` / `wtrans` (the twelve
-  `isw*` and `tow*` entries) use a cold function each instead: one closure shared by twelve entries was called, not
-  inlined (seen in the disassembly). Release disassembly: `__ctype_get_mb_cur_max`, `iswalpha`, `towupper` lost
-  their `push`/`sub rsp` prologue. The foreign-block test now also asks `iswalpha`, `MB_CUR_MAX` and the address
-  `view()` returns (`towupper` no longer reaches `view()`, and `mblen` of an ASCII byte answers the same through
-  any view: plants-1 and -3 had `view-ungated` SURVIVED for that; fixed in e8c366306).
-- Jobs (mei): lint-4 (clippy workspace + xtask clippy + static) green; gate-4, plants-4, percall-3 on e8c366306
-  (results in the report json and the hand-back). Superseded: gate-1/-2/-3 (stopped: the head moved), plants-1/-3
-  (view-ungated survived), lint-2 (clippy manual_c_str_literals), percall-1/-2 (same code, earlier heads).
-- **Why the gate is still 3-4 instructions, not 2 (measured, mei):**
-  1. No atomic byte load is folded into `cmpb`: of 846 reads of `OWNED_HERE`/`LOCK_ALONE` in the release libc.a,
-     every one is `movzbl` + `test` (`LOCK_ALONE` is `Relaxed`). Relaxed vs Acquire changes nothing on x86.
-  2. GOT: `wl_percall`/`wl_prep` build their products with plain `cargo xtask so` = the **Fast** profile (thin
-     LTO, 16 CGUs). There `OWNED_HERE` is an exported symbol (reachable through `pub #[inline]` fns such as
-     `locale::view`), so it is read through `R_X86_64_REX_GOTPCRELX` (+1: `mov GOT,%rax; movzbl (%rax)`). In the
-     shipped Release build (fat LTO, `LIELLA_FULL_PROFILE=1 cargo xtask so`) it is internal: `movzbl X(%rip)`.
-  So the percall rows show +4 (GOT load + movzbl + test + je); the shipped build should show +3 (from the
-  disassembly; Release per-call counts were NOT measured: the percall cache is keyed by sha, not profile).
+## Run 8
+- Step 0 on the inherited head 555a7ca52: clippy + static green (keke tb-foreign-safety-8-lint-0).
+- 100c3b9d6: merge origin/next. Conflicts: ld.rs (both sides kept), hot-text.list and startup-data.keys (next's
+  taken, hot-lists lane).
+- 23806b6fe: **process-flag**. `owned()` reads `OWNED_HERE` non-atomically; xtask/src/policy.rs knows the category,
+  permits it only in `src/thread.rs` and only with the body `*OWNED_HERE.as_ptr()`; docs/architecture.md S2 row; the
+  D-X.58 body records the category, the write-before-first-thread argument and #4779/#4889. Recorded in D-X.58 (this
+  story's own record, not landed yet) instead of a new D-NEW record.
+- e27ef6381: next's `startup-state.list` named `thread::OWNED` (gone on this branch): now `OWNED_HERE` and
+  `symbol liella_machine_owned` (both written at start-up), the asm byte in a section of its own.
+- 4d6206d76: `hot-text.absent` gets five keys this branch's code inlines in one profile (fast: locale publish_global,
+  iconv convert/load, nscache real_secs; release: regex ThreadScratch::table). next's hot-text.list untouched.
+- Jobs (keke, role n1): gate-3, plants-4, percall-3 (Fast), percall-rel-new3 + percall-rel-base2 (Release). Superseded:
+  gate-1/-2, plants-1/-2, percall-1/-2, percall-rel-new/-new2 (xtask so refused the merged lists, fixed above),
+  percall-rel-base (wl_percall refuses a dir that is neither git tree nor role dir), plants-3 (process-flag-elsewhere
+  WARN-NO-MSG: the planted read did not compile, so static stopped before the audit; plant fixed for plants-4).
+- Release per-call counts without tooling: `LIELLA_FULL_PROFILE=1 wl_percall.sh --rev <sha>-release --base none`
+  (products cached under `<sha>-release`, no Fast cache touched); next's tip counted from a scratch copy of the primed
+  `~/wl/src/9042cc44f...` with a minimal `.synced` marker (~/work/TB-FOREIGN-SAFETY-8/start2.sh on keke).
 
-## Ruling #4779 counts (instructions:u per call, wl_percall --spec validation/percall/locale.c, mei, base = primed next ca8aa835a, Fast-profile products)
-| case | glibc | next base | run 6 | run 7 | delta vs next |
-|---|---|---|---|---|---|
-| mb_cur_max | 15 | 12 | 18 | 16 | +4 |
-| toupper_ascii | 24 | 24 | 28 | 28 | +4 |
-| iswalpha_2byte | 51 | 29 | 35 | 33 | +4 |
-| towupper_2byte | 41 | 28 | 35 | 32 | +4 |
-| wcwidth_2byte | 45 | 50 | 57 | 54 | +4 |
-| wcrtomb_2byte | 244 | 112 | 118 | 118 | +6 |
-| mbrtowc_ascii / _2byte | 211 / 234 | 42 / 56 | 55 / 70 | 55 / 70 | +13 / +14 |
-| regexec_short, mbstowcs_short | | 1248.6, 572 | 1262.6, 592 | 1262.5, 592 | +14, +20 |
-(run 6's column was measured on shiki; run 7 on mei; base and glibc columns agree.)
-
-## RULING NEEDED
-1. **The `cmpb` fold needs a non-atomic read of the write-once byte.** A plain (or volatile) read of a static
-   written once in `init_initial` before any thread exists folds to `cmpb $0, X(%rip)`; it needs `unsafe` in
-   thread.rs, which no category in docs/architecture.md S2 permits. Recommend: a narrow category (e.g.
-   *process-flag*: a non-atomic read of a byte written only before the first thread is created; thread.rs only),
-   which gives +3 -> +2 in Release. Alternative: accept +3 (Release) for #4779.
-2. **Per-call counts measure the Fast profile, not what ships** (`wl_prep` runs plain `cargo xtask so`). Here that
-   costs +1 (a GOT load) that the shipped build does not have. Recommend: `wl_prep` builds with
-   `LIELLA_FULL_PROFILE=1` (and keys its product cache by profile), since #4779-style instruction limits are judged
-   from these counts. Also fixable here without tooling: make `owned()` reachable only crate-internally (no
-   `pub #[inline]` caller), so the Fast build hides `OWNED_HERE` too; wide visibility change, not done.
+## Counts (instructions:u per call, validation/percall/locale.c, keke, base = next 9042cc44f)
+| case | glibc | next Release | run 8 Release | delta | next Fast | run 8 Fast | delta |
+|---|---|---|---|---|---|---|---|
+| mb_cur_max | 15 | 12 | 14 | **+2** | 12 | 15 | +3 |
+| toupper_ascii | 24 | 24 | 26 | **+2** | 24 | 27 | +3 |
+| iswalpha_2byte | 51 | 30 | 32 | **+2** | 29 | 32 | +3 |
+| towupper_2byte | 41 | 29 | 31 | **+2** | 28 | 31 | +3 |
+| wcwidth_2byte | 45 | 48 | 50 | +2 | 50 | 53 | +3 |
+| wcrtomb_2byte | 244 | 91 | 97 | +6 | 111 | 117 | +6 |
+| mbrtowc_ascii / _2byte | 211 / 234 | 42 / 56 | 53 / 68 | +11 / +12 | 42 / 56 | 54 / 69 | +12 / +13 |
+| mbstowcs_short | 452 | 562 | 572 | +10 | 578 | 591 | +13 |
+| regexec_short | 8407 | 1272.7 | 1263.7 | -9 | 1248.6 | 1261.6 | +13 |
+Fast keeps +1 over Release (the GOT load of an exported symbol, -7's note). The `cmpb` was not re-checked in the
+disassembly this run (the objdump grep found no symbol); the +2 counts are the evidence.
 
 ## Exact next step
-After ruling 1: read `OWNED_HERE` non-atomically in `owned()` (category per the ruling), check the release
-disassembly for `cmpb $0, ...(%rip)`, then count (Release products if ruling 2 lands). mbrtowc (+13/+14) and
-mbstowcs (+20) have several gated accesses per call: hoist one `owned()` per entry if the target extends to them.
-DL-13's `__liella_tls_init`/`release` (not on next yet) need the same gate and foreign-block test (#4503, #4781).
+Land. Follow-ups (not this story): mbrtowc/mbstowcs/wcrtomb read `owned()` several times per call (+6..+12): hoist one
+per entry if #4779 is extended to them. wl_prep's Release profile option (#4889 follow-up). DL-13's
+`__liella_tls_init`/`release` need the same gate and foreign-block test when they land (#4503, #4781).
 
 ## Open (D-X.58 known limits)
 - A dead foreign thread's resolver state is not freed on entry reuse; TID reuse at the same thread pointer looks
@@ -74,7 +60,7 @@ DL-13's `__liella_tls_init`/`release` (not on next yet) need the same gate and f
 - ld.so: in a process it started, every thread block is taken as its runtime's.
 
 ## Do not redo
-- No ownership test inside the block can be safe (D-X.58 options). Run 6 plants: 10/10 CAUGHT.
-- A Relaxed atomic load does not give `cmpb` (846 of 846 reads are movzbl/test). The GOT load is the Fast profile's.
+- No ownership test inside the block can be safe (D-X.58 options). An atomic byte load never folds into `cmpb`.
 - One `with_view` closure shared by many entries is outlined; use a cold function per helper (`isw_int`, `wtrans`).
+- A plant that plants code into another file must compile there, or `cargo xtask static` stops at the build.
 - Never `--allow-drop` a key `xtask so` does not call dead (start::program, run 5).
