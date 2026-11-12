@@ -9,7 +9,7 @@
 # (gcc -O2 -Wl,-z,now: the system's libc.so.6, as every real program uses it; TOOLS-PERCALL 2026-10-10: static
 # glibc ignores the locale for collation, so its locale rows were not a reference). -z now binds every PLT slot at
 # startup, so the n = 0 run pays the whole ld.so cost and the per-call delta holds none of it. Liella: static,
-# scripts/liella-cc against ~/wl/products/<sha>. Per case: `perf stat -r 5` of n=0 (setup only) and n=N; per call =
+# scripts/liella-cc against ~/wl/products/$(wl_key <sha>) (<sha>-release). Per case: `perf stat -r 5` of n=0 (setup only) and n=N; per call =
 # (I(N) - I(0)) / (N * per). Rows cached in ~/wl/percall/<variant>/<hash>.<case>.tsv (glibc: variant glibc-dyn).
 # Row: per_call  sd_per_call  calls  per
 # EVENT: WL_EVENT (default instructions:u) is the counted perf event; rows of other events are cached as
@@ -53,7 +53,12 @@ dir=$data/d
 variants=(glibc); [ "$base" != - ] && variants+=("$base"); variants+=("$new")
 [ -n "$trace" ] && variants=("$new")
 
-vdir() { [ "$1" = glibc ] && echo "$W/percall/glibc-dyn" || echo "$W/percall/$1"; }
+# PROFILE (WL-PREP-RELEASE-PROFILE): a commit's products, binaries and rows live under its key, $(wl_key <sha>)
+# (validation/wl_lock.sh): <sha>-release (default, what ships) or <sha> (WL_PROFILE=fast).
+wl_profile > /dev/null || exit 2
+echo "products profile: $(wl_profile)"
+vdir() { [ "$1" = glibc ] && echo "$W/percall/glibc-dyn" || echo "$W/percall/$(wl_key "$1")"; }
+pdir() { echo "$W/products/$(wl_key "$1")"; }
 build() { # variant -> binary path on stdout (built under a temporary name, then renamed: concurrent runs never see half a binary)
     local v=$1 out
     out=$(vdir "$1")/$h
@@ -63,20 +68,20 @@ build() { # variant -> binary path on stdout (built under a temporary name, then
             # -lm: math specs (hypotf.c); gcc's default --as-needed leaves libm out of every other spec's binary.
             gcc -O2 -Wl,-z,now -I"$src" -o "$out/pc.$$" "$src"/harness.c "$src"/spec.c -lm || exit 1
         else
-            [ -f "$W/products/$v/libc.a" ] || { echo "wl_percall: no products for $v" >&2; exit 1; }
+            wl_products_ok "$(pdir "$v")" || { echo "wl_percall: no $(wl_profile) products for $v in $(pdir "$v")" >&2; exit 1; }
             # The cached tree's own wrapper matches the products being linked; ~/liella-test (an old copy on some
             # hosts) predates -lm handling and leaves math specs with undefined references.
             lcc=$W/src/$v/scripts/liella-cc
             [ -x "$lcc" ] || lcc=$HOME/liella-test/scripts/liella-cc
             # -lm as for glibc: liella-cc links Liella's libm.a (math specs) only when -lm is given.
-            LIELLA_PRODUCTS=$W/products/$v "$lcc" -O2 -I"$src" -o "$out/pc.$$" "$src"/harness.c "$src"/spec.c -lm || exit 1
+            LIELLA_PRODUCTS=$(pdir "$v") "$lcc" -O2 -I"$src" -o "$out/pc.$$" "$src"/harness.c "$src"/spec.c -lm || exit 1
         fi
         mv -f "$out/pc.$$" "$out/pc"
     fi
     echo "$out/pc"
 }
 for v in "${variants[@]}"; do
-    [ "$v" = glibc ] || [ -f "$W/products/$v/libc.a" ] || { wl_lock "$v"; wl_build_products "$v" || exit 1; wl_unlock; }
+    [ "$v" = glibc ] || wl_products_ok "$(pdir "$v")" 2>/dev/null || { wl_lock "$v"; wl_build_products "$v" || exit 1; wl_unlock; }
 done
 declare -A bin
 for v in "${variants[@]}"; do bin[$v]=$(build "$v") || exit 1; done
