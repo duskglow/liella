@@ -32,21 +32,72 @@ use crate::so::OWN_PREFIX;
 pub const REGEN_FLAG: &str = "--hottext-regen";
 static REGEN: AtomicBool = AtomicBool::new(false);
 
+/// HOTLIST-REGEN-CHEAP: `cargo xtask so --hottext-regen --libc-only <dir>` builds only what the regen's
+/// traces link (`libc.a`, `liella-crt1.o` and the `.profile` marker) into `<dir>`, never into
+/// `target/liella`: no libc.so.6, libm, ld.so or layout check (79% of a regen was product builds).
+pub const LIBC_ONLY_FLAG: &str = "--libc-only";
+
 /// The arguments of `cargo xtask so`: [`REGEN_FLAG`] turns the regen mode on; it is refused under
-/// CI (the `CI` variable set) and any other argument is an error.
-pub fn regen_mode(args: &[String]) -> Result<(), String> {
+/// CI (the `CI` variable set). [`LIBC_ONLY_FLAG`] `<dir>` (only with [`REGEN_FLAG`]) returns `<dir>`.
+/// Any other argument is an error.
+pub fn regen_mode(args: &[String]) -> Result<Option<std::path::PathBuf>, String> {
     let mut on = false;
-    for a in args {
+    let mut libc_only = None;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
         if a == REGEN_FLAG {
             on = true;
+        } else if a == LIBC_ONLY_FLAG {
+            let dir = it.next().filter(|d| !d.is_empty()).ok_or_else(|| format!("so: {LIBC_ONLY_FLAG} needs a directory"))?;
+            libc_only = Some(std::path::PathBuf::from(dir));
         } else {
-            return Err(format!("so: unknown argument {a:?} (the only one is {REGEN_FLAG}, for tools/hottext/regen.sh)"));
+            return Err(format!("so: unknown argument {a:?} (the only ones are {REGEN_FLAG} [{LIBC_ONLY_FLAG} <dir>], for tools/hottext/regen.sh)"));
         }
+    }
+    if libc_only.is_some() && !on {
+        return Err(format!("so: {LIBC_ONLY_FLAG} builds regen products only: it needs {REGEN_FLAG}"));
     }
     if on && std::env::var_os("CI").is_some_and(|v| !v.is_empty()) {
         return Err(format!("so: {REGEN_FLAG} is for tools/hottext/regen.sh only, never under CI"));
     }
     REGEN.store(on, Ordering::Relaxed);
+    Ok(libc_only)
+}
+
+/// Whether this run builds in the regen mode ([`REGEN_FLAG`]).
+pub fn regen_on() -> bool {
+    REGEN.load(Ordering::Relaxed)
+}
+
+/// The archive exactly as [`group`] received it in a regen build (`target/product/<profile>/`), kept so
+/// that [`recheck_cmd`] can rerun the grouping alone on the rewritten list.
+pub const PRE_GROUP_ARCHIVE: &str = "hot-text.pre-group.a";
+
+/// `cargo xtask hottext-recheck` (HOTLIST-REGEN-CHEAP): the check a regen ends with, without a second
+/// full `cargo xtask so`. For each profile, [`group`] (the grouping, its cluster check and the
+/// dead-key check, enforced: not the regen mode) runs again on a copy of [`PRE_GROUP_ARCHIVE`] with the
+/// rewritten `crates/libc-so/hot-text.list`. Fails when a profile has no such archive (run
+/// `regen.sh . --both` first) or when the check fails.
+pub fn recheck_cmd(root: &Path, args: &[String]) -> Result<(), String> {
+    if !args.is_empty() {
+        return Err("usage: cargo xtask hottext-recheck".into());
+    }
+    let ar = std::env::var("AR").unwrap_or_else(|_| "ar".into());
+    let product = root.join("target/product");
+    let list = root.join("crates/libc-so/hot-text.list");
+    for p in [crate::so::Profile::Fast, crate::so::Profile::Release] {
+        let dir = product.join(p.name());
+        let saved = dir.join(PRE_GROUP_ARCHIVE);
+        if !saved.is_file() {
+            return Err(format!("hottext-recheck: {} missing (build the {} regen products first: tools/hottext/regen.sh . --both)", saved.display(), p.name()));
+        }
+        let copy = dir.join("hot-text.recheck.a");
+        fs::copy(&saved, &copy).map_err(|e| format!("hottext-recheck: copy {}: {e}", saved.display()))?;
+        let r = group(&ar, &copy, &list, &dir.join("recheck-work"), Some(p.name()));
+        let _ = fs::remove_file(&copy);
+        let (hot, keys) = r.map_err(|e| format!("hottext-recheck: {}: {e}", p.name()))?;
+        println!("hottext-recheck: {}: {hot} function sections grouped, {keys} keys, dead-key check passed", p.name());
+    }
     Ok(())
 }
 

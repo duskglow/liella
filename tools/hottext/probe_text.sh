@@ -12,22 +12,35 @@
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 T=$(cd "$1" && pwd); shift
+#   HOTLIST-REGEN-CHEAP: --products <dir> (default <tree>/target/liella); the modes are traced in parallel;
+#   --trace-only <new dir> traces into <dir> and stops, --merge-only <dir> merges a trace made so (regen.sh).
 replace=0
-if [ "${1:-}" = --replace ]; then replace=1; fi
-MODES="localtime localtime_mktime"
-profile=$(cat "$T/target/liella/.profile" 2>/dev/null || true)
-case $profile in fast|release) ;; *) echo "probe_text: $T/target/liella/.profile: want fast or release, got '$profile'" >&2; exit 1;; esac
-work=$(mktemp -d "${TMPDIR:-/tmp}/probetext.XXXXXX")
-trap 'rm -rf "$work"' EXIT
-cc -std=gnu17 -O1 -static -nostdlib -fno-builtin "$T/target/liella/liella-crt1.o" "$T/crates/core/tests/oracle/page_faults.c" \
-    "$T/target/liella/libc.a" -lgcc -o "$work/page_faults"
-echo x > "$work/in.txt"
-tagged=
-for m in $MODES; do
-    env -i PATH="$PATH" LANG=en_US.UTF-8 HOT_TEXT_OUT="$work/names.$m" HOT_TEXT_STDIN="$work/in.txt" HOT_TEXT_FOLLOW_FORK= timeout 900 \
-        gdb -nx -batch -x "$here/trace_gdb.py" --args "$work/page_faults" "$m" > "$work/gdb.$m.log" 2>&1 || { tail -5 "$work/gdb.$m.log"; exit 1; }
-    tagged="$tagged extra=$work/names.$m"  # merge.py takes hot-text tiers only; these functions' tier is extra
+P=$T/target/liella
+phase=all
+while [ $# -gt 0 ]; do
+    case $1 in --replace) replace=1; shift;; --products) P=$(cd "$2" && pwd); shift 2;;
+        --trace-only) phase=trace; pdir=$2; shift 2;; --merge-only) phase=merge; pdir=$2; shift 2;;
+        *) echo "probe_text: unknown argument $1" >&2; exit 1;; esac
 done
+MODES="localtime localtime_mktime"
+profile=$(cat "$P/.profile" 2>/dev/null || true)
+case $profile in fast|release) ;; *) echo "probe_text: $P/.profile: want fast or release, got '$profile'" >&2; exit 1;; esac
+if [ $phase = all ]; then work=$(mktemp -d "${TMPDIR:-/tmp}/probetext.XXXXXX"); trap 'rm -rf "$work"' EXIT
+elif [ $phase = trace ]; then mkdir "$pdir"; work=$(cd "$pdir" && pwd); else work=$(cd "$pdir" && pwd); fi
+tagged=
+for m in $MODES; do tagged="$tagged extra=$work/names.$m"; done  # merge.py takes hot-text tiers only; these functions' tier is extra
+if [ $phase != merge ]; then
+cc -std=gnu17 -O1 -static -nostdlib -fno-builtin "$P/liella-crt1.o" "$T/crates/core/tests/oracle/page_faults.c" \
+    "$P/libc.a" -lgcc -o "$work/page_faults"
+echo x > "$work/in.txt"
+for m in $MODES; do
+    ( rc=0; env -i PATH="$PATH" LANG=en_US.UTF-8 HOT_TEXT_OUT="$work/names.$m" HOT_TEXT_STDIN="$work/in.txt" HOT_TEXT_FOLLOW_FORK= timeout 900 \
+        ${HOTTEXT_GDB:-gdb} -nx -batch -x "$here/trace_gdb.py" --args "$work/page_faults" "$m" > "$work/gdb.$m.log" 2>&1 || rc=$?; echo $rc > "$work/gdb.$m.rc" ) &
+done
+wait
+for m in $MODES; do [ "$(cat "$work/gdb.$m.rc")" = 0 ] || { tail -5 "$work/gdb.$m.log"; exit 1; }; done
+fi
+[ $phase = trace ] && exit 0
 # shellcheck disable=SC2086
 python3 "$here/keys.py" --tagged $tagged > "$work/probe.keys"
 pkeys=$here/../../crates/libc-so/probe-text.keys

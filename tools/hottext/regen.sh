@@ -23,6 +23,14 @@
 #   reported, not enforced, so a stale key no longer blocks its own repair. After rewriting the list it
 #   rebuilds with plain `cargo xtask so`, which must pass the check. Nothing else may pass that flag
 #   (`cargo xtask static`). Both profiles: `regen.sh . --build` then `LIELLA_FULL_PROFILE=1 regen.sh . --build`.
+#   HOTLIST-REGEN-CHEAP: the traces of one run go in parallel (HOTTEXT_JOBS at once, default nproc), and
+#   each trace keeps its number, so the merge reads them in the order above. --both (needs --build's tree)
+#   is the cheap regen of both profiles: `cargo xtask so --hottext-regen --libc-only` builds only what the
+#   traces link (target/product/<profile>/regen), the two profiles' traces run in parallel (--trace-only),
+#   the merges run fast then release (--merge-only), and `cargo xtask hottext-recheck` reruns only the
+#   grouping and its dead-key check. The release products are built before the fast merge; when that merge
+#   changes a file the build reads, they are rebuilt and retraced after it, as the one-profile path builds them.
+#   --products <dir>: trace the products in <dir> (default <tree>/target/liella).
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 T=$(cd "$1" && pwd); shift
@@ -30,21 +38,72 @@ list=$here/../../crates/libc-so/hot-text.list
 replace=0
 build=0
 allow_drop=0
+both=0
+P=$T/target/liella
+phase=all
+pdir=
 while [ $# -gt 0 ]; do
-    case $1 in --replace) replace=1; shift;; --build) build=1; shift;; --allow-drop) allow_drop=1; shift;; *) break;; esac
+    case $1 in --replace) replace=1; shift;; --build) build=1; shift;; --allow-drop) allow_drop=1; shift;; --both) both=1; shift;;
+        --products) P=$(cd "$2" && pwd); shift 2;; --trace-only) phase=trace; pdir=$2; shift 2;; --merge-only) phase=merge; pdir=$2; shift 2;;
+        *) break;; esac
 done
+own=$(cd "$here/../.." && pwd)
+if [ $both = 1 ]; then
+    if [ "$T" != "$own" ] || [ $build = 1 ] || [ $replace = 1 ] || [ $# -gt 0 ]; then echo "regen: --both regenerates its own tree ($own), merge mode, no extra programs" >&2; exit 1; fi
+    ad=; [ $allow_drop = 1 ] && ad=--allow-drop
+    R=$T/target/product/regen
+    rm -rf "$R"; mkdir -p "$R"
+    t0=$(date +%s); tp=$t0
+    lap() { local t; t=$(date +%s); echo "regen-both: phase $1: $((t - tp)) s (total $((t - t0)) s)"; tp=$t; }
+    inputs="hot-text.list startup-text.keys probe-text.keys startup-data.keys"
+    mkdir -p "$R/inputs"; for f in $inputs; do cp "$T/crates/libc-so/$f" "$R/inputs/$f"; done
+    (cd "$T" && cargo xtask so --hottext-regen --libc-only "$R/fast") || { echo "regen: fast product build failed" >&2; exit 1; }
+    lap build-fast
+    bash "$0" "$T" --products "$R/fast" --trace-only "$R/fast.trace" > "$R/fast.trace.log" 2>&1 & fpid=$!
+    (cd "$T" && LIELLA_FULL_PROFILE=1 cargo xtask so --hottext-regen --libc-only "$R/release") || { echo "regen: release product build failed" >&2; wait $fpid || true; exit 1; }
+    lap build-release
+    bash "$0" "$T" --products "$R/release" --trace-only "$R/release.trace" > "$R/release.trace.log" 2>&1 & rpid=$!
+    rc=0; wait $fpid || rc=1; wait $rpid || rc=$((rc + 2))
+    [ $rc = 0 ] || { echo "regen: trace failed (rc $rc): $R/fast.trace.log $R/release.trace.log" >&2; tail -5 "$R/fast.trace.log" "$R/release.trace.log" >&2; exit 1; }
+    lap traces-both
+    # shellcheck disable=SC2086
+    bash "$0" "$T" --products "$R/fast" --merge-only "$R/fast.trace" $ad
+    lap merge-fast
+    changed=; for f in $inputs; do cmp -s "$T/crates/libc-so/$f" "$R/inputs/$f" || changed="$changed $f"; done
+    if [ -n "$changed" ]; then
+        echo "regen-both: the fast merge changed$changed: release products rebuilt and retraced after it"
+        (cd "$T" && LIELLA_FULL_PROFILE=1 cargo xtask so --hottext-regen --libc-only "$R/release") || { echo "regen: release product rebuild failed" >&2; exit 1; }
+        rm -rf "$R/release.trace"
+        bash "$0" "$T" --products "$R/release" --trace-only "$R/release.trace" > "$R/release.trace.log" 2>&1 || { tail -5 "$R/release.trace.log" >&2; exit 1; }
+        lap rebuild-retrace-release
+    fi
+    # shellcheck disable=SC2086
+    bash "$0" "$T" --products "$R/release" --merge-only "$R/release.trace" $ad
+    lap merge-release
+    (cd "$T" && cargo xtask hottext-recheck) || { echo "regen: the rewritten list fails the grouping check" >&2; exit 1; }
+    lap recheck
+    exit 0
+fi
 if [ $build = 1 ]; then
-    if [ "$T" != "$(cd "$here/../.." && pwd)" ]; then echo "regen: --build builds the list's own tree; give $(cd "$here/../.." && pwd)" >&2; exit 1; fi
+    if [ "$T" != "$own" ]; then echo "regen: --build builds the list's own tree; give $own" >&2; exit 1; fi
     (cd "$T" && cargo xtask so --hottext-regen) || { echo "regen: product build failed" >&2; exit 1; }
 fi
-profile=$(cat "$T/target/liella/.profile" 2>/dev/null || true)
-case $profile in fast|release) ;; *) echo "regen: $T/target/liella/.profile: want fast or release, got '$profile' (build the products first)" >&2; exit 1;; esac
-work=$(mktemp -d "${TMPDIR:-/tmp}/hottext.XXXXXX")
-trap 'rm -rf "$work"' EXIT
-cp "$here"/probes/*.c "$work"/
-echo x > "$work/in.txt"
+profile=$(cat "$P/.profile" 2>/dev/null || true)
+case $profile in fast|release) ;; *) echo "regen: $P/.profile: want fast or release, got '$profile' (build the products first)" >&2; exit 1;; esac
+if [ $phase = all ]; then
+    work=$(mktemp -d "${TMPDIR:-/tmp}/hottext.XXXXXX")
+    trap 'rm -rf "$work"' EXIT
+elif [ $phase = trace ]; then
+    mkdir "$pdir"; work=$(cd "$pdir" && pwd)
+else
+    work=$(cd "$pdir" && pwd)
+fi
 cd "$work"
 n=0
+jobs_max=${HOTTEXT_JOBS:-$(nproc)}
+if [ $phase != merge ]; then
+cp "$here"/probes/*.c "$work"/
+echo x > "$work/in.txt"
 tier_of() { # <probe> -> its tier (HOTTEXT-STARTUP-COMPLETE)
     case $1 in
         p_true) echo startup;; p_fork) echo fork;; p_puts|p_cat|p_fmt) echo stdio;; p_str) echo strings;;
@@ -56,8 +115,19 @@ trace() { # <tier> <LANG> <program> <args...>
     local tier=$1 lang=$2; shift 2
     n=$((n + 1))
     printf '%s=%s\n' "$tier" "$work/names.$n" >> "$work/tagged"
-    LANG=$lang LC_ALL= HOT_TEXT_OUT=$work/names.$n HOT_TEXT_STDIN=${stdin:-$work/in.txt} HOT_TEXT_FOLLOW_FORK=${follow:-} timeout 900 \
-        gdb -nx -batch -x "$here/trace_gdb.py" --args "$@" > "$work/gdb.$n.log" 2>&1 || { tail -5 "$work/gdb.$n.log"; exit 1; }
+    run_traced "$work/names.$n" "$work/gdb.$n.log" "$lang" "$@"
+}
+run_traced() { # <names out> <log> <LANG> <program> <args...>: started in the background, at most jobs_max at once
+    local out=$1 log=$2 lang=$3; shift 3
+    while [ "$(jobs -rp | wc -l)" -ge "$jobs_max" ]; do wait -n || true; done
+    ( rc=0; LANG=$lang LC_ALL= HOT_TEXT_OUT=$out HOT_TEXT_STDIN=${stdin:-$work/in.txt} HOT_TEXT_FOLLOW_FORK=${follow:-} timeout 900 \
+        ${HOTTEXT_GDB:-gdb} -nx -batch -x "$here/trace_gdb.py" --args "$@" > "$log" 2>&1 || rc=$?; echo $rc > "$log.rc" ) &
+}
+checks=
+traces_done() { # wait for every trace, fail on the first that failed, then run the deferred call checks
+    wait
+    for r in "$work"/*.log.rc; do [ "$(cat "$r")" = 0 ] || { tail -5 "${r%.rc}"; exit 1; }; done
+    for c in $checks; do check_calls "${c%:*}" "${c#*:}"; done
 }
 # Startup (p_true) first, then the probes from the most common calls to the rarer ones (printf before
 # setlocale: HOT-ORDER-2, a printf-first program spans fewer windows); any new
@@ -67,9 +137,9 @@ probes=$(for p in p_true p_puts p_cat p_str p_fmt p_loc p_cold; do [ -f $p.c ] &
 # HOT-ORDER-3 guard: every library function a probe's source names must have run in its trace. gcc
 # folds or replaces libc calls with constant arguments (p_cold's strcoll at -O2), and the list then
 # silently misses the function; call it through a volatile pointer instead.
-nm --defined-only -g "$T/target/liella/libc.a" 2>/dev/null | awk 'NF == 3 && $2 ~ /^[TWi]$/ {print $3}' | sort -u > "$work/libfns"
-check_calls() { # <probe>: after its trace (names.$n)
-    local missing
+nm --defined-only -g "$P/libc.a" 2>/dev/null | awk 'NF == 3 && $2 ~ /^[TWi]$/ {print $3}' | sort -u > "$work/libfns"
+check_calls() { # <probe> <n>: after its trace (names.<n>)
+    local missing n=$2
     # A fortified call (printf -> __printf_chk) and a header redirect (libintl.h at -O2: dgettext ->
     # __dcgettext) count as the call.
     { cat "$work/names.$n"; sed -En 's/^__(.*)_chk$/\1/p' "$work/names.$n"
@@ -82,10 +152,10 @@ check_calls() { # <probe>: after its trace (names.$n)
 # crates/core/tests/hot_text_products.rs links it; its `true` mode gives the start-up keys below, and
 # its `locale` and `tool` modes (the setlocale + printf and coreutils-shaped programs whose faults
 # that test bounds) are always traced, so a regen without extra programs keeps their keys.
-cc -std=gnu17 -O1 -static -nostdlib -fno-builtin "$T/target/liella/liella-crt1.o" "$T/crates/core/tests/oracle/page_faults.c" \
-    "$T/target/liella/libc.a" -lgcc -o page_faults
+cc -std=gnu17 -O1 -static -nostdlib -fno-builtin "$P/liella-crt1.o" "$T/crates/core/tests/oracle/page_faults.c" \
+    "$P/libc.a" -lgcc -o page_faults
 for p in $probes; do
-    LIELLA_PRODUCTS=$T/target/liella "$T/scripts/liella-cc" -O2 -o "$p" "$p.c"
+    LIELLA_PRODUCTS=$P "$T/scripts/liella-cc" -O2 -o "$p" "$p.c"
     if [ "$p" = p_cat ]; then
         # HOT-ORDER-3: p_cat's read path here (empty stdin), its write path (fwrite) at the end of the
         # group below: fwrite ahead of the printf group cost the first snprintf one fault (Ivy Bridge host B:
@@ -94,21 +164,21 @@ for p in $probes; do
     elif [ "$p" = p_fork ]; then
         # TIMING-COV-FORK-COW-FAULTS: trace into the fork child (its text windows fault after fork).
         follow=child trace fork en_US.UTF-8 ./p_fork
-        check_calls p_fork
+        checks="$checks p_fork:$n"
     elif [ "$p" = p_cold ]; then
         # LAYOUT-TEXT-PIN-3: p_cold's localtime_r/mktime in the zone the fault-bounded probes
         # (page_faults.c localtime, localtime_mktime, mktime) and cbench_opt's zone rows use, not the
         # host's: a UTC host traced no rule-string parse, no period cache and another crate's vector
         # growth, so those stayed out of the group and cost the first localtime_r two faults.
         TZ=America/New_York trace "$(tier_of "$p")" en_US.UTF-8 "./$p"
-        check_calls "$p"
+        checks="$checks $p:$n"
     else
         trace "$(tier_of "$p")" en_US.UTF-8 "./$p"
-        check_calls "$p"
+        checks="$checks $p:$n"
     fi
 done
 trace locale C ./p_loc
-if [ -f p_cat.c ]; then trace stdio en_US.UTF-8 ./p_cat; check_calls p_cat; fi
+if [ -f p_cat.c ]; then trace stdio en_US.UTF-8 ./p_cat; checks="$checks p_cat:$n"; fi
 # The bound test runs these modes with LANG=en_US.UTF-8 and stdin /dev/null.
 stdin=/dev/null trace locale en_US.UTF-8 ./page_faults locale
 stdin=/dev/null trace tool en_US.UTF-8 ./page_faults tool
@@ -119,8 +189,13 @@ done
 # STARTUP-TEXT-WINDOWS (D-X.49): the functions `page_faults true` runs (the probe whose start-up faults
 # crates/core/tests/hot_text_products.rs bounds, linked as that test links it), first-touch order, into
 # crates/libc-so/startup-text.keys; the layout check of layout/contracts.tsv counts their 64 KiB windows.
-LANG=C LC_ALL= HOT_TEXT_OUT=$work/startup.names HOT_TEXT_STDIN=$work/in.txt HOT_TEXT_FOLLOW_FORK= timeout 900 \
-    gdb -nx -batch -x "$here/trace_gdb.py" --args ./page_faults true > "$work/gdb.startup.log" 2>&1 || { tail -5 "$work/gdb.startup.log"; exit 1; }
+stdin= follow= run_traced "$work/startup.names" "$work/gdb.startup.log" C ./page_faults true
+# D-X.62: the probe-text modes, traced with the others (probe_text.sh merges them below).
+probe_text_trace() { local rc=0; bash "$here/probe_text.sh" "$T" --products "$P" --trace-only "$work/probe" > "$work/probe.log" 2>&1 || rc=$?; echo $rc > "$work/probe.log.rc"; }
+probe_text_trace &
+traces_done
+fi  # trace phase
+[ $phase = trace ] && exit 0
 python3 "$here/keys.py" --tagged "startup=$work/startup.names" > "$work/startup.keys"
 skeys=$here/../../crates/libc-so/startup-text.keys
 if [ $replace = 1 ] || [ ! -f "$skeys" ]; then : > "$work/startup.old"; else grep -v '^#' "$skeys" > "$work/startup.old" || true; fi
@@ -138,12 +213,12 @@ python3 "$here/keys.py" --tagged $(cat "$work/tagged") > "$work/hit.keys"
 # a #[cold] function's section is `.text.unlikely.<f>`, HOTTEXT-COLD-STARTUP; an unlisted one the build
 # renamed `.text.liella_cold.<f>.liella_cold`, D-X.63: keys.py --sections strips every one of them,
 # LAYOUT-TEXT-PIN-9 #4541, so a function renamed cold re-enters the list when a trace hits it.)
-readelf -SW "$T/target/liella/libc.a" > "$work/readelf"
+readelf -SW "$P/libc.a" > "$work/readelf"
 python3 "$here/keys.py" --sections "$work/readelf" > "$work/sections"
 python3 "$here/keys.py" "$work/sections" > "$work/lib.keys"
 # LAYOUT-TEXT-PIN-6 (#4467): labels inside a function section (assembly entry labels, aliases) -> its key,
 # so a start-up key traced at such a label brings its section to the start-up head.
-objdump -t "$T/target/liella/libc.a" > "$work/syms"
+objdump -t "$P/libc.a" > "$work/syms"
 python3 "$here/keys.py" --aliases "$work/syms" > "$work/alias.keys"
 awk -F'\t' 'NR == FNR { lib[$1]; next } $1 in lib' "$work/lib.keys" "$work/hit.keys" > "$work/new.keys"  # keeps the touch order
 if [ $replace = 1 ] || [ ! -f "$list" ]; then : > "$work/old.keys"; else grep -v '^#' "$list" > "$work/old.keys" || true; fi
@@ -178,10 +253,13 @@ mv "$work/list.merged" "$list"
 echo "hot-text: $(wc -l < "$work/new.keys") keys traced ($profile), $(grep -vc '^#' "$list") in $list"
 # D-X.62: the functions of the other fault-bounded probe modes that no hot-text tier covers, into
 # crates/libc-so/probe-text.keys (the start-up read-only group takes their read-only data).
-if [ $replace = 1 ]; then bash "$here/probe_text.sh" "$T" --replace; else bash "$here/probe_text.sh" "$T"; fi
+pr=; [ $replace = 1 ] && pr=--replace
+# shellcheck disable=SC2086
+bash "$here/probe_text.sh" "$T" --products "$P" --merge-only "$work/probe" $pr
 # STARTUP-DATA-WINDOWS (D-X.50): the data objects the same probe touches, into crates/libc-so/startup-data.keys
 # (it reads the startup-text.keys written above).
-if [ $replace = 1 ]; then bash "$here/startup_data.sh" "$T" --replace; else bash "$here/startup_data.sh" "$T"; fi
+# shellcheck disable=SC2086
+STARTUP_DATA_PRODUCTS=$P bash "$here/startup_data.sh" "$T" $pr
 if [ $build = 1 ]; then
     # The rewritten list must pass the dead-key check in this profile (merge.py drops the keys this
     # trace no longer hits from this profile).
