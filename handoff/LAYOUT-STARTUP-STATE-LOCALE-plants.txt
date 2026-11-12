@@ -11,3 +11,8 @@ lssl-ascii-keys | crates/libc-so/startup-state.list | perl:s/\nliella::locale::c
 lssl-emission-order | xtask/src/coldbss.rs | perl:s/&renames, Some\(&order\)\)/&renames, None)/ | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:STATE-ORDER: \.data1 is not in startup-state\.list order
 lssl-reloc-follow | xtask/src/coldbss.rs | perl:s/\n +from\.extend\(relocs\.get\(&i\)\.into_iter\(\)\.flatten\(\)\);\n/\n/ | cargo test -p xtask -- coldbss::tests::reordered_sections | msg:linked order
 lssl-join-order | xtask/src/so.rs | perl:s/(    let copies = [^\n]*\n)(.*?)(    crate::coldbss::move_startup_state[^\n]*\n)/$3$1$2/s | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:STATE-ORDER: \.data1 is not in startup-state\.list order
+# cargo xtask plants results, head 62fa8c2b9, job layout-startup-state-locale-2-plants (4 plants: 4 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# lssl-ascii-keys: CAUGHT, by hot_text_products init_startup_data_accesses_are_in_the_data1_cluster
+# lssl-emission-order: CAUGHT, by hot_text_products init_startup_state_follows_the_declared_order
+# lssl-reloc-follow: CAUGHT, by xtask coldbss::tests::reordered_sections_keep_their_symbols_and_relocations
+# lssl-join-order: CAUGHT, by hot_text_products init_startup_state_follows_the_declared_order

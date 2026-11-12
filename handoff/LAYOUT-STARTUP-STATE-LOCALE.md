@@ -1,53 +1,53 @@
 # LAYOUT-STARTUP-STATE-LOCALE: deterministic start-up state order (#4923) and setlocale's objects (#4915)
 
-**State (2026-11-12): INCOMPLETE, WIP (context checkpoint).** Branch `task/layout-startup-state-locale` on origin/next
-`dcce89422` (LAYOUT-STARTUP-STATE-TIME landed; no merge needed). Role shiki:~/w/sh2 (rsynced, not a git tree).
-Scratch on shiki: `~/work/LAYOUT-STARTUP-STATE-LOCALE/` (`diag.sh`, `branch.sh`, `pads.py` = STATE-TIME's;
-saved products `next-{fast,release}` (origin/next) and `branch-{fast,release}` (the WIP commit's code)).
-**Do not land:** the order test fails and the start-up probe `true` is +2 (below).
+**State (2026-11-12, run -2): INCOMPLETE, do not land.** Branch `task/layout-startup-state-locale-2` on origin/next
+`dcce89422` (no merge). Role kanon:~/w/kn1. Scratch on kanon: `~/work/LAYOUT-STARTUP-STATE-LOCALE-2/` (`branch.sh`:
+both profiles + checks + fault maps + pads; `faultmap.py`: perf data-fault pages per probe with the symbols on each;
+`layout.py`: `.data1` per page; `pads.py` = STATE-TIME's; saved products `next-{fast,release}` (copied from run -1)
+and `b1-{fast,release}` (commit 6e403c1fb)). The order now holds; **left: `true` is +1, which needs a ruling.**
 
 ## Decisions in force
-Ruling #4923 (order), D-X.70 (declared list), D-X.64 (clusters), D-X.69 (access check), owner jitter rule #4347.
-No new decision record yet (the order rule probably wants one: `records new decision D-NEW --series D-X`).
+Ruling #4923 (order), D-X.70 (declared list), D-X.64 (clusters), D-X.69 (access check), jitter rule #4347.
+No new decision record yet (the order rule wants one: `records new decision D-NEW --series D-X`).
 
-## What the WIP commit does
-1. `xtask/src/coldbss.rs`: `order_sections` permutes the declared sections among their own section-table slots
-   in the extracted member (symbols incl. SHT_SYMTAB_SHNDX, reloc `sh_info`, groups, SHF_LINK_ORDER remapped;
-   other `sh_link`s to a moved section refused), called from `rename()` before the objcopy rename;
-   `state_order` = list position, then section name. Unit tests: `state_order` on shuffled headers, and
-   `reordered_sections_keep_their_symbols_and_relocations` (cc -c, permute, link, run, `nm -n` order). Both pass
-   (job lssl-branch, `cargo test -p xtask -- coldbss`: 3 passed).
-2. `hot_text_products.rs`: the access check traces all ten probe modes (`STARTUP_PROBE_MODES`) and only flags
-   library objects (`libc.a(`; the `strings` probe's own `.data.rel` was flagged). New
-   `init_startup_state_follows_the_declared_order` (per object in the probe map, declared statics in list order).
-3. `startup-state.list`: what the extended check named on next (job lssl-diag, both profiles identical):
-   setlocale/printf tier after NSCACHE: `liella::locale::collate::ASCII_KEYS`, `intl::GENERATION`, `intl::SETTINGS`,
-   `_IO_2_1_stdout_`, `stdout`; catalog tier at the end: intl `LOCK DOMAIN STRINGS BINDINGS _nl_domain_bindings
-   CATALOGS ALIASES MEMO MEMO_NAME R_LAST R_NEXT R_PREV Host::language::LANGUAGE RESOLVED` (RESOLVED is 4096 bytes).
-   With these the branch's access check passes in both profiles.
-4. `handoff/LAYOUT-STARTUP-STATE-LOCALE-plants.txt`: two plants written, NOT run.
+## Done
+- Run -1 (WIP commit bcfed889c): `order_sections`/`state_order` (list order), the access check over all ten probe
+  modes, the order test `init_startup_state_follows_the_declared_order`, 19 list entries (setlocale tier after
+  NSCACHE; catalog tier at the end).
+- Run -2 (6e403c1fb): **why the order did not survive, fixed.** (1) BFD (objcopy, ld) creates a relocation
+  section's target when it reads the relocation section, so a moved section left after its relocations' slot kept
+  its emitted place (`stdout`, `__tzname`): `order_sections` now moves each section's relocation sections with it,
+  right after it. (2) The copies pass's `ld -r` join merged every `.data1` input in member order: the state and
+  cold-bss renames now run after `direct_internal_copies` (so.rs). Unit test now reverses the emitted order with
+  relocated sections at both ends and goes through objcopy + `ld -r` like the build.
+- Job lssl2-branch1 (6e403c1fb): `cargo test -p xtask -- coldbss` 3 passed; hot_text_products order test + access
+  checks pass in BOTH profiles; `.data1` 0x4040 bytes (align 32768).
+- Pads (19 pads x 10 modes, cells next-fast/branch-fast/next-release/branch-release): locale 50/48/51/49 (orig),
+  51/48/52/49 (bss 0x800): flat and 2-3 lower; tool 54/51/55/52 and 55/51/56/52: flat, 3-4 lower; fork, localtime,
+  float, strings, rebind, mktime equal; **true 11/12/10/11 at every pad (+1, flat; run -1 had +2).**
 
-## Measurements (lssl-branch, pads.py, 19 pads, cells next-fast/branch-fast/next-release/branch-release)
-- locale orig 50/49/51/50, bss 0x800 51/49/52/50: flat on the branch and 1 lower. tool orig 54/52/55/53,
-  bss 0x800 55/52/56/53: flat, 2 lower. localtime, mktime, fork, float, strings, rebind equal.
-- **`true` is worse at every pad: 11 -> 13 (fast), 10 -> 12 (release); 38 WORSE cells.** `.data1` alignment
-  went 16384 -> 32768 (`so: start-up data cluster alignments`), so the cluster crossed 16 KiB.
-- **The order test fails** (both profiles): (a) csys_7.o (C): `__tzname` (entry 121) has a lower section index than
-  `environ` (entry 24) in the final libc.a; (b) the Rust object: `stdout` lies before entries 111-116 inside ONE
-  merged `.data1` section (release, symbol offsets 0x29b0 vs 0x29b8).
+## Why `true` is +1 (fault maps, faultmap.py on b1-fast vs next-fast)
+`true` faults `.got`, `.data1` 0x878/0x879/0x87a and the page with `.data1`'s tail + `.bss`'s head (0x87c), where the
+C members' declared words (`__libc_stack_end`, `__progname*`, `environ`: linked after the Rust object) and the probe's
+own `.bss` lie. On next the base tier + those ended inside the third page (~750 bytes of slack). The new tiers sit
+between the Rust base tier and the C words: setlocale + catalog small objects ~0x550 bytes and `intl::RESOLVED`
+4096 bytes (alone on page 0x87b). Without RESOLVED the C words would still start at ~0x87b000: the slack is gone.
+So any first-call state declared after the base tier costs `true` a page; reordering inside the Rust object cannot
+fix it (cold first: the machine words of scan.S's object lead `.data1`, so `true` still spans 5 pages).
 
-## Open / exact next step
-1. Find why the order does not survive. (b): `copies::merge_codegen_units` (`ld -r`, runs after
-   `move_startup_state` in so.rs) merges all `.data1` inputs into one section in member order. It joins whenever two
-   `c-`/`liella_mem-` members exist, release included. Fix: run `move_startup_state` (rename and order) after
-   `direct_internal_copies`. (a): `order_sections` either found the C member already ordered or a later objcopy
-   reordered it. Check with the raw member: readelf before, after `order_sections`, after objcopy.
-2. `true` +2: check whether it comes from the 32 KiB alignment or the new catalog tier (RESOLVED 4 KiB). Measure
-   without the catalog tier, and the order alone (list unchanged). Then trace `true` with perf -d over `.data1`
-   pages. The tiers' list order may not be first-touch order, so the fix may be to reorder the list.
-3. Then: plants (`cargo xtask plants`, the file above), clippy, static, the direct gate, pads again (WORSE 0).
-   Proving "code-only change leaves counts identical" with the lgammaf branch is still undone.
+## RULING NEEDED (recommendation)
+Where declared first-call state (setlocale, catalog, time tiers: touched by locale/tool/localtime, never by `true`)
+goes. Recommend a second ordered cluster for first-call tiers outside the every-process run (for example
+`.ldata.liella_state`, after `.bss` in GNU ld's default script, in list order; the access check accepts either
+cluster), so `true`'s pages hold only every-process state. Alternative: shrink `intl::RESOLVED` (4 KiB) and keep
+the tiers in `.data1` (still +1 here: not enough alone).
 
-## Jobs (shiki)
-lssl-diag (next + extended check: names the objects above; rc 1 expected), lssl-branch (WIP code: xtask tests
-pass, order test FAILED, pads 38 WORSE; rc 1). Neither proves a final head.
+## Exact next step
+After the ruling: implement it in coldbss.rs/so.rs (+ entry.S alignment if a cluster), rerun `branch.sh` (WORSE 0),
+then the gate (`affected --run --base origin/next`), hot_text_products, plants (file below), clippy, static.
+Proving "code-only change leaves counts identical" with the lgammaf branch is still undone.
+
+## Jobs (kanon)
+lssl2-lint0 (inherited head: clippy + static rc 0), lssl2-branch1 (above; rc 0, pads WORSE 38 = all `true`),
+layout-startup-state-locale-2-plants (head 62fa8c2b9: 4 plants, 4 CAUGHT, no WARN), lssl2-lint1 (clippy + static on
+62fa8c2b9: rc 0). Plants file with results: handoff/LAYOUT-STARTUP-STATE-LOCALE-plants.txt. Later commits: handoff only.
