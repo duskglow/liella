@@ -42,7 +42,7 @@ use bessel::bessel_eval;
 pub(crate) use cexp::{cexp_core, CEXP_DELTA};
 pub use cexp::{cexpf, cexpf_nearest};
 pub use clog_csqrt::{clogf, clogf_nearest, csqrtf, csqrtf_nearest};
-use erf::{erf_core, erfc_core, ERFC_DELTA, ERF_DELTA};
+use erf::{erf_core, erf_refused, erfc_core, erfc_refused, ERFC_DELTA, ERF_DELTA};
 use exp_log::*;
 pub use gamma::{eval_lgamma, eval_tgamma};
 use gamma::{gamma_core, lgamma_core, TGAMMA_DELTA};
@@ -583,8 +583,24 @@ fast_fn!(tanh, Fast::Tanh, hyper);
 fast_fn!(asinh, Fast::Asinh, hyper);
 fast_fn!(acosh, Fast::Acosh, hyper);
 fast_fn!(atanh, Fast::Atanh, hyper);
-fast_fn!(erf, Fast::Erf, special);
-fast_fn!(erfc, Fast::Erfc, special);
+
+/// `erf` for `float`: the fast path, else [`erf_refused`] (the tiny operands' direct path, else
+/// the accurate path). The tiny operands are reached only from the refusal arm, out of line, so
+/// a typical operand runs the fast path's code alone (LIBM-RETHINK-ERFC-3, D-10.107).
+pub fn erf(x: f32, mode: Rounding) -> (f32, Status) {
+    match eval(Fast::Erf, x, mode) {
+        Some(r) => r,
+        None => erf_refused(x, mode),
+    }
+}
+
+/// `erfc` for `float`: the fast path, else [`erfc_refused`] (as [`erf`]).
+pub fn erfc(x: f32, mode: Rounding) -> (f32, Status) {
+    match eval(Fast::Erfc, x, mode) {
+        Some(r) => r,
+        None => erfc_refused(x, mode),
+    }
+}
 
 #[cfg(test)]
 mod tests;
