@@ -1,43 +1,54 @@
-# LIBM-DIRECTED-INPLACE(-2, -3): the double exp quick phase in the caller's directed rounding
+# LIBM-DIRECTED-INPLACE(-2, -3, -4): the double exp quick phase in the caller's directed rounding
 
-State: branch task/libm-directed-inplace-3 (-2's branch merged with origin/next at 25b11ee02, after
-LAYOUT-DATA-CLUSTERS-4C landed and lifted the hold), role keke:~/w/r5. Decision D-10.94
-(records/decisions/D-10/D-10.94.toml). Full report of run -3: handoff/LIBM-DIRECTED-INPLACE-3-report.md.
+State: branch task/libm-directed-inplace-4 (= -3's head 68e2c202c, which already contains origin/next 9042cc44f,
+plus this handoff and handoff/reports/LIBM-DIRECTED-INPLACE-4.json; no code change in run 4). Role keke:~/w/r5.
+Decision D-10.94 (records/decisions/D-10/D-10.94.toml). Run -3's report: handoff/LIBM-DIRECTED-INPLACE-3-report.md.
+**Held: LAYOUT-JITTER** (ruling #4347). The red is a .bss placement change, not this story's code (below).
 
-## Done
-- Run 1: `fast64::quick::exp_directed` (both builds), its proof (module doc of
-  crates/math/src/fast64/quick.rs, "Directed rounding"; `directed_bounds` test), `hot::exp_directed`,
-  `mathret::elem_fast_dir` / cold `elem_directed`, the `exp d` row on elem_fast_dir.
-- Run 2: tests in crates/boundary/tests/exp_quick.rs (breakpoints, 30000 x 3 modes x 2 builds, ignored
-  10^7 accuracy job), D-10.94; plants 4/4; 10^7 accuracy 0 mismatches in every direction and build.
-- Run 3: **the exp_upward stall named and fixed.** `h` was selected from the MXCSR value as data
-  (`sete; movsd (table,idx,8)`), so the whole evaluation waited for the MXCSR read, and on the Zen 1
-  host that read completes only after the caller's earlier FP work: successive calls could not
-  overlap (perf: IPC 0.90, 92% backend-stalled, vs 2.21 in nearest). Now `exp_directed::<UP>` is a
-  const generic chosen by a predicted branch (control dependency only): IPC 2.32, and the time
-  dropped from 4.8x glibc to 1.2x (table below). Probes ruled out the other suspects: add, multiply and
-  FMA cost the same in all four rounding directions on Zen 1 (no directed-mode penalty), and the
-  disassembly of the directed path shows no other MXCSR access and no float-to-int conversion.
+## Done (runs 1-3, unchanged)
+- `fast64::quick::exp_directed::<UP>` (both builds) with its proof (quick.rs module doc "Directed rounding",
+  `directed_bounds`), `hot::exp_directed`, `mathret::elem_fast_dir` / cold `elem_directed`, tests in
+  crates/boundary/tests/exp_quick.rs, D-10.94, plants (run 2: 4/4, run 3: 3/3).
+- Run 3: the exp_upward stall (direction picked from the MXCSR value as data) fixed with a const generic picked by a
+  branch: Zen 1 unbooked 68.3 -> 22.4 ns (glibc 18.2).
 
-## Results (keke, Zen 1, UNBOOKED, load ~20: ratios only, not a verdict)
-| row | before (meas1) Liella / glibc ns | after (t4, 3 runs) Liella / glibc ns |
-| exp_upward | 68.30 / 14.28 | 22.1-22.6 / 18.1-18.5 |
-| exp (nearest) | 28.29 / 14.29 | 19.3-19.4 / 18.1-18.3 |
-- Probe (hardware, rcprobe.c in the story's work dir): stmxcsr plus a use of its value costs about
-  20.5 TSC ticks per iteration on Zen 1 in every mode, whatever FP work sits beside it. Every
-  Liella libm entry makes that read once per call, nearest included (see open questions).
+## Run 4: why CI was red (first localtime_r 21 > 20, first localtime_r + mktime 21 > 20)
+Fault map, keke (Zen 1), job labels libm-directed-inplace-4-so / -fmnext / -fm2; script
+~/work/LIBM-DIRECTED-INPLACE-4/fmap.sh on keke (links page_faults.c against a products dir, relay count as the
+test takes it, then `perf record -e page-faults -d` + tools/hottext/faultmap.py). next 9042cc44f products built
+with validation/wl_prep.sh (~/wl/products/9042cc44f9d3...).
 
-## Open questions
-- The per-call MXCSR read itself (~20 TSC ticks reciprocal throughput on Zen 1) is a fixed cost of
-  every elem_* entry. Whether the env check can be cheaper (or skipped where the result is the same
-  in every mode) is a design question for a separate story.
-- Booked timing on Ivy Bridge (where the read is microcoded, per LIBM-LD-ARC-RETHINK-2) and N100 not done.
+| mode | next 9042cc44f | this branch | bound |
+| localtime (relay, 6 runs identical) | 19 | 21 | 20 |
+| localtime_mktime | 19 | 21 | 20 |
+| whole process (direct run, all faults) | 181 | 181 | - |
+
+- The text faults in the window are the same pages in both (localtime_r 0x436000, zone::local_in 0x480000; hot
+  text unchanged). No libm code on the path (no math/exp/mathret symbol in the map).
+- The whole +2 is the `.bss` page 0x87b000. On next, setenv (before the window) touches it first
+  (`liella_boundary::process::TABLE_ON` read, `ENV_OWNED` write). On the branch the `.bss` order changed:
+  TABLE_ON/ENV_OWNED moved to 0x87add8/0x87ade0 (the page `.data1`'s tail shares) and `sys::TSC_STATE` moved from
+  0x87ada4 to 0x87b170. So the first touch of 0x87b000 now falls inside localtime_r:
+  `liella_legacy::time_compat::GENERATION` (0x87b690, read fault) then `liella_boundary::sys::TSC_STATE` (write
+  fault). The total stays 181: the faults moved into the window rather than being added.
+- Why the order moved: this story edits the liella_boundary crate (hot/exp_log.rs, mathret.rs, selftest.rs,
+  s10_math_gen.rs), which changes its codegen units and so the emission order of its `.bss` objects. None of the
+  four objects is declared in crates/libc-so/startup-state.list, so their page is left to emission order.
+
+## Open questions / for the coordinator
+- LAYOUT-JITTER (data, not text): the objects the first localtime_r touches, `liella_legacy::time_compat::GENERATION`
+  and `liella_boundary::sys::TSC_STATE` (and setenv's `process::TABLE_ON` / `ENV_OWNED`), sit in plain `.bss`.
+  Recommendation for the data-clusters lane (not edited here, per the brief): declare them together in
+  startup-state.list (LAYOUT-DATA-CLUSTERS-9's lesson: declared one at a time, the fault moves to the next object).
+- Per-call MXCSR read cost (~20 TSC ticks on Zen 1) on every elem_* entry: a separate design story (run 3).
+
+## Not to redo
+The merge with next 9042cc44f (in 68e2c202c). The fault maps above. The run-3 stall fix and its proof.
 
 ## Next step
-1. Booked timing of exp/exp_upward/expf_upward on Ivy Bridge (nico or kotori) and N100 to confirm the
-   gain off Zen 1 (target <= 2x glibc).
-2. LIBM-DIRECTED-INPLACE-4: log, sin, pow with the same recipe (logf is already one-pass in the
-   caller's direction like expf). Keep any direction-dependent constant a const generic picked by a
-   branch, never data selected from MXCSR. For log: the reduction (r exact in any direction), th
-   exact; Fast2Sum error terms per Boldo-Graillat-Muller; replace `zh + zl·C == zh` by the
-   two-sided monotone test; decline x = 1 (ln 1 = +0 in every direction; `x − x` gives −0 downward).
+1. When the startup-state fix lands: merge origin/next, `cargo xtask so`, re-run
+   hot_text_products (the two localtime tests) and the direct-tier gate and plants on the merged head.
+2. Booked timing of exp/exp_upward/expf_upward on Ivy Bridge (nico or kotori) and N100 (target <= 2x glibc).
+3. Then log, sin, pow with the same recipe (a direction-dependent constant is a const generic picked by a
+   branch, never data from MXCSR; for log decline x = 1, two-sided monotone rounding test, Fast2Sum error terms per
+   Boldo-Graillat-Muller).
