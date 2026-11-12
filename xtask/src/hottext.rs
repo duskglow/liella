@@ -1254,28 +1254,33 @@ fn module_source(root: &Path, krate: &str, mods: &[String]) -> Option<(String, S
 /// their symbol in both profiles whatever unrelated code does to LLVM's inlining budget: two libm
 /// merges inlined `spawn::wait4` away (2026-11-07), and on 2026-11-12 two libm changes inlined
 /// `Vdso::lookup_many::<5>` (#4986) and another start-up function (#4991) in the fast archive.
-const INLINE_NEVER_TIERS: [&str; 2] = ["startup", "fork"];
+/// Since D-X.53 a dead key of ANY tier fails `so`, and a dummy libm growth (LAYOUT-HOTKEY-INLINE-STABLE-2)
+/// killed `locale::builtin` (locale), `nscache::real_secs` (tool) and `iconv::load` (extra): every
+/// tier is checked (ruling #5024).
+const INLINE_NEVER_TIERS: [&str; 7] = TIERS;
 
-/// The start-up and fork keys that may name a function without a fixed boundary, one line each:
-/// `<key>\t<reason>` (LAYOUT-HOTKEY-INLINE-STABLE). A key belongs here only when a call boundary is
-/// not free (a hot path, or a measured start-up cost) or no attribute of ours can pin it (a
-/// closure, a function of `core` or `alloc`, a generic shared with hot instantiations).
+/// The keys of hot-text.list that may name a function without a fixed boundary, one line each:
+/// `<key>\t<tier>\t<reason>` (LAYOUT-HOTKEY-INLINE-STABLE). A key belongs here only when a call
+/// boundary is not free (a hot path, or a measured cost) or no attribute of ours can pin it (a
+/// closure, a function of `core` or `alloc`, a generic shared with hot instantiations). The tier is
+/// the key's tier in hot-text.list: a key that moves tier (a regen found it earlier in a run) must
+/// be justified again for its new tier.
 pub const UNPINNED_LIST: &str = "crates/libc-so/hot-text.unpinned";
 
-/// The lines of [`UNPINNED_LIST`]: key -> reason. `#` comments and blank lines skipped.
-fn parse_unpinned(text: &str) -> Result<BTreeMap<String, String>, String> {
+/// The lines of [`UNPINNED_LIST`]: key -> (tier, reason). `#` comments and blank lines skipped.
+fn parse_unpinned(text: &str) -> Result<BTreeMap<String, (String, String)>, String> {
     let mut out = BTreeMap::new();
     for (n, l) in text.lines().enumerate() {
         if l.trim().is_empty() || l.starts_with('#') {
             continue;
         }
         match l.split('\t').collect::<Vec<_>>()[..] {
-            [k, why] if k.starts_with("_R") && !why.trim().is_empty() => {
-                if out.insert(k.to_string(), why.to_string()).is_some() {
+            [k, tier, why] if k.starts_with("_R") && TIERS.contains(&tier) && !why.trim().is_empty() => {
+                if out.insert(k.to_string(), (tier.to_string(), why.to_string())).is_some() {
                     return Err(format!("{UNPINNED_LIST} line {}: {k} listed twice", n + 1));
                 }
             }
-            _ => return Err(format!("{UNPINNED_LIST} line {}: {l:?}: want <v0 key>\\t<reason>", n + 1)),
+            _ => return Err(format!("{UNPINNED_LIST} line {}: {l:?}: want <v0 key>\\t<tier>\\t<reason>", n + 1)),
         }
     }
     Ok(out)
@@ -1304,21 +1309,24 @@ fn unpinned_reason(root: &Path, key: &str) -> Option<String> {
 }
 
 /// The fixed-boundary check of [`static_check`] on the parsed list and unpinned lines: errors.
-fn check_pinned(root: &Path, entries: &[Entry], unpinned: &BTreeMap<String, String>) -> Vec<String> {
+fn check_pinned(root: &Path, entries: &[Entry], unpinned: &BTreeMap<String, (String, String)>) -> Vec<String> {
     let mut errs = Vec::new();
-    let pinned_tier = |k: &str| entries.iter().any(|e| e.key == k && INLINE_NEVER_TIERS.contains(&e.tier));
+    let checked = |k: &str| entries.iter().any(|e| e.key == k && INLINE_NEVER_TIERS.contains(&e.tier));
     for e in entries.iter().filter(|e| INLINE_NEVER_TIERS.contains(&e.tier)) {
-        match (unpinned_reason(root, &e.key), unpinned.contains_key(&e.key)) {
-            (Some(why), false) => errs.push(format!(
+        match (unpinned_reason(root, &e.key), unpinned.get(&e.key)) {
+            (Some(why), None) => errs.push(format!(
                 "hot-text.list: {} ({} key): {why}: unrelated code can make LLVM inline it and kill the key; mark it #[inline(never)] where a call boundary is free, or #[inline(always)] into a keyed caller and drop the key, or list it in {UNPINNED_LIST} with the reason",
                 e.key, e.tier
             )),
-            (None, true) if e.key.starts_with("_R") => errs.push(format!("{UNPINNED_LIST}: {} has a fixed boundary now: remove its line", e.key)),
+            (Some(_), Some((tier, _))) if tier != e.tier => {
+                errs.push(format!("{UNPINNED_LIST}: {} is listed under tier {tier} but is a {} key now: justify it for its new tier", e.key, e.tier))
+            }
+            (None, Some(_)) if e.key.starts_with("_R") => errs.push(format!("{UNPINNED_LIST}: {} has a fixed boundary now: remove its line", e.key)),
             _ => {}
         }
     }
-    for k in unpinned.keys().filter(|k| !pinned_tier(k)) {
-        errs.push(format!("{UNPINNED_LIST}: {k} is no start-up or fork key of hot-text.list: remove its line"));
+    for k in unpinned.keys().filter(|k| !checked(k)) {
+        errs.push(format!("{UNPINNED_LIST}: {k} is no key of hot-text.list: remove its line"));
     }
     errs
 }
@@ -1415,11 +1423,13 @@ mod tests {
         assert_eq!(inline_never(methods, "map", Some("KernelPages")), Some(false));
         assert_eq!(inline_never(methods, "parse", Some("Vds")), None);
         assert_eq!(inline_never(methods, "parse", None), None);
-        // Unpinned lines: one reason per key, no duplicates, Rust keys only.
-        assert_eq!(parse_unpinned("# c\n_Rk\thot path\n").unwrap().get("_Rk").map(String::as_str), Some("hot path"));
-        assert!(parse_unpinned("_Rk\thot\n_Rk\tagain\n").unwrap_err().contains("listed twice"));
+        // Unpinned lines: a known tier and one reason per key, no duplicates, Rust keys only.
+        assert_eq!(parse_unpinned("# c\n_Rk\ttool\thot path\n").unwrap().get("_Rk"), Some(&("tool".to_string(), "hot path".to_string())));
+        assert!(parse_unpinned("_Rk\tfork\thot\n_Rk\tfork\tagain\n").unwrap_err().contains("listed twice"));
         assert!(parse_unpinned("_Rk\n").unwrap_err().contains("want <v0 key>"));
-        assert!(parse_unpinned("malloc\tC name\n").unwrap_err().contains("want <v0 key>"));
+        assert!(parse_unpinned("_Rk\thot path\n").unwrap_err().contains("want <v0 key>\\t<tier>"));
+        assert!(parse_unpinned("_Rk\tlibm\thot path\n").unwrap_err().contains("want <v0 key>"));
+        assert!(parse_unpinned("malloc\tstartup\tC name\n").unwrap_err().contains("want <v0 key>"));
     }
 
     #[test]
@@ -1427,26 +1437,32 @@ mod tests {
         // LAYOUT-HOTKEY-INLINE-STABLE (no spec clause: build tooling): on a fixture tree, an
         // unmarked start-up method fails, a listed one passes, a marked one passes and makes its
         // line stale, a closure or core key needs a line, a C key never does, a line of a key that
-        // is not a start-up/fork key is stale, and other tiers are not checked.
+        // is not in the list is stale; every tier is checked (ruling #5024: a libm growth killed
+        // locale, tool and extra keys), and a listed key that changed tier fails until moved.
         let root = std::env::temp_dir().join(format!("liella-pinned-{}", std::process::id()));
         let src = root.join("crates/kernel/src");
         std::fs::create_dir_all(&src).unwrap();
         std::fs::write(root.join("crates/kernel/Cargo.toml"), "[package]\nname = \"liella-kernel\"\n").unwrap();
-        std::fs::write(src.join("vdso.rs"), "impl<'a> Vdso<'a> {\n    #[inline(never)]\n    pub fn parse() {}\n    fn lookup_many<const N: usize>() {}\n}\n").unwrap();
+        std::fs::write(src.join("vdso.rs"), "impl<'a> Vdso<'a> {\n    #[inline(never)]\n    pub fn parse() {}\n    fn lookup_many<const N: usize>() {}\n}\nfn builtin() {}\n").unwrap();
         let parse = "_RNvMNtC13liella_kernel4vdsoNtNtC13liella_kernel4vdso4Vdso5parse";
         let many = "_RINvMNtC13liella_kernel4vdsoNtNtC13liella_kernel4vdso4Vdso11lookup_manyKj5_EC15liella_boundary";
         let closure = "_RNCNvNtC15liella_boundary6printf8vfprintf0C15liella_boundary";
-        let list = format!("_start\tstartup\tfast,release\n{parse}\tstartup\tfast\n{many}\tstartup\tfast\n{closure}\tfork\tfast\n_RNvNtC13liella_kernel4vdso1x\tlocale\tfast\n");
+        let builtin = "_RNvNtC13liella_kernel4vdso7builtin";
+        let list = format!("_start\tstartup\tfast,release\n{parse}\tstartup\tfast\n{many}\tstartup\tfast\n{closure}\tfork\tfast\n{builtin}\tlocale\tfast\n");
         let entries = parse_list(&list).unwrap();
         let errs = check_pinned(&root, &entries, &BTreeMap::new());
-        assert_eq!(errs.len(), 2, "{errs:?}");
+        assert_eq!(errs.len(), 3, "{errs:?}");
         assert!(errs[0].contains("Vdso::lookup_many is not #[inline(never)]") && errs[0].contains("startup key"), "{errs:?}");
         assert!(errs[1].contains("a closure") && errs[1].contains("fork key"), "{errs:?}");
-        let listed: BTreeMap<String, String> = [many, closure, parse, "_RNvNtC13liella_kernel4vdso1x"].iter().map(|k| (k.to_string(), "why".to_string())).collect();
+        assert!(errs[2].contains("fn builtin is not #[inline(never)]") && errs[2].contains("locale key"), "{errs:?}");
+        let line = |k: &str, t: &str| (k.to_string(), (t.to_string(), "why".to_string()));
+        let listed: BTreeMap<String, (String, String)> =
+            [line(many, "startup"), line(closure, "fork"), line(parse, "startup"), line(builtin, "extra"), line("_RNvNtC13liella_kernel4vdso1x", "tool")].into_iter().collect();
         let errs = check_pinned(&root, &entries, &listed);
-        assert_eq!(errs.len(), 2, "{errs:?}");
+        assert_eq!(errs.len(), 3, "{errs:?}");
         assert!(errs[0].contains(parse) && errs[0].contains("has a fixed boundary now"), "{errs:?}");
-        assert!(errs[1].contains("1x is no start-up or fork key"), "{errs:?}");
+        assert!(errs[1].contains(builtin) && errs[1].contains("listed under tier extra but is a locale key"), "{errs:?}");
+        assert!(errs[2].contains("1x is no key of hot-text.list"), "{errs:?}");
         std::fs::remove_dir_all(&root).unwrap();
     }
 
