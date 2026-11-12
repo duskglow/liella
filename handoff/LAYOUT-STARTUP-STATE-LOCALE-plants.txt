@@ -8,7 +8,11 @@
 # lssl-join-order (-2): the state rename back before the copies pass's `ld -r` join, which merges every `.data1`
 # input in member (codegen unit) order: the order test names the objects out of list order.
 lssl-ascii-keys | crates/libc-so/startup-state.list | perl:s/\nliella::locale::collate::ASCII_KEYS\n/\n/ | cargo test -p liella --test hot_text_products -- init_startup_data_accesses | msg:locale: \.bss\.[A-Za-z0-9_]+collate[0-9]+ASCII_KEYS
-lssl-emission-order | xtask/src/coldbss.rs | perl:s/&plan\.renames, Some\(&plan\.order\)\)/&plan.renames, None)/ | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:STATE-ORDER: \.data1 is not in startup-state\.list order
+lssl-emission-order | xtask/src/coldbss.rs | perl:s/&plan\.renames, Some\(&plan\.order\)\)/&plan.renames, None)/ | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:STATE-ORDER: \.data1 is not in startup-state\.list order|first \.lbss section aligned to [0-9]+, want 4096
+# -4: with no reorder at all the build's own first-section check (-4) refuses the products first (the aligned section is
+# no longer the first `.lbss`), so lssl-emission-order accepts either message. lssl4-unsorted keeps the reorder but
+# drops the list-order sort inside each cluster (emission order): the build passes and the order test must name it.
+lssl4-unsorted | xtask/src/coldbss.rs | lit:v.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0))); ==> | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:STATE-ORDER: \.data1 is not in startup-state\.list order
 lssl-reloc-follow | xtask/src/coldbss.rs | perl:s/\n +from\.extend\(relocs\.get\(&i\)\.into_iter\(\)\.flatten\(\)\);\n/\n/ | cargo test -p xtask -- coldbss::tests::reordered_sections | msg:linked order
 lssl-join-order | xtask/src/so.rs | perl:s/(    let copies = [^\n]*\n)(.*?)(    crate::coldbss::move_startup_state[^\n]*\n)/$3$1$2/s | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:STATE-ORDER: \.data1 is not in startup-state\.list order
 # -3 (ruling #4942): lssl3-no-cluster: no member leads a first-call cluster (all first-call state back in `.data1`): the

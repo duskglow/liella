@@ -1,49 +1,44 @@
 # LAYOUT-STARTUP-STATE-LOCALE: deterministic start-up state order (#4923), setlocale's objects (#4915), first-call cluster (#4942)
 
-**State (2026-11-12, run -3): INCOMPLETE (context checkpoint), do not land yet.** Branch
-`task/layout-startup-state-locale-3` (= -2's head dfaceca76 + 3 commits; no merge). Role mei:~/w/s1. Scratch on mei:
-`~/work/LAYOUT-STARTUP-STATE-LOCALE-3/` (`branch.sh` = -2's for this role: xtask unit tests, both profiles' products +
-the three hot_text_products order/access tests + every probe at every pad against next (`pads.py`); saved products
-`next-{fast,release}` and `b1-{fast,release}` (= -2's head, copied from kanon), branch products land in `b2-*`).
+**State (2026-11-12, run -4):** branch `task/layout-startup-state-locale-4` (= -3's head df59a2829 + run -4's commits;
+no merge). Role keke:~/w/n1. Scratch on keke: `~/work/LAYOUT-STARTUP-STATE-LOCALE-4/` (`branch.sh` = -3's for this
+role; `pads.py`, `faultmap.py`; next's saved products `next-{fast,release}` copied from mei's -3 scratch; this head's
+products `b1-{fast,release}`).
 
 ## Decisions in force
-Ruling #4923 (order), #4942 (first-call tiers in a second cluster outside the every-process run; #4943 relocation
-sections move with targets: done in -2), D-X.70, D-X.64, D-X.69, jitter rule #4347. No decision record yet for the
-order rule or the first-call cluster (both want one: `records new decision D-NEW --series D-X`).
+Rulings #4923 (order), #4942 + #4949 (first-call tiers in a page-aligned `.lbss` cluster after `.bss`; `.ldata` would
+start a second writable PT_LOAD, D-X.68), #4943 (relocation sections move with their targets), D-X.70, D-X.64, jitter
+rule #4347. Records (run -4, #4950): `records/pending/LAYOUT-STARTUP-STATE-LOCALE-4-1.toml` (order rule) and `-2.toml`
+(first-call cluster), both `D-NEW`, series D-X: the coordinator assigns the ids.
 
-## Done (runs -1, -2: see their commits; run -3 below)
+## Done
 - -1/-2: list-order pass (`order_sections`, relocation sections follow), the rename after the copies pass's `ld -r`
-  join, the access check over all ten probe modes, the order test. -2 measured: locale/tool flat and 2-4 lower than
-  next at every pad, `true` +1 at every pad (first-call state between the base tier and the C words).
-- -3 (commits 8ac3454d0, cfd0da5bc, f1047eb5c), ruling #4942:
-  - `startup-state.list`: a `cluster first-call` line; every entry after it is first-call state (the setlocale tiers
-    incl. MAPS..SECURE and `_nl_msg_cat_cntr`, the LOCALE block, the time tiers, setenv's table, the catalog tier).
-    NSCACHE (every process) moved up to the every-process locale block.
-  - `coldbss.rs` `state_plan`: the zero-filled first-call sections of the member with the most such bytes (the Rust
-    object) are renamed `.lbss` (exact name; cold tables are `.lbss.<sym>`), ordered after the every-process tier and
-    ahead of that member's cold tables in the section table, the first one aligned to 4096 (`objcopy
-    --set-section-alignment` before the renames; the build checks exactly one `.lbss` section has it). Initialised
-    first-call objects (stdout, `_IO_2_1_stdout_`, intl GENERATION/SETTINGS/MEMO, NEXT_ID, ENV_VALUES/REPLACED,
-    ~300 bytes) and another member's (`csys_7.o`: `__daylight`, `__timezone`, `__tzname`) stay in `.data1`.
-  - Why `.lbss`, not the ruling's `.ldata` example: `.ldata` starts its own PT_LOAD (GNU ld default script) and the
-    static-PIE start accepts exactly one writable segment (D-X.68). `.lbss` follows `.bss` in that segment.
-  - hot_text_products: the order test covers both clusters (per cluster and object) and asserts the cluster starts a
-    page; the access check names any first-call cluster object the `true` trace touches.
-  - Unit test in `declared_startup_state_is_found_whatever_its_symbol_suffixes` covers the split and order.
+  join, the access check over all ten probe modes, the order test.
+- -3: `cluster first-call` line in `startup-state.list`; `coldbss.rs` `state_plan` renames the Rust object's
+  zero-filled first-call sections `.lbss`, after the every-process tier and ahead of the cold tables, the first one
+  aligned to 4096; initialised first-call objects and `csys_7.o`'s stay in `.data1`. Order test covers both clusters.
+- -4: **cause of lssl3-branch2 rc 3**: intl::RESOLVED is page aligned by its own type (`#[repr(C, align(4096))]`,
+  GETTEXT-SLOTS-PAGE) and is first-call state, so the cluster always held two 4096-aligned `.lbss` sections and the
+  "exactly one" check could never pass. Lowering RESOLVED's alignment would undo GETTEXT-SLOTS-PAGE (ALWAYS FORWARD),
+  and joining the sections would lose the list order inside the cluster; the check now asks what the cluster needs:
+  the first `.lbss` section in index order (the link order) carries the page alignment (`cluster_starts_page`, unit
+  cases in `declared_startup_state_is_found_whatever_its_symbol_suffixes`). Commit da8343fd6.
+- -4: the two decision records (commit 86ad95636); plants file: lssl3-align's message follows the new wording,
+  new plant lssl4-any-aligned (the check accepting any aligned `.lbss` instead of the first).
 
-## NOT VERIFIED (the checkpoint came first)
-Whether f1047eb5c compiles and its tests pass, and every count: job **lssl3-branch2** (mei) runs them now; read
-`~/logs/lssl3-branch2.log` (`grep -E "test result|FAILED|first-call|WORSE|sum over" `). Expectation: `true` back to
-next's level (`.data1` shrinks by the zero-filled first-call bytes); locale/tool may pay 1 page for the cluster
-(they touched those objects on base-tier pages before): compare with -2's 48/49 and 51/52 (next 50/51, 54/55).
+## Measured (lssl4-branch1, keke, Zen 1 host, head da8343fd6; cells next-fast / b1-fast / next-release / b1-release)
+21 pads (orig, pre 0x800-0xf000, cold, data, bss, lbss): `true` equal to next at every pad and profile (11/11/10/10
+at orig); locale 1-2 lower (50/49/51/50 at orig), tool 2-3 lower (54/52/55/53), fork, mktime, localtime(_mktime),
+float, strings, rebind equal everywhere. Sums over pads: fast locale 957 -> 934, tool 1033 -> 991; release 974 -> 951,
+1050 -> 1008; true 212/212, 192/192. WORSE cells: 0. xtask unit tests and the four hot_text_products start-up state
+tests pass in both profiles. The `pre` pads move `true` 11 -> 12 on next and the branch alike (text-side jitter,
+#4347, not this story's state).
 
-## Exact next step
-1. Read lssl3-branch2. If it failed to compile or a test is red, fix that first (clippy + static on mei).
-2. If `true` <= next everywhere and nothing WORSE: gate (`affected --run --base origin/next`), hot_text_products,
-   plants (`handoff/LAYOUT-STARTUP-STATE-LOCALE-plants.txt`: 7 plants, 3 new for -3), clippy, static, hand back.
-3. If locale/tool lose -2's gain: see which first-call page they now fault (faultmap.py on kanon scratch of -2) and
-   put the objects locale touches first in the cluster; never raise a bound.
+## Jobs (keke)
+lssl4-lint0 (inherited head: clippy + static, rc 0), lssl4-branch1 (da8343fd6: products, tests, pads, rc 0),
+lssl4-lint1 (86ad95636: records check + clippy + static, rc 0), lssl4-gate (direct tier, `--base origin/next`),
+layout-startup-state-locale-4-plants (8 plants). Results: see handoff/reports/LAYOUT-STARTUP-STATE-LOCALE-4.json.
 
-## Jobs (mei)
-lssl3-lint0 (inherited head dfaceca76: clippy + static + products, rc 0); lssl3-branch1 (8ac3454d0) and lssl3-unit1
-(cfd0da5bc): compile errors, superseded; lssl3-branch2 (f1047eb5c): running at hand-back.
+## Open / next
+- Coordinator: assign the two pending D-X ids.
+- Nothing else is left in this story once the gate and plants are green.
