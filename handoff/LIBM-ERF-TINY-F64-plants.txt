@@ -1,0 +1,9 @@
+# LIBM-ERF-TINY-F64 plants: the |x| < 2^-55 in-place erf paths (crates/math/src/fast_special.rs), caught by
+# math_fma_paths::erf_tiny_band_rounds_correctly_with_its_flags_in_every_mode (both builds, four modes, flags).
+int-drop-lo | crates/math/src/fast_special.rs | lit:((lo + (1 << 127)) >> 64) ==> ((1u128 << 127) >> 64) | cargo test -p liella-boundary --test math_fma_paths erf_tiny | msg:erf_tiny_band_rounds_correctly.*(FAILED|panicked)|panicked at.*erf\(
+int-no-round | crates/math/src/fast_special.rs | lit:(lo + (1 << 127)) ==> (lo + (1 << 126)) | cargo test -p liella-boundary --test math_fma_paths erf_tiny | msg:erf_tiny_band_rounds_correctly.*(FAILED|panicked)|panicked at.*erf\(
+int-window | crates/math/src/fast_special.rs | lit:if b <= M_TINY { ==> if b < M_TINY { | cargo test -p liella-boundary --test math_fma_paths erf_tiny | msg:erf_tiny_band_rounds_correctly.*(FAILED|panicked)|panicked at.*flags
+int-no-inexact | crates/math/src/fast_special.rs | lit:v * (1.0 + ax) ==> v * 1.0 | cargo test -p liella-boundary --test math_fma_paths erf_tiny | msg:erf_tiny_band_rounds_correctly.*(FAILED|panicked)|panicked at.*flags
+int-sign | crates/math/src/fast_special.rs | lit:f64::from_bits((base + n) | (x.to_bits() & 0x8000_0000_0000_0000)) ==> f64::from_bits(base + n) | cargo test -p liella-boundary --test math_fma_paths erf_tiny | msg:erf_tiny_band_rounds_correctly.*(FAILED|panicked)|panicked at.*erf\(
+fma-drop-lo | crates/math/src/fast_special.rs | lit:_mm_set_sd(CH64), _mm_set_sd(t) ==> _mm_set_sd(CH64), _mm_set_sd(0.0) | cargo test -p liella-boundary --test math_fma_paths erf_tiny | msg:erf_tiny_band_rounds_correctly.*(FAILED|panicked)|panicked at.*erf\(
+fma-subnormal | crates/math/src/fast_special.rs | lit:if ax < f64::MIN_POSITIVE { ==> if ax < 0.0 { | cargo test -p liella-boundary --test math_fma_paths erf_tiny | msg:erf_tiny_band_rounds_correctly.*(FAILED|panicked)|panicked at.*erf\(
