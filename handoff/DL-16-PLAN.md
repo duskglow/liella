@@ -17,8 +17,8 @@ differences row shared with DL-17; no compat flag).
 writer lock, publication point), `-2` (a failed `dlopen` leaves no trace), `-3` (handles and counts, #5006), `-4`
 (static programs deferred, #5005), all series D-27; `-5` the registered compat placeholder (COMPAT-NEW). On
 assignment, also update the references: the plan (intro, §2 `dlsym`, §7 static programs, §8 DL-16S), the two new
-rows at the end of the Behaviour table of `docs/differences-from-glibc.md`, and `-5`'s `decisions` + `date` (left out
-on purpose: `records check` resolves `decisions` only against records that have ids, so `-5`'s body names `-4`).
+rows at the end of the Behaviour table of `docs/differences-from-glibc.md`, and `-5`'s `decisions`, `story` and `date` (left
+out on purpose; story and date go together, and a date needs `decisions`: `records check` resolves `decisions` only against records that have ids, so `-5`'s body names `-4`).
 
 **Jobs:** shiki sh1: `dl-16-plan-2-lint0` (inherited head `b74a3e77f`, clippy + static, rc 0);
 `dl-16-plan-2-static` (final head: clippy, static, records check).

@@ -5,7 +5,6 @@ liella = "`dlopen` returns NULL with a dlerror text, never a crash, until the ph
 restore = "DL-16S: a loader linked into `libc.a` maps, relocates and initialises the object in a static program; DL-16S decides whether that becomes the default or stays behind this option"
 cost = "not implemented now: the restore is a loader inside `libc.a` (mapping, relocation, TLS, a second libc instance next to the static one), which is the whole of DL-16S"
 status = "registered"
-story = "DL-16-PLAN-2"
 body = '''
-Registered future option for coordinator ruling #5005. It rests on the pending decision records/pending/DL-16-PLAN-4.toml: when the coordinator assigns the ids, `decisions` names that decision's id and `date` is set (`records check` resolves `decisions` only against records that have ids).
+Registered future option for coordinator ruling #5005 (story DL-16-PLAN-2, 2026-11-12). It rests on the pending decision records/pending/DL-16-PLAN-4.toml: when the coordinator assigns the ids, `decisions` names that decision's id and `story` and `date` are set (`records check` resolves `decisions` only against records that have ids, and a dated compat record must name its decisions).
 '''
