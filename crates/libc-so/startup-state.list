@@ -49,7 +49,8 @@ liella_boundary::heap::RESERVE_LOCK
 liella_boundary::thread::HEAD
 liella_boundary::thread::LIST
 liella_boundary::thread::LIVE
-liella_boundary::thread::OWNED
+liella_boundary::thread::OWNED_HERE
+symbol liella_machine_owned  # its assembler twin (csys/src/machine/points.S, D-X.58)
 liella_boundary::thread::LOCK_ALONE
 liella_boundary::thread::RSEQ_OWNED
 liella_boundary::thread::FORBIDDEN
