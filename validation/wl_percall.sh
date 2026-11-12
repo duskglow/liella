@@ -22,11 +22,12 @@
 #   drops the column; a REV the branch is behind becomes merge-base NEW REV (WL_BASE_EXACT=1 keeps it; wl_base.sh).
 #   Without git (a role directory) the default is the .synced `merge_base=` (sync_role --base writes it; none: no base
 #   column), and an explicit REV must be a full sha (it wins; `base_sha=` in .synced is the base ref's tip). Either way its
-#   source or products must be cached on this host (~/wl/src/<sha>, ~/wl/products/<sha>; prime them from a git checkout
+#   source or products must be cached on this host (~/wl/src/<sha>, ~/wl/products/<sha>-release; prime them from a git checkout
 #   with validation/wl_prime_base.sh <host> <sha>), else exit 2.
 #   The base used and why is printed and recorded in the log (wl_base: line, read by finish.sh). Output: table sorted by (new-glibc) x typical calls
 #   (calls = 0 in the spec: unsorted, last), per case glibc / base / new, new/glibc, sd over 5 runs (instructions).
-# Products cached per sha in ~/wl/products/<sha> on the host,
+# Products cached per sha and profile in ~/wl/products/<sha>-release on the host (the shipped release profile,
+# LIELLA_FULL_PROFILE=1; WL_PROFILE=fast: the fast test profile in ~/wl/products/<sha>; WL-PREP-RELEASE-PROFILE),
 # binaries and rows per sha and spec hash in ~/wl/percall/ (COUNT_FRESH=1 ignores cached rows).
 # glibc is linked DYNAMICALLY (the system libc.so.6 with -z now; static glibc ignores the locale for collation) and
 # runs in the same locale as Liella: --locale L (default en_US.UTF-8) sets LC_ALL, and the harness calls
@@ -70,6 +71,8 @@ target=$1
 case "$event" in *[!A-Za-z0-9_:.-]*|"") echo "wl_percall: bad event name $event" >&2; exit 2 ;; esac
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/wl_local.sh"
+. "$here/wl_lock.sh"   # wl_profile, wl_key: WL_PROFILE=fast counts the fast-profile products (default: release, what ships)
+profile=$(wl_profile) || exit 2
 root=; gitmode=0
 if [ -d "$target" ]; then
     if wl_is_git "$target"; then
@@ -120,14 +123,14 @@ prep() {
     wl_install_local || return 1   # B = ~/wl/bin/v-<hash>, never overwritten
     for s in $shas; do
         if [ "$s" = "$new" ]; then k=$srckey; else k=$s; fi
-        [ -f ~/wl/products/$k/libc.a ] || [ -d ~/wl/src/$k ] && continue
+        [ -f ~/wl/products/$(wl_key "$k")/libc.a ] || [ -d ~/wl/src/$k ] && continue
         if [ $gitmode = 1 ]; then
             t=~/wl/src/.$k.$$; rm -rf "$t"; mkdir -p "$t" && git -C "$repo" archive --format=tar "$s" | tar -x -C "$t" && { mv -T "$t" ~/wl/src/$k 2>/dev/null || rm -rf "$t"; } || return 1
         else
             wl_local_src "$root" "$k" || return 1
         fi
     done
-    cmd="${rec}WL_EVENT=$event COUNT_FRESH=${COUNT_FRESH:-0} PC_LOCALE=$locale bash $B/wl_percall_run.sh $sname $cases $base $srckey $trace"
+    cmd="${rec}WL_PROFILE=$profile WL_EVENT=$event COUNT_FRESH=${COUNT_FRESH:-0} PC_LOCALE=$locale bash $B/wl_percall_run.sh $sname $cases $base $srckey $trace"
 }
 [ $nowait = 1 ] && echo "wl_percall: --nowait ignored (this tool runs where it is started; jobrun detaches)" >&2
 prep || exit 1

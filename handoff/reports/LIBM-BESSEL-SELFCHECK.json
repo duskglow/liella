@@ -1,0 +1,12 @@
+{"task": "LIBM-BESSEL-SELFCHECK", "model": "opus", "tokens": null,
+ "result": "Bug in the check, not libm: Liella's y1(2.0) and y0(1e-10) are correctly rounded in all 4 modes (mpmath 400-bit, 384-bit path, test oracle agree); the percall self-check compared against the reference's 17 digits, 1 ulp off in RN; the check now compares within 1 ulp of the oracle value; new pinned test; sweep 6513 operands x 4 modes 0 wrong",
+ "branch": "task/libm-bessel-selfcheck", "head": "0efd9a863 (jobs' head; the report commit above it touches handoff/ only)",
+ "gate": {"affected": "5 passed / 0 failed (liella-math::fast_bessel)", "peak": "1.4G"},
+ "accepted_first_attempt": null,
+ "jobs": ["libm-bessel-selfcheck-clippy", "libm-bessel-selfcheck-static", "libm-bessel-selfcheck-gate", "libm-bessel-selfcheck-plants", "libm-bessel-selfcheck-sweep2", "libm-bessel-selfcheck-percall"],
+ "rulings": [],
+ "informational": ["bes_y1_zero is 464k instructions/call vs 436 (band 3 zeros on the 384-bit path): LIBM-F64-BESSEL-BANDS next step, unrelated to the check", "plants: 2 CAUGHT, 0 SURVIVED, 0 WARN", "percall check now ok on bes_y1_zero, bes_j0_zero, bes_y1_tiny, bes_y0_tiny; counts unchanged (no libm code change)", "first commit message used a shell heredoc against the brief; later commits used a message file"],
+ "refused": [],
+ "improvement": "percall self-checks that print %.17g of libm results compare against a reference that is not correctly rounded; print closeness to an oracle value (pc_check_near) for every libm case",
+ "next_step": "none for this story; land with or independently of LIBM-F64-BESSEL-BANDS",
+ "report_file": "handoff/LIBM-BESSEL-SELFCHECK.md"}

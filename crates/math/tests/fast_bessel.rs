@@ -194,6 +194,33 @@ fn double_bessel_tiny_band_settles_and_matches_the_accurate_path() {
 }
 
 #[test]
+fn double_bessel_selfcheck_operands_match_an_external_oracle() {
+    // Clauses: s10_3_c_0 (D-10.13).
+    // The wl_percall self-check operands y1(2.0) (table slot [2, 2.125)) and y0(1e-10) (tiny band): the expected
+    // bits in Nearest, Up, Down, Zero are mpmath 1.4.1's bessely at 400 bits rounded in each mode (an oracle
+    // outside the repository; the true values are -0.10703243154093754688837077... and
+    // -14.732516272697242019498212..., 0.35 and 0.47 ulp above the double below them in magnitude). The entry
+    // point, the fast tier when it settles, the 384-bit path and the repository's test oracle must all give them.
+    let cases: [(&str, f64, [u64; 4]); 2] = [
+        ("y1", 2.0, [0xbfbb_667a_3914_6647, 0xbfbb_667a_3914_6647, 0xbfbb_667a_3914_6648, 0xbfbb_667a_3914_6647]),
+        ("y0", 1e-10, [0xc02d_770c_5f76_0b81, 0xc02d_770c_5f76_0b81, 0xc02d_770c_5f76_0b82, 0xc02d_770c_5f76_0b81]),
+    ];
+    for (name, x, want) in cases {
+        let (_, fast, entry, accurate) = FUNCS.into_iter().find(|c| c.0 == name).unwrap();
+        for ((mode, round), w) in MODES.into_iter().zip(want) {
+            let v = entry(x, mode).0;
+            assert_eq!(v.to_bits(), w, "selfcheck operand {name}({x:e}) entry in {mode:?}: {v:e}, external oracle {:e}", f64::from_bits(w));
+            if let Some((v, _)) = fast(x, mode) {
+                assert_eq!(v.to_bits(), w, "selfcheck operand {name}({x:e}) fast tier in {mode:?}: {v:e}, external oracle {:e}", f64::from_bits(w));
+            }
+            let v = accurate(x, mode).0;
+            assert_eq!(v.to_bits(), w, "selfcheck operand {name}({x:e}) 384-bit path in {mode:?}: {v:e}, external oracle {:e}", f64::from_bits(w));
+            assert_eq!(oracle(name, x, round), w, "selfcheck operand {name}({x:e}) test oracle in {mode:?}");
+        }
+    }
+}
+
+#[test]
 fn double_bessel_kernels_stay_within_their_bounds() {
     // Clauses: s10_3_c_0 (D-10.13).
     // Each kernel's error against the oracle (240 bits) stays within its `eps` on 8 operands of

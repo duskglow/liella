@@ -5,9 +5,10 @@
 #   wl_prep.sh SHA...
 #
 # SHA: full commit ids whose source tree is already unpacked in ~/wl/src/SHA (wl_gate.sh does
-# that with git archive). For each SHA: build the products (cargo xtask so; libc.a and
-# liella-crt1.o) into ~/wl/products/SHA, then relink every workload program against them into
-# the kit ~/wl/kit/SHA/bin. The program objects come from the validation builds
+# that with git archive). For each SHA: build the products (`cargo xtask so` with LIELLA_FULL_PROFILE=1, the shipped
+# release profile; WL_PROFILE=fast for the fast one; libc.a, libm.a and liella-crt1.o) into ~/wl/products/KEY, then
+# relink every workload program against them into the kit ~/wl/kit/KEY/bin. KEY = $(wl_key SHA) (validation/wl_lock.sh):
+# SHA-release, or SHA for the fast profile. The program objects come from the validation builds
 # (~/validation/build/liella-m, make: liella-noload), compiled with the system's headers, so
 # they do not depend on the Liella commit; only the final link does. The link commands are
 # taken once from `make -n` (nothing is built in the validation trees). The glibc kit
@@ -69,10 +70,11 @@ for p in "${PROGS[@]}"; do
 done
 
 for sha in "$@"; do
-    prod=$W/products/$sha
+    key=$(wl_key "$sha")
+    prod=$W/products/$key
     wl_lock "$sha"
     wl_build_products "$sha" || exit 1
-    kit=$W/kit/$sha/bin
+    kit=$W/kit/$key/bin
     mkdir -p "$kit"
     for p in "${PROGS[@]}"; do
         IFS='|' read -r name path obj tree <<< "$p"
@@ -82,7 +84,7 @@ for sha in "$@"; do
         # gawk's liella-m objects were configured without -lm (no libm.a then); its maths
         # functions come from Liella's libm.a, where -lm would put it (no stand-in since GAWK-LM-CHECK-2).
         [ "$name" = gawk ] && extra=$prod/libm.a
-        (cd "$(ltree "$name" "$tree")/$sub" && LIELLA_PRODUCTS=$prod LIELLA_CC_EXTRA=$extra bash -c "${cmd/ -o $p / -o $kit/$name.tmp }") > "$W/kit/$sha/link-$name.log" 2>&1 || { echo "wl_prep: link of $name failed (see $W/kit/$sha/link-$name.log)" >&2; exit 1; }
+        (cd "$(ltree "$name" "$tree")/$sub" && LIELLA_PRODUCTS=$prod LIELLA_CC_EXTRA=$extra bash -c "${cmd/ -o $p / -o $kit/$name.tmp }") > "$W/kit/$key/link-$name.log" 2>&1 || { echo "wl_prep: link of $name failed (see $W/kit/$key/link-$name.log)" >&2; exit 1; }
         mv -f "$kit/$name.tmp" "$kit/$name"
     done
     wl_unlock
