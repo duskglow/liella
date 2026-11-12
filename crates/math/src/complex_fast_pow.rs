@@ -198,7 +198,7 @@ fn round32(p: Dd, eps: f64, m: i32, mode: Rounding) -> Option<f32> {
     let dl = ((av - k) - 0.5 * g) + if v < 0.0 { -lo } else { lo };
     // The rounding of `dl` and of the threshold is below `2^-52·g`.
     let thr = g * (0.5 - SLACK_32) - eps * dd::pow2(m) * (1.0 + SLACK_32);
-    if !(dd::abs(dl) < thr) {
+    if dd::abs(dl) >= thr {
         return None;
     }
     let odd = bits & (1u64 << 28) != 0;
