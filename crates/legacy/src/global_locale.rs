@@ -518,7 +518,7 @@ fn replace_changed<M: Mapper>(m: &M, current: &Locale, cats: &[Cat], names: &[&[
     let mut changed = [Cat::Ctype; 12];
     let mut n = 0;
     for &c in cats {
-        if names.get(c.index()).copied()? != current.name(c) {
+        if locale::reported(names.get(c.index()).copied()?) != current.name(c) {
             *changed.get_mut(n)? = c;
             n = n.saturating_add(1);
         }
@@ -592,9 +592,13 @@ pub fn setlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: Reque
             }
         }
         // The name the query would answer (for `LC_ALL`: the single or composite name) names
-        // every category asked as it is: nothing to look up (s7_2_c_4), no lock.
+        // every category asked as it is: nothing to look up (s7_2_c_4), no lock. `"POSIX"` is
+        // compared as the `"C"` it reports: otherwise every repeated setlocale(cat, "POSIX")
+        // missed here and rebuilt, compared and copied whole locales under the lock (~2,300
+        // instructions, partly memmove whose count follows stack alignment).
         Request::Name(n) => {
-            if let Some(s) = query_cached(m, cat).filter(|&s| s == n) {
+            let want = locale::reported(n);
+            if let Some(s) = query_cached(m, cat).filter(|&s| s == want) {
                 return Some(s);
             }
         }
