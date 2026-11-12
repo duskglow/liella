@@ -1,0 +1,78 @@
+{
+ "task": "LAYOUT-FIRST-WINDOW",
+ "model": "opus",
+ "tokens": null,
+ "result": "liella_sys_fstat linked right after the start-up tier (hot-text.first-window); release tool/locale/localtime/localtime_mktime each -1 fault, fast localtime/localtime_mktime -1, rest equal; FIRST-WINDOW test with margin",
+ "branch": "task/layout-first-window",
+ "head": "0c242b364",
+ "gate": {
+  "affected": "pending (mei:lfw-gate2)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "assign the D-X id for records/pending/LAYOUT-FIRST-WINDOW-1.toml",
+   "recommendation": "next free D-X id"
+  }
+ ],
+ "informational": [
+  "fast first-window margin is 1012 bytes (release 1908): the next start-up growth over 1 KiB fails FIRST-WINDOW by name",
+  "fault maps not taken this run (fw-probe.sh used dash for exec -a in the base run); counts from hot_text_products"
+ ],
+ "refused": [
+  "cargo xtask plants (lfw-plants) REFUSED a .S plant anchored on _start: re-anchored on liella_machine_memmove"
+ ],
+ "impact": [
+  {
+   "kind": "faults",
+   "what": "release tool probe (Skylake-SP)",
+   "before": 54,
+   "after": 53,
+   "unit": "minor faults",
+   "measured": true
+  },
+  {
+   "kind": "faults",
+   "what": "release locale probe",
+   "before": 51,
+   "after": 50,
+   "unit": "minor faults",
+   "measured": true
+  },
+  {
+   "kind": "faults",
+   "what": "release localtime / localtime_mktime probes",
+   "before": 18,
+   "after": 17,
+   "unit": "minor faults",
+   "measured": true
+  },
+  {
+   "kind": "faults",
+   "what": "fast localtime / localtime_mktime probes",
+   "before": 19,
+   "after": 18,
+   "unit": "minor faults",
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "FIRST-WINDOW products test + xtask unit test + 2 plants",
+   "before": 0,
+   "after": 2,
+   "unit": "tests",
+   "measured": true
+  }
+ ],
+ "improvement": "faultrun/faultdiag helpers live in one story scratch; a repo tool (tools/hottext/fault_probe.sh) would save each layout story rewriting it",
+ "next_step": "coordinator: assign the D-X id; land after lfw-gate2 and lfw-plants2 are green",
+ "report_file": "handoff/LAYOUT-FIRST-WINDOW.md",
+ "jobs": [
+  "mei:lfw-gate2",
+  "mei:lfw-plants2",
+  "mei:lfw-fwcheck",
+  "mei:lfw-probe-head",
+  "mei:lfw-probe-base"
+ ]
+}
