@@ -581,6 +581,25 @@ fn query_record(handle: usize, cat: Option<Cat>, slot: usize) {
     }
 }
 
+/// `a == b` for two locale names, compared here eight bytes at a time rather than through a
+/// library call: names are short, and the call made the fast path of [`setlocale`] save and
+/// restore six registers and keep a frame, so its miss could not jump straight to
+/// [`setlocale_locked`] (SETLOCALE-C-ROWS).
+#[inline(always)]
+fn same_name(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let word = |c: &[u8]| <[u8; 8]>::try_from(c).ok().map(u64::from_ne_bytes);
+    let (mut a8, mut b8) = (a.chunks_exact(8), b.chunks_exact(8));
+    for (x, y) in a8.by_ref().zip(b8.by_ref()) {
+        if word(x) != word(y) {
+            return false;
+        }
+    }
+    a8.remainder().iter().zip(b8.remainder()).all(|(x, y)| x == y)
+}
+
 /// `setlocale(cat, …)` (`cat` `None` is `LC_ALL`). Returns the category's name or the
 /// composite name (`'static`, followed by a NUL), or `None` if a name is unknown, in which
 /// case nothing changes. A query is answered from the query cache when it can be.
@@ -602,7 +621,7 @@ pub fn setlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: Reque
         // instructions, partly memmove whose count follows stack alignment).
         Request::Name(n) => {
             // The name as given first: "C" and every file name match there at no extra cost.
-            if let Some(s) = query_cached(m, cat).filter(|&s| s == n || s == locale::reported(n)) {
+            if let Some(s) = query_cached(m, cat).filter(|&s| same_name(s, n) || same_name(s, locale::reported(n))) {
                 return Some(s);
             }
         }
