@@ -1,4 +1,4 @@
-id = "COMPAT-NEW"
+id = "COMPAT-22"
 behaviour = "`dlopen` in a statically linked program (§27, `s27_1_c_1`; ruling #5005)"
 glibc = "The shared object is loaded into the static program (the static link warns that the run time needs the shared libraries of the glibc version used for linking); DL-16S probes the details"
 liella = "`dlopen` returns NULL with a dlerror text, never a crash, until the phase-14 story DL-16S `DL-DLOPEN-STATIC` lands"
