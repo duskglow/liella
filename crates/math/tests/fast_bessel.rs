@@ -164,6 +164,36 @@ fn double_bessel_fast_tier_matches_the_accurate_path() {
 }
 
 #[test]
+fn double_bessel_tiny_band_settles_and_matches_the_accurate_path() {
+    // Clauses: s10_3_c_0 (D-10.13, D-10.110).
+    // Below 2^-27 the fast tier answers every operand (subnormal `j1` results read off the bits,
+    // subnormal `y0`, `y1` operands, `y1`'s overflow) except `y1` just above its overflow
+    // threshold, and agrees with the 384-bit path in value and status in all four modes.
+    let thr = 716_770_142_402_180u64;
+    let mut bits: Vec<u64> = vec![1, 2, 3, 0x7_1234, 0x000f_ffff_ffff_ffff, 0x0010_0000_0000_0000, 0x001f_ffff_ffff_ffff];
+    bits.extend([0x0020_0000_0000_0000, thr - 1, thr, thr + 1000, thr + (1 << 23), 0x3e3f_ffff_ffff_ffff]);
+    bits.extend([1.3e-301, 1e-300, 1e-200, 1e-100, 1e-20, 1e-10, 8.7e-19, 7e-9].map(f64::to_bits));
+    for (name, fast, _, accurate) in FUNCS {
+        let signs: &[f64] = if name.starts_with('j') { &[1.0, -1.0] } else { &[1.0] };
+        for &b in &bits {
+            for &s in signs {
+                let x = s * f64::from_bits(b);
+                for (mode, _) in MODES {
+                    let (w, sw) = accurate(x, mode);
+                    match fast(x, mode) {
+                        Some((v, st)) => {
+                            assert_eq!(v.to_bits(), w.to_bits(), "{name}({x:e}) in {mode:?}: fast {v:e}, accurate {w:e}");
+                            assert_eq!(st, sw, "{name}({x:e}) in {mode:?}: fast status {st:?}, accurate {sw:?}");
+                        }
+                        None => assert!(name == "y1" && (thr..thr + (1 << 22)).contains(&b), "{name}({x:e}) in {mode:?}: the tiny band declined"),
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn double_bessel_kernels_stay_within_their_bounds() {
     // Clauses: s10_3_c_0 (D-10.13).
     // Each kernel's error against the oracle (240 bits) stays within its `eps` on 8 operands of
