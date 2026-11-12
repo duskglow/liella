@@ -136,7 +136,7 @@ pub(super) const ERF_TINY_MAX: u32 = 0x0071_6fe1;
 /// below 2^23 (Khinchin, Continued Fractions, ch. II, best approximations; the decision record
 /// lists them). So y rounds like erf x in every mode and is never a `float` itself: underflow and
 /// inexact always, no `errno` (the result is never zero).
-#[inline(never)]
+#[inline(always)]
 pub(super) fn erf_tiny(x: f32, mode: Rounding) -> Option<(f32, Status)> {
     if (x.to_bits() & 0x7fff_ffff).wrapping_sub(1) >= ERF_TINY_MAX {
         return None;
@@ -162,7 +162,7 @@ pub(super) fn erf_tiny(x: f32, mode: Rounding) -> Option<(f32, Status)> {
 /// c·|x| < 2^-25: inside (1 - 2^-25, 1) for x > 0 and (1, 1 + 2^-24) for x < 0, open intervals
 /// between rounding boundaries (the midpoints 1 - 2^-25 and 1 + 2^-24, the `float` 1). So the
 /// result is 1 to nearest, 1 - 2^-24 down from below 1, 1 + 2^-23 up from above 1; inexact.
-#[inline(never)]
+#[inline(always)]
 pub(super) fn erfc_tiny(x: f32, mode: Rounding) -> Option<(f32, Status)> {
     let ax = x.to_bits() & 0x7fff_ffff;
     if ax.wrapping_sub(1) >= 0x3280_0000 - 1 {

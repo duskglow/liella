@@ -367,7 +367,8 @@ pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)> {
         Fast::Acosh => (acosh_core(x)?, ACOSH_DELTA, "acoshf"),
         Fast::Atanh => (atanh_core(x)?, ATANH_DELTA, "atanhf"),
         // Tiny operands the rounding test refuses (subnormal erf, erfc next to 1) take their
-        // own exact path, out of line on the refusal side (LIBM-RETHINK-ERFC, D-10.107).
+        // own exact path on the refusal side (LIBM-RETHINK-ERFC, D-10.107), inlined: an
+        // out-of-line call there gave the entry a frame on every call (+9 instructions typical).
         Fast::Erf => return finish(x, erf_core(x)?, ERF_DELTA, mode, "erff").or_else(|| erf_tiny(x, mode)),
         Fast::Erfc => return finish(x, erfc_core(x)?, ERFC_DELTA, mode, "erfcf").or_else(|| erfc_tiny(x, mode)),
         Fast::Tgamma => (gamma_core(f64::from(x))?, TGAMMA_DELTA, "tgammaf"),
