@@ -1,0 +1,12 @@
+# HOTLIST-TRAIN-REGEN-2: plants on the train-owned list resolution (xtask/src/hotlists.rs) and the dead-key check, run with `cargo xtask plants`.
+# train-stale-passes: under LIELLA_TRAIN=1 a stale tracked list is not fatal (the train falls through to the branch path).
+train-stale-passes | xtask/src/hotlists.rs | lit:    if train { ==>     if false { | cargo test -p xtask --bin xtask hotlists:: | msg:train_fails_on_a_stale_tracked_list.*(FAILED|panicked)|panicked.*train_fails_on_a_stale_tracked_list
+# branch-stale-fails: off the train the same stale tracked list fails instead of reading the fresh copy with an info line.
+branch-stale-fails | xtask/src/hotlists.rs | lit:    if train {
+==>     if train || !differ.is_empty() { | cargo test -p xtask --bin xtask hotlists:: | msg:branch_reads_the_fresh_copy_with_an_info_line.*(FAILED|panicked)|panicked.*branch_reads_the_fresh_copy
+# other-tree-read: a regeneration made for another tree state (stamp mismatch) is read anyway.
+other-tree-read | xtask/src/hotlists.rs | lit:    if stamp.trim() != here { ==>     if stamp.trim() == "never" { | cargo test -p xtask --bin xtask hotlists:: | msg:a_regeneration_of_another_tree_is_not_read.*(FAILED|panicked)|panicked.*a_regeneration_of_another_tree
+# hand-written-from-copy: a hand-written input (hot-text.clusters) is routed to the out-of-tree copy.
+hand-written-from-copy | xtask/src/hotlists.rs | lit:        Some(name) if GENERATED.contains(&name) => path(root, name), ==>         Some(name) => path(root, name), | cargo test -p xtask --bin xtask hotlists:: | msg:branch_reads_the_fresh_copy_with_an_info_line.*(FAILED|panicked)|panicked.*branch_reads_the_fresh_copy
+# dead-key-branch: a dead key is not enforced off the train (the stale check moved to the train, the dead-key check must not).
+dead-key-branch | xtask/src/hottext.rs | lit:        Some(e) if regen => Ok(Some(e)), ==>         Some(e) if regen || !crate::hotlists::train() => Ok(Some(e)), | cargo test -p xtask --bin xtask regen_mode_is_one_explicit_flag | msg:regen_mode_is_one_explicit_flag_for_regen_sh_only.*(FAILED|panicked)|panicked.*regen_mode_is_one_explicit_flag
