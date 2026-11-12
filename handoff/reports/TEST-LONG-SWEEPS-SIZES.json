@@ -17,14 +17,16 @@
  ],
  "refused": [],
  "jobs": [
-  "tlss-lint1",
-  "tlss-small1",
-  "tlss-rows1",
   "tlss-lint2",
-  "tlss-plants1",
+  "tlss-rows1",
   "tlss-plants2"
  ],
  "improvement": "the plants file was written before the row's final shape (secs line) and was refused once; write plants after the last code edit",
  "next_step": "none for this story",
- "report_file": "handoff/test-long-sweeps-sizes.md"
+ "report_file": "handoff/test-long-sweeps-sizes.md",
+ "superseded": [
+  "tlss-plants1 (refused by the plants tool: pattern matched no site; fixed in tlss-plants2)",
+  "tlss-lint1 (older head; rerun as tlss-lint2)",
+  "tlss-small1 (default-size timing, evidence only)"
+ ]
 }
