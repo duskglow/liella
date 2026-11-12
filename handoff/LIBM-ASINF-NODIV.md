@@ -32,7 +32,12 @@ identical math), new bound test + `math_expf_onepass_entries_match_the_envelope`
 - Superseded: libm-asinf-nodiv-plants (baseline `so` failed on the partial-register check), libm-asinf-nodiv-gate
   (killed: stale head).
 
+## Gate2 result
+RED only on two start-up page-fault bounds (hot_text_products: first localtime_r 21 > 20; localtime_r + mktime 21 > 20).
+This change touches no start-up code: LAYOUT-JITTER (#4347). Not chased; origin/next not yet measured with the same count.
+
 ## Next step (continuation)
+0. Measure the same two counts on origin/next (handoff/layout-stability-rethink.md tool) per #4347.
 1. Read the three jobs above; fix anything red (plants WARN lines too).
 2. Counts: `cargo xtask bench --compare --counters --runs 3 cbench_libm --rows asinf,acosf,atanf` on the role.
 3. Timing (the verdict, ruling #4924): `cargo xtask bench --stage <tar> --only cbench_libm` on the role, book
