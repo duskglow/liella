@@ -1,0 +1,12 @@
+id = "D-NEW"
+series = "D-10"
+section = "s10"
+spec = "no spec clause (measurement tooling)"
+ann = "—"
+status = "active"
+story = "WL-PREP-RELEASE-PROFILE"
+date = "2026-11-12"
+tests = ["validation/wl_lock_test.sh"]
+body = '''
+**The lab's workload and per-call counts measure the shipped release build** (WL-PREP-RELEASE-PROFILE, coordinator ruling #4889; decided locally, tooling only, no product code). `wl_build_products` (`validation/wl_lock.sh`, used by `wl_prep.sh` and `wl_percall_run.sh`) builds with `LIELLA_FULL_PROFILE=1`, xtask's own switch to the `release` profile (`Profile::for_tests`), and accepts the build only when the `target/liella/.profile` marker xtask writes says `release`; the marker is kept in the products directory. Products, kits, per-call binaries and rows and workload count rows are keyed by `wl_key <sha>`: `<sha>-release`; `WL_PROFILE=fast` (for a comparison only) builds and reads the fast test profile under `<sha>`, the only key before this decision, under which every cached set is fast, so old caches stay readable as fast and are never taken for release. A cached set of the other profile under a key is refused (never reused, rebuilt over or deleted). Every reader of `~/wl/products` and `~/wl/kit` under `validation/` follows the key (`wl_gate.sh`, `wl_count.sh`, `wl_count_run.sh`, `wl_run.sh`, `wl_attr.sh`, `wl_percall.sh`, `wl_local.sh`, `wl_prime_base.sh`, `wl_alloctrace.sh`, `wl_alloctrace_run.sh`, `mcs_run.sh`). Why: fast-profile products read some statics through the GOT (+1 instruction per read) where the release build does not, so the counts differed from what ships. Cost: the first count of each commit builds fat LTO (minutes longer than the fast build); a primed base whose only cached products are fast needs its source again. Test: `validation/wl_lock_test.sh` (a stand-in `cargo`; `affected` runs it when `wl_lock.sh` changes); plants `handoff/WL-PREP-RELEASE-PROFILE-plants.txt`.
+'''

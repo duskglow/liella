@@ -24,7 +24,7 @@ export PATH=$stub:$PATH
 printf '%s\n' '#!/bin/sh' \
     '[ "$1 $2" = "xtask so" ] || { echo "stand-in cargo: unexpected $*" >&2; exit 2; }' \
     'echo build >> "$HOME/builds"' \
-    'p=fast; case ${LIELLA_FULL_PROFILE:-} in ""|0) ;; *) p=release ;; esac' \
+    'p=fast; case ${LIELLA_FULL_PROFILE:-} in ""|0) ;; *) p=release ;; esac; [ -n "${STUB_PROFILE:-}" ] && p=$STUB_PROFILE' \
     'mkdir -p target/liella && for f in libc.a libm.a liella-crt1.o; do echo "$p" > target/liella/$f; done' \
     'echo "$p" > target/liella/.profile' > "$stub/cargo"
 chmod +x "$stub/cargo"
@@ -62,6 +62,12 @@ check "fast reuse ran no cargo" 1 "$(builds)"
 WL_PROFILE=fast wl_build_products $U > /dev/null 2>&1; check "fast build of a new sha (rc)" 0 "$?"
 check "fast products marker" fast "$(cat "$HOME/wl/products/$U/.profile" 2>/dev/null)"
 check "release key untouched by a fast build" no "$([ -e "$HOME/wl/products/$U-release" ] && echo yes || echo no)"
+
+# 2b. a build that leaves products of the other profile (STUB_PROFILE: the stand-in ignores the switch) is refused
+V=00112233445566778899aabbccddeeff00112233
+mkdir -p "$HOME/wl/src/$V"
+STUB_PROFILE=fast wl_build_products $V > "$tmp/b2.log" 2>&1; check "build that left fast products refused (rc)" 1 "$?"
+check "refused build cached nothing" no "$([ -e "$HOME/wl/products/$V-release" ] && echo yes || echo no)"
 
 # 4. the other profile under a key: refused, kept, not rebuilt
 mkdir -p "$HOME/wl/products/$T-release" && for f in libc.a libm.a; do echo fast > "$HOME/wl/products/$T-release/$f"; done
