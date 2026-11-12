@@ -19,16 +19,17 @@ Decisions in force: D-10.53 (tier structure), D-10.25 (FMA builds). New: records
   bit; nearest answers per regime [999729, 999676, 999663, 950661, 896581] (typical, series, cancellation, large |x|
   incl. overflowing results, y near k*pi/2).
 
-## Red (not caused by a test of this story; attribution NOT yet shown)
+## Red: caused by this branch (the product build), not by a test
 
-* libm-cplx-sincos-2-gate rc 1 and libm-cplx-sincos-2-plants rc 2 (baseline): `xtask so`/`xtask test` stop on
+* libm-cplx-sincos-2-gate rc 1, -plants rc 2 (baseline) and -percall rc 1 all stop in `xtask so` on
   "hot-text.list: 1 key(s) match no function section of the fast-profile libc.a: _RNvNtC6liella6locale7builtin
-  (locale, traced in fast,release)". This branch touches no locale code. NEXT STEP 1: check whether origin/next
-  d1b3a596c fails the same way (percall's base build of d1b3a596c on keke, or `cargo xtask so` on a next role); if
-  next is green, the new libm code changed an inlining decision: follow the message (`tools/hottext/regen.sh . --build`
-  per profile, or a hot-text.absent line with the reason), never loosen the check.
-* libm-cplx-sincos-2-percall was still running at hand-back (validation/percall/cplx_sin.c: csin, csinh, csinf,
-  csinhf typical, csin small-|y| and large-|y|, csinf small-|y|, bench operands; base d1b3a596c primed on keke).
+  (locale, traced in fast,release)". Attributed: percall's build of origin/next d1b3a596c passed (products cached in
+  keke ~/wl/products/d1b3a596c...), this branch's 12f4a0891 failed; the branch touches no locale code, so the new libm
+  code changed an inlining decision in the fast (LTO) profile. NEXT STEP 1: follow the message
+  (`tools/hottext/regen.sh . --build` in each profile, as a jobrun job in the role; or, if the key is gone by design,
+  `tools/hottext/prune.py`), commit the regenerated list; never loosen the check.
+* percall probe ready: validation/percall/cplx_sin.c (csin, csinh, csinf, csinhf typical; csin small-|y| and
+  large-|y|; csinf small-|y|; bench operands); base d1b3a596c primed and built on keke.
 
 ## Bands and routes (double, a = |hyperbolic argument|, t = trig argument)
 
