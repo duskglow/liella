@@ -630,11 +630,13 @@ pub fn setlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: Reque
     setlocale_locked(sys, m, cat, &req)
 }
 
-/// [`setlocale`] when the query cache did not answer: under [`LOCK`]. `req` by reference, so
-/// that the call from [`setlocale`] can be a jump: the locked path's stack buffers then sit where
-/// they sat when it was part of `setlocale` (memmove counts there follow their alignment).
+/// [`setlocale`] when the query cache did not answer, under [`LOCK`]; also called directly for a
+/// [`Request::Environment`], which the cache never answers. A caller that calls this itself puts
+/// its stack buffers right below its own frame, where they were when this was part of
+/// `setlocale`: `setlocale(cat, "")` copies whole locales there and its memmove count follows
+/// their alignment (+6 to +8 per call when reached through [`setlocale`]; SETLOCALE-C-ROWS).
 #[inline(never)]
-fn setlocale_locked<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: &Request<'_>) -> Option<&'static [u8]> {
+pub fn setlocale_locked<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: &Request<'_>) -> Option<&'static [u8]> {
     let _g = LOCK.lock(sys);
     let current = *global(m);
     let one = [cat.unwrap_or(Cat::Ctype)];
