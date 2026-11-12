@@ -1,7 +1,12 @@
 # LAYOUT-HOTKEY-INLINE-STABLE: handoff (checkpoint 1, NOT VERIFIED)
 
-State: branch `task/layout-hotkey-inline-stable`, cut from next d1b3a596c; code commit a61fb95aa36b. Role shiki:~/w/sh1
-(not synced with the code yet: the base job below holds it). Nothing in this run was compiled: there is no local cargo.
+State: branch `task/layout-hotkey-inline-stable`, cut from next d1b3a596c; code a61fb95aa36b + fixes 45dc54390c30
+(E0502 in `V0::owner`) and 88ea784bd441 (two stale unpinned lines: `Heap::alloc_slow`, `ToStream::put_general` already
+inline(never)). Role shiki:~/w/sh1 not synced yet (the base job below holds it). Verified so far only by
+`ops handback-check`'s static build on shiki: xtask compiles, and the new check flags EXACTLY the seven always-inlined keys
+(Vdso::{parse, lookup_many, version_name}, apply_irelative, Features::detect, setup_standard, Heap::park_others),
+which stay in the lists until the regen drops them, so static is red until step 3 below. Unit tests and clippy not run.
+hot-text.unpinned now has 31 keys.
 
 ## Done (commit a61fb95aa36b)
 
