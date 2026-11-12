@@ -1193,55 +1193,6 @@ fn cplx_fast_cold<C: CPart>(z: Complex<C>, saved: u32, unit: Unit, f: impl FnOnc
     cplx(z, unit, f)
 }
 
-/// [`cplx_fast`] with a second in-place attempt in its cold fallback (`cexp`, LIBM-CEXP-COLD-MIDDLE,
-/// D-10.99): where `fast` declines, `retry` runs next, still in the default environment, and its
-/// parts are the result; only where it declines too does [`cplx`] run. The hot part is
-/// [`cplx_fast`]'s: `retry` costs the calls `fast` answers nothing (it lives in the cold function).
-#[inline(always)]
-pub fn cplx_fast_retry<C: CPart>(
-    z: Complex<C>,
-    unit: Unit,
-    fast: impl FnOnce(C::V, C::V) -> Option<(C::V, C::V)>,
-    retry: impl FnOnce(C::V, C::V) -> Option<(C::V, C::V)>,
-    f: impl FnOnce(C::V, C::V, Rounding) -> ((C::V, C::V), Status),
-) -> Complex<C> {
-    let (saved, in_place) = fpu::peek(&CSys);
-    if in_place {
-        // The barrier as in `elem_fast`.
-        let z = core::hint::black_box(z);
-        if let Some((re, im)) = fast(z.re.v(), z.im.v()) {
-            return Complex { re: C::of_v(re), im: C::of_v(im) };
-        }
-        return cplx_fast_retry_cold(z, saved, unit, retry, f);
-    }
-    cplx(z, unit, f)
-}
-
-/// [`cplx_fast_retry`]'s fallback: `retry` in place; where it answers, MXCSR becomes `saved` with
-/// inexact raised (both parts of an answer are inexact; whatever else the retry's intermediates
-/// raised in hardware is dropped, so the flags are those [`cplx`] would leave), else as
-/// [`cplx_fast_cold`].
-#[cold]
-#[inline(never)]
-fn cplx_fast_retry_cold<C: CPart>(
-    z: Complex<C>,
-    saved: u32,
-    unit: Unit,
-    retry: impl FnOnce(C::V, C::V) -> Option<(C::V, C::V)>,
-    f: impl FnOnce(C::V, C::V, Rounding) -> ((C::V, C::V), Status),
-) -> Complex<C> {
-    if let Some((re, im)) = retry(z.re.v(), z.im.v()) {
-        fpu::settle(&CSys, saved, fpu::Flags::INEXACT, RETRY_HW);
-        return Complex { re: C::of_v(re), im: C::of_v(im) };
-    }
-    fpu::settle(&CSys, saved, fpu::Flags(0), RETRY_HW);
-    cplx(z, unit, f)
-}
-
-/// What [`cplx_fast_retry_cold`]'s two attempts may have raised in hardware: every flag and the
-/// denormal-operand bit (a superset; the fallback is cold, so a write it could skip costs little).
-const RETRY_HW: fpu::Flags = fpu::Flags(fpu::Flags::ALL.0 | Status::HW_DENORMAL.0);
-
 /// `cpow`: a complex function of two complex arguments.
 pub fn cplx2<C: CPart>(z: Complex<C>, w: Complex<C>, unit: Unit, f: impl FnOnce(C::V, C::V, C::V, C::V, Rounding) -> ((C::V, C::V), Status)) -> Complex<C> {
     let (e, mode) = enter(unit);

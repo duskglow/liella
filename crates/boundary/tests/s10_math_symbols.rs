@@ -1827,11 +1827,11 @@ fn complex_axes_in_place_match_the_route() {
 }
 
 /// `cexp`'s cold fallback in the default environment (LIBM-CEXP-COLD-MIDDLE, D-10.99): where the
-/// in-place kernel declines, the second in-place attempt (quick tier with the middle tier) or else
-/// the envelope gives the 384-bit route's bits, flags and `errno` to nearest. The bench operand
-/// is one the kernel declines and the second attempt answers (checked first, so the case keeps
-/// reaching that branch); the others leave the quick tier's range (tiny, huge or zero-crossing
-/// parts, underflow and overflow) and reach the envelope after both attempts.
+/// in-place kernel declines, the envelope (quick tier with the middle tier, then the route) gives
+/// the 384-bit route's bits, flags and `errno` to nearest. The bench operand is one the kernel
+/// declines and the middle tier answers (checked first, so the case keeps reaching that branch);
+/// the others leave the quick tier's range (tiny, huge or zero-crossing parts, underflow and
+/// overflow).
 #[test]
 fn cexp_cold_fallback_matches_the_route() {
     // Clauses: s10_5_c_0, s10_0_c_0.
@@ -1839,7 +1839,7 @@ fn cexp_cold_fallback_matches_the_route() {
     use liella_math::{complex as c, complex_fast as cf, MathError, Rounding::Nearest};
     let bench = (f64::from_bits(0xbff9_c127_e0e2_1690), f64::from_bits(0xbffe_c14d_45bc_5e2d));
     assert_eq!(cf::cexp_nearest(bench.0, bench.1), None, "the in-place kernel answers the bench operand");
-    assert!(cf::cexp(bench.0, bench.1, Nearest).is_some(), "the second attempt declines the bench operand");
+    assert!(cf::cexp(bench.0, bench.1, Nearest).is_some(), "the middle tier declines the bench operand");
     let ops = [
         bench,
         (1.0, 1e-300),
@@ -1867,8 +1867,8 @@ fn cexp_cold_fallback_matches_the_route() {
             MathError::Range => 34,
         };
         assert_eq!((x, y, got, seen), (x, y, (wr.to_bits(), wi.to_bits()), (errno, st.flags)), "cexp's cold fallback differs from the route");
-        // Where the second attempt answers, MXCSR holds exactly the caller's word with inexact:
-        // the attempts' own intermediate bits (the denormal-operand bit too) are dropped.
+        // Where the middle tier answers, MXCSR holds exactly the caller's word with inexact: the
+        // declined attempt's own intermediate bits (the denormal-operand bit too) are dropped.
         if (x, y) == bench {
             assert_eq!((x, y, word), (x, y, u32::from(st.flags.0)), "cexp's cold fallback left an attempt's flag in MXCSR");
         }
