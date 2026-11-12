@@ -412,12 +412,21 @@ pub fn move_startup_state(ar: &str, archive: &Path, root: &Path, work: &Path) ->
     let n = rename(ar, archive, work, "start-up state", &plan.renames, Some(&plan.order))?;
     if let Some((m, _)) = &plan.lead {
         let after = archive_headers(archive)?;
-        let lead = after.iter().filter(|(n, _)| n == m).flat_map(|(_, h)| h).filter(|s| s.name == FIRST_CALL_SECTION && s.align >= FIRST_CALL_ALIGN).count();
-        if lead != 1 {
-            return Err(format!("start-up state: {m}: {lead} {FIRST_CALL_SECTION} sections aligned to {FIRST_CALL_ALIGN}, want 1 (objcopy --set-section-alignment)"));
-        }
+        cluster_starts_page(after.iter().filter(|(n, _)| n == m).flat_map(|(_, h)| h)).map_err(|e| format!("start-up state: {m}: {e}"))?;
     }
     Ok(n)
+}
+
+/// Whether the first [`FIRST_CALL_SECTION`] section of a member's headers (index order: the order
+/// the link places them in) carries [`FIRST_CALL_ALIGN`]. Only the first one is checked: a later
+/// object may be page aligned by its own type (intl::RESOLVED, `align(4096)`, GETTEXT-SLOTS-PAGE),
+/// which the cluster keeps.
+fn cluster_starts_page<'a>(headers: impl IntoIterator<Item = &'a Shdr>) -> Result<(), String> {
+    match headers.into_iter().find(|s| s.name == FIRST_CALL_SECTION) {
+        Some(s) if s.align >= FIRST_CALL_ALIGN => Ok(()),
+        Some(s) => Err(format!("first {FIRST_CALL_SECTION} section aligned to {}, want {FIRST_CALL_ALIGN} (objcopy --set-section-alignment)", s.align)),
+        None => Err(format!("no {FIRST_CALL_SECTION} section after the renames")),
+    }
 }
 
 /// LAYOUT-STARTUP-STATE-LOCALE-3 (ruling #4942): the zero-filled first-call state (entries after
@@ -543,6 +552,12 @@ mod tests {
         assert!(to("r.o", "4HEAP", ".data1") && to("r.o", "RESOLVED", ".lbss") && to("r.o", "4LOCK", ".lbss") && to("r.o", "stdout", ".data1") && to("c.o", "__daylight", ".data1"), "{:?}", plan.renames);
         assert_eq!(plan.order["r.o"], [".bss._RNvNtCs1_15liella_boundary4heap4HEAP", ".data.stdout", ".bss._RNvNtCs1_13liella_legacy4intl8RESOLVED", ".bss._RNvNtCs1_13liella_legacy4intl4LOCK", ".bss.big"]);
         assert_eq!(plan.lead, Some(("r.o".to_string(), ".bss._RNvNtCs1_13liella_legacy4intl8RESOLVED".to_string())));
+        // LAYOUT-STARTUP-STATE-LOCALE-4: the build checks that the cluster's first section starts a page; a
+        // later one may be page aligned by its own type (intl::RESOLVED) and is no error.
+        let aligned = |name: &str, align: u64| Shdr { align, ..sec(name, SHT_NOBITS, 8) };
+        assert!(cluster_starts_page(&[aligned(".data1", 8), aligned(".lbss", 4096), aligned(".lbss", 8), aligned(".lbss", 4096)]).is_ok());
+        assert!(cluster_starts_page(&[aligned(".lbss", 8), aligned(".lbss", 4096)]).unwrap_err().contains("first .lbss section aligned to 8"));
+        assert!(cluster_starts_page(&[aligned(".lbss.cold", 4096)]).unwrap_err().contains("no .lbss"));
         assert!(state_sections(&members[1..], &list).unwrap_err().contains("for liella_boundary::heap::HEAP, liella_boundary::timer::EPOLL ("));
         members[0].1[0].size = STATE_DECLARED_MAX + 1;
         assert!(state_sections(&members, &list).unwrap_err().contains("over 8192 bytes"));
