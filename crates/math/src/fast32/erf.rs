@@ -118,6 +118,64 @@ pub(super) fn erfc_core(x: f32) -> Option<f64> {
     }
 }
 
+/// 2/√π rounded to `double` (0x1.20dd750429b6dp+0).
+const TWO_OVER_SQRT_PI: f64 = f64::from_bits(0x3ff2_0dd7_5042_9b6d);
+
+/// Largest `|x|` bits taken by [`erf_tiny`]: 0x716ff6·2^-149, the last operand whose result is
+/// subnormal in every mode (c·n ≤ 8388606.55 < 2^23 - 1).
+pub(super) const ERF_TINY_MAX: u32 = 0x0071_6ff6;
+
+/// erff for `0 < |x| ≤ ERF_TINY_MAX` (LIBM-RETHINK-ERFC, D-10.107), whose subnormal results
+/// [`super::round`] refuses. erf x = c·x·(1 - x²/3 + …) with c = 2/√π, the x³ term below 2^-250
+/// relative; for x = n·2^-149 (n < 2^23) the result is c·n rounded to an integer, in units of
+/// 2^-149. `y` = C·x (C = c to `double`) is within 2^-28.4 units of c·n (C's error 2^-53·n, the
+/// product's rounding at most one `double` ulp, 2^-29), while c·n stays 2^-24.4 or more from every
+/// half-integer and 2^-23.4 or more from every integer for n < 2^23: the convergents of 2c and c
+/// below 2^23 (Khinchin, Continued Fractions, ch. II, best approximations; the decision record
+/// lists them). So y rounds like erf x in every mode and is never a `float` itself: underflow and
+/// inexact always, no `errno` (the result is never zero).
+#[inline(never)]
+pub(super) fn erf_tiny(x: f32, mode: Rounding) -> Option<(f32, Status)> {
+    if (x.to_bits() & 0x7fff_ffff).wrapping_sub(1) >= ERF_TINY_MAX {
+        return None;
+    }
+    let y = TWO_OVER_SQRT_PI * f64::from(x);
+    // Round to nearest in hardware, then step for a directed mode (as `round`).
+    let r = y as f32;
+    let back = f64::from(r);
+    let b = r.to_bits();
+    let neg = y < 0.0;
+    let bits = match mode {
+        Rounding::Up if back < y => if neg { b - 1 } else { b + 1 },
+        Rounding::Down if back > y => if neg { b + 1 } else { b - 1 },
+        Rounding::Zero if (if neg { back < y } else { back > y }) => b - 1,
+        _ => b,
+    };
+    let f = Flags::INEXACT.union(Flags::UNDERFLOW);
+    Some((f32::from_bits(bits), Status::flags(f).hw(f.union(Status::HW_DENORMAL))))
+}
+
+/// erfcf for `0 < |x| < 2^-26` (LIBM-RETHINK-ERFC, D-10.107), which [`super::round`] refuses
+/// (y lies within its margin of the `float` 1). erfc x = 1 - c·x·(1 - x²/3 + …) with
+/// c·|x| < 2^-25: inside (1 - 2^-25, 1) for x > 0 and (1, 1 + 2^-24) for x < 0, open intervals
+/// between rounding boundaries (the midpoints 1 - 2^-25 and 1 + 2^-24, the `float` 1). So the
+/// result is 1 to nearest, 1 - 2^-24 down from below 1, 1 + 2^-23 up from above 1; inexact.
+#[inline(never)]
+pub(super) fn erfc_tiny(x: f32, mode: Rounding) -> Option<(f32, Status)> {
+    let ax = x.to_bits() & 0x7fff_ffff;
+    if ax.wrapping_sub(1) >= 0x3280_0000 - 1 {
+        return None;
+    }
+    let bits = match (mode, x.is_sign_negative()) {
+        (Rounding::Up, true) => 0x3f80_0001,
+        (Rounding::Down | Rounding::Zero, false) => 0x3f7f_ffff,
+        _ => 0x3f80_0000,
+    };
+    // The kernel ran on x before: denormal-operand from `f64::from` of a subnormal x.
+    let hw = if ax < 0x0080_0000 { Flags::INEXACT.union(Status::HW_DENORMAL) } else { Flags::INEXACT };
+    Some((f32::from_bits(bits), Status::flags(Flags::INEXACT).hw(hw)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
