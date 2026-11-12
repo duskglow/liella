@@ -1,39 +1,34 @@
-# LIBM-F32-BESSEL-LARGE handoff (run 2, LIBM-F32-BESSEL-LARGE-2: INCOMPLETE, typical rows slower)
+# LIBM-F32-BESSEL-LARGE handoff (run 3, LIBM-F32-BESSEL-LARGE-3: PENDING JOBS)
 
-State: branch `task/libm-f32-bessel-large-2` (on `task/libm-f32-bessel-large`, next fe4c4893d), code head 80f128b5a,
-role shiki:~/w/sh1. Decision record D-10.109 written (records/decisions/D-10/D-10.109.toml). Brief:
-~/state/briefs/LIBM-F32-BESSEL-LARGE.md "The change"; method and design as in run 1 (see D-10.109's body).
-DO NOT LAND as it stands: the mid and tiny rows are slower than next (below).
+State: branch `task/libm-f32-bessel-large-3` (stacks on -2; base next fe4c4893d, not merged), role kanon:~/w/kn1.
+Decision in force: D-10.109 (records/decisions/D-10/D-10.109.toml, measured sentence updated in run 3). Spec: the
+original brief ~/state/briefs/LIBM-F32-BESSEL-LARGE.md "The change".
 
-## Done in run 2
-- gate2 red fixed: `bessel_large_table_is_the_refused_set` is a `long` row of xtask/src/longsweeps.rs (36 s in
-  release on Haswell-EP 26 vCPU, sweeps job 1). Oracle module comment says the range reaches FLT_MAX (#4976).
-- `bessel_large` is `#[inline(never)]` (d5d5114b0): inlined, it widened bessel_eval's frame (mid +12..+27, tiny
-  +12..+21 instructions a call, percall2). It also made LLVM inline `Vdso::lookup_many::<5>` in the fast libc.a,
-  so `so` failed on that dead hot-text key (run 1's plants rc 2). With the band out of line the key matches again:
-  my `hottext-repair` drop (44d8749f4) is reverted (80f128b5a); crates/libc-so is identical to next. No hot-lists lane.
-- Plants (handoff/LIBM-F32-BESSEL-LARGE-2-plants.txt: table, margin, phase3, oracle): plants2 4/4 CAUGHT, no WARN
-  (on 44d8749f4: band inlined, key dropped); plants3 rc 2 (BASELINE `so` on d5d5114b0: the dropped key, above);
-  plants4 on 80f128b5a: see handoff/reports/LIBM-F32-BESSEL-LARGE-2.json.
-- Exhaustive: j0f_fast_path_agrees_exhaustively ok (1976 s, release) on the inlined code; the enumeration ok (36 s).
+## Done in run 3
+- step 0: clippy and static green on the inherited head 482a14d0f (job libm-f32-bessel-large-3-lint0, kanon).
+- gate4 red (`init_data_clusters_hold_at_every_text_phase`): reproduced on kanon (diag1: `tool` 55, 54 at `data
+  0x3000`). The branch's writable object was `const LG_TAB: [&[u64]; 4]`: indexed at run time it is an array of
+  four slice pointers, which a PIC build places in `.data.rel.ro` (relocated at start-up). Now one `static LG_ALL:
+  [u64; 202]` of plain words built at compile time from the four tables, with `LG_OFF` offsets (`lg_tab(f)`): .rodata
+  only. Test after the fix: passes, `tool` 54 at all 10 phases (uniform; diag2, diag3). Test and bound untouched.
+- mid/tiny rows: run 2's band test sat ahead of the fast path. Tried (diag2) the band from bessel_core's refusal
+  inside `bessel_eval`: mid j0f +10, y1f +8, tiny +1..+7 (a second call on the inlined refusal path keeps x/mode live
+  across it). Kept (diag3): `bessel_eval` is next's code again; `special::{j0,j1,y0,y1}` for `float` make ONE
+  out-of-line call `bessel32_rest(n, name, x, mode)` (band via `fast32::bessel_large`, else `*_accurate`) where they
+  called `*_accurate`: same cold-path shape as next. Percall kanon (base next fe4c4893d / head): mid j0f 217.6/217.6,
+  y1f 254.9/254.9; tiny j0f 94.0/94.0, j1f 119.7/119.7, y0f 340.9/340.9, y1f 313.6/313.6; large j0f 176646/405.5,
+  j1f 179299/407, y0f 176650/420, y1f 179312/423.5 (glibc 292-318: 1.33-1.39x).
+- Tests: `bessel_large_band_edges` (2^19 edges, FLT_MAX, inf, NaN, Y at x < 0), `bessel32_rest_is_each_functions_path`;
+  fast32/tests.rs `fast()` = eval then the band for Bessel, used by `agree_oracle`, so the exhaustive sweeps still
+  cover the band. Math Bessel unit tests 11/11 (release, diag3).
 
-## Counts (wl_percall, libm_bessel.c, shiki, base = next fe4c4893d; glibc / base / head 80f128b5a)
-- large: j0f 296 / 176646 / 384, j1f 292 / 179299 / 385, y0f 302 / 176650 / 386, y1f 318 / 179312 / 392 (1.23-1.32x).
-- mid: j0f 286.5 / 217.6 / 235.3 (+17.7), y1f 299.3 / 254.9 / 259.7 (+4.8).
-- tiny: j0f 94.0 -> 102.0, j1f 119.7 -> 129.7, y0f 340.9 -> 347.9, y1f 313.6 -> 318.3 (+4.7..+10).
+## Jobs on the final head (kanon)
+gate libm-f32-bessel-large-3-gate, plants libm-f32-bessel-large-3-plants (handoff/LIBM-F32-BESSEL-LARGE-3-plants.txt:
+yneg, offset, restmap, table, margin), percall libm-f32-bessel-large-3-percall, sweeps libm-f32-bessel-large-3-sweeps
+(the enumeration + four exhaustive sweeps, release). Diagnostic jobs diag1-3 are evidence, not final.
 
-## Next step (continuation)
-0. gate4 (80f128b5a, shiki) rc 1: only `liella::hot_text_products init_data_clusters_hold_at_every_text_phase`
-   failed (clippy, static ok). The change touches no start-up code: run that test on origin/next fe4c4893d in the
-   same way first; if next fails too, or it moves with code growth, it is LAYOUT-JITTER (ruling #4347: do not
-   chase, hand back `INCOMPLETE: LAYOUT-JITTER` with the numbers). Not analysed in run 2 (context checkpoint).
-1. Profile first: `validation/wl_trace.sh --spec validation/percall/libm_bessel.c . bes_j0f_mid j0f` on head and on
-   base fe4c4893d (primed on shiki); find where the +17.7 goes. Likely: the large-band test now sits at the top of
-   `bessel_eval` (every band pays its compare and the `f < 2 || x > 0` test) and the out-of-line call changes the
-   shared frame or the `Option<(f32, Status)>` return. Candidate: test the band only where the mid path refuses
-   |x| >= 2^19 (after the tiny and mid dispatch), so the mid and tiny paths run next's instructions.
-2. Re-measure percall (typical rows <= base, large within 2x), then gate, plants and the four exhaustive sweeps
-   (sweeps script: ~/work/LIBM-F32-BESSEL-LARGE-2/sweeps3.sh on shiki, one release run per row; ~33 min each).
-3. Update D-10.109's measured sentence if the large rows move.
-Not to redo: the table enumeration (current for LG_B = 8), the design (bound holds at 0.45 of B), the hot-text
-analysis above (do not drop or regenerate keys: the dead key came from the inlined band).
+## Open / next
+- jnf(0|1, x) for |x| >= 2^19 still takes the accurate path (as on next): fast_bessel_n::jnf calls fast32::eval
+  only (ynf not checked). Follow-up: give its refusal the same one-call rest path (measure the jnf rows first).
+- If a job is red: read its log on kanon (~/logs/<label>.log); fix with new commits; rerun only the failing job.
+Not to redo: the table enumeration (current for LG_B = 8), the design, the dispatch experiment above.
