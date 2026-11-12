@@ -1826,6 +1826,56 @@ fn complex_axes_in_place_match_the_route() {
     fpu::clear(&CSys, Flags::ALL);
 }
 
+/// `cexp`'s cold fallback in the default environment (LIBM-CEXP-COLD-MIDDLE, D-10.99): where the
+/// in-place kernel declines, the envelope (quick tier with the middle tier, then the route) gives
+/// the 384-bit route's bits, flags and `errno` to nearest. The bench operand is one the kernel
+/// declines and the middle tier answers (checked first, so the case keeps reaching that branch);
+/// the others leave the quick tier's range (tiny, huge or zero-crossing parts, underflow and
+/// overflow).
+#[test]
+fn cexp_cold_fallback_matches_the_route() {
+    // Clauses: s10_5_c_0, s10_0_c_0.
+    use liella_boundary::mathret::Complex;
+    use liella_math::{complex as c, complex_fast as cf, MathError, Rounding::Nearest};
+    let bench = (f64::from_bits(0xbff9_c127_e0e2_1690), f64::from_bits(0xbffe_c14d_45bc_5e2d));
+    assert_eq!(cf::cexp_nearest(bench.0, bench.1), None, "the in-place kernel answers the bench operand");
+    assert!(cf::cexp(bench.0, bench.1, Nearest).is_some(), "the middle tier declines the bench operand");
+    let ops = [
+        bench,
+        (1.0, 1e-300),
+        (0.5, f64::MIN_POSITIVE),
+        (-0.5, 5e-324),
+        (1.0, 1e10),
+        (-745.0, 1.0),
+        (-707.5, -3.0),
+        (710.0, 1.0),
+        (2.0, f64::MAX),
+    ];
+    for (x, y) in ops {
+        use liella_kernel::machine::Machine;
+        let (mut got, mut word) = ((0, 0), 0);
+        let seen = observe(|| {
+            let r = m::cexp(Complex { re: x, im: y });
+            // ARCH(x86_64): the MXCSR flag bits after the call, the denormal-operand bit included
+            word = CSys.mxcsr() & 0x3f;
+            got = (r.re.to_bits(), r.im.to_bits());
+        });
+        let ((wr, wi), st) = c::cexp_route(x, y, Nearest);
+        let errno = match st.error {
+            MathError::None => 0,
+            MathError::Domain => 33,
+            MathError::Range => 34,
+        };
+        assert_eq!((x, y, got, seen), (x, y, (wr.to_bits(), wi.to_bits()), (errno, st.flags)), "cexp's cold fallback differs from the route");
+        // Where the middle tier answers, MXCSR holds exactly the caller's word with inexact: the
+        // declined attempt's own intermediate bits (the denormal-operand bit too) are dropped.
+        if (x, y) == bench {
+            assert_eq!((x, y, word), (x, y, u32::from(st.flags.0)), "cexp's cold fallback left an attempt's flag in MXCSR");
+        }
+    }
+    fpu::clear(&CSys, Flags::ALL);
+}
+
 /// The complex functions of `long double`, `_Float64x` and `_Float128` (D-10.21; milestone 5,
 /// M5-1 to M5-4): each name of every family member is exported, and the bit-level functions behind the C forwarders keep the parts in their order
 /// and report the flags of the implementation.
