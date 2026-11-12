@@ -4,6 +4,8 @@
 //! with an odd 54-bit hypotenuse) and exact roots at several scales, overflow at `DBL_MAX`, two
 //! subnormals (the `2^-1022` tininess edge), a subnormal beside a normal, and roots just off a midpoint.
 
+#![allow(clippy::arithmetic_side_effects, clippy::as_conversions)] // test data: bounded integer and float arithmetic, exact u64 -> f64 legs
+
 fn gcd64(mut a: u64, mut b: u64) -> u64 {
     while b != 0 {
         (a, b) = (b, a % b);

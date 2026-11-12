@@ -81,8 +81,8 @@ fn hypot_on_the_hardware_root_is_the_exact_path_in_every_direction() {
     for &(x, y) in &pairs {
         for (_, mode) in dirs {
             let (w, ws) = pow::hypot_exact::<f64>(x, y, mode);
-            let (g, gs) = invtrig::hypot_rounded::<Hw>(x, y, mode).expect("a finite pair");
-            assert!(g.to_bits() == w.to_bits() && gs == ws, "hypot({x:e}, {y:e}) {mode:?}: kernel on sqrtsd {g:e} {gs:?}, exact {w:e} {ws:?}: hardware kernel FAILED");
+            let r = invtrig::hypot_rounded::<Hw>(x, y, mode);
+            assert!(r.is_some_and(|(g, gs)| g.to_bits() == w.to_bits() && gs == ws), "hypot({x:e}, {y:e}) {mode:?}: kernel on sqrtsd {r:?}, exact {w:e} {ws:?}: hardware kernel FAILED");
         }
     }
     for (rc, mode) in dirs {
