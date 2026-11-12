@@ -1,0 +1,12 @@
+{"task": "LIBM-CPLX-SINCOS-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: csinh/csin (double, float) tier compiles, lint/static clean, matches the route bit for bit (unit tests + 10^6/regime sweep, 4 modes); gate and plants red on a hot-text key in locale code, attribution not yet shown (context checkpoint)",
+ "branch": "task/libm-cplx-sincos-2", "head": "12f4a0891",
+ "gate": {"affected": "red: hot-text.list key _RNvNtC6liella6locale7builtin matches no fast-profile section (0 suites ran)", "peak": "963M"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["check4 sweep: csinh and csin 10^6 operands per regime in 4 modes, no mismatch; nearest answers [999729, 999676, 999663, 950661, 896581]", "decision record pending: records/pending/LIBM-CPLX-SINCOS-2-1.toml (D-NEW, series D-10)"],
+ "refused": [],
+ "improvement": "the sibling test helpers should take the hyperbolic/trig roles explicitly; run 2 lost a check cycle to csin being fed csinh's regimes",
+ "next_step": "check whether origin/next d1b3a596c fails the same hot-text key; then gate and plants (handoff/LIBM-CPLX-SINCOS-2-plants.txt) and percall",
+ "report_file": "handoff/libm-cplx-sincos.md",
+ "jobs": ["libm-cplx-sincos-2-check4", "libm-cplx-sincos-2-percall"]}

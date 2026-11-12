@@ -1,0 +1,12 @@
+id = "D-NEW"
+series = "D-10"
+section = "s10"
+spec = "§10.5"
+ann = "—"
+status = "active"
+story = "LIBM-CPLX-SINCOS-2"
+date = "2026-11-12"
+tests = ["crates/math/src/complex_fast_sinh_tests.rs::csinh_quick_tier_matches_the_384_bit_route_in_every_mode", "crates/math/src/complex_fast_sinh_tests.rs::hyperbolic_factors_are_within_their_bounds"]
+body = '''
+**`csinh`, `csin`, `csinhf`, `csinf` get a quick tier in front of the 384-bit route** (LIBM-CPLX-SINCOS, under D-10.53; every decline reaches the route unchanged, so special values, the axes and the Annex G cases stay the route's). `csinh(x + iy) = sinh x·cos y + i·cosh x·sin y`; `csin(x + iy)` is `csinh(y + ix)` with its parts swapped (no sign change, so all four modes carry over). `double`: `e^a` (`a = \|x\|`) from the `exp` quick kernel (bound `2^-69`), `e^-a` as its double-double reciprocal (Newton correction of `RN(1/E)`, Dekker 1971 products; `2^-103` relative) scaled exactly by `2^-2m` up to `a = 40` and dropped above (`e^-2a < 2^-115`); `cosh = (E + Q)/2`, `sinh = (E − Q)/2` for `a >= 2^-3` (cancellation at most `coth 2^-3`: below `2^-65.9`), the odd Taylor series in double-double below `2^-3` (`2^-68`). Each part is one double-double product with the trig kernel's `cos y`/`sin y` (`2^-30 <= \|y\| < 2^20`, as `cexp`), with an a-priori bound from the factors' proved bounds, and one rounding test per part (de Dinechin, Lauter & Muller, RAIRO-ITA 41, 2007) in all four modes; the results are never exact or midpoints (Lindemann–Weierstrass, as `cexp`). Bands: `2^-60 <= a <= 746` with a normal result (a product that stays finite while `cosh`/`sinh` alone overflow is answered); the route takes `a < 2^-60`, `a > 746`, `\|y\| < 2^-30` or `>= 2^20`, results outside the normal range, zeros, infinities and NaNs. `float`: the `double` products of the `float` quick cores (`sinh_core` 12.2u, `cosh_core` 233u, `trig_core` 24.3u) with margins 64 and 512 ulp of the `double` part (at least 1.5·bound + 1) and `float`'s rounding test. Tests: `complex_fast_sinh_tests.rs` (tier against route, bits and flags, four modes, five regimes, hard cases at the band edges, the hyperbolic factors against a double-double reference, a 10^6-per-regime sweep in the long-sweeps runner).
+'''
