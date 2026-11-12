@@ -156,11 +156,48 @@ fn with_sign_of(v: f64, x: f64) -> f64 {
     f64::from_bits(v.to_bits() | (x.to_bits() & 0x8000_0000_0000_0000))
 }
 
+/// `round(c·2^127)` for `c = 2/√π`, as its high and low 64 bits (tools/proofs/erf_tiny_f64.py).
+const C127_HI: u64 = 0x906e_ba82_14db_688d;
+const C127_LO: u64 = 0x71d4_8a7f_6bfe_c344;
+/// `ceil(2^53/c)`: the least 53-bit significand `X` with `X·c >= 2^53`.
+const C_T: u64 = 0x001c_5bf8_91b4_ef6b;
+/// The largest subnormal significand `m` whose `m·c` is tiny when rounded to 53 bits (below
+/// `2^52 − 1/4`); `m·c` for this one rounds to `2^52` on the subnormal grid (the tool above).
+const M_TINY: u64 = 0x000e_2dfc_48da_77b5;
+/// 2^-60: `x·2^-60` for a subnormal `x` is zero, inexact and tiny.
+const E60: f64 = f64::from_bits(0x3c30_0000_0000_0000);
+
+/// `erf x` for `|x| < 2^-55` rounded to nearest with the default environment's flags, by integer
+/// arithmetic (LIBM-ERF-TINY-F64; the proof is tools/proofs/erf_tiny_f64.py, case I): `erf x`
+/// lies below `c·x` by less than `2^-110/3` relative, and no `c·x` comes within `2^-57.3` ulps of a
+/// rounding breakpoint, so the result is `c·x` rounded, `n = round(X'·c/2)` with the 128-bit
+/// constant (`X' = X`, `2X` or `2m` in `[2^53/c, 2^54/c)`, error at most `2^-75` ulps); its bits
+/// are `(g − 1)·2^52 + n`, the significand's carry into the exponent included. Flags: `x·2^-60`
+/// (subnormal `x` up to `M_TINY`) raises inexact and underflow and adds a zero; otherwise
+/// `1 + |x|` (exactly 1, inexact) multiplies the result. `±0` returns itself, no flag.
+#[inline(always)]
+#[allow(clippy::as_conversions, clippy::cast_possible_truncation)] // n < 2^54 after the shift
+fn erf_linear_int(x: f64, ax: f64) -> f64 {
+    let b = ax.to_bits();
+    let e = b >> 52;
+    let (xq, base) = if e == 0 {
+        (b << 1, 0)
+    } else {
+        let xm = (b & 0x000f_ffff_ffff_ffff) | 1 << 52;
+        if xm >= C_T { (xm, e << 52) } else { (xm << 1, (e - 1) << 52) }
+    };
+    let hi = u128::from(xq) * u128::from(C127_HI);
+    let lo = u128::from(xq) * u128::from(C127_LO);
+    let n = ((hi + ((lo + (1 << 127)) >> 64)) >> 64) as u64;
+    let v = f64::from_bits((base + n) | (x.to_bits() & 0x8000_0000_0000_0000));
+    if b <= M_TINY { v + x * E60 } else { v * (1.0 + ax) }
+}
+
 // The kernels and in-place entries in two builds (module doc, "Builds"): `$prod` is the exact
 // product, `$exp_dd` the matching build of `fast64::exp_dd`; `$i` is
 // the inlining (`#[inline(always)]` cannot be combined with `#[target_feature]`).
 macro_rules! kernels {
-    ($(#[$a:meta])*; $(#[$i:meta])*; $prod:path; $exp_dd:path) => {
+    ($(#[$a:meta])*; $(#[$i:meta])*; $prod:path; $exp_dd:path; $lin:path) => {
 /// The Taylor row `row` (layout in the module doc, `M = 4` double-doubles, degree 14) at `t`.
 $(#[$a])*
 $(#[$i])*
@@ -279,7 +316,8 @@ pub fn erfc_kernel(x: f64) -> Option<(Dd, f64, i32)> {
 }
 
 /// `erf x` rounded to nearest for the in-place envelope (module doc, "In-place entries"), or
-/// `None`: NaN, `±∞` and `|x| < 2^-55` always, and the rare operands both rounding tests refuse.
+/// `None`: NaN and `±∞` always, and the rare operands both rounding tests refuse. `|x| < 2^-55`
+/// is `c·x` rounded (`erf_linear_int`, or one FMA in [`fused`]; LIBM-ERF-TINY-F64).
 ///
 /// # Safety
 ///
@@ -290,6 +328,11 @@ $(#[$i])*
 pub fn erf_nearest(x: f64) -> Option<f64> {
     let ax = dd::abs(x);
     if !(LINEAR..).contains(&ax) {
+        // |x| < 2^-55 (LIBM-ERF-TINY-F64): c·x rounded, inside the test the entry already makes,
+        // so the typical path sees no new compare. NaN fails both tests.
+        if ax < LINEAR {
+            return Some($lin(x, ax));
+        }
         return None;
     }
     if ax >= ERF_ONE {
@@ -464,7 +507,7 @@ pub fn erfc_quick(x: f64) -> Option<f64> {
     };
 }
 
-kernels!(; #[inline(always)]; two_prod; fast64::exp_dd);
+kernels!(; #[inline(always)]; two_prod; fast64::exp_dd; erf_linear_int);
 
 /// The FMA build of the kernels and in-place entries (module doc, "Builds"; MATH-F64-FMA-PATH,
 /// D-10.25): the same arithmetic with every exact product a single FMA, so the same results bit
@@ -475,7 +518,28 @@ kernels!(; #[inline(always)]; two_prod; fast64::exp_dd);
 pub mod fused {
     use super::*;
 
-    kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma; fast64::fused::exp_dd);
+    /// `c·2^64` as a double-double (tools/proofs/erf_tiny_f64.py, case F).
+    const CH64: f64 = f64::from_bits(0x43f2_0dd7_5042_9b6d);
+    const CL64: f64 = f64::from_bits(0x4071_ae3a_914f_ed80);
+    /// 2^-64.
+    const E64: f64 = f64::from_bits(0x3bf0_0000_0000_0000);
+
+    /// [`super::erf_linear_int`]'s result for normal `x` by one FMA (case F of the proof tool):
+    /// `fma(x, CH64, x·CL64)·2^-64`, every intermediate normal and the last product exact; the
+    /// tool checks the operands where its error could reach a breakpoint. Inexact alone (the
+    /// FMA). Subnormal `x` take the integer path.
+    #[target_feature(enable = "fma")]
+    #[inline]
+    fn erf_linear_fma(x: f64, ax: f64) -> f64 {
+        use core::arch::x86_64::{_mm_cvtsd_f64, _mm_fmadd_sd, _mm_set_sd};
+        if ax < f64::MIN_POSITIVE {
+            return super::erf_linear_int(x, ax);
+        }
+        let t = x * CL64;
+        _mm_cvtsd_f64(_mm_fmadd_sd(_mm_set_sd(x), _mm_set_sd(CH64), _mm_set_sd(t))) * E64
+    }
+
+    kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma; fast64::fused::exp_dd; erf_linear_fma);
 }
 
 /// `mode` with up and down swapped (rounding `−a` is the negation of rounding `a` in it).
