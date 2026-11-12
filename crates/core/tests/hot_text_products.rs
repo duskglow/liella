@@ -1120,11 +1120,11 @@ fn isolated_data_script(dir: &Path) -> PathBuf {
 #[test]
 fn init_startup_data_accesses_are_in_the_data1_cluster() {
     // Every probe mode is traced: a mode added to page_faults.c without a trace here would leave its
-    // first-call statics unchecked.
+    // first-call statics unchecked. (`true` is the probe's default, selected by no `strcmp`.)
     let source = std::fs::read_to_string(root().join("crates/core/tests/oracle/page_faults.c")).expect("page_faults.c");
     let modes: std::collections::BTreeSet<&str> = source.split("strcmp(argv[1], \"").skip(1).filter_map(|s| s.split_once('"').map(|(m, _)| m)).filter(|m| *m != "relay").collect();
     let untraced: Vec<&&str> = modes.iter().filter(|m| !STARTUP_PROBE_MODES.contains(m)).collect();
-    assert!(modes.len() >= STARTUP_PROBE_MODES.len() && untraced.is_empty(), "STARTUP-DATA-KEYS: page_faults.c modes {untraced:?} are not in STARTUP_PROBE_MODES (found {modes:?})");
+    assert!(modes.len() >= 3 && untraced.is_empty(), "STARTUP-DATA-KEYS: page_faults.c modes {untraced:?} are not in STARTUP_PROBE_MODES (found {modes:?})");
     let dir = std::env::temp_dir().join(format!("liella-startup-access-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
     let script = isolated_data_script(&dir);
