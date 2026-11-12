@@ -12,7 +12,8 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast32/bessel.rs:80` `fn horner_f(c: &[f64; 11], t: f64) -> f64` — bound: undocumented
 - `fast32/bessel.rs:102` `fn hankel_core(f: usize, x: f64) -> Option<(f64, f64)>` — bound: undocumented — doc: Hankel's form for x in [24, 2^19): f = √(2/(πx))·(P cos ω ∓ ...), ω = x - νπ/2 - π/4, written with s = sin x, c = cos x: J0 = A·(P(c + s) - Q(s - c)), Y0 = A·(P…
 - `fast32/bessel.rs:123` `pub(super) fn bessel_core(f: usize, x: f32) -> Option<(f64, f64)>` — bound: undocumented — doc: J0 (f = 0), J1 (1), Y0 (2), Y1 (3) of a `float` x as (y, e) with |y - f| ≤ e, or `None` (x outside [2^-20, 2^19) in magnitude, x ≤ 0 for Y, NaN).
-- `fast32/bessel.rs:177` `pub(super) fn bessel_finish(x: f32, (y, e): (f64, f64), mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test for an absolute bound e: margin e/ulp(y) < e·2^53/|y| (ulp(y) > |y|·2^-53), refused at or beyond 2^26 (the test's mask is 2^28; y near a zero …
+- `fast32/bessel.rs:190` `pub(super) fn bessel_eval(f: usize, x: f32, mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: j0f, j1f, y0f, y1f: the tiny band 0 < |x| < 2^-20 (LIBM-RETHINK-BESSEL, D-10.106), else [`bessel_core`] and [`bessel_finish`].
+- `fast32/bessel.rs:264` `pub(super) fn bessel_finish(x: f32, (y, e): (f64, f64), mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test for an absolute bound e: margin e/ulp(y) < e·2^53/|y| (ulp(y) > |y|·2^-53), refused at or beyond 2^26 (the test's mask is 2^28; y near a zero …
 
 ## fast32/cexp.rs (f32 cexp)
 
