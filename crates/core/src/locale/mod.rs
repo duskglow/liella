@@ -537,6 +537,8 @@ pub const ARCHIVE: &[u8] = b"/usr/lib/locale/locale-archive";
 pub const ALIAS_FILE: &[u8] = b"/usr/share/locale/locale.alias";
 
 /// The built-in locale named `name` and the name it reports, if it is one.
+// LAYOUT-HOTKEY-INLINE-STABLE-3: a fixed boundary for its locale-tier hot-text key (a libm growth inlined it away, ruling #5024).
+#[inline(never)]
 pub fn builtin(name: &'static [u8]) -> Option<(Data, &'static [u8])> {
     match name {
         b"C" | b"POSIX" => Some((Data::C, C_NAME)),

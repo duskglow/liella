@@ -53,6 +53,8 @@ fn store(words: &[AtomicUsize], conv: &Conv) {
 }
 
 /// The live descriptor at `cd`, or `EBADF`.
+// LAYOUT-HOTKEY-INLINE-STABLE-3: a fixed boundary for its extra-tier hot-text key (a libm growth inlined it away, ruling #5024).
+#[inline(never)]
 fn load(cd: usize) -> KResult<(&'static [AtomicUsize], Conv)> {
     let words = tb::iconv_object(cd).ok_or(Errno::EBADF)?;
     if words.first().map(|w| w.load(Relaxed)) != Some(TAG) {
