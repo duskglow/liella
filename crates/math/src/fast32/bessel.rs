@@ -332,7 +332,7 @@ fn large_core(f: usize, a: u32) -> (f64, f64) {
     // |x| = m·2^(E - 150); the window ends at bit p = E - 24 of 2/π (bits whose products with |x|
     // are multiples of 4 dropped): floor(2^p·2/π) mod 2^128, p in [122, 230].
     let p = (a >> 23) as usize - 24;
-    let t = &crate::coeffs::trig::TWO_OVER_PI;
+    let t = &crate::coeffs::tables::TWO_OVER_PI;
     let w = if p <= 128 {
         ((u128::from(t[0]) << 64) | u128::from(t[1])) >> (128 - p)
     } else {
