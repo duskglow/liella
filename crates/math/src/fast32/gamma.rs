@@ -196,6 +196,7 @@ fn lgamma_edge(xd: f64) -> Option<(f64, u64, i32, bool)> {
     if q.is_nan() || q >= EDGE_MAX_MARGIN {
         return None;
     }
+    // RANGE: 0 <= q < 2^26 (NaN and larger returned above).
     Some((v, q as u64 + 2, sign, true))
 }
 
