@@ -597,8 +597,8 @@ pub fn setlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: Reque
         // missed here and rebuilt, compared and copied whole locales under the lock (~2,300
         // instructions, partly memmove whose count follows stack alignment).
         Request::Name(n) => {
-            let want = locale::reported(n);
-            if let Some(s) = query_cached(m, cat).filter(|&s| s == want) {
+            // The name as given first: "C" and every file name match there at no extra cost.
+            if let Some(s) = query_cached(m, cat).filter(|&s| s == n || s == locale::reported(n)) {
                 return Some(s);
             }
         }
