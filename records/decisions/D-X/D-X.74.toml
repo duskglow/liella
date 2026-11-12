@@ -1,5 +1,4 @@
-id = "D-NEW"
-series = "D-X"
+id = "D-X.74"
 section = "x"
 status = "active"
 amends = ["D-X.70"]
