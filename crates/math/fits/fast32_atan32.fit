@@ -1,0 +1,11 @@
+# LIBM-ASINF-NODIV (D-10.103): atan on [-1/32, 1/32], the reduced range of atanf for |x| > 1 with
+# one division: atan x = pi/2 - atan c - atan((1 - x c)/(x + c)), c = j/32 picked from the bits of x
+# by a table (no reciprocal of x first). Odd powers up to 9; the x coefficient is fixed at 1.
+name = fast32_atan32
+target = atan
+interval = -1/32, 1/32
+powers = odd 1..9
+fixed = 1:1
+error = relative
+format = f64
+output = crates/math/src/coeffs/fast32_atan32.rs
