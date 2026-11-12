@@ -71,7 +71,7 @@ pub(crate) fn sqrtsd(x: f64) -> f64 {
     }
 }
 
-/// `liella_math`'s hardware operations ([`liella_math::hwop::HwOps`], D-NEW LIBM-HYPOT-DIRECTED):
+/// `liella_math`'s hardware operations ([`liella_math::hwop::HwOps`]; decision pending, records/pending/LIBM-HYPOT-DIRECTED-1.toml):
 /// the root is [`sqrtsd`], so a kernel monomorphised on `Hw` has the instruction inline, no call.
 /// It is correctly rounded in the MXCSR's direction (the kernels run in the default one), within
 /// `2^-53` relative, stricter than the trait's `2^-50`; it raises at most inexact for the

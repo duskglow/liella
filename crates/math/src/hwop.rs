@@ -1,4 +1,5 @@
-//! Hardware operations for the kernels (D-NEW, LIBM-HYPOT-DIRECTED; design rules S1/S2).
+//! Hardware operations for the kernels (LIBM-HYPOT-DIRECTED, decision pending in
+//! records/pending/LIBM-HYPOT-DIRECTED-1.toml; design rules S1/S2).
 //!
 //! This crate has no `unsafe` (S1), so it cannot issue an instruction that `core` reaches only
 //! through `core::arch` (for example `sqrtsd`). A kernel that needs such an operation is generic
