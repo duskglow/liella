@@ -1,0 +1,5 @@
+# LIBM-TINY-FASTPATHS plants (cargo xtask plants; docs/plants.md). D-10.108: the one-pass exp family answers a
+# normal |x| < 2^-27 as 1 + x rounded in the caller's direction. The bound is the margin of the tiny-argument
+# claim (10^x - 1 reaches the midpoint 1 - 2^-25 near x = -2^-26.2); the sign of x picks the directed results.
+bound-raised | crates/math/src/fast32/exp_log.rs | lit:0x3200_0000 - 0x0080_0000 ==> 0x3300_0000 - 0x0080_0000 | cargo test -p liella-boundary --release --test s10_math_symbols -- math_expf_onepass_entries_match_the_envelope | msg:(BAD exp10f|differs from the envelope)
+sign-dropped | crates/math/src/fast32/exp_log.rs | lit:Some((1.0 + f64::from(x)) as f32) ==> Some((1.0 + f64::from(x).abs()) as f32) | cargo test -p liella-boundary --release --test s10_math_symbols -- math_expf_onepass_entries_match_the_envelope | msg:(BAD exp[0-9]*f|differs from the envelope)

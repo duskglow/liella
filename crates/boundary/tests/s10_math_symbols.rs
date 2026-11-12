@@ -2429,7 +2429,10 @@ fn math_expf_onepass_entries_match_the_envelope() {
     // D-10.72 adds exp10f's range edges (±37.9) and exact powers (1, 9, 10; 11 and 1.125 are not
     // exact), and the log family's: 1 and its neighbours, the m split at 0.75 and 1.5, the least
     // normal and the largest finite operand, -1, and the 10^n operands log10 refuses (10, 10^10).
-    let edges: [u32; 44] = [
+    // LIBM-TINY-FASTPATHS (D-10.108): the exp family's tiny-operand path below 2^-27 (0x3200_0000)
+    // on both sides of its bound and of the least normal (0x0080_0000, 0x0080_0001 above).
+    let edges: [u32; 48] = [
+        0x31ff_ffff, 0x3200_0000, 0xb1ff_ffff, 0xb200_0000,
         0x0000_0000, 0x8000_0000, 0x0000_0001, 0x807f_ffff, 0x327f_ffff, 0x3280_0000, 0xb280_0000, 0x42ae_a8f5,
         0x42ae_a8f6, 0xc2ae_a8f6, 0x42fb_ffff, 0x42fc_0000, 0xc2fc_0000, 0x4040_0000, 0xc0e0_0000, 0x7f80_0000,
         0xff80_0000, 0x7fc0_0000, 0x7f80_0001, 0xffa0_0005, 0x4217_9999, 0x4217_999a, 0xc217_999a, 0x3f80_0000,

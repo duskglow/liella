@@ -1,0 +1,11 @@
+id = "D-10.108"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+amends = ["D-10.63"]
+story = "LIBM-TINY-FASTPATHS"
+date = "2026-11-12"
+body = '''
+**The one-pass `expf`, `exp2f` and `exp10f` entries answer a normal operand with |x| < 2^-27 themselves, as 1 + x rounded in the caller's direction** (LIBM-TINY-FASTPATHS, ruling #4936; amends D-10.63, whose kernel takes 2^-26 ≤ |x| < amax). Before, every operand below the kernel's range left through the full envelope to the accurate path: 233 instructions per call for 2^-127 ≤ |x| < 2^-60 and 832-928 for 2^-60 ≤ |x| < 2^-43 (LIBM-TAIL-PROBE, all `float` inputs; the reference 26-32), about 45% of the encodings. Method (elementary; Muller, *Elementary Functions: Algorithms and Implementation*, 3rd ed., 2016, the tiny-argument case of the exponential, and IEEE 754-2019 §4.3 for the directed roundings): for b = e, 2, 10, b^x - 1 has x's sign and |b^x - 1| < 2^-27·ln 10·1.001 < 2^-25.79, so b^x and 1 + x lie on the same side of 1 strictly between 1 and its neighbour `float` (1 - 2^-24 or 1 + 2^-23) and between the midpoints around 1 (1 - 2^-25, 1 + 2^-24): every direction rounds both to the same `float`, round to nearest to 1. The `double` sum 1 + x rounded in the caller's direction and converted in that direction is that rounding (the `float` grid is part of the `double` grid; in round to nearest the sum stays within 2^-26 of 1), and it raises inexact and nothing else (x normal and nonzero, everything near 1), which is the one-pass contract: the entry still reads no MXCSR. The bound is 2^-27 rather than the kernel's 2^-26 because 10^x - 1 reaches the midpoint 1 - 2^-25 near x = -2^-26.2; 2^-27 ≤ |x| < 2^-26 keeps the envelope (2 of the 101 tiny binades). The code is out of line and cold (`exp_onepass_tiny`), so the kernel's own path gains no instruction. Zeros and subnormals still take the envelope (a subnormal's conversion raises denormal-operand). Checked against the envelope on every `float` operand in the four directions (`math_{expf,exp2f,exp10f}_onepass_sweep`) and on samples and the new bound's edges under FTZ, DAZ and both (`math_expf_onepass_entries_match_the_envelope`). Measured cost: handoff/LIBM-TINY-FASTPATHS.md.
+'''
