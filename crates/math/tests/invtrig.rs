@@ -363,6 +363,12 @@ fn double_hypot_kernel_is_the_exact_path_in_every_direction() {
         v.push((f64::from_bits(next() & mant), f64::from_bits(next() & mant)));
         v.push((f64::from_bits((1 + next() % 30) << 52 | (next() & mant)), f64::from_bits(next() & mant)));
     }
+    // The fast entry's gap exit adds `a·2^-60` built from `a`'s bits, a normal number only for a
+    // field above 60: every field around that edge, beside a subnormal and 27 binades down.
+    for ea in 27..=64u64 {
+        v.push((f64::from_bits(ea << 52 | (next() & mant)), f64::from_bits(next() & mant)));
+        v.push((f64::from_bits(ea << 52 | (next() & mant)), f64::from_bits((ea - 27) << 52 | (next() & mant))));
+    }
     let modes = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
     for &(x, y) in &v {
         for (x, y) in [(x, y), (-y, x)] {

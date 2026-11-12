@@ -109,8 +109,10 @@ const INF_BITS: u64 = 0x7ff << 52;
 /// Exponent-field gap from which `hypot` lies strictly inside `(a, a + ulp(a)/2)` (D-10.104):
 /// `r − a < b^2/(2a) < 2^(2Eb+1−Ea) <= 2^(Ea−53)` when `Ea − Eb >= 27` (unbiased; `Eb = −1023` for a subnormal).
 pub const HYPOT_GAP: u64 = 27;
-/// `1 + 2^-60`: `a` times it rounds to `a` and raises inexact.
-const ONE_PLUS_2M60: f64 = 1.0 + TWO_M60;
+/// `2^-60` as a step of the exponent field: for `a` with field `Ea > 60`, `a·2^-60` is `a`'s bits
+/// minus it (exact, normal, below `ulp(a)/128`), so `a + a·2^-60` rounds to `a` in the default
+/// environment and raises inexact only (the fast entry's gap exit; `1 + 2^-60` is no `double`).
+const M60_FIELD: u64 = 60 << 52;
 /// Ziv's rounding test factor (ACM TOMS 17(3), 1991): `yh + yl·(1 + 2^-40) == yh` leaves a
 /// margin `> 2^-94.1 yh` to the rounding boundary on `yl`'s side, above the root's `2^-104`.
 const ZIV_HYPOT: f64 = 1.0 + f64::from_bits(pow2_bits(-40));
@@ -453,7 +455,8 @@ macro_rules! kernels {
         /// overflow), and every root within `2^-98` of a `double` or of a midpoint (an exact
         /// root, a tie, too close to tell; `hypot_rounded` settles those exactly). A zero
         /// operand gives the other's magnitude with no operation; a gap of 27 or more binades
-        /// gives `a·(1 + 2^-60)`, which rounds to `a` and raises inexact only; otherwise the
+        /// gives `a + a·2^-60`, which rounds to `a` and raises inexact only (`None` for an
+        /// exponent field of 60 or less, where `a·2^-60` is not normal); otherwise the
         /// root of the operands scaled by `2^(1023 − Ea)` (exact) is tested by Ziv's rounding
         /// test and scaled back (exact). An answered root is not a `double`, so an operation
         /// was inexact in hardware; no other flag can rise (every operand and term is normal).
@@ -471,7 +474,7 @@ macro_rules! kernels {
             let (ea, eb) = (hi >> 52, lo >> 52);
             let a = f64::from_bits(hi);
             if ea >= eb + HYPOT_GAP {
-                return Some(a * ONE_PLUS_2M60);
+                return if ea > 60 { Some(a + f64::from_bits(hi - M60_FIELD)) } else { None };
             }
             if eb == 0 || ea == 0x7fe {
                 return None;
@@ -643,7 +646,7 @@ fn hypot_finish(q: u64, unscale: f64, exact: bool, mode: Rounding) -> (f64, Stat
 #[cfg(target_arch = "x86_64")]
 pub mod fused {
     use super::{comb, done, index, two_sum, fast_two_sum, t, Dd, Table, dd, pow2_bits};
-    use super::{HYPOT_GAP, INF_BITS, ONE_PLUS_2M60, ZIV_HYPOT};
+    use super::{HYPOT_GAP, INF_BITS, M60_FIELD, ZIV_HYPOT};
     use super::{C3, C5, C7, C9, EPS_HYPOT, HALF_MINUS, HALF_PLUS, PI_HI, PI_LO, PI_MINUS, RECIP, SIGN, TWO_M60};
 
     kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma, dd::two_prod_fma, dd::two_prod_fma);
