@@ -309,12 +309,23 @@ enum Declared {
     Section(String),
 }
 
-/// The entries of a `startup-state.list` text: (entry, the line as written, may be absent: `fast-only`).
-fn declared(text: &str) -> Result<Vec<(Declared, String, bool)>, String> {
-    let mut out = Vec::new();
+/// The line of [`STATE_LIST_FILE`] after which every entry is first-call state ([`FIRST_CALL_SECTION`]).
+pub const FIRST_CALL_LINE: &str = "cluster first-call";
+
+/// The entries of a `startup-state.list` text: (entry, the line as written, may be absent: `fast-only`,
+/// first-call state: after [`FIRST_CALL_LINE`]).
+fn declared(text: &str) -> Result<Vec<(Declared, String, bool, bool)>, String> {
+    let (mut out, mut first) = (Vec::new(), false);
     for (n, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or("").trim();
         if line.is_empty() {
+            continue;
+        }
+        if line == FIRST_CALL_LINE {
+            if first {
+                return Err(format!("{STATE_LIST_FILE}:{}: a second `{FIRST_CALL_LINE}`", n + 1));
+            }
+            first = true;
             continue;
         }
         let mut f: Vec<&str> = line.split_whitespace().collect();
@@ -331,7 +342,7 @@ fn declared(text: &str) -> Result<Vec<(Declared, String, bool)>, String> {
             }
             _ => return Err(format!("{STATE_LIST_FILE}:{}: not an entry: {line}", n + 1)),
         };
-        out.push((d, f.join(" "), optional));
+        out.push((d, f.join(" "), optional, first));
     }
     Ok(out)
 }
@@ -349,7 +360,7 @@ fn split_stem(name: &str) -> &str {
 /// section headers (whole names). Every entry not marked `fast-only` must name at least one section: a
 /// renamed or removed static is an error, not a silent return to a page of its own.
 /// Each section comes with the position of its entry in the list.
-fn state_sections(members: &[(String, Vec<Shdr>)], list: &[(Declared, String, bool)]) -> Result<BTreeMap<String, Vec<(String, usize)>>, String> {
+fn state_sections(members: &[(String, Vec<Shdr>)], list: &[(Declared, String, bool, bool)]) -> Result<BTreeMap<String, Vec<(String, usize)>>, String> {
     let mut out: BTreeMap<String, Vec<(String, usize)>> = BTreeMap::new();
     let (mut seen, mut big) = (vec![0usize; list.len()], Vec::new());
     for (member, s) in members.iter().flat_map(|(m, h)| h.iter().map(move |s| (m, s))) {
@@ -361,7 +372,7 @@ fn state_sections(members: &[(String, Vec<Shdr>)], list: &[(Declared, String, bo
             Some((s, n)) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) && !s.ends_with(".llvm") => crate::hottext::key(s),
             _ => crate::hottext::key(sym),
         });
-        let hit = list.iter().position(|(d, _, _)| match d {
+        let hit = list.iter().position(|(d, _, _, _)| match d {
             Declared::Section(n) => n == name,
             Declared::Symbol(n) => raw == Some(n.as_str()),
             Declared::Path(p) => k.as_deref().is_some_and(|k| split_stem(k).ends_with(p.as_str())),
@@ -373,7 +384,7 @@ fn state_sections(members: &[(String, Vec<Shdr>)], list: &[(Declared, String, bo
         }
         out.entry(member.clone()).or_default().push((name.to_string(), i));
     }
-    let missing: Vec<&str> = list.iter().zip(&seen).filter(|((_, _, optional), n)| !optional && **n == 0).map(|((_, l, _), _)| l.as_str()).collect();
+    let missing: Vec<&str> = list.iter().zip(&seen).filter(|((_, _, optional, _), n)| !optional && **n == 0).map(|((_, l, _, _), _)| l.as_str()).collect();
     if !missing.is_empty() {
         return Err(format!("start-up state: no .data/.bss section for {} (renamed or removed? update {STATE_LIST_FILE})", missing.join(", ")));
     }
@@ -387,10 +398,82 @@ fn state_sections(members: &[(String, Vec<Shdr>)], list: &[(Declared, String, bo
 /// [`STATE_SECTION`] in place; `work` is scratch. Returns the number renamed.
 pub fn move_startup_state(ar: &str, archive: &Path, root: &Path, work: &Path) -> Result<usize, String> {
     let list = declared(&fs::read_to_string(root.join(STATE_LIST_FILE)).map_err(|e| format!("{STATE_LIST_FILE}: {e}"))?)?;
-    let state = state_sections(&archive_headers(archive)?, &list)?;
+    let members = archive_headers(archive)?;
+    let plan = state_plan(&members, &list)?;
+    if let Some((m, first)) = &plan.lead {
+        // The cluster's first section starts a page, before the renames make the names ambiguous.
+        let _ = fs::remove_dir_all(work);
+        fs::create_dir_all(work).map_err(|e| e.to_string())?;
+        run(Command::new(ar).current_dir(work).arg("x").arg(archive).arg(m))?;
+        run(Command::new("objcopy").arg(format!("--set-section-alignment={first}={FIRST_CALL_ALIGN}")).arg(work.join(m)))?;
+        run(Command::new(ar).current_dir(work).arg("r").arg(archive).arg(m))?;
+        let _ = fs::remove_dir_all(work);
+    }
+    let n = rename(ar, archive, work, "start-up state", &plan.renames, Some(&plan.order))?;
+    if let Some((m, _)) = &plan.lead {
+        let after = archive_headers(archive)?;
+        let lead = after.iter().filter(|(n, _)| n == m).flat_map(|(_, h)| h).filter(|s| s.name == FIRST_CALL_SECTION && s.align >= FIRST_CALL_ALIGN).count();
+        if lead != 1 {
+            return Err(format!("start-up state: {m}: {lead} {FIRST_CALL_SECTION} sections aligned to {FIRST_CALL_ALIGN}, want 1 (objcopy --set-section-alignment)"));
+        }
+    }
+    Ok(n)
+}
+
+/// LAYOUT-STARTUP-STATE-LOCALE-3 (ruling #4942): the zero-filled first-call state (entries after
+/// [`FIRST_CALL_LINE`]: what the first setlocale, setenv, localtime_r, mktime and catalog lookups touch,
+/// never a process that makes none of those calls) goes here, after `.bss` in GNU ld's default script, not
+/// into [`STATE_SECTION`]: there it lay between the every-process tier and the C members' start-up words
+/// (`__libc_stack_end`, `environ`, linked after the Rust object), and the `true` probe touched one page
+/// more (intl::RESOLVED alone is 4 KiB). In `.lbss` it stays in the one writable segment a static PIE
+/// needs (`.ldata` would start a second). Initialised first-call objects cannot be zero-filled and stay in
+/// [`STATE_SECTION`], after the every-process tier (list order).
+pub const FIRST_CALL_SECTION: &str = ".lbss";
+/// The first-call cluster starts a page, so its page split depends only on the list and the objects'
+/// sizes (anonymous zero-filled pages have no fault-around window to fit).
+pub const FIRST_CALL_ALIGN: u64 = 4096;
+
+/// What [`move_startup_state`] does to the archive.
+#[derive(Debug, Default)]
+struct StatePlan {
+    /// member -> (section, new name).
+    renames: BTreeMap<String, Vec<(String, String)>>,
+    /// member -> section-table order: the every-process tier, the first-call cluster, the member's
+    /// cold tables (also `.lbss` once renamed: after the cluster, never inside it).
+    order: BTreeMap<String, Vec<String>>,
+    /// The member holding the first-call cluster and the cluster's first section.
+    lead: Option<(String, String)>,
+}
+
+/// The renames and order of the declared start-up state. The first-call cluster is one member's: the one
+/// with the most first-call zero-filled bytes (the library's Rust object). Another member's first-call
+/// state stays in [`STATE_SECTION`]: a second piece in `.lbss` would land among the cold tables, on a page
+/// of its own wherever they put it.
+fn state_plan(members: &[(String, Vec<Shdr>)], list: &[(Declared, String, bool, bool)]) -> Result<StatePlan, String> {
+    let state = state_sections(members, list)?;
     let order = state_order(&state);
-    let renames = state.into_iter().map(|(m, list)| (m, list.into_iter().map(|(s, _)| (s, STATE_SECTION.to_string())).collect())).collect();
-    rename(ar, archive, work, "start-up state", &renames, Some(&order))
+    let headers = |m: &str| members.iter().filter(|(n, _)| n == m).flat_map(|(_, h)| h);
+    let first_call = |m: &str, s: &str| {
+        let entry = state.get(m).and_then(|v| v.iter().find(|(n, _)| n == s)).map(|(_, i)| *i);
+        entry.is_some_and(|i| list[i].3) && headers(m).any(|h| h.name == s && h.kind == SHT_NOBITS)
+    };
+    let bytes = |m: &str| headers(m).filter(|h| first_call(m, &h.name)).map(|h| h.size).sum::<u64>();
+    let lead = state.keys().filter(|m| bytes(m) > 0).max_by_key(|m| (bytes(m), std::cmp::Reverse((*m).clone()))).cloned();
+    let cold = cold_sections(members);
+    let mut plan = StatePlan::default();
+    for (m, secs) in order {
+        let in_cluster = |s: &String| lead.as_deref() == Some(m.as_str()) && first_call(&m, s);
+        let (first, base): (Vec<String>, Vec<String>) = secs.into_iter().partition(in_cluster);
+        let renames = base.iter().map(|s| (s.clone(), STATE_SECTION.to_string())).chain(first.iter().map(|s| (s.clone(), FIRST_CALL_SECTION.to_string()))).collect();
+        plan.renames.insert(m.clone(), renames);
+        let mut o: Vec<String> = base.into_iter().chain(first.iter().cloned()).collect();
+        if let Some(f) = first.first() {
+            o.extend(cold.get(&m).into_iter().flatten().filter(|c| !o.contains(c)).cloned());
+            plan.lead = Some((m.clone(), f.clone()));
+        }
+        plan.order.insert(m, o);
+    }
+    Ok(plan)
 }
 
 /// LAYOUT-STARTUP-STATE-LOCALE (ruling #4923): the order of each member's start-up state in
@@ -434,6 +517,22 @@ mod tests {
         let order = state_order(&got);
         assert_eq!(order["a.o"], [".bss._RNvNtCsAbC12_15liella_boundary4heap4HEAP", ".data._RNvNtCsQ9_15liella_boundary5timer5EPOLL.0.llvm.42", ".data._RNvNtCsQ9_15liella_boundary5timer5EPOLL.1"]);
         assert_eq!(order["b.o"], [".bss.__rseq_size", ".bss.environ"]);
+        // LAYOUT-STARTUP-STATE-LOCALE-3 (ruling #4942): entries after the cluster line are first-call state.
+        // The zero-filled ones of the member with the most such bytes go to the page-aligned `.lbss` cluster,
+        // in list order, ahead of that member's cold tables; an initialised one, and another member's, stay
+        // in `.data1` after the every-process tier.
+        let list = declared("liella_boundary::heap::HEAP\ncluster first-call\nliella_legacy::intl::RESOLVED\nsymbol stdout\nsymbol __daylight\nliella_legacy::intl::LOCK\n").unwrap();
+        assert_eq!(list.iter().map(|e| e.3).collect::<Vec<_>>(), [false, true, true, true, true]);
+        assert!(declared("cluster first-call\ncluster first-call\n").unwrap_err().contains("a second"));
+        let members = vec![
+            ("r.o".to_string(), vec![sec(".bss.big", SHT_NOBITS, 2048), sec(".bss._RNvNtCs1_13liella_legacy4intl4LOCK", SHT_NOBITS, 4), sec(".data.stdout", 1, 8), sec(".bss._RNvNtCs1_13liella_legacy4intl8RESOLVED", SHT_NOBITS, 4096), sec(".bss._RNvNtCs1_15liella_boundary4heap4HEAP", SHT_NOBITS, 5376)]),
+            ("c.o".to_string(), vec![sec(".bss.__daylight", SHT_NOBITS, 4)]),
+        ];
+        let plan = state_plan(&members, &list).unwrap();
+        let to = |m: &str, s: &str| plan.renames[m].iter().find(|(f, _)| f.ends_with(s)).map(|(_, t)| t.as_str());
+        assert_eq!((to("r.o", "4HEAP"), to("r.o", "RESOLVED"), to("r.o", "4LOCK"), to("r.o", "stdout"), to("c.o", "__daylight")), (Some(".data1"), Some(".lbss"), Some(".lbss"), Some(".data1"), Some(".data1")));
+        assert_eq!(plan.order["r.o"], [".bss._RNvNtCs1_15liella_boundary4heap4HEAP", ".data.stdout", ".bss._RNvNtCs1_13liella_legacy4intl8RESOLVED", ".bss._RNvNtCs1_13liella_legacy4intl4LOCK", ".bss.big"]);
+        assert_eq!(plan.lead, Some(("r.o".to_string(), ".bss._RNvNtCs1_13liella_legacy4intl8RESOLVED".to_string())));
         assert!(state_sections(&members[1..], &list).unwrap_err().contains("for liella_boundary::heap::HEAP, liella_boundary::timer::EPOLL ("));
         members[0].1[0].size = STATE_DECLARED_MAX + 1;
         assert!(state_sections(&members, &list).unwrap_err().contains("over 8192 bytes"));

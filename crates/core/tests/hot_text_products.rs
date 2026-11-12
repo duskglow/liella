@@ -1169,6 +1169,11 @@ fn init_startup_data_accesses_are_in_the_data1_cluster() {
             if own && *size <= 4096 && file.contains("libc.a(") {
                 bad.insert(format!("{mode}: {name} ({size} bytes, {file})"));
             }
+            // LAYOUT-STARTUP-STATE-LOCALE-3 (ruling #4942): the first-call cluster (`.lbss` itself; the cold
+            // tables are `.lbss.<symbol>`) holds no state `true` touches, or every process pays its page.
+            if mode == "true" && name == ".lbss" && file.contains("libc.a(") {
+                bad.insert(format!("true: first-call cluster {name} ({size} bytes, {file}): every-process state declared after `cluster first-call`"));
+            }
         }
     }
     let _ = std::fs::remove_dir_all(&dir);
@@ -1190,7 +1195,12 @@ fn init_startup_state_follows_the_declared_order() {
     let map = link_map(&dir, &root().join("target/liella/liella-crt1.o"));
     let nm = Command::new("nm").args(["-n", "--defined-only"]).arg(dir.join("page_faults")).output().expect("nm");
     let _ = std::fs::remove_dir_all(&dir);
-    let inputs = output_inputs(&map, ".data1");
+    // LAYOUT-STARTUP-STATE-LOCALE-3 (ruling #4942): and the first-call cluster (`.lbss` inputs named `.lbss`
+    // itself), in list order within each cluster, starting a page.
+    let first_call: Vec<(String, u64, u64, String)> = output_inputs(&map, ".lbss").into_iter().filter(|s| s.0 == ".lbss" && s.2 > 0).collect();
+    let lead = first_call.iter().find(|s| s.3.contains("libc.a(")).expect("no first-call cluster (.lbss) from libc.a in the link map");
+    assert_eq!(lead.1 % 4096, 0, "STATE-ORDER: the first-call cluster starts at {:#x}, not on a page (FIRST_CALL_ALIGN)", lead.1);
+    let inputs: Vec<(String, u64, u64, String)> = output_inputs(&map, ".data1").into_iter().chain(first_call).collect();
     let list = std::fs::read_to_string(root().join("crates/libc-so/startup-state.list")).expect("startup-state.list");
     // (entry position, a symbol matcher): a path by its v0 tail, a symbol or section entry by name.
     let entries: Vec<String> = list.lines().map(|l| l.split('#').next().unwrap_or("").trim()).filter(|l| !l.is_empty()).map(str::to_string).collect();
@@ -1210,7 +1220,8 @@ fn init_startup_state_follows_the_declared_order() {
     for l in String::from_utf8_lossy(&nm.stdout).lines() {
         let w: Vec<&str> = l.split_whitespace().collect();
         let (Some(a), Some(name)) = (w.first().and_then(|a| u64::from_str_radix(a, 16).ok()), w.get(2)) else { continue };
-        let Some((_, _, _, file)) = inputs.iter().find(|s| s.1 <= a && a < s.1 + s.2.max(1)) else { continue };
+        let Some((cluster, _, _, file)) = inputs.iter().find(|s| s.1 <= a && a < s.1 + s.2.max(1)) else { continue };
+        let file = &format!("{cluster} {file}");
         let Some(p) = position(name) else { continue };
         seen = seen.saturating_add(1);
         if let Some((q, prev)) = last.get(file).filter(|(q, _)| *q > p) {
