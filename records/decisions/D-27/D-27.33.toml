@@ -1,0 +1,10 @@
+id = "D-27.33"
+section = "s26-29"
+spec = "§27"
+ann = "ABI"
+status = "active"
+story = "DL-16-PLAN-2"
+date = "2026-11-12"
+body = '''
+**`dlopen` in statically linked programs is deferred to a later phase-14 item (coordinator ruling #5005; plan/ph14/dl-16-dlopen.md §7).** DL-16 builds `dlopen` for dynamically linked programs (Liella's `ld.so`). In a program linked with `libc.a`, `dlopen` returns NULL and sets a dlerror text, and `dlsym` and `dlvsym` fail the same way: never a crash, and never an undefined symbol at link time (`libc.a` carries the failing entry points from DL-16a). Loading objects into a static program is its own phase-14 story, DL-16S `DL-DLOPEN-STATIC`, after DL-17 and DL-20: it needs unloading and lazy binding to be useful. Until then a differences row records the difference and a compatibility option id is registered for it (records/pending/DL-16-PLAN-5.toml, status registered, not implemented). Deferred, not dropped.
+'''
