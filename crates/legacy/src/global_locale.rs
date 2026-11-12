@@ -581,6 +581,16 @@ fn query_record(handle: usize, cat: Option<Cat>, slot: usize) {
     }
 }
 
+/// Whether the cached name `s` is the name `n` reports (`"POSIX"` reports `"C"`), for a name that
+/// did not match as given. Out of line and cold so that the inline fast path of [`setlocale`] stays
+/// what it is without the alias: inline, the alias compare cost every other `setlocale` call 1-3
+/// instructions in register and frame set-up (SETLOCALE-C-ROWS).
+#[cold]
+#[inline(never)]
+fn reports_as(s: &[u8], n: &[u8]) -> bool {
+    s == locale::reported(n)
+}
+
 /// `setlocale(cat, …)` (`cat` `None` is `LC_ALL`). Returns the category's name or the
 /// composite name (`'static`, followed by a NUL), or `None` if a name is unknown, in which
 /// case nothing changes. A query is answered from the query cache when it can be.
@@ -597,8 +607,9 @@ pub fn setlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: Reque
         // missed here and rebuilt, compared and copied whole locales under the lock (~2,300
         // instructions, partly memmove whose count follows stack alignment).
         Request::Name(n) => {
-            // The name as given first: "C" and every file name match there at no extra cost.
-            if let Some(s) = query_cached(m, cat).filter(|&s| s == n || s == locale::reported(n)) {
+            // The name as given first: "C" and every file name match there; the alias is
+            // checked out of line, only after that missed.
+            if let Some(s) = query_cached(m, cat).filter(|&s| s == n || reports_as(s, n)) {
                 return Some(s);
             }
         }
