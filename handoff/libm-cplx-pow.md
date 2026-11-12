@@ -1,40 +1,44 @@
-# LIBM-CPLX-POW handoff: cpow/cpowf quick + middle tiers, middle bounds proved (run 3)
+# LIBM-CPLX-POW handoff: cpow/cpowf quick + middle tiers, bounds proved, record pending (run 4)
 
-State: branch task/libm-cplx-pow-3 (continues -2's branch; 11 commits behind next, no merge allowed). Code head
-78bff2d8f; role mei:~/w/s1. Run 3 stopped at the 180k context checkpoint (Effort: max budget).
-Decisions in force: D-10.53, D-10.74, D-10.99, D-10.25, D-10.17. No decision record for this tier yet.
+State: branch task/libm-cplx-pow-4 (= -3's branch plus a merge of origin/next a5636ce6b, merge commit 1936e6f54);
+head in handoff/reports/LIBM-CPLX-POW-4.json. Role mei:~/w/s4. Decisions in force: D-10.53, D-10.74, D-10.99,
+D-10.25, D-10.17; this tier's record is pending (records/pending/LIBM-CPLX-POW-4-1.toml, D-NEW in series D-10:
+the coordinator assigns the id).
 
-## Blocker found in run 3 (not this branch): `cargo xtask so` fails on this tree
+## Blocker (still external): `cargo xtask so` fails on this branch, not on next
 
--2's gate (276 product-test failures) and plants (rc 2, BASELINE FAILED) share one cause: `xtask so`
-stops with `hot-text.list: 1 key(s) match no function section of the fast-profile libc.a:
-_RNvNtC6liella6locale7builtin`. Reproduced on mei (job libm-cplx-pow-3-lint0: clippy 0, static 0, so 1).
-The branch touches only crates/math; another story's probe of next plus a 3-line dummy change failed the same
-way (mei job lhis2-probe-nextdummy, 11-12 13:44), as did libm-cplx-sincos-2-plants on keke: the inlining of
-`locale::builtin` flips with unrelated code growth (layout-jitter family; HOTTEXT-REGEN-HOSTS chain). Not chased
-(no regen, no hot-text.absent line). Until it is fixed, `xtask plants` (it builds the products first), the
-`affected` gate and percall cannot pass on any tree.
+* origin/next a5636ce6b alone: `xtask so` rc 0, all 12 layout contracts hold (mei job `libm-cplx-pow-4-so-next`).
+* This branch (next merged, 1936e6f54): clippy and static pass, then `so` stops with `hot-text.list: 1 key(s)
+  match no function section of the fast-profile libc.a: _RINvNtC6liella6getopt4next<options::CArgs,
+  options::CLongs>` (traced in tool) (job `libm-cplx-pow-4-lint0`). The locale::builtin key that blocked -3 is fixed
+  (LAYOUT-HOTKEY-INLINE-STABLE); this is the next unpinned key of the same family.
+* The branch changes only crates/math (+503 lines: the tiers, proofs and tests) and one xtask long-sweeps row. The
+  key is a generic instantiated in liella_boundary; crates/libc-so/hot-text.unpinned:322 says it cannot be pinned
+  (`#[inline(never)]` on a generic binds every instantiation). Growth of the cpow code reached through boundary
+  flips its inlining. Not chased (brief: no regen, no dropped key; START-UP LAYOUT JITTER rule).
+* Consequence: plants (the tool builds the products in its baseline), the `affected` gate and percall cannot run.
 
-## Done in run 3 (#5023, #5022)
+## Done in run 4
 
-* `exp_log::log_dd` and `trig::atan_dd` carry step-by-step proofs (doc comments): primitives (JMP 2017 Alg. 6
-  and 4 cited; mul_f64 3u², mul 8u², div 5u² derived there), series truncation, f64 tails, table facts,
-  per-branch sums. Proved 29.8u² and 34.6u²; constants `LOG_DD_REL = 32u²`, `ATAN_DD_REL = 36u²`.
-* complex_fast_pow.rs: `LR_REL`, `LR_ABS` (sum_squares' 2^-104.4 halved), `LI_REL` (+ div, sub, 2·PI_2)
-  derived from them (the old 2x estimates are gone; the old constants were 4-7x above the proofs, so no
-  past result was wrong).
-* Test `cpow_middle_bounds_cover_their_proofs`: |s| <= 2^-8.4 per LOG_C bucket, LOG_L/ATAN_J64/LN2/PI_2
-  within u² (mp), the proofs' sums vs every constant, 4000 sampled log_dd/atan_dd errors vs mp.
-* Sweep `cpow_decline_rates` per |w log z| band (2^-6..1, 1..16, 16..512), 2^21 operands each: asserts no
-  middle decline and the bound-implied rate <= 2^-30 per part; long-sweeps row in xtask/src/longsweeps.rs.
-  Result: see job libm-cplx-pow-3-check1 (mei) and the report.
-* Plants file handoff/LIBM-CPLX-POW-3-plants.txt (strict test + each bound halved); NOT RUN (blocker above).
+* Merged origin/next (the brief allows it); no conflicts.
+* Decision record (pending): method, proofs, strict test, measured decline rates, citations (Joldes-Muller-Popescu
+  2017; Muller, Elementary Functions 2016). `records check` ok.
+* Plants file handoff/LIBM-CPLX-POW-4-plants.txt: -3's five (strict test dropped; LOG_DD_REL, ATAN_DD_REL, LR_ABS,
+  LI_REL halved) plus `middle-bound-loose` (middle part bound times 1e15: still correct, declines, only
+  `cpow_decline_rates` catches it; release, `--ignored`). NOT RUN (blocker).
+* Job `libm-cplx-pow-4-check3` rc 0 on the code of the final head: records check, `cargo test -p liella-math --lib
+  complex_fast::pow` (3 pass, the sweep ignored as a long sweep), `cargo xtask static`.
 
-## Next step (continuation, after the hot-text fix lands)
+## Next step (continuation, once this branch's `so` passes)
 
-1. Sync; run `cargo xtask plants handoff/LIBM-CPLX-POW-3-plants.txt` and the `affected` gate (base origin/next).
-2. Decision record: `cargo xtask records new decision D-NEW --series D-10 --story <story>` (method, proofs,
-   strict test, measured rates; cite Joldes-Muller-Popescu 2017).
-3. In-place entry: `cplx2_fast` in crates/boundary/src/mathret.rs (mirror `cplx_fast`), rows `cpow f`/`d` in
-   posix/s10_math.tsv, `cargo xtask math-gen`.
-4. percall typical and hard rows (with and without `--tunables glibc.cpu.hwcaps=-FMA`) vs next and glibc.
+1. Sync; `cargo xtask plants handoff/LIBM-CPLX-POW-4-plants.txt` and the `affected` gate (base origin/next).
+2. percall typical and per-|w log z|-band hard rows (with and without `--tunables glibc.cpu.hwcaps=-FMA`) vs next
+   and glibc; report the middle tier's cost per band (the quick tier declines 2^-2.4 per part in the large band);
+   add the numbers to the pending record's body.
+3. In-place entry (optional, after the above): `cplx2_fast` in crates/boundary/src/mathret.rs mirroring
+   `cplx_fast`, rows `cpow f`/`d` in crates/boundary/src/posix/s10_math.tsv, `cargo xtask math-gen`. Its fast
+   function must raise only inexact in hardware where it answers (prove no intermediate underflow/overflow on the
+   answered path, or decline first); more boundary code, so check `so` again.
+
+Do not redo: the proofs (log_dd 29.8u², atan_dd 34.6u²), the constants, the proof test, the decline sweep and its
+long-sweeps row, the record text.
