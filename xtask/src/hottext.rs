@@ -1787,8 +1787,100 @@ mod tests {
             assert!(l < extra, "regen.sh traces page_faults {mode} after the extra programs");
         }
         let refuse = sh.find("if [ $allow_drop = 0 ]; then").expect("regen.sh: no --allow-drop guard");
-        for w in ["mv \"$work/startup.merged\" \"$skeys\"", "mv \"$work/list.merged\" \"$list\""] {
+        for w in ["put_changed \"$work/startup.merged\" \"$skeys\"", "put_changed \"$work/list.merged\" \"$list\""] {
             assert!(sh.find(w).is_some_and(|p| p > refuse), "regen.sh writes before the drop guard: {w}");
         }
+    }
+
+    #[test]
+    fn regen_runner_runs_traces_together_and_keeps_their_order() {
+        // HOTLIST-REGEN-CHEAP (no spec clause: build tooling): tools/hottext/runner.sh, the trace
+        // runner of regen.sh and probe_text.sh. A fake tracer (HOTTEXT_GDB) waits until all four
+        // traces of the run have started, so a runner that runs them one at a time fails here
+        // (iteration budget, a hang guard only). The tagged file names every trace in start order,
+        // each trace writes its own names file with its own environment, a failed trace fails the
+        // wait, and put_changed leaves a file whose bytes did not change untouched.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let runner = root.join("tools/hottext/runner.sh");
+        let tmp = root.join(format!("target/xtask-runner-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let run = |name: &str, progs: &[&str]| {
+            let work = tmp.join(name);
+            let barrier = work.join("barrier");
+            std::fs::create_dir_all(&barrier).unwrap();
+            let fake = r#"#!/bin/bash
+while [ "$1" != --args ]; do shift; done; shift
+touch "BARRIER/started.$1"
+i=0
+while [ "$(ls BARRIER | wc -l)" -lt COUNT ]; do
+    i=$((i + 1))
+    if [ $i -gt 3000 ]; then echo "fake tracer: $1 started alone: the traces did not run together" >&2; exit 7; fi
+    sleep 0.01
+done
+if [ "$1" = fail ]; then exit 3; fi
+printf '%s\n' "$@" "LANG=$LANG" > "$HOT_TEXT_OUT"
+"#
+            .replace("BARRIER", &barrier.to_string_lossy())
+            .replace("COUNT", &progs.len().to_string());
+            let fake_path = work.join("fake-gdb");
+            std::fs::write(&fake_path, fake).unwrap();
+            let driver = r#"set -eu
+work=$1; here=$2; shift 2
+n=0
+: > "$work/tagged"
+. "$here/runner.sh"
+for p in "$@"; do trace_tagged "tier-$p" LANG="lang-$p" -- "$p" arg; done
+traces_wait
+"#;
+            let o = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(driver)
+                .arg("driver")
+                .arg(&work)
+                .arg(runner.parent().unwrap())
+                .args(progs)
+                .env("HOTTEXT_GDB", format!("bash {}", fake_path.display()))
+                .env("HOTTEXT_JOBS", progs.len().to_string())
+                .output()
+                .expect("bash runs tools/hottext/runner.sh");
+            (work, o.status.success(), String::from_utf8_lossy(&o.stderr).into_owned())
+        };
+        let progs = ["p1", "p2", "p3", "p4"];
+        let (work, ok, err) = run("ok", &progs);
+        assert!(ok, "runner.sh: the four traces did not all run and pass: {err}");
+        let tagged = std::fs::read_to_string(work.join("tagged")).unwrap();
+        let want: String = (1..=progs.len()).map(|i| format!("tier-p{i}={}\n", work.join(format!("names.{i}")).display())).collect();
+        assert_eq!(tagged, want, "runner.sh: tagged does not name every trace in start order");
+        for (i, p) in progs.iter().enumerate() {
+            let names = std::fs::read_to_string(work.join(format!("names.{}", i + 1))).unwrap();
+            assert_eq!(names, format!("{p}\narg\nLANG=lang-{p}\n"), "runner.sh: names.{} is not trace {p}'s output", i + 1);
+        }
+        let (_, ok, err) = run("fail", &["p1", "fail", "p3", "p4"]);
+        assert!(!ok && err.contains("trace failed (rc 3)"), "runner.sh: a failed trace did not fail the wait: {err}");
+        // put_changed: equal bytes keep the tracked file (and its mtime); new bytes replace it.
+        let dir = tmp.join("put");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("tracked"), "a\n").unwrap();
+        let old = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
+        std::fs::File::options().write(true).open(dir.join("tracked")).unwrap().set_modified(old).unwrap();
+        let put = |text: &str| {
+            std::fs::write(dir.join("new"), text).unwrap();
+            let st = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(". \"$1\"; put_changed \"$2/new\" \"$2/tracked\"")
+                .arg("put")
+                .arg(&runner)
+                .arg(&dir)
+                .status()
+                .unwrap();
+            assert!(st.success(), "put_changed failed");
+            assert!(!dir.join("new").exists(), "put_changed left its input behind");
+            (std::fs::read_to_string(dir.join("tracked")).unwrap(), std::fs::metadata(dir.join("tracked")).unwrap().modified().unwrap())
+        };
+        let same = put("a\n");
+        let changed = put("b\n");
+        std::fs::remove_dir_all(&tmp).unwrap();
+        assert_eq!(same, ("a\n".to_string(), old), "put_changed rewrote a file whose bytes did not change");
+        assert_eq!(changed.0, "b\n", "put_changed did not write new bytes");
     }
 }

@@ -27,6 +27,8 @@ profile=$(cat "$P/.profile" 2>/dev/null || true)
 case $profile in fast|release) ;; *) echo "probe_text: $P/.profile: want fast or release, got '$profile'" >&2; exit 1;; esac
 if [ $phase = all ]; then work=$(mktemp -d "${TMPDIR:-/tmp}/probetext.XXXXXX"); trap 'rm -rf "$work"' EXIT
 elif [ $phase = trace ]; then mkdir "$pdir"; work=$(cd "$pdir" && pwd); else work=$(cd "$pdir" && pwd); fi
+# shellcheck source=tools/hottext/runner.sh
+. "$here/runner.sh"
 tagged=
 for m in $MODES; do tagged="$tagged extra=$work/names.$m"; done  # merge.py takes hot-text tiers only; these functions' tier is extra
 if [ $phase != merge ]; then
@@ -34,11 +36,9 @@ cc -std=gnu17 -O1 -static -nostdlib -fno-builtin "$P/liella-crt1.o" "$T/crates/c
     "$P/libc.a" -lgcc -o "$work/page_faults"
 echo x > "$work/in.txt"
 for m in $MODES; do
-    ( rc=0; env -i PATH="$PATH" LANG=en_US.UTF-8 HOT_TEXT_OUT="$work/names.$m" HOT_TEXT_STDIN="$work/in.txt" HOT_TEXT_FOLLOW_FORK= timeout 900 \
-        ${HOTTEXT_GDB:-gdb} -nx -batch -x "$here/trace_gdb.py" --args "$work/page_faults" "$m" > "$work/gdb.$m.log" 2>&1 || rc=$?; echo $rc > "$work/gdb.$m.rc" ) &
+    run_traced "$work/names.$m" "$work/gdb.$m.log" -i PATH="$PATH" LANG=en_US.UTF-8 HOT_TEXT_STDIN="$work/in.txt" HOT_TEXT_FOLLOW_FORK= -- "$work/page_faults" "$m"
 done
-wait
-for m in $MODES; do [ "$(cat "$work/gdb.$m.rc")" = 0 ] || { tail -5 "$work/gdb.$m.log"; exit 1; }; done
+traces_wait || exit 1
 fi
 [ $phase = trace ] && exit 0
 # shellcheck disable=SC2086
@@ -52,5 +52,5 @@ if [ $replace = 1 ] || [ ! -f "$pkeys" ]; then : > "$work/probe.old"; else grep 
     echo "# <key> TAB extra TAB <profiles traced in>."
     python3 "$here/merge.py" "$work/probe.old" "$work/probe.keys" "$profile"
 } > "$pkeys.tmp"
-mv "$pkeys.tmp" "$pkeys"
+put_changed "$pkeys.tmp" "$pkeys"
 echo "probe-text: $(wc -l < "$work/probe.keys") keys traced ($profile), $(grep -vc '^#' "$pkeys") in $pkeys"

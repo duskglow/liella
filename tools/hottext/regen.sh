@@ -26,10 +26,10 @@
 #   HOTLIST-REGEN-CHEAP: the traces of one run go in parallel (HOTTEXT_JOBS at once, default nproc), and
 #   each trace keeps its number, so the merge reads them in the order above. --both (needs --build's tree)
 #   is the cheap regen of both profiles: `cargo xtask so --hottext-regen --libc-only` builds only what the
-#   traces link (target/product/<profile>/regen), the two profiles' traces run in parallel (--trace-only),
-#   the merges run fast then release (--merge-only), and `cargo xtask hottext-recheck` reruns only the
-#   grouping and its dead-key check. The release products are built before the fast merge; when that merge
-#   changes a file the build reads, they are rebuilt and retraced after it, as the one-profile path builds them.
+#   traces link (target/product/regen/<profile>), each profile is traced (--trace-only) and merged
+#   (--merge-only), fast then release, the release products built from the lists the fast merge wrote (as
+#   the one-profile path builds them), and `cargo xtask hottext-recheck` reruns only the grouping and its
+#   dead-key check. A list is rewritten only when its bytes change (runner.sh put_changed).
 #   --products <dir>: trace the products in <dir> (default <tree>/target/liella).
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
@@ -59,24 +59,22 @@ if [ $both = 1 ]; then
     mkdir -p "$R/inputs"; for f in $inputs; do cp "$T/crates/libc-so/$f" "$R/inputs/$f"; done
     (cd "$T" && cargo xtask so --hottext-regen --libc-only "$R/fast") || { echo "regen: fast product build failed" >&2; exit 1; }
     lap build-fast
-    bash "$0" "$T" --products "$R/fast" --trace-only "$R/fast.trace" > "$R/fast.trace.log" 2>&1 & fpid=$!
-    (cd "$T" && LIELLA_FULL_PROFILE=1 cargo xtask so --hottext-regen --libc-only "$R/release") || { echo "regen: release product build failed" >&2; wait $fpid || true; exit 1; }
-    lap build-release
-    bash "$0" "$T" --products "$R/release" --trace-only "$R/release.trace" > "$R/release.trace.log" 2>&1 & rpid=$!
-    rc=0; wait $fpid || rc=1; wait $rpid || rc=$((rc + 2))
-    [ $rc = 0 ] || { echo "regen: trace failed (rc $rc): $R/fast.trace.log $R/release.trace.log" >&2; tail -5 "$R/fast.trace.log" "$R/release.trace.log" >&2; exit 1; }
-    lap traces-both
+    bash "$0" "$T" --products "$R/fast" --trace-only "$R/fast.trace" > "$R/fast.trace.log" 2>&1 || { tail -5 "$R/fast.trace.log" >&2; exit 1; }
+    lap traces-fast
     # shellcheck disable=SC2086
     bash "$0" "$T" --products "$R/fast" --merge-only "$R/fast.trace" $ad
     lap merge-fast
+    # HOTLIST-REGEN-CHEAP-2 (#5093): the release products are built from the lists the fast merge wrote, as
+    # the one-profile path builds them. Not ahead of the merge: merge.py puts the new trace's first-touch
+    # order first, the fast and release orders differ, so even a regen that ends where it started reorders
+    # the lists in the fast merge (the release merge puts the release order back), and a release build
+    # made before it was never the one traced.
     changed=; for f in $inputs; do cmp -s "$T/crates/libc-so/$f" "$R/inputs/$f" || changed="$changed $f"; done
-    if [ -n "$changed" ]; then
-        echo "regen-both: the fast merge changed$changed: release products rebuilt and retraced after it"
-        (cd "$T" && LIELLA_FULL_PROFILE=1 cargo xtask so --hottext-regen --libc-only "$R/release") || { echo "regen: release product rebuild failed" >&2; exit 1; }
-        rm -rf "$R/release.trace"
-        bash "$0" "$T" --products "$R/release" --trace-only "$R/release.trace" > "$R/release.trace.log" 2>&1 || { tail -5 "$R/release.trace.log" >&2; exit 1; }
-        lap rebuild-retrace-release
-    fi
+    echo "regen-both: the fast merge changed:${changed:- nothing}"
+    (cd "$T" && LIELLA_FULL_PROFILE=1 cargo xtask so --hottext-regen --libc-only "$R/release") || { echo "regen: release product build failed" >&2; exit 1; }
+    lap build-release
+    bash "$0" "$T" --products "$R/release" --trace-only "$R/release.trace" > "$R/release.trace.log" 2>&1 || { tail -5 "$R/release.trace.log" >&2; exit 1; }
+    lap traces-release
     # shellcheck disable=SC2086
     bash "$0" "$T" --products "$R/release" --merge-only "$R/release.trace" $ad
     lap merge-release
@@ -100,7 +98,8 @@ else
 fi
 cd "$work"
 n=0
-jobs_max=${HOTTEXT_JOBS:-$(nproc)}
+# shellcheck source=tools/hottext/runner.sh
+. "$here/runner.sh"
 if [ $phase != merge ]; then
 cp "$here"/probes/*.c "$work"/
 echo x > "$work/in.txt"
@@ -113,20 +112,11 @@ tier_of() { # <probe> -> its tier (HOTTEXT-STARTUP-COMPLETE)
 : > "$work/tagged"
 trace() { # <tier> <LANG> <program> <args...>
     local tier=$1 lang=$2; shift 2
-    n=$((n + 1))
-    printf '%s=%s\n' "$tier" "$work/names.$n" >> "$work/tagged"
-    run_traced "$work/names.$n" "$work/gdb.$n.log" "$lang" "$@"
-}
-run_traced() { # <names out> <log> <LANG> <program> <args...>: started in the background, at most jobs_max at once
-    local out=$1 log=$2 lang=$3; shift 3
-    while [ "$(jobs -rp | wc -l)" -ge "$jobs_max" ]; do wait -n || true; done
-    ( rc=0; LANG=$lang LC_ALL= HOT_TEXT_OUT=$out HOT_TEXT_STDIN=${stdin:-$work/in.txt} HOT_TEXT_FOLLOW_FORK=${follow:-} timeout 900 \
-        ${HOTTEXT_GDB:-gdb} -nx -batch -x "$here/trace_gdb.py" --args "$@" > "$log" 2>&1 || rc=$?; echo $rc > "$log.rc" ) &
+    trace_tagged "$tier" LANG="$lang" LC_ALL= HOT_TEXT_STDIN="${stdin:-$work/in.txt}" HOT_TEXT_FOLLOW_FORK="${follow:-}" -- "$@"
 }
 checks=
 traces_done() { # wait for every trace, fail on the first that failed, then run the deferred call checks
-    wait
-    for r in "$work"/*.log.rc; do [ "$(cat "$r")" = 0 ] || { tail -5 "${r%.rc}"; exit 1; }; done
+    traces_wait || exit 1
     for c in $checks; do check_calls "${c%:*}" "${c#*:}"; done
 }
 # Startup (p_true) first, then the probes from the most common calls to the rarer ones (printf before
@@ -189,7 +179,7 @@ done
 # STARTUP-TEXT-WINDOWS (D-X.49): the functions `page_faults true` runs (the probe whose start-up faults
 # crates/core/tests/hot_text_products.rs bounds, linked as that test links it), first-touch order, into
 # crates/libc-so/startup-text.keys; the layout check of layout/contracts.tsv counts their 64 KiB windows.
-stdin= follow= run_traced "$work/startup.names" "$work/gdb.startup.log" C ./page_faults true
+run_traced "$work/startup.names" "$work/gdb.startup.log" LANG=C LC_ALL= HOT_TEXT_STDIN="$work/in.txt" HOT_TEXT_FOLLOW_FORK= -- ./page_faults true
 # D-X.62: the probe-text modes, traced with the others (probe_text.sh merges them below).
 probe_text_trace() { local rc=0; bash "$here/probe_text.sh" "$T" --products "$P" --trace-only "$work/probe" > "$work/probe.log" 2>&1 || rc=$?; echo $rc > "$work/probe.log.rc"; }
 probe_text_trace &
@@ -247,9 +237,9 @@ if [ -s "$work/startup.dropped" ] || [ -s "$work/list.dropped" ]; then
     fi
     echo "regen: --allow-drop: dropping them" >&2
 fi
-mv "$work/startup.merged" "$skeys"
+put_changed "$work/startup.merged" "$skeys"
 echo "startup-text: $(wc -l < "$work/startup.keys") keys traced ($profile), $(grep -vc '^#' "$skeys") in $skeys"
-mv "$work/list.merged" "$list"
+put_changed "$work/list.merged" "$list"
 echo "hot-text: $(wc -l < "$work/new.keys") keys traced ($profile), $(grep -vc '^#' "$list") in $list"
 # D-X.62: the functions of the other fault-bounded probe modes that no hot-text tier covers, into
 # crates/libc-so/probe-text.keys (the start-up read-only group takes their read-only data).
