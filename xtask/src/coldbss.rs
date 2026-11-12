@@ -452,23 +452,33 @@ struct StatePlan {
 fn state_plan(members: &[(String, Vec<Shdr>)], list: &[(Declared, String, bool, bool)]) -> Result<StatePlan, String> {
     let state = state_sections(members, list)?;
     let order = state_order(&state);
-    let headers = |m: &str| members.iter().filter(|(n, _)| n == m).flat_map(|(_, h)| h);
-    let first_call = |m: &str, s: &str| {
-        let entry = state.get(m).and_then(|v| v.iter().find(|(n, _)| n == s)).map(|(_, i)| *i);
-        entry.is_some_and(|i| list[i].3) && headers(m).any(|h| h.name == s && h.kind == SHT_NOBITS)
-    };
-    let bytes = |m: &str| headers(m).filter(|h| first_call(m, &h.name)).map(|h| h.size).sum::<u64>();
-    let lead = state.keys().filter(|m| bytes(m) > 0).max_by_key(|m| (bytes(m), std::cmp::Reverse((*m).clone()))).cloned();
+    // member -> its zero-filled first-call sections (list entries after FIRST_CALL_LINE) and their bytes.
+    let mut zero: BTreeMap<String, (Vec<String>, u64)> = BTreeMap::new();
+    for (m, secs) in &state {
+        for (s, i) in secs {
+            let nobits = members.iter().filter(|(n, _)| n == m).flat_map(|(_, h)| h).find(|h| &h.name == s && h.kind == SHT_NOBITS);
+            if let Some(h) = nobits.filter(|_| list[*i].3) {
+                let e = zero.entry(m.clone()).or_default();
+                e.0.push(s.clone());
+                e.1 += h.size;
+            }
+        }
+    }
+    let lead = zero.iter().max_by_key(|(m, (_, b))| (*b, std::cmp::Reverse((*m).clone()))).map(|(m, _)| m.clone());
     let cold = cold_sections(members);
     let mut plan = StatePlan::default();
     for (m, secs) in order {
-        let in_cluster = |s: &String| lead.as_deref() == Some(m.as_str()) && first_call(&m, s);
-        let (first, base): (Vec<String>, Vec<String>) = secs.into_iter().partition(in_cluster);
+        let cluster: &[String] = match (&lead, zero.get(&m)) {
+            (Some(l), Some((z, _))) if *l == m => z,
+            _ => &[],
+        };
+        let (first, base): (Vec<String>, Vec<String>) = secs.into_iter().partition(|s| cluster.contains(s));
         let renames = base.iter().map(|s| (s.clone(), STATE_SECTION.to_string())).chain(first.iter().map(|s| (s.clone(), FIRST_CALL_SECTION.to_string()))).collect();
         plan.renames.insert(m.clone(), renames);
         let mut o: Vec<String> = base.into_iter().chain(first.iter().cloned()).collect();
         if let Some(f) = first.first() {
-            o.extend(cold.get(&m).into_iter().flatten().filter(|c| !o.contains(c)).cloned());
+            let tables: Vec<String> = cold.get(&m).into_iter().flatten().filter(|c| !o.contains(c)).cloned().collect();
+            o.extend(tables);
             plan.lead = Some((m.clone(), f.clone()));
         }
         plan.order.insert(m, o);
@@ -529,8 +539,8 @@ mod tests {
             ("c.o".to_string(), vec![sec(".bss.__daylight", SHT_NOBITS, 4)]),
         ];
         let plan = state_plan(&members, &list).unwrap();
-        let to = |m: &str, s: &str| plan.renames[m].iter().find(|(f, _)| f.ends_with(s)).map(|(_, t)| t.as_str());
-        assert_eq!((to("r.o", "4HEAP"), to("r.o", "RESOLVED"), to("r.o", "4LOCK"), to("r.o", "stdout"), to("c.o", "__daylight")), (Some(".data1"), Some(".lbss"), Some(".lbss"), Some(".data1"), Some(".data1")));
+        let to = |m: &str, s: &str, want: &str| plan.renames[m].iter().any(|(f, t)| f.ends_with(s) && t == want);
+        assert!(to("r.o", "4HEAP", ".data1") && to("r.o", "RESOLVED", ".lbss") && to("r.o", "4LOCK", ".lbss") && to("r.o", "stdout", ".data1") && to("c.o", "__daylight", ".data1"), "{:?}", plan.renames);
         assert_eq!(plan.order["r.o"], [".bss._RNvNtCs1_15liella_boundary4heap4HEAP", ".data.stdout", ".bss._RNvNtCs1_13liella_legacy4intl8RESOLVED", ".bss._RNvNtCs1_13liella_legacy4intl4LOCK", ".bss.big"]);
         assert_eq!(plan.lead, Some(("r.o".to_string(), ".bss._RNvNtCs1_13liella_legacy4intl8RESOLVED".to_string())));
         assert!(state_sections(&members[1..], &list).unwrap_err().contains("for liella_boundary::heap::HEAP, liella_boundary::timer::EPOLL ("));

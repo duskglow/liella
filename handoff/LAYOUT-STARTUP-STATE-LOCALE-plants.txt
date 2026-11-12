@@ -8,9 +8,15 @@
 # lssl-join-order (-2): the state rename back before the copies pass's `ld -r` join, which merges every `.data1`
 # input in member (codegen unit) order: the order test names the objects out of list order.
 lssl-ascii-keys | crates/libc-so/startup-state.list | perl:s/\nliella::locale::collate::ASCII_KEYS\n/\n/ | cargo test -p liella --test hot_text_products -- init_startup_data_accesses | msg:locale: \.bss\.[A-Za-z0-9_]+collate[0-9]+ASCII_KEYS
-lssl-emission-order | xtask/src/coldbss.rs | perl:s/&renames, Some\(&order\)\)/&renames, None)/ | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:STATE-ORDER: \.data1 is not in startup-state\.list order
+lssl-emission-order | xtask/src/coldbss.rs | perl:s/&plan\.renames, Some\(&plan\.order\)\)/&plan.renames, None)/ | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:STATE-ORDER: \.data1 is not in startup-state\.list order
 lssl-reloc-follow | xtask/src/coldbss.rs | perl:s/\n +from\.extend\(relocs\.get\(&i\)\.into_iter\(\)\.flatten\(\)\);\n/\n/ | cargo test -p xtask -- coldbss::tests::reordered_sections | msg:linked order
 lssl-join-order | xtask/src/so.rs | perl:s/(    let copies = [^\n]*\n)(.*?)(    crate::coldbss::move_startup_state[^\n]*\n)/$3$1$2/s | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:STATE-ORDER: \.data1 is not in startup-state\.list order
+# -3 (ruling #4942): lssl3-no-cluster: no member leads a first-call cluster (all first-call state back in `.data1`): the
+# order test finds no `.lbss` cluster. lssl3-align: the cluster's first section not aligned to a page: the build's
+# own check refuses it. lssl3-true-state: cpu::STATE (every start) declared first-call: the `true` trace names it.
+lssl3-no-cluster | xtask/src/coldbss.rs | perl:s/let lead = zero\.iter\(\)[^\n]*;/let lead: Option<String> = None;/ | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:no first-call cluster \(\.lbss\) from libc\.a
+lssl3-align | xtask/src/coldbss.rs | perl:s/--set-section-alignment=\{first\}=\{FIRST_CALL_ALIGN\}/--set-section-alignment={first}=8/ | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:sections aligned to 4096, want 1
+lssl3-true-state | crates/libc-so/startup-state.list | perl:s/\nliella_boundary::cpu::STATE\n(.*\ncluster first-call\n)/\n$1liella_boundary::cpu::STATE\n/s | cargo test -p liella --test hot_text_products -- init_startup_data_accesses | msg:true: first-call cluster \.lbss
 # cargo xtask plants results, head 62fa8c2b9, job layout-startup-state-locale-2-plants (4 plants: 4 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
 # lssl-ascii-keys: CAUGHT, by hot_text_products init_startup_data_accesses_are_in_the_data1_cluster
 # lssl-emission-order: CAUGHT, by hot_text_products init_startup_state_follows_the_declared_order
