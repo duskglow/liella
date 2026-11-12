@@ -104,8 +104,9 @@ pub(super) fn exp_onepass(x: f32, c: f64, amax: u32) -> Option<f32> {
     Some(y as f32)
 }
 
-/// [`exp_onepass`]'s answer below its range (LIBM-TINY-FASTPATHS, D-10.108), out of line so the
-/// kernel's own path is unchanged: e^x, 2^x or 10^x for a normal x with |x| < 2^-27, as 1 + x
+/// [`exp_onepass`]'s answer below its range (LIBM-TINY-FASTPATHS, D-10.108), inlined into the
+/// kernel's refusal branch: as an out-of-line call it made the entry a non-leaf function, 2
+/// instructions more on every operand (probed). e^x, 2^x or 10^x for a normal x with |x| < 2^-27, as 1 + x
 /// rounded in the caller's direction, or `None` (zeros, subnormals, |x| ≥ 2^-27, NaN).
 /// * Value: b^x - 1 has x's sign and |b^x - 1| < 2^-27·ln 10·1.001 < 2^-25.79 (b = e, 2, 10), so
 ///   b^x and 1 + x both lie strictly inside (1 - 2^-24, 1) or (1, 1 + 2^-23) on x's side of 1,
@@ -118,8 +119,7 @@ pub(super) fn exp_onepass(x: f32, c: f64, amax: u32) -> Option<f32> {
 ///   rounding of 1 + x; in round to nearest the sum stays within 2^-26 of 1 and converts to 1. x ≠ 0,
 ///   so the sum or the conversion is inexact, and nothing else is raised (operands and result
 ///   near 1: no overflow, underflow or subnormal): the one-pass contract, inexact only.
-#[cold]
-#[inline(never)]
+#[inline(always)]
 fn exp_onepass_tiny(x: f32) -> Option<f32> {
     // 2^-27 and the least normal as `float` bits.
     if (x.to_bits() & 0x7fff_ffff).wrapping_sub(0x0080_0000) >= 0x3200_0000 - 0x0080_0000 {
