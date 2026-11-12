@@ -1,0 +1,13 @@
+{"task": "LAYOUT-HOTKEY-INLINE-STABLE-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: start-up keys pinned and lists regenerated (6 intended drops + 2 explained); lint, static, plants green; release tool probe +1 data fault (53->54) unexplained; dummy growth still kills locale/tool/extra keys",
+ "branch": "task/layout-hotkey-inline-stable-2", "head": "56832561f",
+ "gate": {"affected": "lhis2-gate running at hand-back", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "locale/tool/extra hot-text tiers stay inlining-sensitive: a dummy libm growth kills locale::builtin, nscache::real_secs, iconv::load", "recommendation": "follow-up story: extend check_pinned to the locale and tool tiers with its own unpinned ratchet; pin nscache::real_secs, locale::builtin, iconv::load with counts"},
+             {"item": "decision record for the static check and the hot-text.unpinned ratchet", "recommendation": "coordinator reserves a D-X id; the next run writes it"}],
+ "informational": ["release tool probe data phases 53 -> 54 on the head; not caused by the regen's startup-data.keys additions (lhis2-probe-olddata)",
+                   "always-inlining lookup_many and its helpers moved fat-LTO inlining in fast: four tool-tier keys and with_list<unlink> died (regen2); pinning lookup_many instead avoided it"],
+ "refused": [],
+ "improvement": "a per-tier 'inlining-sensitive keys' survey tool (build with a canned dummy growth, list dead keys by tier) would turn the dummy experiment into one command",
+ "next_step": "faultmap the extra release tool data page (base vs head), place or fix it, rerun per-phase probes and gate",
+ "report_file": "handoff/LAYOUT-HOTKEY-INLINE-STABLE.md",
+ "jobs": ["mei:lhis2-lint", "mei:lhis2-plants", "mei:lhis2-probe-head", "mei:lhis2-gate"]}
