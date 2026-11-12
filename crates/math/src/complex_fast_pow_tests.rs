@@ -89,34 +89,3 @@ fn cpow_tiers_decline_exact_parts() {
         }
     }
 }
-
-/// The decline rates by band (`cargo test -p liella-math --release -- --ignored
-/// cpow_decline_rates --nocapture`): quick declines, middle declines, and the middle bound over
-/// an ulp averaged (the expected middle decline rate).
-#[test]
-#[ignore = "long sweep: run in release"]
-fn cpow_decline_rates() {
-    let n = 1 << 20;
-    for band in 0..5 {
-        let mut st = 0x2545_f491_4f6c_dd1d_u64 + band as u64;
-        let (mut parts_n, mut quick, mut mid, mut expect) = (0u64, 0u64, 0u64, 0f64);
-        for _ in 0..n {
-            let [x, y, c, d] = operand(&mut st, band);
-            let Some(([(re, er), (im, ei)], m)) = parts(x, y, c, d) else { continue };
-            for (p, e, part) in [(re, er, Part::Re), (im, ei, Part::Im)] {
-                parts_n += 1;
-                if strict(p, e, m, Rounding::Nearest).is_none() {
-                    quick += 1;
-                    if middle(x, y, c, d, part, Rounding::Nearest).is_none() {
-                        mid += 1;
-                    }
-                }
-                if let Some((q, eps, _)) = middle_part(x, y, c, d, part) {
-                    expect += 4.0 * eps / (dd::abs(q.hi) * f64::EPSILON);
-                }
-            }
-        }
-        let pn = parts_n as f64;
-        println!("band {band}: parts {parts_n} quick 2^{:.1} middle {mid} (2^{:.1}) expected middle 2^{:.1}", (quick as f64 / pn).log2(), (mid as f64 / pn).log2(), (expect / pn).log2());
-    }
-}
