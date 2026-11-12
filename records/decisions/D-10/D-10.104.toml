@@ -1,0 +1,43 @@
+id = "D-10.104"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+amends = ["D-10.13"]
+story = "LIBM-RETHINK-HYPOT"
+date = "2026-11-12"
+body = '''
+**`double` `hypot`: one correctly rounded kernel for every finite pair in every rounding direction, no multi-precision path** (LIBM-RETHINK-HYPOT designed it, -2 implemented it, -3 finished it; amends D-10.13 for the `double` format: `pow::hypot::<f64>` routes to the kernel, so the `hypot` entry's slow path, `cabs` and `cpow`'s modulus use it, #4947; the 256-bit `pow::hypot_exact` stays for the other formats and as the test oracle). Before, the fast tier answered only operands in `[2^-450, 2^450)` whose exponents were within 60 of each other, only in round-to-nearest, and refused every root within `2^-98` of a `double`. Every other finite pair took the 256-bit exact path: 98% of bit patterns and every directed mode, about 3.7k instructions per call.
+
+Method (`crates/math/src/invtrig.rs`, `kernels!`: the Dekker and FMA builds, bit-identical):
+1. `a = max(|x|, |y|)`, `b = min`, by bits. A zero operand gives the other's magnitude with no flag; a NaN or an infinity is handled as before.
+2. **Gap exit:** for exponent fields `Ea − Eb >= 27`, the root lies strictly inside `(a, a + ulp(a)/2)` (`r − a < b^2/(2a) < 2^(2Eb+1−Ea) <= 2^(Ea−53)`, a subnormal `b` included). The result is `a`, or its successor upward, and is inexact. The fast entry returns `a + a·2^-60`, with `a·2^-60` built from `a`'s bits (the field minus 60, exact and normal for a field above 60; it refuses otherwise). `1 + 2^-60` is no `double`, so a product by it would raise nothing.
+3. **Both operands subnormal:** the root in units of `2^-1074` is the integer `round(sqrt(A^2 + B^2))`. `A^2 + B^2 < 2^105` fits a `u128`, and the root is fixed by exact squares; tininess is detected after rounding.
+4. **Otherwise:** both operands are scaled by `2^(1023−Ea)` (exact). The root of the double-double `a^2 + b^2` (two exact products, then Fast2Sum since `a^2 >= b^2`) takes one correction step: Borges, "Algorithm 1014: An improved algorithm for hypot(x,y)", ACM TOMS 47(1), 2021. It is within `2^-104` relative. Ziv's rounding test (Ziv, "Fast evaluation of elementary mathematical functions with correctly rounded last bit", ACM TOMS 17(3), 1991) uses the bound `2^-98·yh`; the fast entry's form is `yh + yl·(1 + 2^-40) == yh`.
+5. **Hard cases exactly, in integers:** the kernel takes the sign of `a^2 + b^2 − m^2` at `yh` or at the midpoint (`2Y+1`, `2Y−1`, or `4Y−1` below a power of two). The sum is a wrapping 128-bit one, scaled to the smallest exponent; a shift of 128 or more is 0 modulo `2^128`. It is exact because the true difference is below `2^127` wherever it is asked: near a midpoint the gap is under 27 binades; elsewhere `m = a`, and the difference is `b^2`. Equal at a midpoint is a tie, which goes to even. Equal at `yh` is an exact root, with no flag.
+6. **Unscale** (exact). On overflow, round-to-nearest and upward give `inf`, overflow, inexact and `ERANGE`; downward and toward zero give `DBL_MAX`, overflow and inexact.
+
+Wiring: the fast entry (`hypot_nearest`, default MXCSR, the boundary's inline `sqrtsd`) answers every finite pair except these: a root within the test bound, the top binade, a subnormal smaller operand inside the gap window, both operands subnormal, and a gap exit with a field of 60 or less. An answered root is not a `double`, so a hardware operation raised inexact, and no other flag can rise. The slow closure is `hypot_rounded(x, y, mode)`, the same kernel for any direction, with explicit flags and `errno`; it returns `None` only for a NaN or an infinity, which go to `pow::hypot`.
+
+Rulings recorded here:
+- #4959: `hypot_rounded` takes a software root (`sqrt_soft`: an inverse-root start and four Newton steps, within `2^-50`). `liella_math` cannot issue `sqrtsd` without `unsafe` (E0133), and `unsafe` lives in liella-boundary only. With that first root, `sqrt_dd` stays below `2^-99.5` relative, under the test's `2^-98`. The fast entry keeps the boundary's `sqrtsd`.
+- #4960: `ERANGE` follows `float::range_errno`, so it is set only for an infinite result. Downward and toward zero give `DBL_MAX` with overflow and inexact flags, without `ERANGE`. The design note's "`DBL_MAX` + `ERANGE`" was not adopted.
+
+Alternatives rejected (LIBM-RETHINK-HYPOT's design):
+- (B) An all-integer 160-bit root on every call: about 50 instructions, branchy, and no gain.
+- (C) A division-free residual threshold compare: it needs ±1/±2 ulp branches taken on about 30% of calls, so it mispredicts.
+
+Measured with `validation/wl_percall.sh --spec validation/percall/hypot.c` on the Zen 1 build host, in instructions per call (loop included), before → after, against the reference library:
+
+| case | before | after | reference |
+|---|---:|---:|---:|
+| `hypot_typ` | 110.0 | 106.0 | 65.9 |
+| `hypot_near` | 2306.9 | 106.0 | 68.8 |
+| `hypot_bits` | 3703.4 | 64.1 | 41.5 |
+| `hypot_near_up` (`FE_UPWARD`, new row) | the 256-bit path | 355.6 | 68.8 |
+
+Tests:
+- crates/math/tests/invtrig.rs `double_hypot_kernel_is_the_exact_path_in_every_direction`: the kernel against the exact path in four directions (value, flags, `errno`), plus the fast entry and the exported entry in both builds. The pairs: bit patterns, near-binade pairs, gaps 25-29, ties and exact roots from Pythagorean triples at five scales, `DBL_MAX` overflow, two subnormals at the `2^-1022` edge, a subnormal beside a normal, and fields 27-64 at the gap exit's edge.
+- crates/boundary/tests/s10_math_symbols.rs `math_double_invtrig_hypot_fast_tier_is_the_accurate_path`: the entry's flags.
+- crates/math/tests/elem_products.rs: the reference probe.
+'''

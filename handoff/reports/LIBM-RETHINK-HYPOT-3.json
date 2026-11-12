@@ -1,0 +1,12 @@
+{"task": "LIBM-RETHINK-HYPOT-3", "model": "opus", "tokens": null,
+ "result": "f64 hypot D-10.104 finished: gap-exit inexact fix, hard-case tests from surviving plants, D-10.104 record; near 2306.9->106.0, bits 3703.4->64.1, typ 110.0->106.0 instr/call (glibc 68.8/41.5/65.9)",
+ "branch": "task/libm-rethink-hypot-3", "head": "f2c324769",
+ "gate": {"affected": "pending: libm-rethink-hypot-3-gate2 (final head); -2's three red tests pass on keke (libm-rethink-hypot-3-t1)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "directed-mode hypot costs 355.6 instr/call (glibc 68.8): hypot_rounded uses sqrt_soft because liella_math cannot issue sqrtsd (#4959)", "recommendation": "a follow-up passing the boundary's sqrtsd into hypot_rounded as the fast entry does (no unsafe in liella_math)"}],
+ "informational": ["init_data_clusters_hold_at_every_text_phase failed in libm-rethink-hypot-2-gate on shiki (tool 55 at nine pads, 54 at data 0x3000); passes on keke with -3's head (54 at all ten pads); no start-up code touched (layout jitter class, not chased)"],
+ "refused": [],
+ "improvement": "a one-line const like 1.0 + 2^-60 that rounds to 1.0 could be caught by a clippy-style static check (float constant expression equal to an operand): it cost -2 a whole gate cycle",
+ "next_step": "dispatcher reads gate2/plants2/percall2/lint1 on keke; if red, see handoff/LIBM-RETHINK-HYPOT.md Next step",
+ "report_file": "handoff/LIBM-RETHINK-HYPOT.md",
+ "jobs": ["libm-rethink-hypot-3-gate2", "libm-rethink-hypot-3-plants2", "libm-rethink-hypot-3-percall2", "libm-rethink-hypot-3-lint1"]}
