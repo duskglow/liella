@@ -381,9 +381,12 @@ fn inverse_trig_cores_are_within_their_bounds() {
 /// form above; atanf: the table-point reduction above |x| = 1) within INV_ONEPASS_BOUND ulp of
 /// [`atan2_dd`], round to nearest: every encoding of the band 3/8 ≤ |x| < 3/4 around the split
 /// (a split moved either way puts the polynomial outside its fit interval, hundreds of ulp off
-/// within the band), every 61st over the rest of the range, and every 61st atanf operand in
-/// [1, 64), across the table's bins and its end at 32. The agreement sweeps see such a loss only
-/// next to a `float` boundary. (No spec clause: LIBM-ASINF-NODIV, D-10.103.)
+/// within the band), every 509th over the rest of the range, and every 61st atanf operand in
+/// [1, 64), across the table's bins and its end at 32. Above 1 atanf is held to its own proof's
+/// 5.4u (relative, u = 2^-53), not the shared bound: a table point read from the wrong bin or
+/// cut short leaves |u| up to 1/16 outside the fit's interval, about 30u, inside the shared 24
+/// ulp. The agreement sweeps see such a loss only next to a `float` boundary. (No spec clause:
+/// LIBM-ASINF-NODIV, D-10.103.)
 #[test]
 fn inverse_trig_onepass_kernels_are_within_their_bound() {
     let Some(verdict) = crate::verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".fast32.inverse_trig_onepass_kernels_are_within_their_bound")).begin() else {
@@ -411,8 +414,12 @@ fn inverse_trig_onepass_kernels_are_within_their_bound() {
         }
         seen += 1;
     }
+    // atanf above 1 (D-10.103's proof at `atan_onepass_any`): 5.4u relative.
+    let above_one = 5.4 / 9_007_199_254_740_992.0;
     for b in (0x3f80_0001u32..0x4280_0000).step_by(61).chain((0x4280_0000..0x7f80_0000).step_by(0x1_0001)) {
-        check(atan_y(b), atan2_dd(Dd::from(f64::from(f32::from_bits(b))), one), "atan", b);
+        let y = atan_y(b);
+        let err = Dd::from(y).sub(atan2_dd(Dd::from(f64::from(f32::from_bits(b))), one)).to_f64();
+        assert!(err.abs() <= above_one * y, "onepass bound: atan({b:#010x}): {} u above 1", err / y * 9_007_199_254_740_992.0);
     }
     assert!(seen > 2_500_000, "{seen}");
     verdict.pass();
