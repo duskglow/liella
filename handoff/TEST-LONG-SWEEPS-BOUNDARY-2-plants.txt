@@ -5,3 +5,9 @@ weekly-bound-off-by-one | xtask/src/longsweeps.rs | lit:(Group::Exhaustive, Secs
 nightly-bound-off-by-one | xtask/src/longsweeps.rs | lit:(Group::Long, Secs::Took(n)) if n >= NIGHTLY_SECS ==> (Group::Long, Secs::Took(n)) if n > NIGHTLY_SECS | cargo test -p xtask --bin xtask longsweeps:: | msg:a_measured_row_lies_in_the_group_its_time_allows.*(FAILED|panicked)|panicked.*longsweeps.rs:[0-9]+
 over-limit-runs-nightly | xtask/src/longsweeps.rs | lit:(Group::Long, Secs::Over(n)) => { ==> (Group::Count, Secs::Over(n)) => { | cargo test -p xtask --bin xtask longsweeps:: | msg:a_measured_row_lies_in_the_group_its_time_allows.*(FAILED|panicked)|panicked.*longsweeps.rs:[0-9]+
 rule-not-applied | xtask/src/longsweeps.rs | lit:    why.extend(group_mismatches(sweeps)); ==>     let _ = group_mismatches(sweeps); | cargo test -p xtask --bin xtask longsweeps:: | msg:a_measured_row_lies_in_the_group_its_time_allows.*(FAILED|panicked)|panicked.*longsweeps.rs:[0-9]+
+# cargo xtask plants results (5 plants: 5 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# nightly-row-back-to-weekly: CAUGHT, caught by xtask longsweeps::tests::the_tables_match_the_tree
+# weekly-bound-off-by-one: CAUGHT, caught by xtask longsweeps::tests::a_measured_row_lies_in_the_group_its_time_allows
+# nightly-bound-off-by-one: CAUGHT, caught by xtask longsweeps::tests::a_measured_row_lies_in_the_group_its_time_allows
+# over-limit-runs-nightly: CAUGHT, caught by xtask longsweeps::tests::a_measured_row_lies_in_the_group_its_time_allows
+# rule-not-applied: CAUGHT, caught by xtask longsweeps::tests::a_measured_row_lies_in_the_group_its_time_allows
