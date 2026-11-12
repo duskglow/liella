@@ -6,3 +6,7 @@ vdso-fn-unpinned | crates/boundary/src/sys.rs | perl:s/#\[inline\(never\)\]\n(fn
 unpinned-rust-alloc | crates/libc-so/hot-text.unpinned | perl:s/^_RNvNtC15liella_boundary4heap10rust_alloc\t[^\n]*\n//m | cargo xtask static | msg:fn rust_alloc is not #\[inline\(never\)\]
 # 3. The check keeps an unpinned line whose key gained a boundary (the list must only shrink).
 stale-unpinned-kept | xtask/src/hottext.rs | lit:(None, true) if e.key.starts_with("_R") => ==> (None, true) if false => | cargo test -p xtask --bin xtask hottext | msg:fail_unless_listed' [(][0-9]+[)] panicked at xtask/src/hottext.rs:[0-9]+
+# cargo xtask plants results (3 plants: 3 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# vdso-fn-unpinned: CAUGHT, caught by no test the log names
+# unpinned-rust-alloc: CAUGHT, caught by no test the log names
+# stale-unpinned-kept: CAUGHT, caught by xtask hottext::tests::startup_keys_without_a_fixed_boundary_fail_unless_listed
