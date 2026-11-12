@@ -993,12 +993,12 @@ fn build_crt1(root: &Path, cc: &str, dir: &Path) -> Result<Vec<String>, String> 
     Ok(defines)
 }
 
-/// `cargo xtask so --hottext-regen --libc-only <dir>` (HOTLIST-REGEN-CHEAP): only the products the
+/// `cargo xtask so` in the regen mode with [`crate::hottext::LIBC_ONLY_FLAG`] `<dir>` (HOTLIST-REGEN-CHEAP): only the products the
 /// regen's traces link, built exactly as [`run_so_as`] builds them (step 1 and the start object), into
 /// `dir`, with the `.profile` marker last. `target/liella` is not touched.
 pub fn run_regen_libc(root: &Path, dir: &Path, profile: Profile) -> Result<(), String> {
     if !crate::hottext::regen_on() {
-        return Err("so: --libc-only is a regen build (--hottext-regen)".into());
+        return Err(format!("so: {} is a regen build ({})", crate::hottext::LIBC_ONLY_FLAG, crate::hottext::REGEN_FLAG));
     }
     let product = root.join("target/product");
     let _lock = lock_product_dir(&product)?;
