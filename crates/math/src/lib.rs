@@ -31,6 +31,7 @@ pub mod exp_log;
 pub mod fast32;
 pub mod fast64;
 pub mod invtrig;
+pub mod hwop;
 pub mod fast_special;
 pub mod fast_gamma;
 pub mod fast_bessel;

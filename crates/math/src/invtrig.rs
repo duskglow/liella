@@ -81,6 +81,7 @@
 
 use crate::coeffs::tables as t;
 use crate::dd::{self, fast_two_sum, two_sum, Dd};
+use crate::hwop::HwOps;
 use crate::status::{Flags, MathError, Rounding, Status};
 
 const C3: f64 = -1.0 / 3.0;
@@ -491,18 +492,10 @@ macro_rules! kernels {
 
 kernels!(; #[inline(always)]; dd::two_prod, prod_small, prod_short);
 
-/// `sqrt(x)` for a normal `x > 0` within `2^-50` relative, in software (this crate cannot issue
-/// `sqrtsd`): the inverse root from the halved exponent (within 3.4%), four Newton steps (each
-/// `1.5 e^2` plus about `2^-52` of rounding), times `x`. `sqrt_dd` with a first root within
-/// `d <= 2^-50` stays within `d^2/2 + 6·2^-53 d + 2^-105 < 2^-99.5` relative, under the test's `2^-98`.
-#[inline]
-fn sqrt_soft(x: f64) -> f64 {
-    let mut y = f64::from_bits(0x5fe6_eb50_c7b5_37a9u64.wrapping_sub(x.to_bits() >> 1));
-    for _ in 0..4 {
-        y *= 1.5 - 0.5 * x * y * y;
-    }
-    x * y
-}
+// The first root of `hypot_rounded` and `hypot_tiny` is `O::sqrt` ([`HwOps`]: within `2^-50`
+// relative; the boundary's `sqrtsd` in the default environment is correctly rounded, within
+// `2^-53`). `sqrt_dd` with a first root within `d <= 2^-50` stays within
+// `d^2/2 + 6·2^-53 d + 2^-105 < 2^-99.5` relative, under the test's `2^-98`.
 
 /// The significand and exponent field of a normal `double`: `v = M·2^(E − 1075)`.
 fn parts(v: f64) -> (u128, i32) {
@@ -526,13 +519,13 @@ fn sq_cmp(a: f64, b: f64, mm: u128, me: i32) -> core::cmp::Ordering {
 
 /// `hypot` of two subnormal magnitudes `A·2^-1074`, `B·2^-1074` (bits `hi >= lo > 0`): the root
 /// in units of `2^-1074` is `sqrt(N)`, `N = A^2 + B^2 < 2^105`; `q = floor(sqrt(N))` from the
-/// software root (within 7 of it) fixed by exact squares; the grid is the integers below
+/// first root `O::sqrt` (within a few units of it) fixed by exact squares; the grid is the integers below
 /// `2^53`, so the result's bits are the rounded integer. Underflow is detected after rounding
 /// (x86): tiny unless the root rounded to 53 bits reaches `2^52` (D-10.104).
 #[allow(clippy::as_conversions, clippy::cast_possible_truncation, clippy::cast_precision_loss, clippy::cast_sign_loss)] // n < 2^105, its root < 2^53
-fn hypot_tiny(hi: u64, lo: u64, mode: Rounding) -> (f64, Status) {
+fn hypot_tiny<O: HwOps>(hi: u64, lo: u64, mode: Rounding) -> (f64, Status) {
     let n = u128::from(hi) * u128::from(hi) + u128::from(lo) * u128::from(lo);
-    let mut q = sqrt_soft(n as f64) as u64; // RANGE: the root of 2 <= n < 2^105 is in [1, 2^53)
+    let mut q = O::sqrt(n as f64) as u64; // RANGE: the root of 2 <= n < 2^105 is in [1, 2^53)
     while u128::from(q) * u128::from(q) > n {
         q -= 1;
     }
@@ -566,7 +559,8 @@ fn hypot_tiny(hi: u64, lo: u64, mode: Rounding) -> (f64, Status) {
 /// exit (`a`, or its successor upward), else the scaled root with Ziv's test (`2^-98`) and,
 /// within it, the exact integer sign of `a^2 + b^2 − m^2` at `yh` or at the midpoint (a tie
 /// goes to even); scaled back, an overflow is `inf` (nearest, upward; `ERANGE`) or `DBL_MAX`.
-pub fn hypot_rounded(x: f64, y: f64, mode: Rounding) -> Option<(f64, Status)> {
+/// The first root is `O::sqrt` ([`HwOps`]): the boundary passes its `sqrtsd`, the tests both.
+pub fn hypot_rounded<O: HwOps>(x: f64, y: f64, mode: Rounding) -> Option<(f64, Status)> {
     use core::cmp::Ordering::{Equal, Greater, Less};
     let (ab, bb) = (x.to_bits() & !SIGN, y.to_bits() & !SIGN);
     let (hi, lo) = if ab >= bb { (ab, bb) } else { (bb, ab) };
@@ -578,7 +572,7 @@ pub fn hypot_rounded(x: f64, y: f64, mode: Rounding) -> Option<(f64, Status)> {
     }
     let (ea, eb) = (hi >> 52, lo >> 52);
     if ea == 0 {
-        return Some(hypot_tiny(hi, lo, mode));
+        return Some(hypot_tiny::<O>(hi, lo, mode));
     }
     let up = mode == Rounding::Up;
     if ea >= eb + HYPOT_GAP {
@@ -587,7 +581,7 @@ pub fn hypot_rounded(x: f64, y: f64, mode: Rounding) -> Option<(f64, Status)> {
     let k = ea.min(0x7fd);
     let scale = f64::from_bits((0x7fe - k) << 52);
     let (a, b) = (f64::from_bits(hi) * scale, f64::from_bits(lo) * scale);
-    let r = hypot_root(a, b, sqrt_soft);
+    let r = hypot_root(a, b, O::sqrt);
     let (yb, eta, t) = (r.hi.to_bits(), EPS_HYPOT * r.hi, dd::abs(r.lo));
     let (ym, ye) = parts(r.hi);
     let at_y = |_: ()| if t > eta { if r.lo > 0.0 { Greater } else { Less } } else { sq_cmp(a, b, ym, ye) };

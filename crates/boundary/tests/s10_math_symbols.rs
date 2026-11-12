@@ -16,6 +16,8 @@ use spectest::{family, symbol};
 mod products;
 #[path = "../../core/tests/support/skip_note.rs"]
 mod skip_note;
+#[path = "../../math/tests/support/hypot_pairs.rs"]
+mod hypot_pairs;
 
 use liella_abi::ctypes::LdBits;
 use liella_boundary::posix::s10_math_gen as m;
@@ -62,6 +64,39 @@ fn observe_with_cw(cw: u16, f: impl FnOnce()) -> (i32, Flags) {
 /// bits 10-11): nearest, down, up, toward zero.
 // ARCH(x86_64): x87 rounding-control encodings of `fesetround`; FE_* values on aarch64 (A-9)
 const ROUND_DIRECTIONS: [(u32, i32); 4] = [(0, 0), (1, 0x400), (2, 0x800), (3, 0xc00)];
+
+/// The `double` hypot kernel on the hardware root (`hot::Hw`, `sqrtsd`; LIBM-HYPOT-DIRECTED) is
+/// the exact path (D-10.13) in every direction, value bits and status, on the math test's hard
+/// pairs (ties, exact roots, roots just off a midpoint, the subnormal and overflow edges); the
+/// `hypot` entry under each `fesetround` direction gives the same bits, errno and flags (a
+/// directed call runs that kernel on `sqrtsd` in the default MXCSR).
+#[test]
+fn hypot_on_the_hardware_root_is_the_exact_path_in_every_direction() {
+    // Clauses: s10_3_c_0 (D-10.104).
+    use liella_boundary::hot::Hw;
+    use liella_math::{invtrig, pow, MathError, Rounding};
+    let errno_of = |e: MathError| if e == MathError::Range { 34 } else { 0 };
+    let pairs: Vec<(f64, f64)> = hypot_pairs::hard_pairs().into_iter().flat_map(|(x, y)| [(x, y), (-y, x)]).collect();
+    let dirs = [(0, Rounding::Nearest), (0x400, Rounding::Down), (0x800, Rounding::Up), (0xc00, Rounding::Zero)];
+    for &(x, y) in &pairs {
+        for (_, mode) in dirs {
+            let (w, ws) = pow::hypot_exact::<f64>(x, y, mode);
+            let (g, gs) = invtrig::hypot_rounded::<Hw>(x, y, mode).expect("a finite pair");
+            assert!(g.to_bits() == w.to_bits() && gs == ws, "hypot({x:e}, {y:e}) {mode:?}: kernel on sqrtsd {g:e} {gs:?}, exact {w:e} {ws:?}: hardware kernel FAILED");
+        }
+    }
+    for (rc, mode) in dirs {
+        assert_eq!(liella_boundary::posix::s10_math::fesetround(rc), 0);
+        for &(x, y) in &pairs {
+            let (w, ws) = pow::hypot_exact::<f64>(x, y, mode);
+            let mut got = 0;
+            let seen = observe(|| got = m::hypot(x, y).to_bits());
+            let want = (w.to_bits(), (errno_of(ws.error), Flags(ws.flags.0)));
+            assert!((got, seen) == want, "hypot({x:e}, {y:e}) {mode:?}: entry {:e} {seen:?}, exact {w:e} {:?}: directed entry FAILED", f64::from_bits(got), want.1);
+        }
+    }
+    assert_eq!(liella_boundary::posix::s10_math::fesetround(0), 0);
+}
 
 #[test]
 fn math_translation_reports_errno_flags_and_out_parameters() {
