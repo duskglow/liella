@@ -267,6 +267,38 @@ mod tests {
     use super::*;
     use super::super::tests::{accurate, agree_in, exhaustive_oracle, MODES};
 
+    /// The tiny band (D-10.106): every answer below 2^-20 (J0, J1 from their brackets, Y0, Y1
+    /// through the rounding test, Y1's overflow) is the accurate path's value and status in every
+    /// rounding mode, on odd and even subnormals, the 2^-125 edges, normal operands and around
+    /// Y1's overflow threshold. (No spec clause: LIBM-RETHINK-BESSEL, D-10.106.)
+    #[test]
+    fn bessel_tiny_band_agrees_with_the_accurate_path() {
+        let mut xs: std::vec::Vec<f32> = (1u32..=6)
+            .chain([0x7f_fffd, 0x7f_fffe, 0x80_0000, 0x80_0001, 0xff_fffd, 0x100_0001, 0x100_0002, 0x357f_ffff])
+            .map(f32::from_bits)
+            .collect();
+        xs.extend((0..64u32).map(|k| f32::from_bits(0x0100_0000 + k * 0x0053_1a37 % 0x3480_0000)));
+        xs.extend([2.0e-39_f32, 2.1e-39, 1.9e-39, 1.87e-39, 1.8e-39, 1e-40]);
+        let mut taken = 0;
+        for f in BES {
+            for &x in &xs {
+                for x in [x, -x] {
+                    for m in MODES {
+                        if let Some((v, s)) = super::super::eval(f, x, m) {
+                            taken += 1;
+                            let (w, t) = accurate(f, x, m);
+                            assert!(
+                                v.to_bits() == w.to_bits() && std::format!("{s:?}") == std::format!("{t:?}"),
+                                "{f:?}({x:e}) {m:?}: fast {v:e} {s:?}, accurate {w:e} {t:?}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        assert!(taken > 1500, "tiny band: fast path taken {taken} times");
+    }
+
     /// The Bessel functions (not in the all-encodings stride test: their accurate path costs
     /// ~2.3e5 instructions a call, so their agreement tests sample, and the exhaustive sweeps
     /// use the tiered oracle).
