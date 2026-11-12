@@ -1102,7 +1102,10 @@ fn isolated_data_script(dir: &Path) -> PathBuf {
 /// moves with unrelated changes. The probe is linked with every `.data`, `.bss` and `.lbss` input
 /// section on a 64 KiB boundary of its own and `true` is traced with `perf record -e page-faults -d`:
 /// a fault in a static of at most 4 KiB in a section of its own outside `.data1` (what
-/// `xtask/src/coldbss.rs` moves by key) is named. No spec clause (layout of the products).
+/// `xtask/src/coldbss.rs` moves by key) is named. LAYOUT-STARTUP-STATE-TIME (#4901): `localtime_mktime`
+/// (setenv, the first localtime_r and the first mktime) is traced the same way, so a first-call static
+/// left undeclared is named here, not found later as a fault that moved with emission order.
+/// No spec clause (layout of the products).
 #[test]
 fn init_startup_data_accesses_are_in_the_data1_cluster() {
     let dir = std::env::temp_dir().join(format!("liella-startup-access-{}", std::process::id()));
@@ -1117,46 +1120,53 @@ fn init_startup_data_accesses_are_in_the_data1_cluster() {
         .filter(|o| map.lines().any(|l| !l.starts_with(' ') && l.split_whitespace().next() == Some(*o)))
         .flat_map(|o| output_inputs(&map, o))
         .collect();
-    let rec = Command::new("perf")
-        .args(["record", "-q", "-e", "page-faults", "-c", "1", "-d", "-o"])
-        .arg(&data)
-        .arg("--")
-        .arg(&exe)
-        .arg("true")
-        .current_dir("/")
-        .env_clear()
-        .env("LANG", "en_US.UTF-8")
-        .stdout(Stdio::null())
-        .output();
-    let rec = match rec {
-        Ok(r) => r,
-        Err(e) => {
+    // LAYOUT-STARTUP-STATE-TIME (#4901): `localtime_mktime` runs start-up, setenv("TZ"), the first
+    // localtime_r (zone load) and the first mktime; a static those first calls touch outside `.data1`
+    // sits on a `.bss` page whose place follows emission order, and its fault moved into the first
+    // localtime_r with unrelated code growth (time_compat::GENERATION, sys::TSC_STATE, process::TABLE_ON
+    // and ENV_OWNED). Each mode's trace is checked the same way.
+    let (mut touched, mut bad) = (std::collections::BTreeSet::new(), std::collections::BTreeSet::new());
+    for mode in ["true", "localtime_mktime"] {
+        let rec = Command::new("perf")
+            .args(["record", "-q", "-e", "page-faults", "-c", "1", "-d", "-o"])
+            .arg(&data)
+            .arg("--")
+            .arg(&exe)
+            .arg(mode)
+            .current_dir("/")
+            .env_clear()
+            .env("LANG", "en_US.UTF-8")
+            .stdout(Stdio::null())
+            .output();
+        let rec = match rec {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = std::fs::remove_dir_all(&dir);
+                eprintln!("SKIP init_startup_data_accesses_are_in_the_data1_cluster: perf cannot be run ({e}); the fault data addresses need perf");
+                return;
+            }
+        };
+        let err = String::from_utf8_lossy(&rec.stderr).into_owned();
+        if !rec.status.success() && (err.contains("perf_event_paranoid") || err.contains("Permission denied")) {
             let _ = std::fs::remove_dir_all(&dir);
-            eprintln!("SKIP init_startup_data_accesses_are_in_the_data1_cluster: perf cannot be run ({e}); the fault data addresses need perf");
+            eprintln!("SKIP init_startup_data_accesses_are_in_the_data1_cluster: page-fault events are not permitted here: {}", err.trim());
             return;
         }
-    };
-    let err = String::from_utf8_lossy(&rec.stderr).into_owned();
-    if !rec.status.success() && (err.contains("perf_event_paranoid") || err.contains("Permission denied")) {
-        let _ = std::fs::remove_dir_all(&dir);
-        eprintln!("SKIP init_startup_data_accesses_are_in_the_data1_cluster: page-fault events are not permitted here: {}", err.trim());
-        return;
-    }
-    assert!(rec.status.success(), "perf record of `page_faults true` failed: {}", err.trim());
-    let script_out = Command::new("perf").args(["script", "-F", "addr", "-i"]).arg(&data).output().expect("perf script");
-    let _ = std::fs::remove_dir_all(&dir);
-    let addrs: Vec<u64> = String::from_utf8_lossy(&script_out.stdout).split_whitespace().filter_map(|w| u64::from_str_radix(w, 16).ok()).collect();
-    assert!(!addrs.is_empty(), "perf recorded no page fault of `page_faults true`");
-    let (mut touched, mut bad) = (std::collections::BTreeSet::new(), std::collections::BTreeSet::new());
-    for a in addrs {
-        let Some((name, _, size, file)) = inputs.iter().find(|s| s.1 <= a && a < s.1 + s.2) else { continue };
-        touched.insert(format!("{name} ({size} bytes, {file})"));
-        // Only a static in a section of its own is moved by key (D-X.64); a larger one stays where it is.
-        let own = (name.starts_with(".data.") && !name.starts_with(".data.rel.ro")) || name.starts_with(".bss.") || name.starts_with(".lbss.");
-        if own && *size <= 4096 {
-            bad.insert(format!("{name} ({size} bytes, {file})"));
+        assert!(rec.status.success(), "perf record of `page_faults {mode}` failed: {}", err.trim());
+        let script_out = Command::new("perf").args(["script", "-F", "addr", "-i"]).arg(&data).output().expect("perf script");
+        let addrs: Vec<u64> = String::from_utf8_lossy(&script_out.stdout).split_whitespace().filter_map(|w| u64::from_str_radix(w, 16).ok()).collect();
+        assert!(!addrs.is_empty(), "perf recorded no page fault of `page_faults {mode}`");
+        for a in addrs {
+            let Some((name, _, size, file)) = inputs.iter().find(|s| s.1 <= a && a < s.1 + s.2) else { continue };
+            touched.insert(format!("{mode}: {name} ({size} bytes, {file})"));
+            // Only a static in a section of its own is moved by key (D-X.64); a larger one stays where it is.
+            let own = (name.starts_with(".data.") && !name.starts_with(".data.rel.ro")) || name.starts_with(".bss.") || name.starts_with(".lbss.");
+            if own && *size <= 4096 {
+                bad.insert(format!("{mode}: {name} ({size} bytes, {file})"));
+            }
         }
     }
+    let _ = std::fs::remove_dir_all(&dir);
     eprintln!("start-up accesses in .data/.bss/.lbss outside .data1: {touched:#?}");
     assert!(bad.is_empty(), "STARTUP-DATA-KEYS: start-up touches statics outside the .data1 cluster (declare each in crates/libc-so/startup-state.list): {bad:#?}");
 }
