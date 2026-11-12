@@ -95,6 +95,9 @@ const LN2_DD: [u64; 2] = [0x3fe6_2e42_fefa_39ef, 0x3c7a_bc9e_3b39_803f];
 /// `⌊(2/π)·2^50·(1 − 2^-40)⌋·2^-1074`: below it `|Y1| > (2/π)/x > 2^1024·(1 + 2^-40)`, an
 /// overflow in every mode.
 const Y1_OVERFLOW: f64 = f64::from_bits(716_770_142_402_180);
+/// `Y1_OVERFLOW` plus 2^22 units: from here `|Y1| < 2^1024·(1 − 2^-27)`, so `fast64::settle`
+/// (which raises no overflow) never meets an overflowing result; between the two, the 384-bit path.
+const Y1_SAFE: f64 = f64::from_bits(716_770_142_402_180 + (1 << 22));
 
 const M: usize = t::BESSEL_T_DD;
 const D: usize = t::BESSEL_T_DEG;
@@ -306,6 +309,9 @@ pub fn y1(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     if x < NEAR_SERIES {
         if x < Y1_OVERFLOW {
             return Some(crate::elem::overflow::<f64>(true, mode));
+        }
+        if x < Y1_SAFE {
+            return None;
         }
         let (y, eps) = y1_tiny(x)?;
         return round(y, eps, 128, mode);
