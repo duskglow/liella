@@ -29,3 +29,14 @@ lssl3-true-state | crates/libc-so/startup-state.list | perl:s/\nliella_boundary:
 # lssl-emission-order: CAUGHT, by hot_text_products init_startup_state_follows_the_declared_order
 # lssl-reloc-follow: CAUGHT, by xtask coldbss::tests::reordered_sections_keep_their_symbols_and_relocations
 # lssl-join-order: CAUGHT, by hot_text_products init_startup_state_follows_the_declared_order
+# cargo xtask plants results, run -4, this file at head 3cded5a23 (code as 86ad95636), job
+# layout-startup-state-locale-4-plants2 on keke (9 plants: 9 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# lssl-ascii-keys: CAUGHT, by hot_text_products init_startup_data_accesses_are_in_the_data1_cluster
+# lssl-emission-order: CAUGHT, by the build's first-section check (xtask so refuses the products)
+# lssl4-unsorted: CAUGHT, by hot_text_products init_startup_state_follows_the_declared_order
+# lssl-reloc-follow: CAUGHT, by xtask coldbss::tests::reordered_sections_keep_their_symbols_and_relocations
+# lssl-join-order: CAUGHT, by hot_text_products init_startup_state_follows_the_declared_order
+# lssl3-no-cluster: CAUGHT, by hot_text_products init_startup_state_follows_the_declared_order
+# lssl3-align: CAUGHT, by the build's first-section check (xtask so refuses the products)
+# lssl4-any-aligned: CAUGHT, by xtask coldbss::tests::declared_startup_state_is_found_whatever_its_symbol_suffixes
+# lssl3-true-state: CAUGHT, by hot_text_products init_startup_data_accesses_are_in_the_data1_cluster

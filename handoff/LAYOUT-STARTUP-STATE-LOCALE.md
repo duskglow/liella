@@ -36,9 +36,14 @@ tests pass in both profiles. The `pre` pads move `true` 11 -> 12 on next and the
 
 ## Jobs (keke)
 lssl4-lint0 (inherited head: clippy + static, rc 0), lssl4-branch1 (da8343fd6: products, tests, pads, rc 0),
-lssl4-lint1 (86ad95636: records check + clippy + static, rc 0), lssl4-gate (direct tier, `--base origin/next`),
-layout-startup-state-locale-4-plants (8 plants). Results: see handoff/reports/LAYOUT-STARTUP-STATE-LOCALE-4.json.
+lssl4-lint1 (86ad95636: records check + clippy + static, rc 0); lssl4-gate (86ad95636, `affected --run --base
+origin/next`, escalated itself to FULL because xtask/src changed: 32 suites ok, 11643 passed, 0 failed, 1269
+ignored; conformance 130/0; peak 13G, rc 0; includes the whole hot_text_products);
+layout-startup-state-locale-4-plants2 (9 plants: 9 CAUGHT, 0 SURVIVED, 0 WARN, rc 0; per-plant list in the plants
+file). Superseded: layout-startup-state-locale-4-plants (stopped by me after 4 plants: lssl-emission-order gave
+WARN-NO-MSG because the build's new check now refuses that mutant first; the file was fixed and rerun as plants2).
+Commits after 86ad95636 touch handoff/ only.
 
 ## Open / next
-- Coordinator: assign the two pending D-X ids.
-- Nothing else is left in this story once the gate and plants are green.
+- Coordinator: assign the two pending D-X ids (records/pending/LAYOUT-STARTUP-STATE-LOCALE-4-{1,2}.toml).
+- Nothing else is left in this story.
