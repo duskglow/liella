@@ -3,5 +3,11 @@
 # `.bss` and the `locale` trace of init_startup_data_accesses_are_in_the_data1_cluster names it.
 # lssl-emission-order: the start-up state renamed without the declared order (the order emission left, ruling
 # #4923): init_startup_state_follows_the_declared_order names the objects out of list order.
+# lssl-reloc-follow (-2): order_sections without moving each section's relocation sections: BFD (objcopy, ld)
+# takes a relocated section at its relocations' slot, and the unit test's linked order is wrong.
+# lssl-join-order (-2): the state rename back before the copies pass's `ld -r` join, which merges every `.data1`
+# input in member (codegen unit) order: the order test names the objects out of list order.
 lssl-ascii-keys | crates/libc-so/startup-state.list | perl:s/\nliella::locale::collate::ASCII_KEYS\n/\n/ | cargo test -p liella --test hot_text_products -- init_startup_data_accesses | msg:locale: \.bss\.[A-Za-z0-9_]+collate[0-9]+ASCII_KEYS
 lssl-emission-order | xtask/src/coldbss.rs | perl:s/&renames, Some\(&order\)\)/&renames, None)/ | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:STATE-ORDER: \.data1 is not in startup-state\.list order
+lssl-reloc-follow | xtask/src/coldbss.rs | perl:s/\n +from\.extend\(relocs\.get\(&i\)\.into_iter\(\)\.flatten\(\)\);\n/\n/ | cargo test -p xtask -- coldbss::tests::reordered_sections | msg:linked order
+lssl-join-order | xtask/src/so.rs | perl:s/(    let copies = [^\n]*\n)(.*?)(    crate::coldbss::move_startup_state[^\n]*\n)/$3$1$2/s | cargo test -p liella --test hot_text_products -- init_startup_state_follows | msg:STATE-ORDER: \.data1 is not in startup-state\.list order
