@@ -12,8 +12,9 @@
 //!   release runs that already run every accuracy shard (D-10.57). The ordinary gate leaves them out.
 //! - `exhaustive` (every `float` operand, 10^8 to 10^9 operands, or 2^32 to 2^34 calls each: minutes to hours):
 //!   run only by `cargo xtask long-sweeps --group exhaustive`, a weekly job on an idle build host (ruling #4750).
-//!   A row's `secs` is the test time of one run (the libtest `finished in` figure, build excluded) where it was
-//!   measured, so that job can budget its slot.
+//!   A row's `secs` is the test time of one run where it was measured (the libtest `finished in` figure rounded
+//!   up, build excluded; TEST-LONG-SWEEPS-BOUNDARY on mei, Xeon Platinum 8151, a 6-CPU jobrun slot at load
+//!   15 to 25), so that job can budget its slot.
 //!
 //! `cargo xtask long-sweeps [--group long|exhaustive|count|all] [--only <test>]... [--list]` (default `long`; `--only`
 //! keeps the rows of those full test names) runs each sweep of the group once, in release, in its crate's package, by its exact name (`-- --include-ignored --exact
@@ -137,21 +138,21 @@ pub const SWEEPS: &[Sweep] = &[
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::tanf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::powf_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::fast_path_agrees_exhaustively", Group::Exhaustive),
-    lib("crates/math/src/fast64/quick_log/tests.rs", "fast64::quick_log::tests::log_family_quick_matches_correctly_rounded", Group::Exhaustive).env(QUICK_LOG),
+    lib("crates/math/src/fast64/quick_log/tests.rs", "fast64::quick_log::tests::log_family_quick_matches_correctly_rounded", Group::Exhaustive).env(QUICK_LOG).secs(3),
     lib("crates/math/src/complex.rs", "complex::ziv_tests::random_sample_retry_count", Group::Count),
     it("crates/math/tests/complex_f128_products.rs", "complex_f128_products", "accuracy_suite_retry_count", Group::Count),
     // liella-boundary (TEST-LONG-SWEEPS-BOUNDARY, #4752)
-    it("crates/boundary/tests/exp_quick.rs", "exp_quick", "exp_quick_accuracy_job", Group::Exhaustive).env(&[("EXP_QUICK_N", "100000000")]),
-    it("crates/boundary/tests/trig_quick.rs", "trig_quick", "trig_quick_accuracy_job", Group::Exhaustive).env(&[("TRIG_QUICK_N", "100000000")]),
+    it("crates/boundary/tests/exp_quick.rs", "exp_quick", "exp_quick_accuracy_job", Group::Exhaustive).env(&[("EXP_QUICK_N", "100000000")]).secs(5),
+    it("crates/boundary/tests/trig_quick.rs", "trig_quick", "trig_quick_accuracy_job", Group::Exhaustive).env(&[("TRIG_QUICK_N", "100000000")]).secs(58),
     it("crates/boundary/tests/hyperb_quick.rs", "hyperb_quick", "hyperb_quick_both_builds_round_correctly", Group::Exhaustive)
-        .env(&[("LIELLA_HYPERB_N", "1000000")]),
-    it("crates/boundary/tests/hyperb_quick.rs", "hyperb_quick", "hyperb_quick_ranges", Group::Exhaustive).env(&[("LIELLA_HYPERB_N", "1000000")]),
+        .env(&[("LIELLA_HYPERB_N", "1000000")]).secs(23),
+    it("crates/boundary/tests/hyperb_quick.rs", "hyperb_quick", "hyperb_quick_ranges", Group::Exhaustive).env(&[("LIELLA_HYPERB_N", "1000000")]).secs(1),
     it("crates/boundary/tests/invhyp_quick.rs", "invhyp_quick", "invhyp_quick_both_builds_round_correctly", Group::Exhaustive)
-        .env(&[("LIELLA_INVHYP_N", "1000000")]),
-    it("crates/boundary/tests/erf_quick.rs", "erf_quick", "erf_quick_both_builds_round_correctly", Group::Exhaustive).env(&[("LIELLA_ERF_N", "1000000")]),
-    it("crates/boundary/tests/log_quick.rs", "log_quick", "log_family_both_builds_round_correctly", Group::Exhaustive).env(QUICK_LOG),
-    it("crates/boundary/tests/log_quick.rs", "log_quick", "log_family_quick_fma_error_within_bound", Group::Exhaustive).env(QUICK_LOG),
-    it("crates/boundary/tests/pow_quick.rs", "pow_quick", "pow_entry_tiers_round_correctly", Group::Exhaustive).env(&[("LIELLA_POW_SWEEP", "25000000")]),
+        .env(&[("LIELLA_INVHYP_N", "1000000")]).secs(16),
+    it("crates/boundary/tests/erf_quick.rs", "erf_quick", "erf_quick_both_builds_round_correctly", Group::Exhaustive).env(&[("LIELLA_ERF_N", "1000000")]).secs(5),
+    it("crates/boundary/tests/log_quick.rs", "log_quick", "log_family_both_builds_round_correctly", Group::Exhaustive).env(QUICK_LOG).secs(12),
+    it("crates/boundary/tests/log_quick.rs", "log_quick", "log_family_quick_fma_error_within_bound", Group::Exhaustive).env(QUICK_LOG).secs(484),
+    it("crates/boundary/tests/pow_quick.rs", "pow_quick", "pow_entry_tiers_round_correctly", Group::Exhaustive).env(&[("LIELLA_POW_SWEEP", "25000000")]).secs(36),
     it(S10, "s10_math_symbols", "math_double_fast_entry_sweep", Group::Exhaustive).env(&[("LIELLA_FE_SWEEP_CHUNKS", "200")]),
     it(S10, "s10_math_symbols", "math_expf_onepass_sweep", Group::Exhaustive).env(STRIDE1),
     it(S10, "s10_math_symbols", "math_exp2f_onepass_sweep", Group::Exhaustive).env(STRIDE1),
