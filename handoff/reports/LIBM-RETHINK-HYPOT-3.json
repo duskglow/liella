@@ -9,4 +9,4 @@
  "improvement": "a one-line const like 1.0 + 2^-60 that rounds to 1.0 could be caught by a clippy-style static check (float constant expression equal to an operand): it cost -2 a whole gate cycle",
  "next_step": "dispatcher reads gate2/plants2/percall2/lint1 on keke; if red, see handoff/LIBM-RETHINK-HYPOT.md Next step",
  "report_file": "handoff/LIBM-RETHINK-HYPOT.md",
- "jobs": ["libm-rethink-hypot-3-gate2", "libm-rethink-hypot-3-plants2", "libm-rethink-hypot-3-percall2", "libm-rethink-hypot-3-lint1"]}
+ "jobs": ["libm-rethink-hypot-3-gate3", "libm-rethink-hypot-3-plants3", "libm-rethink-hypot-3-percall3", "libm-rethink-hypot-3-lint2"]}

@@ -2,7 +2,8 @@
 
 State: branch `task/libm-rethink-hypot-3` (= -2's branch + -3's commits, from origin/next c32adc349). Code head
 f2c324769; then the D-10.104 record, this note and the report. -3 stopped at its context checkpoint (180k) with the
-final-head jobs started on keke role r5: `libm-rethink-hypot-3-gate2`, `-plants2`, `-percall2`, `-lint1`.
+final-head jobs started on keke role r5: `libm-rethink-hypot-3-gate3`, `-plants3`, `-percall3`, `-lint2`
+(gate2/plants2/percall2 were stopped and lint1 was red: the record's body must be one line, a table cell).
 
 ## Decisions in force
 
@@ -31,9 +32,9 @@ rulings #4959 (software root `sqrt_soft` in the slow kernel) and #4960 (ERANGE =
 
 ## Next step (if a final-head job is red)
 
-1. `gate2` red in invtrig's kernel test on the NEW pairs: a real kernel defect at those hard cases (fix the kernel,
-   not the test). Other red: read `~/logs/libm-rethink-hypot-3-gate2.log` (keke) with test-summary.
-2. `plants2`: all CAUGHT or EQUIVALENT expected (eta-half/-double, shl-wrap declared equivalent with reasons);
+1. `gate3` red in invtrig's kernel test on the NEW pairs: a real kernel defect at those hard cases (fix the kernel,
+   not the test). Other red: read `~/logs/libm-rethink-hypot-3-gate3.log` (keke) with test-summary.
+2. `plants3`: all CAUGHT or EQUIVALENT expected (eta-half/-double, shl-wrap declared equivalent with reasons);
    commit its results.txt as handoff/LIBM-RETHINK-HYPOT-3-plants.txt.
 3. Follow-up (not this story): the directed path (355.6) is the slow closure + `sqrt_soft`; a boundary `sqrtsd`
    root for `hypot_rounded` (needs a ruling: #4959) would cut it.
