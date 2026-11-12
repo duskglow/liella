@@ -125,11 +125,11 @@ fn parts(x: f64, y: f64) -> Option<([(Dd, f64); 2], i32)> {
     Some(([part(sh, es, c, trig::eps(cs, c)), part(ch, ec, s, trig::eps(ss, s))], m - 1))
 }
 
-/// Both parts in `mode`, `[re, im]` of `parts` in the order `o` (`[0, 1]` csinh, `[1, 0]` csin).
+/// Both parts in `mode`, those of `parts` swapped for csin (`swap`).
 #[inline(always)]
-fn both(x: f64, y: f64, o: [usize; 2], mode: Rounding) -> Option<(f64, f64)> {
-    let (ps, m) = parts(x, y)?;
-    let ([re, im], [er, ei]) = ([ps[o[0]].0, ps[o[1]].0], [ps[o[0]].1, ps[o[1]].1]);
+fn both(x: f64, y: f64, swap: bool, mode: Rounding) -> Option<(f64, f64)> {
+    let ([p0, p1], m) = parts(x, y)?;
+    let ((re, er), (im, ei)) = if swap { (p1, p0) } else { (p0, p1) };
     Some((round(re, er, m, mode)?, round(im, ei, m, mode)?))
 }
 
@@ -137,25 +137,25 @@ fn both(x: f64, y: f64, o: [usize; 2], mode: Rounding) -> Option<(f64, f64)> {
 /// test raises inexact itself, nothing else can arise; a decline goes to the cold fallback).
 #[inline(always)]
 pub fn csinh_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
-    both(x, y, [0, 1], Rounding::Nearest)
+    both(x, y, false,Rounding::Nearest)
 }
 
 /// `csin(x + iy)` to nearest for the boundary's in-place entry: `csinh(y + ix)` swapped.
 #[inline(always)]
 pub fn csin_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
-    both(y, x, [1, 0], Rounding::Nearest)
+    both(y, x, true,Rounding::Nearest)
 }
 
 /// `csinh(x + iy)` in `mode` by the quick tier, or `None`.
 #[inline(always)]
 pub fn csinh(x: f64, y: f64, mode: Rounding) -> Option<((f64, f64), Status)> {
-    Some((both(x, y, [0, 1], mode)?, Status::flags(Flags::INEXACT)))
+    Some((both(x, y, false,mode)?, Status::flags(Flags::INEXACT)))
 }
 
 /// `csin(x + iy)` in `mode` by the quick tier, or `None`.
 #[inline(always)]
 pub fn csin(x: f64, y: f64, mode: Rounding) -> Option<((f64, f64), Status)> {
-    Some((both(y, x, [1, 0], mode)?, Status::flags(Flags::INEXACT)))
+    Some((both(y, x, true,mode)?, Status::flags(Flags::INEXACT)))
 }
 
 /// The `csinh` quick tier for any format.
