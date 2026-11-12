@@ -36,9 +36,10 @@ LIBM-CPLX-SINCOS`, from the module comment of crates/math/src/complex_fast_sinh.
 
 ## Next steps (in order)
 
-1. Read job check1 on keke (`~/bin/jobwait libm-cplx-sincos-check1`; log `~/logs/libm-cplx-sincos-check1.log`):
-   it runs math-gen, `cargo xtask clippy`, the new unit tests and the release sweep. Fix compile errors (the code
-   has never been compiled), copy the regenerated s10_math_gen.rs back, then commit.
+1. Read job check2 on keke (`~/bin/jobwait libm-cplx-sincos-check2`; log `~/logs/libm-cplx-sincos-check2.log`;
+   script ~/work/libm-cplx-sincos/check1.sh): math-gen, `cargo xtask clippy`, the new unit tests, the release
+   sweep. check1 (code b7f59d625) failed only on 4 clippy indexing_slicing lints, fixed in e0965e04d. Copy the
+   regenerated s10_math_gen.rs back from the role and commit it.
 2. `cargo xtask static` is red on `long-sweeps` ("1 ignored test(s) and runner rows out of step"): register
    `csinh_quick_tier_sweep` in the long-sweeps runner as `cexp_quick_tier_sweep` is (grep it). Then the gate (`affected --run --base origin/next`), plants (msg: regexes; candidates:
    drop `- e.lo * r0` in the reciprocal, drop `t2` from the series, swap the csin parts, drop the sign of sinh,
