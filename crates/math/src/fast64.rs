@@ -412,7 +412,7 @@ pub(crate) fn reduce_exp(x: f64, kf: f64) -> Dd {
 
 /// [`pow`]'s reduced argument (proof there).
 #[inline(always)]
-fn reduce_pow(z: Dd, kf: f64) -> Dd {
+pub(crate) fn reduce_pow(z: Dd, kf: f64) -> Dd {
     let (h, l) = reduce_ln2(z.hi, kf);
     fast_two_sum(h, l + z.lo)
 }
