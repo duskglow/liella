@@ -18,3 +18,12 @@ q-log-e0-l2-shift | crates/math/src/wide_int/quad/explog.rs | lit:sar(l2, 6) ==>
 q-log-e-l1-shift | crates/math/src/wide_int/quad/explog.rs | lit:sar(l1, 14) ==> sar(l1, 13) | cargo test -p liella-math --lib wide_int::quad | msg:explog::tests.*(FAILED|panicked)
 # log L4 (E != 0): the polynomial term's alignment shift off by one.
 q-log-e-poly-shift | crates/math/src/wide_int/quad/explog.rs | lit:p.shr(lzw + 14) ==> p.shr(lzw + 13) | cargo test -p liella-math --lib wide_int::quad | msg:explog::tests.*(FAILED|panicked)
+# cargo xtask plants results (8 plants: 7 CAUGHT, 0 SURVIVED, 1 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# q-exp-horner-shift: CAUGHT, caught by liella_math wide_int::quad::explog::tests::tier_agrees_with_the_wide_route
+# q-signed3-borrow: CAUGHT, caught by liella_math wide_int::quad::explog::tests::constants_are_the_rounded_values
+# q-exp-sub-shift: CAUGHT, caught by liella_math wide_int::quad::explog::tests::exp_rounding_matches_the_exact_value_in_every_range
+# q-err-bound: EQUIVALENT
+# q-log-i2-round: CAUGHT, caught by liella_math wide_int::quad::explog::tests::tier_agrees_with_the_wide_route
+# q-log-e0-l2-shift: CAUGHT, caught by liella_math wide_int::quad::explog::tests::tier_agrees_with_the_wide_route
+# q-log-e-l1-shift: CAUGHT, caught by liella_math wide_int::quad::explog::tests::tier_agrees_with_the_wide_route
+# q-log-e-poly-shift: CAUGHT, caught by liella_math wide_int::quad::explog::tests::tier_agrees_with_the_wide_route

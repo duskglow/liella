@@ -1,30 +1,42 @@
-# handoff: libm-f128-explog (LIBM-F128-EXPLOG run 1: design; LIBM-F128-EXPLOG-2: code, unit-tested)
+# handoff: libm-f128-explog (run 1: design; -2: code, unit-tested; -3: merged next, plants, sweep, percall, record)
 
-**State.** Branch `task/libm-f128-explog-2` (on `task/libm-f128-explog`, from origin/next d1b3a596c); head = the
-WIP commit "Add the binary128 exp/log three-limb integer tier". Run -2 stopped at its 180k context checkpoint.
-Done: `crates/math/src/wide_int/quad/explog.rs` (exp X1-X6, log L1-L4; the module doc holds the method, citations
-and error budget), wired in `wide.rs::tiers()` (after the x87 tier); quad's `round` now delegates to
-`round_within(.., err)` (same code, bound as parameter); generator `crates/mathtools/src/ld_explog_tables.rs` adds
-`third()` and the WQ_* tables (regenerated with `cargo xtask tables`, job rc 0); long sweep registered in
-`xtask/src/longsweeps.rs`. Job `libm-f128-explog-2-unit2` (shiki, final head): clippy + static + `cargo test -p
-liella-math --lib wide_int::quad` green: sweep 6016 calls, 0 undecided, worst 2^-142.2; near 1: 1200 calls,
-0 undecided, worst 2^-148.1.
+**State.** Branch `task/libm-f128-explog-3` (= `task/libm-f128-explog-2` + merge of origin/next a5636ce6b + the
+commits below). The binary128 `expf128`/`logf128` three-limb integer tier is done:
+`crates/math/src/wide_int/quad/explog.rs` (exp X1-X6, log L1-L4; the module doc holds the method, citations and
+error budget), wired in `wide.rs::tiers()` after the x87 tier; quad's `round` delegates to `round_within(.., err)`;
+generator `crates/mathtools/src/ld_explog_tables.rs` adds the WQ_* third limbs (2.5 KiB); long sweep registered in
+`xtask/src/longsweeps.rs` (that one line makes `cargo xtask affected` escalate the gate to FULL: xtask/src/longsweeps.rs
+is not in XTASK_TOOLS).
 
-**Fixed in -2 (not in the run-1 design).** `round_exp`: run 1 said "None if s >= 192"; that refuses every
-result in [2^-16495, 2^-16494) (be = -112, the whole bottom band). Now s = 192 takes the normal test, s > 192
-rounds as a tiny value (Exact sig 0, sticky), refusing only be = -113 with M's top word all ones.
+**Commits in -3.** Merge of origin/next (clean); plants file (`handoff/LIBM-F128-EXPLOG-3-plants.txt`, now with the
+tool's results); `validation/percall/libm_f128_explog.c` (expf128 typical/wide, logf128 typical/near 1); the pending
+decision `records/pending/LIBM-F128-EXPLOG-3-1.toml` (D-NEW, series D-10: method Tang 1989/1990, Wong-Goto 1994,
+Brent-Zimmermann 2010; bounds; tables; measurements); a fix of bare `|` in that record (records check).
 
-**Decisions in force.** D-10.52, D-10.73 (x87 tier). No new record yet.
+**Results (kanon, Broadwell-EP; jobs in kanon:~/logs/).**
+- `libm-f128-explog-3-lint` (inherited head after merge) and `-lint3` (final code head 19dbc5ad1): clippy + static rc 0.
+  `-lint2` rc 1 was the record's bare `|`, fixed in 19dbc5ad1.
+- `libm-f128-explog-3-plants`: 8 plants, 7 CAUGHT, 1 EQUIVALENT (q-err-bound: the rounding bound moved by 2^-187;
+  the bound has 2^1.7 slack over the proved error, so no operand can tell; the bound rests on the module-doc proof).
+- `libm-f128-explog-3-longsweep` (release, 10^7 operands, twelve bands incl. overflow/underflow/subnormal and near 1,
+  four modes vs the 384-bit route): 33,333,160 calls 0 undecided, 0 refused, worst 2^-141.96; near 1: 6,666,632 calls,
+  16 undecided (go to the 384-bit route), worst 2^-146.53. rc 0.
+- `libm-f128-explog-3-percall` (instructions:u per call, release; glibc / next a5636ce6b / new):
+  expf128 6682 / 33418 / 767; expf128_wide 6704 / 33533 / 746; logf128 7794 / 70524 / 898;
+  logf128_near1 7481 / 48493 / 884. All 0.11-0.12x glibc; self-checks ok.
+- `libm-f128-explog-3-gate2`: `cargo xtask affected --run --base origin/next` on 19dbc5ad1 (escalated to FULL by
+  longsweeps.rs; see the hand-back for its state). `libm-f128-explog-3-gate` (first try) was stopped by me after it
+  escalated, before the percall/record commits; superseded.
 
-**Next steps, in order.** (1) Direct-tier gate on the head (`cargo xtask affected --run`, base origin/next).
-(2) Plants through `cargo xtask plants` on explog.rs, msg regex `explog::tests.*(FAILED|panicked)`: Horner
-shift (`mulhi64(a1, h) >> 12` -> 11), third-limb sign (`signed3` `lo < 0` -> `lo > 0`), `s` formula (`80 - be` ->
-`81 - be`), ERR (`+ 16` -> `- 16`... check it is caught, else `equivalent:`), i2 rounding (`1 << 116` -> `1 << 115`),
-(b)/(c) shifts (`sar(l2, 6)` -> 7, `sar(l1, 14)` -> 13), `p.shr(lzw + 14)` -> 13. (3) percall for expf128/logf128
-against next and glibc (`validation/wl_percall.sh`; the f128 rows' file is not under validation/percall/ by
-name: grep the row list). (4) `cargo xtask records new decision D-NEW --series D-10 --story LIBM-F128-EXPLOG-2`
-naming the method (Tang 1989/1990, Wong-Goto 1994, Brent-Zimmermann 2010) and bounds; drop the WIP subject.
-(5) Long sweep once in release (`cargo xtask long-sweeps` or the #[ignore] test) for the brief's proof.
-Then -3: log2/log10/log1p/expm1/exp2/exp10 on the same kernels.
+**Not done / open.** FMA-off (`glibc.cpu.hwcaps=-FMA`) counts not run: the tier is integer-only (no FP ops), so
+Liella's count does not depend on the path; only the reference column could move. Timing (Ivy Bridge, AVX2 host) not
+measured: left to the periodic timing sweep (instruction mix changes from 384-bit software arithmetic to 64-bit
+integer multiplies, 40-80x fewer instructions). The pending record needs an id from the coordinator.
 
-**Do not redo.** The design and proof (module doc); the table generation; the unit tests.
+**Decisions in force.** D-10.52, D-10.73 (x87 tier, tables shared), the pending record above.
+
+**Do not redo.** Design and proof (module doc), tables, unit tests, plants, long sweep, percall.
+
+**Next step.** If gate2 is green: land. Then the next story: log2/log10/log1p/expm1/exp2/exp10 for binary128 on the
+same kernels (`exp_kernel`, `ln_kernel` in explog.rs), and consider adding `xtask/src/longsweeps.rs` to the affected
+tool's non-escalating table (it only lists test names) so a new sweep does not force a FULL gate.
