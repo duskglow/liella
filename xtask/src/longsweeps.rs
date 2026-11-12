@@ -80,8 +80,8 @@ pub const SWEEPS: &[Sweep] = &[
     lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::j1f_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::y0f_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::y1f_fast_path_agrees_exhaustively", Group::Exhaustive),
-    // Every float of 2^19..2^128 through the large-band core, once per function, but no oracle: about 40 s on a
-    // Zen 1 host (60 vCPU), so it runs with the long group (D-10.109).
+    // Every float of 2^19..2^128 through the large-band core, once per function, but no oracle: about 40 s at
+    // opt-level 2 on a Haswell-EP host (26 vCPU), so it runs with the long group (D-10.109).
     lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::bessel_large_table_is_the_refused_set", Group::Long),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::asinf_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::acosf_fast_path_agrees_exhaustively", Group::Exhaustive),
