@@ -323,7 +323,8 @@ const LG_COS: [f64; 10] = lg_taylor(false);
 /// The operands the rounding test refuses, per function, sorted: bits 32..63 |x|, 0..31 the
 /// nearest `float` F of the value at |x|, bit 31 of the high word set when the value lies above F.
 /// Written by `bessel_large_table_is_the_refused_set` (the plant target "table").
-const LG_TAB: [&[u64]; 4] = [&[], &[], &[], &[]];
+const LG_TAB: [&[u64]; 4] = [&LG_J0, &LG_J1, &LG_Y0, &LG_Y1];
+include!("bessel_tab.rs");
 
 /// y ≈ f(|x|) (J1 at |x|) and the bound in units of 2^-53 of |y|; `y` is never 0 on the band.
 #[inline(always)]
