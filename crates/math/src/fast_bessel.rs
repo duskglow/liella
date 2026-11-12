@@ -288,7 +288,8 @@ pub fn j1(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     if ax < NEAR_SERIES {
         // `J1(x) = (x/2)·(1 − x²/8 + ...)`: `x/2` (exact and normal from 2^-1021) moved toward 0
         // by less than `2^-56` of itself, under a quarter of its last place.
-        return Some(if ax < J1_HALF { j1_subnormal(x, mode) } else { below(ax * 0.5, x < 0.0, mode) });
+        // At 2^-1021 the neighbour of `x/2 = 2^-1022` toward 0 is subnormal: rounded with underflow.
+        return Some(if ax <= J1_HALF { j1_subnormal(x, mode) } else { below(ax * 0.5, x < 0.0, mode) });
     }
     let (y, eps) = kernel(1, ax)?;
     round(if x < 0.0 { y.neg() } else { y }, eps, 0, mode)
