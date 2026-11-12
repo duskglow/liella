@@ -40,7 +40,8 @@ All jobs on shiki, code head b3e4ee5ad (later commits: handoff/ only).
 * Plants `libm-hypot-directed-plants2` (tool, ~/work/LIBM-HYPOT-DIRECTED/plants.txt): entry-nearest (fallback given
   Rounding::Nearest), hw-root-off (Hw root x1.0001), kernel-up-nearest (directed branch drops the upward step):
   3 CAUGHT, 0 WARN.
-* Gate `libm-hypot-directed-gate2` (affected --run --base origin/next): see the report json.
+* Gate `libm-hypot-directed-gate2` (affected --run --base origin/next): rc 0, 32 suites ok, 11646 passed, 0 failed
+  (init_data_clusters_hold_at_every_text_phase passes after the regen).
 * Checks job `libm-hypot-directed-t3` (clippy, static incl. records check: 2 pending, the two tests): rc 0.
 * Superseded: t1/t2 (lint red, fixed), gate/plants/percall (first code head: `cargo xtask so` refused the stale
   hot-text key), hotregen (refused to drop without --allow-drop; hotregen2 did it, rc 0).
