@@ -731,11 +731,12 @@ fn init_startup_group_ends_inside_the_first_fault_around_window() {
     let map = link_map(&dir, &r.join("target/liella/liella-crt1.o"));
     let ph = Command::new("readelf").arg("-lW").arg(dir.join("page_faults")).output().expect("readelf -lW");
     let _ = std::fs::remove_dir_all(&dir);
-    // `LOAD off vaddr paddr filesz memsz flags align`; the executable one starts the text mapping.
+    // `LOAD off vaddr paddr filesz memsz flags align`, flags as separate words (`R E`); the
+    // executable one starts the text mapping.
     let seg = String::from_utf8_lossy(&ph.stdout)
         .lines()
         .map(|l| l.split_whitespace().collect::<Vec<_>>())
-        .find(|w| w.first() == Some(&"LOAD") && w.get(6).is_some_and(|f| f.contains('E')))
+        .find(|w| w.first() == Some(&"LOAD") && w.get(6..).is_some_and(|f| f.contains(&"E") || f.contains(&"RE")))
         .and_then(|w| u64::from_str_radix(w[2].trim_start_matches("0x"), 16).ok())
         .expect("no executable LOAD segment in the probe");
     let (start, end) = (seg & !0xfff, (seg & !0xfff) + FIRST_WINDOW);
