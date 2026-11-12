@@ -121,9 +121,11 @@ pub(super) fn erfc_core(x: f32) -> Option<f64> {
 /// 2/√π rounded to `double` (0x1.20dd750429b6dp+0).
 const TWO_OVER_SQRT_PI: f64 = f64::from_bits(0x3ff2_0dd7_5042_9b6d);
 
-/// Largest `|x|` bits taken by [`erf_tiny`]: 0x716ff6·2^-149, the last operand whose result is
-/// subnormal in every mode (c·n ≤ 8388606.55 < 2^23 - 1).
-pub(super) const ERF_TINY_MAX: u32 = 0x0071_6ff6;
+/// Largest `|x|` bits taken by [`erf_tiny`]: 0x716fe1·2^-149 (n = 7434209), the last operand
+/// whose result is subnormal in every mode (c·n = 8388606.56 < 2^23 - 1). From n = 0x716fe2
+/// (c·n = 8388607.69) the result can round up to the normal 2^-126, which is not tiny after
+/// rounding (no underflow), so those operands stay with the accurate path.
+pub(super) const ERF_TINY_MAX: u32 = 0x0071_6fe1;
 
 /// erff for `0 < |x| ≤ ERF_TINY_MAX` (LIBM-RETHINK-ERFC, D-10.107), whose subnormal results
 /// [`super::round`] refuses. erf x = c·x·(1 - x²/3 + …) with c = 2/√π, the x³ term below 2^-250
