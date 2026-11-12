@@ -1,44 +1,35 @@
-# LIBM-F32-BESSEL-LARGE handoff (run 1, context checkpoint)
+# LIBM-F32-BESSEL-LARGE handoff (run 2, LIBM-F32-BESSEL-LARGE-2: INCOMPLETE, typical rows slower)
 
-State: branch `task/libm-f32-bessel-large`, code head 22bd8683c (on next fe4c4893d; this note and the report json
-follow it). Role shiki:~/w/sh1. Reserved decision id: D-10.109 (record NOT written yet). Brief:
-~/state/briefs/LIBM-F32-BESSEL-LARGE.md (= handoff/LIBM-RETHINK-BESSEL/LIBM-F32-BESSEL-LARGE.md).
+State: branch `task/libm-f32-bessel-large-2` (on `task/libm-f32-bessel-large`, next fe4c4893d), code head 80f128b5a,
+role shiki:~/w/sh1. Decision record D-10.109 written (records/decisions/D-10/D-10.109.toml). Brief:
+~/state/briefs/LIBM-F32-BESSEL-LARGE.md "The change"; method and design as in run 1 (see D-10.109's body).
+DO NOT LAND as it stands: the mid and tiny rows are slower than next (below).
 
-## What is done (crates/math/src/fast32/bessel.rs, bessel_tab.rs, oracle32/bessel.rs)
-- `bessel_eval` sends 2^19 <= |x| < 2^128 (Y: x > 0) to `bessel_large`: modulus and phase (DLMF 10.18.17-18),
-  phase in quadrants formed exactly in fixed point: 24-bit significand x the 128 bits of 2/pi ending at bit E-24
-  (`coeffs::tables::TWO_OVER_PI`, existing verified words), wrapping u128 product in units of 2^-126, minus
-  (n + [Y]) quadrants (Y_n = M cos(theta - pi/2)), plus delta' = (2/pi)[(mu-1)/(8x) + (mu-1)(mu-25)/(384x^3)]
-  at 2^-84; top two bits = quadrant, rest g in [-1/2, 1/2]; Taylor sin(pi g/2)/g (k <= 8) or cos (k <= 9);
-  M^2 = (2/(pi x))(1 + (mu-1)/(8x^2)), one sqrt. Bound LG_B = 8 units of 2^-53 relative (+ (3e-25 + 5u|dq|)/|g|
-  on the sin branch), turned into ulps of y by y's significand (`large_delta`), into `round`.
-- Refused operands: table `bessel_tab.rs` (54 j0f, 47 j1f, 44 y0f, 57 y1f), written by the ignored exhaustive
-  test `bessel_large_table_is_the_refused_set` (40 s on shiki; prints the table on a mismatch: regenerate with
-  `python3 -I mktab.py` from the log, see run notes below). Lookup = binary search, answer rebuilt as F +- 2^-28 F
-  through `finish` (all modes, flags inexact). No runtime MP on the band (None is unreachable: the enumeration).
-- Oracle: `bessel_est` now covers up to FLT_MAX; from 2^19 `large_reduce` does the same fixed-point reduction with
-  its own 2/pi bits from the 384-bit mp constant (independent of the fast path's table); r = g.pi/2 in Dd, cut
-  bound 4e-31 added to `err`.
-- Tests: `bessel_large_core_is_within_its_bound` (stride over all binades + near-zero operands near 2^19 against
-  the 384-bit values; oracle checked there too; worst error/bound 0.41-0.45), `bessel_large_taylor_coefficients`,
-  `bessel_large_table_entries` (every entry refused by the core and equal to the accurate path in every mode, +-x).
-- Plants: handoff/LIBM-F32-BESSEL-LARGE-plants.txt (table entry removed, margin halved, x^-3 term dropped).
+## Done in run 2
+- gate2 red fixed: `bessel_large_table_is_the_refused_set` is a `long` row of xtask/src/longsweeps.rs (36 s in
+  release on Haswell-EP 26 vCPU, sweeps job 1). Oracle module comment says the range reaches FLT_MAX (#4976).
+- `bessel_large` is `#[inline(never)]` (d5d5114b0): inlined, it widened bessel_eval's frame (mid +12..+27, tiny
+  +12..+21 instructions a call, percall2). It also made LLVM inline `Vdso::lookup_many::<5>` in the fast libc.a,
+  so `so` failed on that dead hot-text key (run 1's plants rc 2). With the band out of line the key matches again:
+  my `hottext-repair` drop (44d8749f4) is reverted (80f128b5a); crates/libc-so is identical to next. No hot-lists lane.
+- Plants (handoff/LIBM-F32-BESSEL-LARGE-2-plants.txt: table, margin, phase3, oracle): plants2 4/4 CAUGHT, no WARN
+  (on 44d8749f4: band inlined, key dropped); plants3 rc 2 (BASELINE `so` on d5d5114b0: the dropped key, above);
+  plants4 on 80f128b5a: see handoff/reports/LIBM-F32-BESSEL-LARGE-2.json.
+- Exhaustive: j0f_fast_path_agrees_exhaustively ok (1976 s, release) on the inlined code; the enumeration ok (36 s).
 
-## Jobs (shiki)
-On code head c33609c90, verdicts NOT read: libm-f32-bessel-large-gate2 (clippy, static, affected --base
-origin/next), -sweeps2 (waits for gate2, then the four exhaustive oracle sweeps + the enumeration).
-Superseded: -gate rc 1 (clippy::panic in the new bound test, fixed in c33609c90), -plants rc 2 (BASELINE FAILED
-in `cargo xtask so`: "hot-text.list: 1 key(s) match no function section of the fast-profile libc.a", a vdso
-`lookup_many` key in liella_boundary; not touched by this change, not analysed: compare on origin/next before any
-regen), -sweeps (stopped to sync), -enum (compile error), -enum2 (rc 101 by design: printed the table; the
-other three large tests ok). Plants still to run once `so` builds.
+## Counts (wl_percall, libm_bessel.c, shiki, base = next fe4c4893d; glibc / base / head 80f128b5a)
+- large: j0f 296 / 176646 / 384, j1f 292 / 179299 / 385, y0f 302 / 176650 / 386, y1f 318 / 179312 / 392 (1.23-1.32x).
+- mid: j0f 286.5 / 217.6 / 235.3 (+17.7), y1f 299.3 / 254.9 / 259.7 (+4.8).
+- tiny: j0f 94.0 -> 102.0, j1f 119.7 -> 129.7, y0f 340.9 -> 347.9, y1f 313.6 -> 318.3 (+4.7..+10).
 
 ## Next step (continuation)
-1. Read the three jobs (`~/bin/jobwait <label>` on shiki; `grep -E "panicked|SURVIVED|WARN" ~/logs/<label>.log`).
-2. Write D-10.109: `cargo xtask records new decision D-10.109` (method above; cite DLMF 10.17.3, 10.17(iii),
-   10.18.17-18; Payne-Hanek via Muller, Elementary Functions ch. 11; error budget: g 1u, pi/2 0.35u, poly sums
-   ~2.3u, coefficients < 1u, M 2.28u, product 1u -> < 8u), then `cargo xtask records check`.
-3. Counts: `wl_percall.sh --spec validation/percall/libm_bessel.c .` rows bes_{j0f,j1f,y0f,y1f}_large, base =
-   next fe4c4893d (full sha), against glibc 275-298 (LIBM-TAIL-PROBE rank 4): done = within 2x.
-4. Update the module comment of oracle32/bessel.rs (still says the range ends at 2^19).
-Not to redo: the enumeration (table is current for LG_B = 8); the design (bound holds at 0.45 of B).
+1. Profile first: `validation/wl_trace.sh --spec validation/percall/libm_bessel.c . bes_j0f_mid j0f` on head and on
+   base fe4c4893d (primed on shiki); find where the +17.7 goes. Likely: the large-band test now sits at the top of
+   `bessel_eval` (every band pays its compare and the `f < 2 || x > 0` test) and the out-of-line call changes the
+   shared frame or the `Option<(f32, Status)>` return. Candidate: test the band only where the mid path refuses
+   |x| >= 2^19 (after the tiny and mid dispatch), so the mid and tiny paths run next's instructions.
+2. Re-measure percall (typical rows <= base, large within 2x), then gate, plants and the four exhaustive sweeps
+   (sweeps script: ~/work/LIBM-F32-BESSEL-LARGE-2/sweeps3.sh on shiki, one release run per row; ~33 min each).
+3. Update D-10.109's measured sentence if the large rows move.
+Not to redo: the table enumeration (current for LG_B = 8), the design (bound holds at 0.45 of B), the hot-text
+analysis above (do not drop or regenerate keys: the dead key came from the inlined band).

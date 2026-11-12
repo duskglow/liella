@@ -1,0 +1,12 @@
+{"task": "LIBM-F32-BESSEL-LARGE-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: f32 Bessel large band at 384-392 instr/call (1.23-1.32x reference, from 1.77e5), D-10.109 written, gate2 red fixed; mid/tiny rows still 4.7-17.7 instr slower than next, so do not land yet",
+ "branch": "task/libm-f32-bessel-large-2", "head": "80f128b5a",
+ "gate": {"affected": "gate4 on 80f128b5a running at hand-back (gate2/3 superseded)", "peak": null},
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["fat-LTO inlining coupling: inlining bessel_large into bessel_eval made LLVM inline Vdso::lookup_many::<5> in the fast libc.a, so a start-up hot-text key went dead; out of line, it matches again (no list change kept)", "plants2 4/4 CAUGHT on 44d8749f4 (same tests); plants3 rc 2 on d5d5114b0 (dropped key); plants4 on the final head running at hand-back"],
+ "refused": [],
+ "improvement": "the hot-text dead-key message suggests regen/repair first; it should first say to compare inlining with next, since a code-growth flip in the fast build is the likelier cause and regen.sh reorders the whole start-up list by the host's dispatch",
+ "next_step": "wl_trace bes_j0f_mid head vs base, move the large-band test after the mid/tiny dispatch, re-measure (typical rows <= base), then gate, plants and the four exhaustive sweeps",
+ "report_file": "handoff/LIBM-F32-BESSEL-LARGE.md",
+ "jobs": ["libm-f32-bessel-large-2-gate4", "libm-f32-bessel-large-2-plants4", "libm-f32-bessel-large-2-percall4"]}
