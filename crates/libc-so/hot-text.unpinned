@@ -11,7 +11,6 @@ _RINvNtC13liella_legacy12stdio_compat9with_listNtNtC15liella_boundary5stdio4Glue
 _RNvMs8_NtC6liella3memINtNtC6liella3mem6TryBoxNtNtC15liella_boundary5stdio4SlotE3newC15liella_boundary	a generic of liella::mem shared with hot allocation paths: a call boundary is not free
 _RNvMs5_NtC5alloc7raw_vecNtNtC5alloc7raw_vec11RawVecInner11finish_growC15liella_boundary	a function of alloc: no attribute of ours can pin it
 _RNvNtC15liella_boundary4heap10rust_alloc	allocator path (every Rust allocation): a call boundary is not free
-_RINvMs3_NtC9liella_rt4heapNtNtC9liella_rt4heap4Heap10alloc_slowINtNtC15liella_boundary3sys8CSysImplKb0_ENtNtC15liella_boundary4heap11KernelPagesEC15liella_boundary	allocator path (malloc, free): a call boundary is not free
 _RINvMs3_NtC9liella_rt4heapNtNtC9liella_rt4heap4Heap11first_cacheINtNtC15liella_boundary3sys8CSysImplKb0_ENtNtC15liella_boundary4heap11KernelPagesEC15liella_boundary	allocator path (malloc, free): a call boundary is not free
 _RINvMs3_NtC9liella_rt4heapNtNtC9liella_rt4heap4Heap10cache_addrNtNtC15liella_boundary4heap11KernelPagesEC15liella_boundary	allocator path (malloc, free): a call boundary is not free
 _RINvMs3_NtC9liella_rt4heapNtNtC9liella_rt4heap4Heap6refillINtNtC15liella_boundary3sys8CSysImplKb0_ENtNtC15liella_boundary4heap11KernelPagesEC15liella_boundary	allocator path (malloc, free): a call boundary is not free
@@ -33,6 +32,5 @@ _RINvNtC15liella_boundary5stdio4withINtNtC4core6result6ResultjNtNtC13liella_kern
 _RNCNvNtC15liella_boundary6printf8vfprintf0C15liella_boundary	a closure: no attribute of ours can pin it
 _RNvNtC15liella_boundary6printf9to_stream	printf hot path: a call boundary is not free
 _RNvNtC6liella6printf11simple_conv	printf hot path: a call boundary is not free
-_RNvMs3_NtC15liella_boundary6printfNtNtC15liella_boundary6printf8ToStream11put_general	printf hot path: a call boundary is not free
 _RNvMs3_NtC15liella_boundary6printfNtNtC15liella_boundary6printf8ToStream6finish	printf hot path: a call boundary is not free
 _RNvNtC15liella_boundary6printf4send	printf hot path: a call boundary is not free
