@@ -15,8 +15,8 @@
 //!   A row's `secs` is the test time of one run (the libtest `finished in` figure, build excluded) where it was
 //!   measured, so that job can budget its slot.
 //!
-//! `cargo xtask long-sweeps [--group long|exhaustive|count|all] [--list]` (default `long`) runs each sweep of the
-//! group once, in release, in its crate's package, by its exact name (`-- --include-ignored --exact
+//! `cargo xtask long-sweeps [--group long|exhaustive|count|all] [--only <test>]... [--list]` (default `long`; `--only`
+//! keeps the rows of those full test names) runs each sweep of the group once, in release, in its crate's package, by its exact name (`-- --include-ignored --exact
 //! --nocapture`) with the row's environment, prints its output and one `long-sweep: <test> ok|FAILED <seconds>s`
 //! line, and fails naming every sweep that failed or that did not run exactly one test (a renamed test would
 //! otherwise run nothing and pass).
@@ -393,9 +393,14 @@ pub fn sweep_passed(success: bool, stdout: &str) -> bool {
 
 /// Run every sweep of `groups`, each once; fails naming each that failed.
 pub fn run_groups(root: &Path, groups: &[Group]) -> Result<(), String> {
+    run_rows(root, SWEEPS.iter().filter(|s| groups.contains(&s.group)).collect())
+}
+
+/// Run each of `rows` once; fails naming each that failed.
+fn run_rows(root: &Path, rows: Vec<&Sweep>) -> Result<(), String> {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut failed = Vec::new();
-    for s in SWEEPS.iter().filter(|s| groups.contains(&s.group)) {
+    for s in rows {
         let pkg = package(root, s.file)?;
         let mut c = Command::new(&cargo);
         c.current_dir(root).args(["test", "--release", "-p", &pkg]);
@@ -420,10 +425,11 @@ pub fn run_groups(root: &Path, groups: &[Group]) -> Result<(), String> {
     if failed.is_empty() { Ok(()) } else { Err(format!("long sweeps failed: {}", failed.join(", "))) }
 }
 
-/// `cargo xtask long-sweeps [--group long|exhaustive|count|all] [--list]`.
+/// `cargo xtask long-sweeps [--group long|exhaustive|count|all] [--only <test>]... [--list]`.
 pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let mut groups = vec![Group::Long];
     let mut list = false;
+    let mut only: Vec<String> = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -437,18 +443,24 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
                     g => return Err(format!("--group: long, exhaustive, count or all, not {g:?}")),
                 }
             }
-            _ => return Err(format!("usage: long-sweeps [--group long|exhaustive|count|all] [--list]; unknown {a}")),
+            "--only" => only.push(it.next().ok_or("--only: a test name")?.clone()),
+            _ => return Err(format!("usage: long-sweeps [--group long|exhaustive|count|all] [--only <test>]... [--list]; unknown {a}")),
         }
     }
+    if let Some(o) = only.iter().find(|o| !SWEEPS.iter().any(|s| s.test == o.as_str() && groups.contains(&s.group))) {
+        return Err(format!("--only {o}: no row of the group(s) has that test name"));
+    }
+    let rows: Vec<&Sweep> =
+        SWEEPS.iter().filter(|s| groups.contains(&s.group) && (only.is_empty() || only.iter().any(|o| o == s.test))).collect();
     if list {
-        for s in SWEEPS.iter().filter(|s| groups.contains(&s.group)) {
+        for s in rows {
             let env: Vec<String> = s.env.iter().map(|(v, x)| format!("{v}={x}")).collect();
             let secs = s.secs.map_or_else(|| "-".to_string(), |n| format!("{n}s"));
             println!("{}\t{}\t{}\t{}\t{}\t{}", s.group.name(), package(root, s.file)?, s.target.unwrap_or("--lib"), s.test, env.join(" "), secs);
         }
         return Ok(());
     }
-    run_groups(root, &groups)
+    run_rows(root, rows)
 }
 
 #[cfg(test)]
