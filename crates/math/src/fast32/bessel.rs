@@ -189,11 +189,12 @@ const BES_Y1_OVF: f64 = 3.402_823_669_209_694_5e38;
 #[inline(always)]
 pub(super) fn bessel_eval(f: usize, x: f32, mode: Rounding, name: &'static str) -> Option<(f32, Status)> {
     let a = x.to_bits() & 0x7fff_ffff;
-    if (BES_LARGE_BITS..0x7f80_0000).contains(&a) && (f < 2 || x > 0.0) {
-        return bessel_large(f, x, mode, name);
-    }
     if a == 0 || a >= BES_TINY_BITS || (f >= 2 && x < 0.0) {
-        return bessel_finish(x, bessel_core(f, x)?, mode, name);
+        // The large band from the core's own range refusal: the other operands pay nothing for it.
+        return match bessel_core(f, x) {
+            Some(ye) => bessel_finish(x, ye, mode, name),
+            None => bessel_large(f, x, mode, name),
+        };
     }
     let neg = x < 0.0;
     let xd = f64::from(x);
@@ -320,11 +321,43 @@ const fn lg_taylor(odd: bool) -> [f64; 10] {
 const LG_SIN: [f64; 10] = lg_taylor(true);
 const LG_COS: [f64; 10] = lg_taylor(false);
 
-/// The operands the rounding test refuses, per function, sorted: bits 32..63 |x|, 0..31 the
-/// nearest `float` F of the value at |x|, bit 31 of the high word set when the value lies above F.
-/// Written by `bessel_large_table_is_the_refused_set` (the plant target "table").
-const LG_TAB: [&[u64]; 4] = [&LG_J0, &LG_J1, &LG_Y0, &LG_Y1];
+// The operands the rounding test refuses, per function, sorted: bits 32..63 |x|, 0..31 the
+// nearest `float` F of the value at |x|, bit 31 of the high word set when the value lies above F.
+// Written by `bessel_large_table_is_the_refused_set` (the plant target "table").
 include!("bessel_tab.rs");
+
+/// Where each function's entries start in [`LG_ALL`] (and where the last ends).
+const LG_OFF: [usize; 5] = [
+    0,
+    LG_J0.len(),
+    LG_J0.len() + LG_J1.len(),
+    LG_J0.len() + LG_J1.len() + LG_Y0.len(),
+    LG_J0.len() + LG_J1.len() + LG_Y0.len() + LG_Y1.len(),
+];
+
+/// The four tables as one array of plain words. Not an array of slices: a slice is a pointer,
+/// and a position-independent build puts a table of pointers in writable data (`.data.rel.ro`,
+/// relocated at start-up), where it moved the start-up data's pages (LIBM-F32-BESSEL-LARGE-3).
+static LG_ALL: [u64; LG_OFF[4]] = {
+    let parts: [&[u64]; 4] = [&LG_J0, &LG_J1, &LG_Y0, &LG_Y1];
+    let mut all = [0; LG_OFF[4]];
+    let (mut f, mut k) = (0, 0);
+    while f < 4 {
+        let mut i = 0;
+        while i < parts[f].len() {
+            all[k] = parts[f][i];
+            (i, k) = (i + 1, k + 1);
+        }
+        f += 1;
+    }
+    all
+};
+
+/// Function f's table (0 j0f, 1 j1f, 2 y0f, 3 y1f).
+#[inline(always)]
+fn lg_tab(f: usize) -> &'static [u64] {
+    &LG_ALL[LG_OFF[f]..LG_OFF[f + 1]]
+}
 
 /// y ≈ f(|x|) (J1 at |x|) and the bound in units of 2^-53 of |y|; `y` is never 0 on the band.
 #[inline(always)]
@@ -385,12 +418,17 @@ fn large_delta(y: f64, b: f64) -> Option<u64> {
     if d < 67_108_864.0 { Some(d as u64 + 1) } else { None }
 }
 
-/// The large band: the core and the rounding test, else the table (J1 odd: the value at -x is
-/// the negated one). Out of line: inlined, its u128 reduction's registers widened `bessel_eval`'s
-/// frame for every band (12 to 27 more instructions a call on the mid and tiny rows).
+/// The operands [`bessel_core`] refuses: the large band (the core and the rounding test, else
+/// the table; J1 odd: the value at -x is the negated one), `None` for the rest (zero, infinities,
+/// NaN, Y at x < 0). Reached only from that refusal, so no other operand tests for the band, and
+/// out of line: inlined, its u128 reduction's registers widened `bessel_eval`'s frame for every
+/// band (12 to 27 more instructions a call on the mid and tiny rows).
 #[inline(never)]
 fn bessel_large(f: usize, x: f32, mode: Rounding, name: &'static str) -> Option<(f32, Status)> {
     let a = x.to_bits() & 0x7fff_ffff;
+    if !(BES_LARGE_BITS..0x7f80_0000).contains(&a) || (f >= 2 && x < 0.0) {
+        return None;
+    }
     let (y, b) = large_core(f, a);
     let y = if f == 1 && x < 0.0 { -y } else { y };
     if let Some(d) = large_delta(y, b) {
@@ -399,7 +437,7 @@ fn bessel_large(f: usize, x: f32, mode: Rounding, name: &'static str) -> Option<
             return Some((v, Status::flags(Flags::INEXACT)));
         }
     }
-    let tab = LG_TAB[f];
+    let tab = lg_tab(f);
     let i = tab.binary_search_by(|e| ((e >> 32) as u32 & 0x7fff_ffff).cmp(&a)).ok()?;
     // A value a 2^-28 relative step from F on its side: every mode rounds it as the value.
     let fv = f64::from(f32::from_bits(tab[i] as u32));
@@ -703,8 +741,8 @@ mod tests {
     /// for J also at -x. (No spec clause: D-10.109.)
     #[test]
     fn bessel_large_table_entries() {
-        for (f, tab) in LG_TAB.iter().enumerate() {
-            for &e in tab.iter() {
+        for f in 0..4 {
+            for &e in lg_tab(f) {
                 let a = (e >> 32) as u32 & 0x7fff_ffff;
                 let (y, b) = large_core(f, a);
                 assert!(large_delta(y, b).and_then(|d| round(y, d, Rounding::Nearest)).is_none(), "{} entry {a:#x} is not refused", BES_NAMES[f]);
@@ -722,7 +760,7 @@ mod tests {
 
     /// The table is exactly the set of band operands the core's rounding test refuses (an
     /// exhaustive enumeration of 2^19 ≤ x < 2^128; J0 even, J1 odd, so x > 0 decides). On a
-    /// mismatch it prints the table to paste into `LG_TAB`, the nearest value and its side from
+    /// mismatch it prints the table to paste into bessel_tab.rs, the nearest value and its side from
     /// the accurate path. (No spec clause: D-10.109.)
     #[test]
     #[ignore]
@@ -744,7 +782,7 @@ mod tests {
             });
             let mut found = found.into_inner().unwrap_or_else(std::sync::PoisonError::into_inner);
             found.sort_unstable();
-            let have: std::vec::Vec<u32> = LG_TAB[f].iter().map(|e| (e >> 32) as u32 & 0x7fff_ffff).collect();
+            let have: std::vec::Vec<u32> = lg_tab(f).iter().map(|e| (e >> 32) as u32 & 0x7fff_ffff).collect();
             std::println!("{}: {} refused", BES_NAMES[f], found.len());
             if found != have {
                 ok = false;
