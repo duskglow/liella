@@ -190,11 +190,7 @@ const BES_Y1_OVF: f64 = 3.402_823_669_209_694_5e38;
 pub(super) fn bessel_eval(f: usize, x: f32, mode: Rounding, name: &'static str) -> Option<(f32, Status)> {
     let a = x.to_bits() & 0x7fff_ffff;
     if a == 0 || a >= BES_TINY_BITS || (f >= 2 && x < 0.0) {
-        // The large band from the core's own range refusal: the other operands pay nothing for it.
-        return match bessel_core(f, x) {
-            Some(ye) => bessel_finish(x, ye, mode, name),
-            None => bessel_large(f, x, mode, name),
-        };
+        return bessel_finish(x, bessel_core(f, x)?, mode, name);
     }
     let neg = x < 0.0;
     let xd = f64::from(x);
@@ -418,13 +414,15 @@ fn large_delta(y: f64, b: f64) -> Option<u64> {
     if d < 67_108_864.0 { Some(d as u64 + 1) } else { None }
 }
 
-/// The operands [`bessel_core`] refuses: the large band (the core and the rounding test, else
-/// the table; J1 odd: the value at -x is the negated one), `None` for the rest (zero, infinities,
-/// NaN, Y at x < 0). Reached only from that refusal, so no other operand tests for the band, and
-/// out of line: inlined, its u128 reduction's registers widened `bessel_eval`'s frame for every
-/// band (12 to 27 more instructions a call on the mid and tiny rows).
+/// The large band for an operand [`bessel_eval`] refused (the core and the rounding test, else
+/// the table; J1 odd: the value at -x is the negated one), `None` off the band (zero,
+/// infinities, NaN, Y at x < 0, |x| < 2^19). Called only on that refusal, from the one
+/// out-of-line call `special` makes there (`bessel32_rest`), so no other operand tests for the
+/// band: inlined into `bessel_eval`, its u128 reduction's registers widened the frame for every
+/// band, and a second call on the refusal path kept values live across it (mid and tiny rows
+/// 1 to 18 instructions slower, LIBM-F32-BESSEL-LARGE-2 and -3).
 #[inline(never)]
-fn bessel_large(f: usize, x: f32, mode: Rounding, name: &'static str) -> Option<(f32, Status)> {
+pub(crate) fn bessel_large(f: usize, x: f32, mode: Rounding, name: &'static str) -> Option<(f32, Status)> {
     let a = x.to_bits() & 0x7fff_ffff;
     if !(BES_LARGE_BITS..0x7f80_0000).contains(&a) || (f >= 2 && x < 0.0) {
         return None;
@@ -750,8 +748,33 @@ mod tests {
                     let x = f32::from_bits(x);
                     for m in MODES {
                         let want = accurate(BES[f], x, m);
-                        let got = eval(BES[f], x, m).map(|(v, s)| (v.to_bits(), s));
+                        let got = super::super::tests::fast(BES[f], x, m).map(|(v, s)| (v.to_bits(), s));
                         assert_eq!(got, Some((want.0.to_bits(), want.1)), "{}({x:e}) {m:?}", BES_NAMES[f]);
+                    }
+                }
+            }
+        }
+    }
+
+    /// The band is reached from the core's refusal and only on the band (D-10.109): J at ±x and Y
+    /// at +x from 2^19 to FLT_MAX get the accurate path's answer in every mode; infinities, NaN
+    /// and Y at x ≤ -2^19 stay with the accurate path (`None`); below 2^19 an answer is the
+    /// accurate one. (No spec clause: LIBM-F32-BESSEL-LARGE-3, D-10.109.)
+    #[test]
+    fn bessel_large_band_edges() {
+        for f in 0..4 {
+            for a in [0, BES_LARGE_BITS - 1, BES_LARGE_BITS, BES_LARGE_BITS + 1, 0x7f7f_ffff, 0x7f80_0000, 0x7fc0_0000] {
+                for x in [a, a | 0x8000_0000] {
+                    let band = (BES_LARGE_BITS..0x7f80_0000).contains(&a) && (f < 2 || x == a);
+                    let x = f32::from_bits(x);
+                    for m in MODES {
+                        let got = super::super::tests::fast(BES[f], x, m).map(|(v, s)| (v.to_bits(), s));
+                        if band || (a < BES_LARGE_BITS && got.is_some()) {
+                            let want = accurate(BES[f], x, m);
+                            assert_eq!(got, Some((want.0.to_bits(), want.1)), "{}({x:e}) {m:?}", BES_NAMES[f]);
+                        } else {
+                            assert!(got.is_none(), "{}({x:e}) {m:?} left the accurate path", BES_NAMES[f]);
+                        }
                     }
                 }
             }

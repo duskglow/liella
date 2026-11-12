@@ -11,6 +11,20 @@ const CHEAP: usize = 21;
 const TRIG: [Fast; 3] = [Fast::Sin, Fast::Cos, Fast::Tan];
 pub(super) const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
 
+/// [`eval`], and for the Bessel functions the large band after its refusal, the order
+/// `special::j0` and its siblings take (D-10.109): what the `float` functions answer without the
+/// accurate path.
+pub(super) fn fast(f: Fast, x: f32, m: Rounding) -> Option<(f32, Status)> {
+    let (n, name) = match f {
+        Fast::J0 => (0, "j0f"),
+        Fast::J1 => (1, "j1f"),
+        Fast::Y0 => (2, "y0f"),
+        Fast::Y1 => (3, "y1f"),
+        _ => return eval(f, x, m),
+    };
+    eval(f, x, m).or_else(|| bessel_large(n, x, m, name))
+}
+
 pub(super) fn accurate(f: Fast, x: f32, m: Rounding) -> (f32, Status) {
     match f {
         Fast::Exp => acc::exp(x, m),
@@ -932,7 +946,7 @@ pub(super) fn agree_oracle(f: Fast, est: impl Fn(f32) -> crate::oracle32::Est, x
     use crate::oracle32 as o;
     let mut taken = 0;
     for x in xs {
-        let got = o::MODES.map(|m| eval(f, x, m));
+        let got = o::MODES.map(|m| fast(f, x, m));
         if got.iter().all(Option::is_none) {
             continue;
         }

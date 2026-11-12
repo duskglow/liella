@@ -863,6 +863,7 @@ pub fn j0<F: Float>(x: F, mode: Rounding) -> (F, Status) {
         if let Some((r, s)) = crate::fast32::eval(crate::fast32::Fast::J0, f32::from_bits(x.to_bits() as u32), mode) {
             return (F::from_bits(u128::from(r.to_bits())), s);
         }
+        return bessel32_rest(0, "j0f", x, mode);
     }
     if F::PREC == 53 {
         let xf = as_f64(x);
@@ -873,6 +874,22 @@ pub fn j0<F: Float>(x: F, mode: Rounding) -> (F, Status) {
         }
     }
     j0_accurate(x, mode)
+}
+
+/// The `float` Bessel function n (0 j0f, 1 j1f, 2 y0f, 3 y1f) after its fast path refused x: the
+/// large band (D-10.109), else the accurate path. One out-of-line call, as the accurate path
+/// alone was, so the fast path pays nothing for the band (LIBM-F32-BESSEL-LARGE-3).
+#[inline(never)]
+fn bessel32_rest<F: Float>(n: usize, name: &'static str, x: F, mode: Rounding) -> (F, Status) {
+    if let Some((r, s)) = crate::fast32::bessel_large(n, f32::from_bits(x.to_bits() as u32), mode, name) {
+        return (F::from_bits(u128::from(r.to_bits())), s);
+    }
+    match n {
+        0 => j0_accurate(x, mode),
+        1 => j1_accurate(x, mode),
+        2 => y0_accurate(x, mode),
+        _ => y1_accurate(x, mode),
+    }
 }
 
 /// `j0(x)` by the 384-bit path alone (the fast paths' fallback and their tests' reference).
@@ -887,6 +904,7 @@ pub fn j1<F: Float>(x: F, mode: Rounding) -> (F, Status) {
         if let Some((r, s)) = crate::fast32::eval(crate::fast32::Fast::J1, f32::from_bits(x.to_bits() as u32), mode) {
             return (F::from_bits(u128::from(r.to_bits())), s);
         }
+        return bessel32_rest(1, "j1f", x, mode);
     }
     if F::PREC == 53 {
         let xf = as_f64(x);
@@ -911,6 +929,7 @@ pub fn y0<F: Float>(x: F, mode: Rounding) -> (F, Status) {
         if let Some((r, s)) = crate::fast32::eval(crate::fast32::Fast::Y0, f32::from_bits(x.to_bits() as u32), mode) {
             return (F::from_bits(u128::from(r.to_bits())), s);
         }
+        return bessel32_rest(2, "y0f", x, mode);
     }
     if F::PREC == 53 {
         let xf = as_f64(x);
@@ -935,6 +954,7 @@ pub fn y1<F: Float>(x: F, mode: Rounding) -> (F, Status) {
         if let Some((r, s)) = crate::fast32::eval(crate::fast32::Fast::Y1, f32::from_bits(x.to_bits() as u32), mode) {
             return (F::from_bits(u128::from(r.to_bits())), s);
         }
+        return bessel32_rest(3, "y1f", x, mode);
     }
     if F::PREC == 53 {
         let xf = as_f64(x);
