@@ -12,7 +12,11 @@ atan2f to the one-pass `float` form (D-10.82).
   Merged head clippy + static rc 0 (`-lint1`).
 - Gate `libm-f32-rest-next-3-gate` (`affected --run --base origin/next`, keke) and plants
   `libm-f32-rest-next-3-plants` (handoff/LIBM-F32-REST-NEXT-plants.txt, /dev/shm/claude/LIBM-F32-REST-NEXT-3/plants-1):
-  GATE_RESULT.
+  both rc 0 on the merged head `84025d548` (later commits touch only handoff/ and validation/percall/erff.c). Gate:
+  `affected: ok`, peak 1.4G, oom_kill 0; `liella::hot_text_products` was selected (the suite holding -2's red
+  `init_data_clusters_hold_at_every_text_phase`) and `test -p liella` passed, so the layout red is gone with the
+  layout lane's fix; one SKIPPED line, liella-rt matched no test. Plants: 4 CAUGHT, 0 SURVIVED, 1 EQUIVALENT
+  (edge-lowpart, reason in the file), 0 WARN-RC-ONLY / WARN-NO-MSG (only the WARN-DEV-SHM note for /dev/shm).
 - lgammaf evidence from -1 still holds (same product code): exhaustive 2^32 x 4 modes rc 0, lgammaf_zero 1049 instr
   vs about 500k before (glibc 543), cbench lgammaf 315.7 (glibc 277.3; was mean 2257). D-10.87.
 
