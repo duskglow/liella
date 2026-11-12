@@ -227,9 +227,10 @@ mod tests {
     }
 
     /// erff and erfcf against the accurate path in every mode: a stride over every encoding, a
-    /// grid over [-10, 10], and each piece edge (1, the erfcx pieces, ERF_SAT, ERFC_MAX) ±8
-    /// floats on both sides. (Clause s10_0_f_0's Annex F reference for the special values, which
-    /// must be refused or agree; LIBM-F32-ERF.)
+    /// grid over [-10, 10], and each piece edge (1, the erfcx pieces, ERF_SAT, ERFC_MAX, the
+    /// direct paths' band ends) ±8 floats on both sides; the tiny operands' dispatch to the direct
+    /// paths. (Clause s10_0_f_0's Annex F reference for the special values, which must be refused
+    /// or agree; LIBM-F32-ERF, LIBM-RETHINK-ERFC.)
     #[test]
     fn erf_fast_path_agrees_with_the_accurate_path() {
         let fs = [Fast::Erf, Fast::Erfc];
@@ -238,7 +239,10 @@ mod tests {
         let grid = (0..1u32 << 12).map(|i| -10.0 + 20.0 * (i as f32) / 4096.0);
         assert!(agree_in(&fs, grid) > 30_000);
         let mut edges = std::vec::Vec::new();
-        for e in [1.0f32, 1.5, 2.25, 3.375, 5.0625, 7.593_75, 4.0, 9.1875, 9.25] {
+        // Also the ends of the direct paths' bands (D-10.107): erf_tiny's (ERF_TINY_MAX + 1, the
+        // first operand whose result can round up to the normal 2^-126) and erfc_tiny's 2^-26.
+        let tiny_ends = [f32::from_bits(ERF_TINY_MAX + 1), f32::from_bits(0x3280_0000)];
+        for e in [1.0f32, 1.5, 2.25, 3.375, 5.0625, 7.593_75, 4.0, 9.1875, 9.25].into_iter().chain(tiny_ends) {
             for d in 0..8u32 {
                 for b in [e.to_bits() + d, e.to_bits() - 1 - d] {
                     edges.extend([f32::from_bits(b), -f32::from_bits(b)]);
@@ -246,9 +250,25 @@ mod tests {
             }
         }
         assert!(agree_in(&fs, edges.into_iter()) > 900);
-        for x in [0.0f32, -0.0, f32::INFINITY, f32::NEG_INFINITY, f32::NAN, f32::from_bits(1)] {
+        for x in [0.0f32, -0.0, f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
             assert!(MODES.into_iter().all(|m| eval(Fast::Erf, x, m).is_none() && eval(Fast::Erfc, x, m).is_none()), "{x:e} refused");
         }
+        // Subnormal erff results and erfcf next to 1 (D-10.107): the rounding test refuses them
+        // and the direct paths answer, exactly. x = ±n·2^-149 for the least subnormal and, on
+        // each side of a half-integer and of an integer, the three n ≤ ERF_TINY_MAX whose c·n
+        // (c = 2/√π) lies closest to it (2^-24.4 below a half-integer at n = 145635, 2^-23.4
+        // below an integer at 291270: the record's convergents), where an error in C or in a
+        // directed step shows first.
+        let hard = [1u32, 145_635, 436_905, 728_175, 291_270, 582_540, 873_810, 6_784_882, 7_076_152, 7_367_422, 6_639_247, 6_930_517, 7_221_787];
+        let tiny: std::vec::Vec<f32> = hard.into_iter().flat_map(|n| [f32::from_bits(n), -f32::from_bits(n)]).collect();
+        for &x in &tiny {
+            for m in MODES {
+                let direct = (erf_tiny(x, m), erfc_tiny(x, m));
+                assert!(direct.0.is_some() && direct.1.is_some(), "{x:e} {m:?}: inside the direct paths' bands");
+                assert_eq!((eval(Fast::Erf, x, m), eval(Fast::Erfc, x, m)), direct, "{x:e} {m:?}: answered by the direct paths");
+            }
+        }
+        assert_eq!(agree_in(&fs, tiny.into_iter()), 2 * 4 * 26);
     }
 
     /// erf_core and erfc_core within ERF_BOUND and ERFC_BOUND against the correctly rounded
