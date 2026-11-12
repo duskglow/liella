@@ -1,55 +1,53 @@
-# LIBM-F32-REST: f32 inverse trig one-pass (landed), lgammaf edge path (LIBM-F32-REST-NEXT); handoff, one page
+# LIBM-F32-REST: f32 inverse trig one-pass (landed), lgammaf edge path (LIBM-F32-REST-NEXT, -2); handoff, one page
 
-State: branch `task/libm-f32-rest-next` (base origin/next `c1ae12c2d`), head `722d7775a`, role shiki:~/w/sh1.
-Runs 1-5 (LIBM-F32-REST..-5, landed) moved asinf, acosf, atanf, atan2f to the one-pass `float` form (D-10.82;
-`crates/math/src/fast32/inv_trig.rs`, `mathret.rs` `elem32_onepass2`, exhaustive 2^32 × 4 sweeps and the 10^9-pair
-atan2f job green; plants in handoff/LIBM-F32-REST-5-plants.txt).
+State: branch `task/libm-f32-rest-next-2` (= `task/libm-f32-rest-next` plus handoff commits; base origin/next
+`c1ae12c2d`), product code unchanged since `722d7775a`; role kanon:~/w/kn1. Runs 1-5 (LIBM-F32-REST..-5, landed)
+moved asinf, acosf, atanf, atan2f to the one-pass `float` form (D-10.82, `crates/math/src/fast32/inv_trig.rs`).
 
-## LIBM-F32-REST-NEXT (this run): lgammaf beside lnΓ's negative zeros (D-10.87)
-- Cause (profiled in run 2): `lgamma_core_signed` refused |y| < 2^-8 (its absolute bound, up to 7260 ulp of y in
-  the band above, is too wide there) and |x| < 2^-20 (`gamma_core`'s domain); those operands went to the 384-bit
-  path. cbench_libm's lgammaf x = -3.14382577 (bits c0493471) cost about 500k instructions.
-- Change (`crates/math/src/fast32/gamma.rs`): `#[cold] lgamma_edge`: x in `fast_gamma::domain` (2^-60 ≤ |x| < 16,
-  not a pole) by `fast_gamma::lgamma_kernel` (double-double Y, proved absolute ε), v = RN(Y.hi + Y.lo), margin
-  ⌊ε/ulp(v)⌋ + 2 (refused at 2^26); 0 < |x| < 2^-60 by -ln|x| (≤ 2.04 ulp, margin 72). Edge results carry
-  `Status::hw` = HW_ANY (as the `double` tier for the same kernel). `eval(Fast::Lgamma)` now returns
-  `eval_lgamma`'s value, so the exhaustive sweep checks the exported path. Proofs in the doc comments.
-- Tests: `lgammaf_beside_the_negative_zeros_takes_the_fast_path` (1024 encodings around -3.1438258 and -2.4570248
-  plus 7 tiny operands, every mode, value/flags/signgam against the accurate path, refusals ≤ 4);
-  `gamma_cores_are_within_their_bounds` checks the edge margins. Per-call case `lgammaf_zero` in
-  `validation/percall/lgammaf.c`.
-- Counts (wl_percall, instructions per call, glibc / Liella; `percall2` on 83de6229e, the same product code as the
-  head): lgammaf_zero 543 / 1049 (was ≈ 500k per such operand), lgammaf_pos 138.4 / 307.8, lgammaf_neg 394.7 /
-  355.7, lgammaf_r_neg 398.7 / 363.7. The bench row (256 operands) should go from mean 2257 to ≈ 310 (glibc 274):
-  job `libm-f32-rest-next-bench4` measures it.
-- Plants (handoff/LIBM-F32-REST-NEXT-plants.txt): run `libm-f32-rest-next-plants` on 3387fa4c4 (same plant sites):
-  4 CAUGHT (edge-near-zero-none, edge-gamma-refusal-none, edge-sign, tiny-ln-sign, all by the new test with msg),
-  1 EQUIVALENT (edge-lowpart: Y.hi = RN(Y.hi + Y.lo) since the kernel ends in a fast two-sum), 0 SURVIVED.
-  Not planted: the margin's size (the kernel's actual error is far below its proved ε, so a shrunk margin
-  survives every test; soundness rests on the proof and the exhaustive sweep) and the shared rounding test.
-- Final-head jobs on shiki (detached): `libm-f32-rest-next-gate4` (so, clippy, static, affected --run --base
-  origin/next), then `-exh4` (lgammaf exhaustive, every float × 4 modes, with the near-zero tally), then
-  `-bench4` (`cargo xtask bench --compare --counters cbench_libm`); `-plants4`, `-percall4`.
-- Superseded on earlier heads: gate (clippy: doc list), gate2 (clippy: doc list, float literal), gate3 (static
-  float-casts: RANGE comment); exh/exh2/exh3, plants2/plants3 stopped when the head moved; percall (base missing).
+## LIBM-F32-REST-NEXT: lgammaf beside lnΓ's negative zeros (D-10.87), done, held for layout
+- `#[cold] lgamma_edge` in `crates/math/src/fast32/gamma.rs` (double-double kernel with a proved margin; tiny |x| by
+  -ln|x|); test `lgammaf_beside_the_negative_zeros_takes_the_fast_path`; per-call case `lgammaf_zero`. Details and
+  proofs in the doc comments and D-10.87.
+- Evidence on the same product code (shiki, run -1's jobs): `libm-f32-rest-next-exh4` rc 0 (every float × 4 modes;
+  "near-zero refusals 1 operands"), `-plants4` rc 0 (4 CAUGHT, 1 EQUIVALENT), `-percall4` rc 0 (lgammaf_zero 1049 vs
+  ≈500k before, glibc 543), `-bench4` rc 0: cbench_libm lgammaf 315.7 instr/call (glibc 277.3; was mean 2257).
 
-## Gate result on the head (job `libm-f32-rest-next-gate4`, rc 1)
-- so, clippy, static (partial-write 790 exports, 0 findings) ok; affected: one failure,
-  `liella::hot_text_products init_data_clusters_hold_at_every_text_phase`: "tool: fault count moves with the
-  text phase": 55 at every pad except `data 0x3000` = 54. This change touches no start-up code (a cold libm
-  function and a test), so it reads as start-up layout jitter (#4347), but origin/next was NOT measured this run
-  (budget): not attributed. Plants on the head: `libm-f32-rest-next-plants4` rc 0 (4 CAUGHT, 1 EQUIVALENT).
+## The red gate (gate4: `hot_text_products init_data_clusters_hold_at_every_text_phase`), attributed (-2)
+- kanon, same test, same pads: origin/next `c1ae12c2d` tool 54 at all 10 pads, `true` 11, passes (job
+  `libm-f32-rest-next-2-layout-next`); this branch tool 55 at 9 pads and 54 at `data 0x3000`, `true` 12, fails
+  (`-layout-branch`, reproduces shiki's gate4).
+- Cause: `.data1` (the declared start-up state cluster in the single LTO object of libc.a) holds the SAME 153 members
+  with the SAME sizes in both builds, but 60 of them sit at other offsets: LLVM emits the statics of the one fat-LTO
+  object in an order that any code change in the crate graph can move, and the section's padding grows 0x2c18 ->
+  0x2c50 (linked: +0x30), which moves start-up objects across a page boundary. The story touches no start-up code
+  or data; this is the #4347 jitter class (code growth elsewhere moves start-up data), not a regression in the path.
+  Tools: ~/work/libm-f32-rest-next-2/d1addr.sh on kanon (objdump of `.data1`, offset/size/name); next.addr, branch.addr.
+- Fix belongs in the layout lane (LAYOUT-STARTUP-STATE-LOCALE / data clusters): order the `.data1` members
+  deterministically (for example by declared-list order or by alignment then name) when `move_startup_state`
+  renames them, so their packing no longer follows LLVM's emission order. Not done here (brief: no data moves).
+
+## Booked timing (-2), staged branch head, cbench_libm rows, ns/call median of 5 interleaved runs (best of 7 each)
+| row | Ivy Bridge Liella / glibc (ratio) | N100 Liella / glibc (ratio) | Zen 1 instr Liella / glibc (bench4) |
+|---|---|---|---|
+| asinf | 38.98 / 12.81 (3.04) | 22.14 / 7.71 (2.87) | 72.4 / 53.5 |
+| acosf | 38.43 / 15.14 (2.54) | 23.05 / 10.04 (2.30) | 72.3 / 61.2 |
+| atanf | 26.84 / 18.36 (1.46) | 16.17 / 12.17 (1.33) | 68.8 / 66.7 |
+| atan2f | 33.22 / 37.15 (0.89) | 18.41 / 22.66 (0.81) | 80.4 / 147.8 |
+| lgammaf | 135.98 / 78.21 (1.74) | 65.35 / 49.42 (1.32) | 315.7 / 277.3 |
+Jobs nico:`libm-f32-rest-next-2-ivb`, nozomi:`libm-f32-rest-next-2-n100` (booked #178/#179, cancelled after).
+IVB spread is wide (one run up to 1.6x the median), N100 tight. Target ≤ 1.3x IVB: met only by atan2f.
+asinf/acosf are 1.2-1.35x by instructions but 2.3-3x in time: every operand runs a square root and then a division
+into `atan_red_any` (both long-latency on these classes); not profiled further here.
 
 ## Open / next step
-0. Attribute the red: run the same test on origin/next (`cargo xtask so` + `cargo test -p liella --test
-   hot_text_products init_data_clusters_hold_at_every_text_phase`); if next shows it too, INCOMPLETE: LAYOUT-JITTER.
-1. Read `-exh4` (rc and the "near-zero refusals" figure; expected ~0) and `-bench4`'s lgammaf row.
-2. Booked timing (Ivy Bridge: nico or kotori, the less busy; N100) of asinf, acosf, atanf, atan2f and lgammaf,
-   Liella vs glibc, via `cargo xtask bench --stage`; target ≤ 1.3x IVB. Not done this run (budget).
-3. erff, erfcf, hypotf onto the one-pass form (D-10.67), each with its exhaustive proof (hypotf: bound + 10^9
-   pairs), plants: low part dropped, mode test skipped, partial-write conversion. Not started.
-4. Optional: x < -42 (non-pole) still takes the 384-bit path (reflection formula needed), as do
-   rounding-test refusals in the 2^-8 ≤ |y| < 1 band (margin 11264); `lgamma_edge` could serve as a second try.
+1. Held for the layout fix (above); re-gate after it lands (`cargo xtask affected --run --base origin/next`).
+2. New story (recommend, RUT/instruction-mix): asinf/acosf without the division (e.g. a direct polynomial in a for
+   |a| ≤ 1/2 and the half-angle form asin a = π/2 - 2·asin √((1-a)/2) above: one root, no divide; Cody & Waite,
+   "Software Manual for the Elementary Functions", ch. 10), and atanf's 1/a; time it, since the cost is latency.
+3. erff, erfcf, hypotf onto the one-pass form (D-10.67) with exhaustive proofs (hypotf: bound + 10^9 pairs); not
+   started. Profile their time first (timing above shows one-pass alone does not decide the time).
+4. Optional: x < -42 (non-pole) and the rounding-test refusals in 2^-8 ≤ |y| < 1 still take the 384-bit path
+   (#4918, a separate follow-up).
 Not to redo: integer kernels for f32 (DESIGN 3.5 B); a partial-write conversion (D-10.67); the round-to-nearest
 index `s·32 + 1.5·2^52` in a one-pass kernel (use `atan_red_any`). Plan rows: D-10.13, D-10.63, D-10.67, D-10.82,
 D-10.87, D-10.95.
