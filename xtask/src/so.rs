@@ -908,6 +908,12 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
     // (ruling #4923); the declared statics' own sections survive the join.
     crate::coldbss::move_startup_state(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, root, &product.join("state-work"))?;
     crate::coldbss::move_cold_bss(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("coldbss-work"))?;
+    // A regen build keeps the archive as the grouping receives it: `cargo xtask hottext-recheck` reruns
+    // the grouping alone on it with the rewritten list (HOTLIST-REGEN-CHEAP).
+    if crate::hottext::regen_on() && rustflags.is_none() {
+        let saved = product.join(profile.name()).join(crate::hottext::PRE_GROUP_ARCHIVE);
+        fs::copy(&archive, &saved).map_err(|e| format!("copy {}: {e}", saved.display()))?;
+    }
     // The functions short programs run, grouped into `.text.hot.*` (PAGEFAULTS-2: fewer text faults).
     let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &root.join("crates/libc-so/hot-text.list"), &product.join("hot-work"), rustflags.is_none().then(|| profile.name()))?;
     println!("so: {hot} function sections grouped as hot text");
@@ -973,6 +979,41 @@ fn check_no_link_edge(so: &Path) -> Result<(), String> {
         Some(l) => Err(format!("{} carries a link-edge word: {l}", so.display())),
         None => Ok(()),
     }
+}
+
+/// `liella-crt1.o` in `dir`, assembled for the `libc.a` there; returns its `-D` cluster alignments.
+fn build_crt1(root: &Path, cc: &str, dir: &Path) -> Result<Vec<String>, String> {
+    // Each start-up data cluster's start alignment, from its size over the whole archive (D-X.64).
+    let aligns = crate::startup_ro::cluster_aligns(&dir.join("libc.a"))?;
+    println!("so: start-up data cluster alignments {}", aligns.iter().map(|(d, a)| format!("{d}={a}")).collect::<Vec<_>>().join(" "));
+    let defines: Vec<String> = aligns.iter().map(|(d, a)| format!("-D{d}={a}")).collect();
+    let crt1 = tmp_name(&dir.join("liella-crt1.o"));
+    run(Command::new(cc).arg("-c").args(&defines).arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&crt1))?;
+    publish(&crt1, &dir.join("liella-crt1.o"))?;
+    Ok(defines)
+}
+
+/// `cargo xtask so` in the regen mode with [`crate::hottext::LIBC_ONLY_FLAG`] `<dir>` (HOTLIST-REGEN-CHEAP): only the products the
+/// regen's traces link, built exactly as [`run_so_as`] builds them (step 1 and the start object), into
+/// `dir`, with the `.profile` marker last. `target/liella` is not touched.
+pub fn run_regen_libc(root: &Path, dir: &Path, profile: Profile) -> Result<(), String> {
+    if !crate::hottext::regen_on() {
+        return Err(format!("so: {} is a regen build ({})", crate::hottext::LIBC_ONLY_FLAG, crate::hottext::REGEN_FLAG));
+    }
+    let product = root.join("target/product");
+    let _lock = lock_product_dir(&product)?;
+    fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let dir = fs::canonicalize(dir).map_err(|e| e.to_string())?;
+    if dir == fs::canonicalize(root.join("target/liella")).unwrap_or_default() {
+        return Err("so: --libc-only writes regen products, never into target/liella".into());
+    }
+    let _ = fs::remove_file(dir.join(".profile"));
+    println!("so: regen products (libc.a, liella-crt1.o), profile {}, into {}", profile.name(), dir.display());
+    build_archive_locked(root, &product, &dir.join("libc.a"), None, profile)?;
+    build_crt1(root, &std::env::var("CC").unwrap_or_else(|_| "cc".into()), &dir)?;
+    let marker = tmp_name(&dir.join(".profile"));
+    fs::write(&marker, format!("{}\n", profile.name())).map_err(|e| e.to_string())?;
+    publish(&marker, &dir.join(".profile"))
 }
 
 pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
@@ -1045,13 +1086,7 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     publish(&so, &so_final)?;
 
     // 4. The start object.
-    // Each start-up data cluster's start alignment, from its size over the whole archive (D-X.64).
-    let aligns = crate::startup_ro::cluster_aligns(&release.join("libc.a"))?;
-    println!("so: start-up data cluster alignments {}", aligns.iter().map(|(d, a)| format!("{d}={a}")).collect::<Vec<_>>().join(" "));
-    let defines: Vec<String> = aligns.iter().map(|(d, a)| format!("-D{d}={a}")).collect();
-    let crt1 = tmp_name(&release.join("liella-crt1.o"));
-    run(Command::new(&cc).arg("-c").args(&defines).arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&crt1))?;
-    publish(&crt1, &release.join("liella-crt1.o"))?;
+    let defines = build_crt1(root, &cc, &release)?;
     // The static-PIE start object (D-27.10): the same file, calling the relocating start.
     let rcrt1 = tmp_name(&release.join("liella-rcrt1.o"));
     run(Command::new(&cc).arg("-c").arg("-DLIELLA_STATIC_PIE").args(&defines).arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&rcrt1))?;
