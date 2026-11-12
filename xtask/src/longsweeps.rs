@@ -98,6 +98,8 @@ impl Sweep {
 /// Every float encoding (fast32 and the boundary's one-pass sweeps).
 const STRIDE1: &[(&str, &str)] = &[("LIELLA_SWEEP_STRIDE", "1")];
 const S10: &str = "crates/boundary/tests/s10_math_symbols.rs";
+/// The 10^7-operand run of the double log family (LIBM-F64-LOG-FAMILY-WIRE).
+const QUICK_LOG: &[(&str, &str)] = &[("LIELLA_QUICK_LOG_N", "10000000")];
 
 /// Every sweep of the workspace. The static check keeps this list and the sources in step.
 pub const SWEEPS: &[Sweep] = &[
@@ -119,22 +121,23 @@ pub const SWEEPS: &[Sweep] = &[
     lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::j1f_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::y0f_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::y1f_fast_path_agrees_exhaustively", Group::Exhaustive),
-    lib("crates/math/src/fast32/tests.rs", "fast32::tests::asinf_fast_path_agrees_exhaustively", Group::Exhaustive),
-    lib("crates/math/src/fast32/tests.rs", "fast32::tests::acosf_fast_path_agrees_exhaustively", Group::Exhaustive),
-    lib("crates/math/src/fast32/tests.rs", "fast32::tests::atanf_fast_path_agrees_exhaustively", Group::Exhaustive),
+    lib("crates/math/src/fast32/tests.rs", "fast32::tests::asinf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
+    lib("crates/math/src/fast32/tests.rs", "fast32::tests::acosf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
+    lib("crates/math/src/fast32/tests.rs", "fast32::tests::atanf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::atan2_fast_path_agrees_on_a_wide_sample", Group::Exhaustive),
-    lib("crates/math/src/fast32/tests.rs", "fast32::tests::sinhf_fast_path_agrees_exhaustively", Group::Exhaustive),
-    lib("crates/math/src/fast32/tests.rs", "fast32::tests::coshf_fast_path_agrees_exhaustively", Group::Exhaustive),
-    lib("crates/math/src/fast32/tests.rs", "fast32::tests::tanhf_fast_path_agrees_exhaustively", Group::Exhaustive),
-    lib("crates/math/src/fast32/tests.rs", "fast32::tests::asinhf_fast_path_agrees_exhaustively", Group::Exhaustive),
-    lib("crates/math/src/fast32/tests.rs", "fast32::tests::acoshf_fast_path_agrees_exhaustively", Group::Exhaustive),
-    lib("crates/math/src/fast32/tests.rs", "fast32::tests::atanhf_fast_path_agrees_exhaustively", Group::Exhaustive),
+    lib("crates/math/src/fast32/tests.rs", "fast32::tests::sinhf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
+    lib("crates/math/src/fast32/tests.rs", "fast32::tests::coshf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
+    lib("crates/math/src/fast32/tests.rs", "fast32::tests::tanhf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
+    lib("crates/math/src/fast32/tests.rs", "fast32::tests::asinhf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
+    lib("crates/math/src/fast32/tests.rs", "fast32::tests::acoshf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
+    lib("crates/math/src/fast32/tests.rs", "fast32::tests::atanhf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::hyperbolic_hardware_sqrt_agrees_exhaustively", Group::Exhaustive),
-    lib("crates/math/src/fast32/tests.rs", "fast32::tests::sinf_fast_path_agrees_exhaustively", Group::Exhaustive),
-    lib("crates/math/src/fast32/tests.rs", "fast32::tests::cosf_fast_path_agrees_exhaustively", Group::Exhaustive),
-    lib("crates/math/src/fast32/tests.rs", "fast32::tests::tanf_fast_path_agrees_exhaustively", Group::Exhaustive),
+    lib("crates/math/src/fast32/tests.rs", "fast32::tests::sinf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
+    lib("crates/math/src/fast32/tests.rs", "fast32::tests::cosf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
+    lib("crates/math/src/fast32/tests.rs", "fast32::tests::tanf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::powf_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::fast_path_agrees_exhaustively", Group::Exhaustive),
+    lib("crates/math/src/fast64/quick_log/tests.rs", "fast64::quick_log::tests::log_family_quick_matches_correctly_rounded", Group::Exhaustive).env(QUICK_LOG),
     lib("crates/math/src/complex.rs", "complex::ziv_tests::random_sample_retry_count", Group::Count),
     it("crates/math/tests/complex_f128_products.rs", "complex_f128_products", "accuracy_suite_retry_count", Group::Count),
     // liella-boundary (TEST-LONG-SWEEPS-BOUNDARY, #4752)
@@ -142,9 +145,12 @@ pub const SWEEPS: &[Sweep] = &[
     it("crates/boundary/tests/trig_quick.rs", "trig_quick", "trig_quick_accuracy_job", Group::Exhaustive).env(&[("TRIG_QUICK_N", "100000000")]),
     it("crates/boundary/tests/hyperb_quick.rs", "hyperb_quick", "hyperb_quick_both_builds_round_correctly", Group::Exhaustive)
         .env(&[("LIELLA_HYPERB_N", "1000000")]),
+    it("crates/boundary/tests/hyperb_quick.rs", "hyperb_quick", "hyperb_quick_ranges", Group::Exhaustive).env(&[("LIELLA_HYPERB_N", "1000000")]),
     it("crates/boundary/tests/invhyp_quick.rs", "invhyp_quick", "invhyp_quick_both_builds_round_correctly", Group::Exhaustive)
         .env(&[("LIELLA_INVHYP_N", "1000000")]),
     it("crates/boundary/tests/erf_quick.rs", "erf_quick", "erf_quick_both_builds_round_correctly", Group::Exhaustive).env(&[("LIELLA_ERF_N", "1000000")]),
+    it("crates/boundary/tests/log_quick.rs", "log_quick", "log_family_both_builds_round_correctly", Group::Exhaustive).env(QUICK_LOG),
+    it("crates/boundary/tests/log_quick.rs", "log_quick", "log_family_quick_fma_error_within_bound", Group::Exhaustive).env(QUICK_LOG),
     it("crates/boundary/tests/pow_quick.rs", "pow_quick", "pow_entry_tiers_round_correctly", Group::Exhaustive).env(&[("LIELLA_POW_SWEEP", "25000000")]),
     it(S10, "s10_math_symbols", "math_double_fast_entry_sweep", Group::Exhaustive).env(&[("LIELLA_FE_SWEEP_CHUNKS", "200")]),
     it(S10, "s10_math_symbols", "math_expf_onepass_sweep", Group::Exhaustive).env(STRIDE1),
@@ -176,6 +182,12 @@ pub const NOT_SWEEPS: &[(&str, &str, &str)] = &[
     ("crates/core/tests/stdio_short_io.rs", "reference_values", "pins the reference's values where Liella differs (each difference a story); fails on Liella by design"),
     ("crates/core/tests/enomem_stream_grow.rs", "harness_ignored_case", "a fixture that harness_runs_ignored_cases_in_the_child runs in a re-executed child"),
     ("crates/core/tests/s23_time_clauses.rs", "s23_7_c_3_child", "a fixture that s23_7_c_3 runs in a child with DATEMSK set"),
+    ("crates/core/tests/no_proc_lane.rs", "link_max_without_proc", "LIELLA_NPL_LINK_MAX is the expected value the test hands its re-executed child, not a size"),
+    ("crates/core/tests/no_proc_lane.rs", "getauxval_hosted_without_proc", "LIELLA_NPL_PAGESZ is the expected value the test hands its re-executed child, not a size"),
+    ("crates/core/tests/s25_ipc_clauses.rs", "s25_2_c_3", "LIELLA_C25_UNDO is the semaphore id the test hands its re-executed child, not a size"),
+    ("crates/math/tests/fast_special.rs", "double_erf_erfc_fast_tier_matches_the_accurate_path", "LIELLA_ERF_SWEEP only widens a run by hand (its comment); the gate's default size is the test"),
+    ("crates/math/tests/fast_bessel.rs", "double_bessel_fast_tier_matches_the_accurate_path", "LIELLA_BESSEL_SWEEP widens a run by hand; no long size is documented, and the gate's default size is the test"),
+    ("crates/math/tests/fast_gamma.rs", "double_gamma_fast_tier_matches_the_accurate_path", "LIELLA_GAMMA_SWEEP widens a run by hand; no long size is documented, and the gate's default size is the test"),
 ];
 
 /// The identifier at the start of `s` (a `$` for a `macro_rules!` metavariable).
