@@ -989,6 +989,8 @@ pub fn unlink<E: Env>(env: &E, fp: usize) {
 }
 
 /// Every open stream's address, with the list lock held.
+// LAYOUT-HOTKEY-INLINE-STABLE: a fixed boundary for its start-up/fork hot-text key (off the hot paths: the call is free).
+#[inline(never)]
 fn each_stream<E: Env>(env: &E, mut f: impl FnMut(usize)) {
     let mut at = env.list_head().load(Acquire);
     while at != 0 {
@@ -1213,6 +1215,8 @@ pub fn setup<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, kind: Kind, m
 
 /// Set up a standard stream (`fd` 0, 1, 2) at first use: `stdin` reads, the others write;
 /// `stderr` is unbuffered.
+// LAYOUT-HOTKEY-INLINE-STABLE: release already inlines it; always inlined, its code stays in the keyed caller in both profiles.
+#[inline(always)]
 pub fn setup_standard<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, fd: i32) {
     let m = if fd == 0 { Mode { read: true, first: b'r', ..Mode::default() } } else { Mode { write: true, first: b'w', ..Mode::default() } };
     let flags = get(file, word::FLAGS);

@@ -1,0 +1,14 @@
+# LAYOUT-HOTKEY-INLINE-STABLE-4 plants (cargo xtask plants; docs/plants.md): the -3 pin kept (nscache::real_secs) and the
+# check_pinned tier rules. Direct tests: `cargo xtask static` (xtask/src/hottext.rs check_pinned on the real lists) and the
+# xtask hottext unit tests. iconv::load and locale::builtin are #[inline(always)] now (no key): nothing to plant on them.
+# 1. The kept tool-tier pin loses its fixed boundary: static must name the function and its tier.
+real-secs-unpinned | crates/legacy/src/nscache.rs | perl:s/#\[inline\(never\)\]\n(fn real_secs<)/$1/ | cargo xtask static | msg:tool key\): .*fn real_secs is not #\[inline\(never\)\]
+# 2-3. A locale-tier and an extra-tier key lose their hot-text.unpinned line (the check covers those tiers, ruling #5024).
+unlisted-locale-setlocale | crates/libc-so/hot-text.unpinned | perl:s/^_RNvNtC15liella_boundary6locale9setlocale\tlocale\t[^\n]*\n//m | cargo xtask static | msg:locale key\): .*fn setlocale is not #\[inline\(never\)\]
+unlisted-extra-iconv-open | crates/libc-so/hot-text.unpinned | perl:s/^_RNvNtC15liella_boundary5iconv4open\textra\t[^\n]*\n//m | cargo xtask static | msg:extra key\): .*fn open is not #\[inline\(never\)\]
+# 4. An unpinned line names the wrong tier (a key that moved tier must be justified again).
+unpinned-wrong-tier | crates/libc-so/hot-text.unpinned | perl:s/^(_RNvNtC6liella5iconv7builtin)\textra\t/$1\tlocale\t/m | cargo xtask static | msg:listed under tier locale but is a extra key now
+# 5. The check falls back to the start-up tiers only (the pre-#5024 scope).
+check-startup-tiers-only | xtask/src/hottext.rs | lit:for e in entries.iter().filter(|e| INLINE_NEVER_TIERS.contains(&e.tier)) { ==> for e in entries.iter().filter(|e| e.tier == "startup" || e.tier == "fork") { | cargo test -p xtask --bin xtask hottext | msg:fail_unless_listed' [(][0-9]+[)] panicked at xtask/src/hottext.rs:[0-9]+
+# 6. The tier-changed rule is dropped (a listed key keeps its old tier's reason).
+tier-rule-dropped | xtask/src/hottext.rs | lit:(Some(_), Some((tier, _))) if tier != e.tier => { ==> (Some(_), Some((tier, _))) if tier != e.tier && false => { | cargo test -p xtask --bin xtask hottext | msg:fail_unless_listed' [(][0-9]+[)] panicked at xtask/src/hottext.rs:[0-9]+

@@ -205,8 +205,9 @@ __close:
 	.cfi_endproc
 	.size liella_machine_close, .-liella_machine_close
 
-/* The asynchronous-I/O flag (read above; written only by crates/boundary/src/aio.rs). */
-	.data
+/* The asynchronous-I/O flag (read above; written only by crates/boundary/src/aio.rs). In a section of
+ * its own so that crates/libc-so/startup-state.list can declare it: the first close reads it. */
+	.section .data.liella_machine_aio_used,"aw",@progbits
 	.globl liella_machine_aio_used
 	.type liella_machine_aio_used, @object
 liella_machine_aio_used:

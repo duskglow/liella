@@ -186,6 +186,8 @@ static SLOTS: RawMutex = RawMutex::new();
 
 /// A slot for a new stream, its `FILE` words zeroed and pointing at its lock and record: the
 /// slot's address (the `FILE *`).
+// LAYOUT-HOTKEY-INLINE-STABLE: a fixed boundary for its start-up/fork hot-text key (off the hot paths: the call is free).
+#[inline(never)]
 fn new_slot() -> KResult<usize> {
     SLOTS.lock_raw(&CSys, Scope::Private);
     let reused = FREE.load(Acquire);

@@ -1,0 +1,10 @@
+id = "D-27.32"
+section = "s26-29"
+spec = "§27"
+ann = "SEC"
+status = "active"
+story = "DL-16-PLAN"
+date = "2026-11-12"
+body = '''
+**`dlopen` handles and counts (phase 14 DL-16 and DL-17, plan/ph14/dl-16-dlopen.md §1 and §2; coordinator ruling #5006).** A handle is the address of Liella's per-object record (equal to its `struct link_map`, probe P-12). `dlsym` and `dlvsym` (and `dlclose` in DL-17) refuse a handle that Liella did not return, or one already closed, with a dlerror text and no other effect: the secure default. The check stays cheap: `RTLD_DEFAULT`, `RTLD_NEXT` and the NULL handle are recognised first, then one lookup in the existing address index or a handle set kept with the chain; never a scan of the chain on the `dlsym` path. `opens` counts direct `dlopen` calls (a re-open, `RTLD_NOLOAD` included, adds one); DL-16 never decrements it; it saturates at `u32::MAX` and the object becomes `nodelete`, because a wrapped count could unmap a live object in DL-17. One differences row, shared with DL-17's `dlclose`. No compatibility option: the documented interface leaves any other handle undefined, and restoring a crash has no value.
+'''
