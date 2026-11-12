@@ -1,13 +1,30 @@
-{"task": "LIBM-F32-REST-NEXT", "model": "opus", "tokens": null,
+{
+ "task": "LIBM-F32-REST-NEXT",
+ "model": "opus",
+ "tokens": null,
  "result": "lgammaf beside lnGamma's negative zeros and for tiny x: cold double-double edge path with a proved margin (D-10.87); near-zero operand 1049 instr/call vs about 500k (glibc 543); erff/erfcf/hypotf one-pass and booked timing not done",
- "branch": "task/libm-f32-rest-next", "head": "722d7775a",
- "gate": {"affected": "libm-f32-rest-next-gate4 (see job log)", "peak": null},
+ "branch": "task/libm-f32-rest-next",
+ "head": "722d7775a",
+ "gate": {
+  "affected": "1 failed (liella::hot_text_products init_data_clusters_hold_at_every_text_phase, start-up fault count 54 vs 55 at one data pad; not attributed: origin/next not measured)",
+  "peak": "3.7G"
+ },
  "accepted_first_attempt": null,
  "rulings": [],
- "informational": ["x < -42 (non-pole) and rounding-test refusals in the 2^-8 <= |y| < 1 band still take the 384-bit lgammaf path; lgamma_edge could serve as a second try (follow-up)",
-                   "plants of the edge margin's size are not catchable by tests (the kernel's actual error is far below its proved bound); soundness rests on the proof and the exhaustive sweep"],
+ "informational": [
+  "gate4 red on a start-up layout test this change does not touch; measure origin/next before calling it LAYOUT-JITTER",
+  "x < -42 (non-pole) and rounding-test refusals in the 2^-8 <= |y| < 1 band still take the 384-bit lgammaf path; lgamma_edge could serve as a second try (follow-up)",
+  "plants of the edge margin's size are not catchable by tests (the kernel's actual error is far below its proved bound); soundness rests on the proof and the exhaustive sweep"
+ ],
  "refused": [],
  "improvement": "the chain of gate, exhaustive and bench in one detached script lost three cycles to clippy/static findings on doc and literal style; run cargo xtask clippy and static as a short foreground job before starting a long chain",
- "next_step": "read exh4/bench4; then booked IVB and N100 timing of asinf/acosf/atanf/atan2f/lgammaf, and erff/erfcf/hypotf one-pass with exhaustive proofs",
+ "next_step": "measure init_data_clusters_hold_at_every_text_phase on origin/next (LAYOUT-JITTER if it fails there too); read exh4/bench4; then booked IVB/N100 timing and erff/erfcf/hypotf one-pass",
  "report_file": "handoff/LIBM-F32-REST.md",
- "jobs": ["shiki:libm-f32-rest-next-gate4", "shiki:libm-f32-rest-next-exh4", "shiki:libm-f32-rest-next-bench4", "shiki:libm-f32-rest-next-plants4", "shiki:libm-f32-rest-next-percall4"]}
+ "jobs": [
+  "shiki:libm-f32-rest-next-gate4",
+  "shiki:libm-f32-rest-next-exh4",
+  "shiki:libm-f32-rest-next-bench4",
+  "shiki:libm-f32-rest-next-plants4",
+  "shiki:libm-f32-rest-next-percall4"
+ ]
+}

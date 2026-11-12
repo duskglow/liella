@@ -33,7 +33,16 @@ atan2f job green; plants in handoff/LIBM-F32-REST-5-plants.txt).
 - Superseded on earlier heads: gate (clippy: doc list), gate2 (clippy: doc list, float literal), gate3 (static
   float-casts: RANGE comment); exh/exh2/exh3, plants2/plants3 stopped when the head moved; percall (base missing).
 
+## Gate result on the head (job `libm-f32-rest-next-gate4`, rc 1)
+- so, clippy, static (partial-write 790 exports, 0 findings) ok; affected: one failure,
+  `liella::hot_text_products init_data_clusters_hold_at_every_text_phase`: "tool: fault count moves with the
+  text phase": 55 at every pad except `data 0x3000` = 54. This change touches no start-up code (a cold libm
+  function and a test), so it reads as start-up layout jitter (#4347), but origin/next was NOT measured this run
+  (budget): not attributed. Plants on the head: `libm-f32-rest-next-plants4` rc 0 (4 CAUGHT, 1 EQUIVALENT).
+
 ## Open / next step
+0. Attribute the red: run the same test on origin/next (`cargo xtask so` + `cargo test -p liella --test
+   hot_text_products init_data_clusters_hold_at_every_text_phase`); if next shows it too, INCOMPLETE: LAYOUT-JITTER.
 1. Read `-exh4` (rc and the "near-zero refusals" figure; expected ~0) and `-bench4`'s lgammaf row.
 2. Booked timing (Ivy Bridge: nico or kotori, the less busy; N100) of asinf, acosf, atanf, atan2f and lgammaf,
    Liella vs glibc, via `cargo xtask bench --stage`; target ≤ 1.3x IVB. Not done this run (budget).
