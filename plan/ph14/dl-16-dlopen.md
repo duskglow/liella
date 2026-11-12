@@ -62,7 +62,9 @@ is its local scope first, then the global scope (design §5). `RTLD_LAZY` before
 like `RTLD_NOW` (same answers for every symbol that is defined at load time, because the global scope only grows by
 appending); an undefined *function* reference therefore fails the open until DL-20 brings the PLT trampoline and late
 definitions (probed reference: the open succeeds). This is an interim gap of the phase, listed in DL-20's tests, not a
-shipped difference. Unknown mode bits: probe P-1 decides (follow the reference if it refuses them with a text).
+shipped difference. Unknown mode bits: every bit outside `RTLD_LAZY|RTLD_NOW|RTLD_NOLOAD|RTLD_DEEPBIND|RTLD_GLOBAL|
+RTLD_NODELETE` (`0x40000000` included) fails before the search with NULL and the dlerror text `invalid mode parameter`
+(probe P-1); DL-16a's test sweeps every undefined bit.
 A re-open never re-relocates (probed: an `RTLD_NOW` re-open of an object first opened lazily succeeds).
 
 **Finding the object and its dependencies** (DL-8, D-27.16). `dlopen("")`/`dlopen(NULL)` return the program's

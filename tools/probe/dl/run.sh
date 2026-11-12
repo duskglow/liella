@@ -5,6 +5,7 @@
 # options only; the reference's own files are only executed, and its libraries' exported
 # names listed (nm -D, the public ABI).
 #   sh tools/probe/dl/run.sh SCRATCH > spec/behaviour/dynlink.glibc.txt
+# The record's DL-16P part (`== P-n`) comes from tools/probe/dl/dlopen/run.sh and is appended after it.
 set -u
 SRC=$(cd "$(dirname "$0")" && pwd)
 W=${1:?usage: run.sh SCRATCH}
