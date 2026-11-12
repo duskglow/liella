@@ -40,6 +40,10 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast32/erf.rs:65` `fn erfc_big(a: f64) -> f64` — bound: undocumented — doc: erfc a for 1 ≤ a < 37/4 as e^(-a²)·Q_i(a - c_i), ε ≤ 2^-45.74 (153u): a² is exact (a has 24 bits), so z = RN(-a²·INV_L) has |z| < 85.6·184.7 < 2^13.95: INV_L's …
 - `fast32/erf.rs:83` `pub(super) fn erf_core(x: f32) -> Option<f64>` — bound: undocumented — doc: erf x as a `double`, ≤ ERF_BOUND ulp: [`erf_small`] (7u) below 1; 1 - erfc a up to ERF_SAT (erfc a ≤ 0.158 within 2^-45.74, over a result ≥ 0.84 rounded once: 2…
 - `fast32/erf.rs:103` `pub(super) fn erfc_core(x: f32) -> Option<f64>` — bound: undocumented — doc: erfc x as a `double`, ≤ ERFC_BOUND ulp: 1 - erf_small(x) for |x| < 1 (erfc x ≥ 0.157, the 7u of erf x ≤ 0.843 become 37.6u, the sum u); erfc_big up to ERFC_MAX …
+- `fast32/erf.rs:140` `pub(super) fn erf_tiny(x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: erff for `0 < |x| ≤ ERF_TINY_MAX` (LIBM-RETHINK-ERFC, D-10.107), whose subnormal results [`super::round`] refuses.
+- `fast32/erf.rs:166` `pub(super) fn erfc_tiny(x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: erfcf for `0 < |x| < 2^-26` (LIBM-RETHINK-ERFC, D-10.107), which [`super::round`] refuses (y lies within its margin of the `float` 1).
+- `fast32/erf.rs:188` `pub(super) fn erf_refused(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: erff where [`super::eval`] refused: [`erf_tiny`]'s band, else the accurate path.
+- `fast32/erf.rs:198` `pub(super) fn erfc_refused(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: erfcf where [`super::eval`] refused: [`erfc_tiny`]'s band, else the accurate path (as [`erf_refused`]).
 
 ## fast32/exp_log.rs (f32 exp_log)
 
@@ -125,7 +129,9 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast32.rs:535` `pub fn log_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `logf` in the caller's rounding direction and MXCSR, unread (D-10.72; proof at [`log_onepass`]).
 - `fast32.rs:541` `pub fn log2_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `log2f` as [`log_onepass_any`].
 - `fast32.rs:547` `pub fn log10_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `log10f` as [`log_onepass_any`].
-- `fast32.rs:565-587` `fast_fn!` entries: exp, exp2, exp10, log, log2, log10, log1p, sin, cos, tan, asin, acos, atan, expm1, cbrt, sinh, cosh, tanh, asinh, acosh, atanh, erf, erfc
+- `fast32.rs:565-585` `fast_fn!` entries: exp, exp2, exp10, log, log2, log10, log1p, sin, cos, tan, asin, acos, atan, expm1, cbrt, sinh, cosh, tanh, asinh, acosh, atanh
+- `fast32.rs:590` `pub fn erf(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `erf` for `float`: the fast path, else [`erf_refused`] (the tiny operands' direct path, else the accurate path).
+- `fast32.rs:598` `pub fn erfc(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `erfc` for `float`: the fast path, else [`erfc_refused`] (as [`erf`]).
 
 ## fast32_tables.rs (fast32_tables)
 
