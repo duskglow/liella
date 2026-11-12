@@ -57,8 +57,11 @@ fn compare(n: usize, seed: u64) -> [usize; 3] {
                 for (p, e, part) in [(re, er, Part::Re), (im, ei, Part::Im)] {
                     // The middle tier runs on every part (not only the quick declines): its
                     // bound must decide all of them (expected misses about 2^-44 per part).
-                    let quick = strict(p, e, m, Rounding::Nearest).is_some();
-                    count[usize::from(!quick)] += 1;
+                    if strict(p, e, m, Rounding::Nearest).is_some() {
+                        count[0] += 1;
+                    } else {
+                        count[1] += 1;
+                    }
                     if middle(x, y, c, d, part, Rounding::Nearest).is_none() {
                         count[2] += 1;
                     }
