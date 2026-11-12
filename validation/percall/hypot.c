@@ -2,8 +2,10 @@
  * tables so no call is folded; the sum goes to pc_sink.
  *   hypot_typ:  x, y uniform in [-100, 100] (the cbench_libm row's range).
  *   hypot_bits: x, y uniform over the bit patterns of finite doubles (the libm tail probe's sampling).
- *   hypot_near: x over every binade, y = x * u with u in [1/4, 4] (no exponent gap, any magnitude). */
+ *   hypot_near: x over every binade, y = x * u with u in [1/4, 4] (no exponent gap, any magnitude).
+ *   hypot_near_up: hypot_near's pairs rounded upward (a directed mode; LIBM-RETHINK-HYPOT-3). */
 #include "percall.h"
+#include <fenv.h>
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
@@ -59,4 +61,15 @@ CASE(hypot_near, 100000, 1) {
     for (long i = 0; i < n; i++) acc += hypot(nx[i & 63], ny[i & 63]);
     pc_sink += (long)(acc != 0);
     PC_CHECKING { pc_check("%a %a", hypot(nx[5], ny[7]), hypot(nx[9], ny[11])); }
+}
+
+CASE(hypot_near_up, 0, 1) {
+    hyp_fill();
+    double acc = 0;
+    fesetround(FE_UPWARD);
+    for (long i = 0; i < n; i++) acc += hypot(nx[i & 63], ny[i & 63]);
+    double c1 = hypot(nx[5], ny[7]), c2 = hypot(nx[9], ny[11]);
+    fesetround(FE_TONEAREST);
+    pc_sink += (long)(acc != 0);
+    PC_CHECKING { pc_check("%a %a", c1, c2); }
 }
