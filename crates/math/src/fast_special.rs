@@ -507,7 +507,16 @@ pub fn erfc_quick(x: f64) -> Option<f64> {
     };
 }
 
-kernels!(; #[inline(always)]; two_prod; fast64::exp_dd; erf_linear_int);
+/// The baseline build's tiny-band call: [`erf_linear_int`] kept out of line, so the in-place
+/// entry's typical path keeps its register assignment (LIBM-ERF-TINY-F64-2: inlined, the band
+/// cost the baseline build's typical erf one extra register copy per call).
+#[cold]
+#[inline(never)]
+fn erf_linear_cold(x: f64, ax: f64) -> f64 {
+    erf_linear_int(x, ax)
+}
+
+kernels!(; #[inline(always)]; two_prod; fast64::exp_dd; erf_linear_cold);
 
 /// The FMA build of the kernels and in-place entries (module doc, "Builds"; MATH-F64-FMA-PATH,
 /// D-10.25): the same arithmetic with every exact product a single FMA, so the same results bit
