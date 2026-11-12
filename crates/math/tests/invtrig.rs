@@ -369,6 +369,19 @@ fn double_hypot_kernel_is_the_exact_path_in_every_direction() {
         v.push((f64::from_bits(ea << 52 | (next() & mant)), f64::from_bits(next() & mant)));
         v.push((f64::from_bits(ea << 52 | (next() & mant)), f64::from_bits((ea - 27) << 52 | (next() & mant))));
     }
+    // The largest subnormal beside B = 2^25 + k·2^22 (k < 48): the integer root crosses 2^52, so each
+    // direction's tininess edge (nearest: A^2 + B^2 <= 2^104 − 2^51) has pairs on both sides of it.
+    for k in 0..48u64 {
+        v.push((f64::from_bits(mant), f64::from_bits((1 << 25) + (k << 22))));
+    }
+    // Roots just off a midpoint, no tie: for odd s in [2^26.29, 2^26.5), hypot(s^2 − 1, s) lies about
+    // 3/(8 s^2) above the midpoint s^2 − 1/2 and hypot(s^2, s) about 1/(8 s^2) below s^2 + 1/2, both
+    // inside the root's 2^-104 error: only Ziv's margin sends them to the exact compare.
+    for i in 0..64u32 {
+        let s = f64::from(82_200_001 + 198_000 * i);
+        v.push((s * s - 1.0, s));
+        v.push((s * s, s));
+    }
     let modes = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
     for &(x, y) in &v {
         for (x, y) in [(x, y), (-y, x)] {
