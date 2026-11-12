@@ -2379,7 +2379,7 @@ fn math_expf_onepass_entries_match_the_envelope() {
     // D-10.72 adds exp10f's range edges (±37.9) and exact powers (1, 9, 10; 11 and 1.125 are not
     // exact), and the log family's: 1 and its neighbours, the m split at 0.75 and 1.5, the least
     // normal and the largest finite operand, -1, and the 10^n operands log10 refuses (10, 10^10).
-    let edges: [u32; 44] = [
+    let edges: [u32; 50] = [
         0x0000_0000, 0x8000_0000, 0x0000_0001, 0x807f_ffff, 0x327f_ffff, 0x3280_0000, 0xb280_0000, 0x42ae_a8f5,
         0x42ae_a8f6, 0xc2ae_a8f6, 0x42fb_ffff, 0x42fc_0000, 0xc2fc_0000, 0x4040_0000, 0xc0e0_0000, 0x7f80_0000,
         0xff80_0000, 0x7fc0_0000, 0x7f80_0001, 0xffa0_0005, 0x4217_9999, 0x4217_999a, 0xc217_999a, 0x3f80_0000,
@@ -2388,6 +2388,9 @@ fn math_expf_onepass_entries_match_the_envelope() {
         // D-10.82 (asinf, acosf, atanf): the one-pass ranges' edges (|x| < 1, the least and the
         // largest normal), the index split at s = 1/64 and 1/8, and 1 - 2^-24 on both sides.
         0x3f7f_ffff, 0xbf7f_ffff, 0x3c80_0000, 0x3c7f_ffff, 0x3e00_0000, 0x0080_0001, 0x807f_ffff, 0xff7f_ffff,
+        // D-10.103: asinf/acosf's split at |x| = 1/2 on both sides, atanf's table at 32 (its end)
+        // and 2 (a reduced argument of exactly 0).
+        0x3eff_ffff, 0x3f00_0000, 0xbf00_0000, 0x41ff_ffff, 0x4200_0000, 0x4000_0000,
     ];
     for p in &ONEPASS {
         for ctl in [0u32, 0x8000, 0x0040, 0x8040] {
