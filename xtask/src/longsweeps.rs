@@ -18,8 +18,10 @@
 //!   boundary quick and log rows and math quick_log: TEST-LONG-SWEEPS-BOUNDARY on a Skylake-SP build host, Xeon
 //!   Platinum 8151, a 6-CPU jobrun slot at load 15 to 25. The s10 and core rows: TEST-LONG-SWEEPS-BOUNDARY-2 on a
 //!   Broadwell-EP build host, Xeon E5-2699 v4, each row alone on the 7 CPUs of its jobrun slot under a 1800 s
-//!   limit, with up to three other rows on the host's other CPUs (load 20 to 30 of 35 CPUs). The one-pass `float`
-//!   sweeps take 14 to 23 min each, so the group as a whole runs for hours: longer than one jobrun slot allows.
+//!   limit, with up to three other rows on the host's other CPUs (load 20 to 30 of 35 CPUs). The math fast_special,
+//!   fast_bessel and fast_gamma rows: TEST-LONG-SWEEPS-SIZES on the same host, one after another, load 1 to 3.
+//!   The one-pass `float` sweeps take 14 to 23 min each, so the group as a whole runs for hours: longer than one
+//!   jobrun slot allows.
 //!
 //! `cargo xtask long-sweeps [--group long|exhaustive|count|all] [--only <test>]... [--list]` (default `long`; `--only`
 //! keeps the rows of those full test names) runs each sweep of the group once, in release, in its crate's package, by its exact name (`-- --include-ignored --exact
@@ -140,13 +142,16 @@ pub const SWEEPS: &[Sweep] = &[
     lib("crates/math/src/complex_fast_ls_tests.rs", "complex_fast::ls_tests::clog_csqrt_quick_tier_sweep", Group::Long),
     it("crates/math/tests/fast_bessel_n.rs", "fast_bessel_n", "bessel_n_tier_sweep", Group::Long).env(&[("LIELLA_BESSEL_N_SWEEP", "10000000")]),
     // The double special-function fast tiers against their 384-bit paths at 10^5 operands per function and mode
-    // (ruling #5061; the gate runs 1500 to 2000).
-    it("crates/math/tests/fast_special.rs", "fast_special", "double_erf_erfc_fast_tier_matches_the_accurate_path", Group::Long)
-        .env(&[("LIELLA_ERF_SWEEP", "100000")]),
-    it("crates/math/tests/fast_bessel.rs", "fast_bessel", "double_bessel_fast_tier_matches_the_accurate_path", Group::Long)
-        .env(&[("LIELLA_BESSEL_SWEEP", "100000")]),
-    it("crates/math/tests/fast_gamma.rs", "fast_gamma", "double_gamma_fast_tier_matches_the_accurate_path", Group::Long)
-        .env(&[("LIELLA_GAMMA_SWEEP", "100000")]),
+    // (ruling #5061; the gate runs 1500 to 2000). Each took 60 s or more, so they run weekly (ruling #5062).
+    it("crates/math/tests/fast_special.rs", "fast_special", "double_erf_erfc_fast_tier_matches_the_accurate_path", Group::Exhaustive)
+        .env(&[("LIELLA_ERF_SWEEP", "100000")])
+        .secs(60),
+    it("crates/math/tests/fast_bessel.rs", "fast_bessel", "double_bessel_fast_tier_matches_the_accurate_path", Group::Exhaustive)
+        .env(&[("LIELLA_BESSEL_SWEEP", "100000")])
+        .secs(99),
+    it("crates/math/tests/fast_gamma.rs", "fast_gamma", "double_gamma_fast_tier_matches_the_accurate_path", Group::Exhaustive)
+        .env(&[("LIELLA_GAMMA_SWEEP", "100000")])
+        .secs(85),
     lib("crates/math/src/fast32/erf.rs", "fast32::erf::tests::erff_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/erf.rs", "fast32::erf::tests::erfcf_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/gamma.rs", "fast32::gamma::tests::tgammaf_fast_path_agrees_exhaustively", Group::Exhaustive),
