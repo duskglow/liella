@@ -548,6 +548,15 @@ pub fn builtin(name: &'static [u8]) -> Option<(Data, &'static [u8])> {
     }
 }
 
+/// The name a category selected by `name` reports: `"POSIX"` reports `"C"` (the same built-in
+/// locale, [`builtin`]); every other name reports itself. `setlocale` compares this, not the name
+/// as given, with the current name, so asking again for the locale a category already has is a
+/// no-op whichever of the two built-in names is used (s7_2_c_4; SETLOCALE-POSIX-ATTR).
+#[inline(always)]
+pub fn reported(name: &[u8]) -> &[u8] {
+    if name == b"POSIX" { C_NAME } else { name }
+}
+
 /// `dir/name/file` in a fixed buffer.
 fn path<'b>(buf: &'b mut [u8; 3 * name::MAX_NAME], parts: &[&[u8]]) -> Option<&'b [u8]> {
     let mut n = 0usize;
