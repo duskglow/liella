@@ -1,0 +1,13 @@
+{"task": "LIBM-CPLX-POW-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: LAYOUT-JITTER (hot-text key locale::builtin breaks xtask so on any tree); cpow middle bounds proved (log_dd 29.8u2, atan_dd 34.6u2), constants derived, proof test, decline sweep per |w log z| band (middle 0 declines; bound rate 2^-38.1/-39.5/-35.8)",
+ "branch": "task/libm-cplx-pow-3", "head": "bf74f8a66",
+ "gate": {"affected": "not run: xtask so fails on the base (hot-text key); liella-math tests in job libm-cplx-pow-3-check2", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["xtask so fails with hot-text key _RNvNtC6liella6locale7builtin on this tree and on next plus a dummy change (mei lhis2-probe-nextdummy); plants, gate and percall wait for the HOTTEXT-REGEN fix",
+                   "quick tier declines 2^-9.1 / 2^-6.4 / 2^-2.4 per part by |w log z| band; the middle tier decides all of them (route rate bound 2^-35.8 or less)"],
+ "refused": [],
+ "improvement": "the plants tool always builds the products first, so a math-only plant set is blocked by any product-build break; a --no-products mode for plants whose commands never touch target/liella would have let this run prove its plants",
+ "next_step": "after the hot-text fix: plants (handoff/LIBM-CPLX-POW-3-plants.txt), affected gate, D-10 record, in-place entry, percall",
+ "report_file": "handoff/libm-cplx-pow.md",
+ "jobs": ["libm-cplx-pow-3-check2"]}
