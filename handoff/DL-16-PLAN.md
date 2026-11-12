@@ -21,7 +21,9 @@ rows at the end of the Behaviour table of `docs/differences-from-glibc.md`, and 
 out on purpose; story and date go together, and a date needs `decisions`: `records check` resolves `decisions` only against records that have ids, so `-5`'s body names `-4`).
 
 **Jobs:** shiki sh1: `dl-16-plan-2-lint0` (inherited head `b74a3e77f`, clippy + static, rc 0);
-`dl-16-plan-2-static` (final head: clippy, static, records check).
+`dl-16-plan-2-static` (rc 1: records check refused `-5`'s
+`story` without `date`; fixed), `dl-16-plan-2-static2` (rc 0, superseded by the report fix), `dl-16-plan-2-static3`
+(final head: clippy, static, records check).
 
 **Open questions:** none for DL-16. DL-16S decides its own design (probe the reference first).
 
