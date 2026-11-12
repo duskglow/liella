@@ -6,7 +6,8 @@
 //! environment variable runs at its full size only when something sets it. Before this runner, the long sweeps
 //! said "the accuracy job runs them" while no command or script did (#4749, #4752), so they had never run. Each
 //! sweep is one row of [`SWEEPS`] with its group and the environment it runs under:
-//! - `long` (10^7 operands or so, minutes in release) and `count` (Ziv retry counts that also assert the
+//! - `long` (10^7 operands or so, minutes in release, and every row measured under [`NIGHTLY_SECS`], ruling
+//!   #5062: the static check keeps a measured row in the group its time allows) and `count` (Ziv retry counts that also assert the
 //!   retries end; about 3 s of tests after a release build of about 4 min on 26 threads, ruling #4751):
 //!   `cargo xtask test` runs both as its `long-sweeps` step when `LIELLA_NO_VERDICT_CACHE=1`, the nightly and
 //!   release runs that already run every accuracy shard (D-10.57). The ordinary gate leaves them out.
@@ -69,17 +70,31 @@ pub struct Sweep {
     pub test: &'static str,
     pub group: Group,
     pub env: &'static [(&'static str, &'static str)],
-    pub secs: Option<u32>,
+    pub secs: Secs,
 }
+
+/// The measured test time of one run of a row.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Secs {
+    /// Not measured yet.
+    Unmeasured,
+    /// The run finished in this many seconds.
+    Took(u32),
+    /// The run was stopped at this limit (seconds) before it finished.
+    Over(u32),
+}
+
+/// Rows measured under this many seconds run nightly in `long`; rows at or over it do not (ruling #5062).
+pub const NIGHTLY_SECS: u32 = 60;
 
 /// A sweep in the library's unit tests.
 const fn lib(file: &'static str, test: &'static str, group: Group) -> Sweep {
-    Sweep { file, target: None, test, group, env: &[], secs: None }
+    Sweep { file, target: None, test, group, env: &[], secs: Secs::Unmeasured }
 }
 
 /// A sweep in the integration test target `target`.
 const fn it(file: &'static str, target: &'static str, test: &'static str, group: Group) -> Sweep {
-    Sweep { file, target: Some(target), test, group, env: &[], secs: None }
+    Sweep { file, target: Some(target), test, group, env: &[], secs: Secs::Unmeasured }
 }
 
 impl Sweep {
@@ -91,7 +106,13 @@ impl Sweep {
 
     /// The row with the measured test seconds of one run.
     const fn secs(mut self, secs: u32) -> Sweep {
-        self.secs = Some(secs);
+        self.secs = Secs::Took(secs);
+        self
+    }
+
+    /// The row whose measured run was stopped at `limit` seconds before it finished.
+    const fn over(mut self, limit: u32) -> Sweep {
+        self.secs = Secs::Over(limit);
         self
     }
 }
@@ -138,21 +159,21 @@ pub const SWEEPS: &[Sweep] = &[
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::tanf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::powf_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::fast_path_agrees_exhaustively", Group::Exhaustive),
-    lib("crates/math/src/fast64/quick_log/tests.rs", "fast64::quick_log::tests::log_family_quick_matches_correctly_rounded", Group::Exhaustive).env(QUICK_LOG).secs(3),
+    lib("crates/math/src/fast64/quick_log/tests.rs", "fast64::quick_log::tests::log_family_quick_matches_correctly_rounded", Group::Long).env(QUICK_LOG).secs(3),
     lib("crates/math/src/complex.rs", "complex::ziv_tests::random_sample_retry_count", Group::Count),
     it("crates/math/tests/complex_f128_products.rs", "complex_f128_products", "accuracy_suite_retry_count", Group::Count),
     // liella-boundary (TEST-LONG-SWEEPS-BOUNDARY, #4752)
-    it("crates/boundary/tests/exp_quick.rs", "exp_quick", "exp_quick_accuracy_job", Group::Exhaustive).env(&[("EXP_QUICK_N", "100000000")]).secs(5),
-    it("crates/boundary/tests/trig_quick.rs", "trig_quick", "trig_quick_accuracy_job", Group::Exhaustive).env(&[("TRIG_QUICK_N", "100000000")]).secs(58),
-    it("crates/boundary/tests/hyperb_quick.rs", "hyperb_quick", "hyperb_quick_both_builds_round_correctly", Group::Exhaustive)
+    it("crates/boundary/tests/exp_quick.rs", "exp_quick", "exp_quick_accuracy_job", Group::Long).env(&[("EXP_QUICK_N", "100000000")]).secs(5),
+    it("crates/boundary/tests/trig_quick.rs", "trig_quick", "trig_quick_accuracy_job", Group::Long).env(&[("TRIG_QUICK_N", "100000000")]).secs(58),
+    it("crates/boundary/tests/hyperb_quick.rs", "hyperb_quick", "hyperb_quick_both_builds_round_correctly", Group::Long)
         .env(&[("LIELLA_HYPERB_N", "1000000")]).secs(23),
-    it("crates/boundary/tests/hyperb_quick.rs", "hyperb_quick", "hyperb_quick_ranges", Group::Exhaustive).env(&[("LIELLA_HYPERB_N", "1000000")]).secs(1),
-    it("crates/boundary/tests/invhyp_quick.rs", "invhyp_quick", "invhyp_quick_both_builds_round_correctly", Group::Exhaustive)
+    it("crates/boundary/tests/hyperb_quick.rs", "hyperb_quick", "hyperb_quick_ranges", Group::Long).env(&[("LIELLA_HYPERB_N", "1000000")]).secs(1),
+    it("crates/boundary/tests/invhyp_quick.rs", "invhyp_quick", "invhyp_quick_both_builds_round_correctly", Group::Long)
         .env(&[("LIELLA_INVHYP_N", "1000000")]).secs(16),
-    it("crates/boundary/tests/erf_quick.rs", "erf_quick", "erf_quick_both_builds_round_correctly", Group::Exhaustive).env(&[("LIELLA_ERF_N", "1000000")]).secs(5),
-    it("crates/boundary/tests/log_quick.rs", "log_quick", "log_family_both_builds_round_correctly", Group::Exhaustive).env(QUICK_LOG).secs(12),
+    it("crates/boundary/tests/erf_quick.rs", "erf_quick", "erf_quick_both_builds_round_correctly", Group::Long).env(&[("LIELLA_ERF_N", "1000000")]).secs(5),
+    it("crates/boundary/tests/log_quick.rs", "log_quick", "log_family_both_builds_round_correctly", Group::Long).env(QUICK_LOG).secs(12),
     it("crates/boundary/tests/log_quick.rs", "log_quick", "log_family_quick_fma_error_within_bound", Group::Exhaustive).env(QUICK_LOG).secs(484),
-    it("crates/boundary/tests/pow_quick.rs", "pow_quick", "pow_entry_tiers_round_correctly", Group::Exhaustive).env(&[("LIELLA_POW_SWEEP", "25000000")]).secs(36),
+    it("crates/boundary/tests/pow_quick.rs", "pow_quick", "pow_entry_tiers_round_correctly", Group::Long).env(&[("LIELLA_POW_SWEEP", "25000000")]).secs(36),
     it(S10, "s10_math_symbols", "math_double_fast_entry_sweep", Group::Exhaustive).env(&[("LIELLA_FE_SWEEP_CHUNKS", "200")]),
     it(S10, "s10_math_symbols", "math_expf_onepass_sweep", Group::Exhaustive).env(STRIDE1),
     it(S10, "s10_math_symbols", "math_exp2f_onepass_sweep", Group::Exhaustive).env(STRIDE1),
@@ -310,7 +331,7 @@ pub struct Found {
     pub scaled: BTreeMap<(String, String), BTreeSet<String>>,
 }
 
-/// The problems between the tests `found` and the two tables.
+/// The problems between the tests `found` and the two tables, and the measured rows in the wrong group.
 pub fn mismatches(found: &Found, sweeps: &[Sweep], not: &[(&str, &str, &str)]) -> Vec<String> {
     let key = |s: &Sweep| (s.file.to_string(), s.test.rsplit("::").next().unwrap_or(s.test).to_string());
     let listed: BTreeSet<(String, String)> =
@@ -339,6 +360,7 @@ pub fn mismatches(found: &Found, sweeps: &[Sweep], not: &[(&str, &str, &str)]) -
             why.push(format!("{}: the runner row of `{}` sets {v}, which the test does not read", s.file, s.test));
         }
     }
+    why.extend(group_mismatches(sweeps));
     why
 }
 
@@ -352,6 +374,30 @@ pub fn package(root: &Path, file: &str) -> Result<String, String> {
         .find_map(|l| l.trim().strip_prefix("name = \"").and_then(|r| r.strip_suffix('"')))
         .map(str::to_string)
         .ok_or_else(|| format!("{}: no package name", toml.display()))
+}
+
+/// The measured rows in a group their time does not allow (ruling #5062): a row of `exhaustive` that took under
+/// [`NIGHTLY_SECS`] belongs in the nightly `long`, and a row of `long` that took that long or more, or was stopped
+/// at its limit, does not. `count` rows and unmeasured rows are left alone.
+pub fn group_mismatches(sweeps: &[Sweep]) -> Vec<String> {
+    let mut why = Vec::new();
+    for s in sweeps {
+        match (s.group, s.secs) {
+            (Group::Exhaustive, Secs::Took(n)) if n < NIGHTLY_SECS => why.push(format!(
+                "the row `{}` took {n} s, under {NIGHTLY_SECS} s: it runs nightly in group `long` (ruling #5062)",
+                s.test
+            )),
+            (Group::Long, Secs::Took(n)) if n >= NIGHTLY_SECS => why.push(format!(
+                "the row `{}` took {n} s, not under {NIGHTLY_SECS} s: too long for the nightly group `long`",
+                s.test
+            )),
+            (Group::Long, Secs::Over(n)) => {
+                why.push(format!("the row `{}` ran over its {n} s limit: too long for the nightly group `long`", s.test))
+            }
+            _ => {}
+        }
+    }
+    why
 }
 
 /// The static check: every ignored or scaled test under `crates/*/{src,tests}` is in [`SWEEPS`] or
@@ -456,7 +502,11 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     if list {
         for s in rows {
             let env: Vec<String> = s.env.iter().map(|(v, x)| format!("{v}={x}")).collect();
-            let secs = s.secs.map_or_else(|| "-".to_string(), |n| format!("{n}s"));
+            let secs = match s.secs {
+                Secs::Unmeasured => "-".to_string(),
+                Secs::Took(n) => format!("{n}s"),
+                Secs::Over(n) => format!(">{n}s"),
+            };
             println!("{}\t{}\t{}\t{}\t{}\t{}", s.group.name(), package(root, s.file)?, s.target.unwrap_or("--lib"), s.test, env.join(" "), secs);
         }
         return Ok(());
@@ -532,6 +582,29 @@ mod tests {
     }
 
     /// No spec clause: the runner's tables match the tree (the static check on the real sources).
+    /// No spec clause: a measured row's time decides between `long` and `exhaustive` (ruling #5062), at the
+    /// boundary too (59 s nightly, 60 s weekly), and a row stopped at its limit never runs nightly.
+    #[test]
+    fn a_measured_row_lies_in_the_group_its_time_allows() {
+        let f = found(&[("f.rs", "t")], &[]);
+        let r = |g, s| Sweep { secs: s, ..lib("f.rs", "m::t", g) };
+        for fine in [
+            r(Group::Long, Secs::Took(59)),
+            r(Group::Exhaustive, Secs::Took(60)),
+            r(Group::Exhaustive, Secs::Over(1800)),
+            r(Group::Long, Secs::Unmeasured),
+            r(Group::Exhaustive, Secs::Unmeasured),
+            r(Group::Count, Secs::Took(3)),
+        ] {
+            let why = mismatches(&f, &[fine], &[]);
+            assert!(why.is_empty(), "{why:?}");
+        }
+        for bad in [r(Group::Exhaustive, Secs::Took(59)), r(Group::Long, Secs::Took(60)), r(Group::Long, Secs::Over(1800))] {
+            let why = mismatches(&f, &[bad], &[]);
+            assert!(why.len() == 1 && why[0].contains("the row `m::t`"), "{why:?}");
+        }
+    }
+
     #[test]
     fn the_tables_match_the_tree() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
