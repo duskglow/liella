@@ -112,7 +112,9 @@ fn csinh_quick_tier_hard_cases() {
     }
     // sinh 710.6 and cosh 710.6 overflow (2.07e308); times cos and sin of π/4 they do not: the
     // tier answers both parts.
-    let ((re, im), _) = csinh(710.6, core::f64::consts::FRAC_PI_4, Rounding::Nearest).expect("finite product answered");
+    let r = csinh(710.6, core::f64::consts::FRAC_PI_4, Rounding::Nearest);
+    assert!(r.is_some(), "the finite product is answered by the tier");
+    let Some(((re, im), _)) = r else { return };
     assert!(re.is_finite() && im.is_finite() && re > 1e308 && im > 1e308, "{re:e} {im:e}");
 }
 
@@ -141,7 +143,9 @@ fn hyperbolic_factors_are_within_their_bounds() {
             1 => uniform(&mut st, 0.125, 2.0),
             _ => uniform(&mut st, 2.0, 30.0),
         };
-        let (s, es, c, ec, m) = hyp(a).expect("in range");
+        let h = hyp(a);
+        assert!(h.is_some(), "{a:e} is in the range of hyp");
+        let Some((s, es, c, ec, m)) = h else { continue };
         let (rs, rc) = reference(a);
         let sc = dd::pow2(1 - m);
         for (v, e, r, name) in [(s, es, rs.scale(sc), "sinh"), (c, ec, rc.scale(sc), "cosh")] {
@@ -152,13 +156,23 @@ fn hyperbolic_factors_are_within_their_bounds() {
     }
 }
 
-/// The 10^6-operand sweep per function and regime in all four modes (`cargo test --release -p
-/// liella-math --lib -- --ignored csinh_quick_tier_sweep`).
+/// The sweep (`cargo test --release -p liella-math --lib -- --ignored csinh_quick_tier_sweep`):
+/// the comparison above on 8 threads, 10^6 operands per function and regime in all four modes.
 #[test]
-#[ignore = "long sweep: run in release"]
+#[ignore = "long sweep: cargo xtask long-sweeps runs it in release (nightly and release runs)"]
 fn csinh_quick_tier_sweep() {
-    for fns in FNS {
-        let got = compare(fns, 200_000, 0xc0ff_ee00);
-        std::println!("csinh/csin quick tier sweep: answers per regime (nearest) {got:?} of 200000 each");
+    // Clauses: s10_5_c_0, s10_0_f_0.
+    for (k, fns) in FNS.into_iter().enumerate() {
+        let threads: Vec<_> = (0..8u64).map(|i| std::thread::spawn(move || compare(fns, 125_000, 0xc0ff_ee00 ^ (i + 1).wrapping_mul(0xd1b5_4a32_d192_ed03)))).collect();
+        let mut total = [0usize; 5];
+        for h in threads {
+            let r = h.join();
+            assert!(r.is_ok(), "a sweep thread failed (its panic message is above)");
+            for (t, v) in total.iter_mut().zip(r.unwrap_or_default()) {
+                *t += v;
+            }
+        }
+        let name = if k == 0 { "csinh" } else { "csin" };
+        std::println!("{name} quick tier sweep: answers per regime (nearest) {total:?} of 1000000 each");
     }
 }

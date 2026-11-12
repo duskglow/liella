@@ -19,7 +19,8 @@
 //! * `cosh a = (E + Q)·2^(m−1)`: Fast2Sum of the heads (exact, `E.hi >= Q.hi`), the tails added
 //!   (two roundings of terms below `2^-51·E.hi`), Fast2Sum: within `Ee + eQ + 2^-102·E.hi`.
 //! * `sinh a = (E − Q)·2^(m−1)` for `a >= 2^-3`, the same steps and bound; relative to the result
-//!   that is at most `2^-69·coth(2^-3) = 2^-66` (the cancellation).
+//!   that is at most `2^-69·coth(2^-3) < 2^-65.9` (the cancellation; [`fast64::exp_eps`] stays
+//!   below `2^-69.9·E` for the reduced range, so the computed bound is below `2^-66` of `S`).
 //! * `sinh a` for `a < 2^-3` (`m = 0` there; scaled by `2^(1−m)` all the same) by the odd series
 //!   `a + a·z/6 + a·z²·q(z)`, `z = a²` exact as `two_prod(a, a)`: `a·z` exact as `two_prod(a, z.hi)`
 //!   plus `RN(a·z.lo)`, normalized, then [`Dd::mul`] by `1/6` as a double-double (`2^-102` of a term
@@ -137,25 +138,25 @@ fn both(x: f64, y: f64, swap: bool, mode: Rounding) -> Option<(f64, f64)> {
 /// test raises inexact itself, nothing else can arise; a decline goes to the cold fallback).
 #[inline(always)]
 pub fn csinh_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
-    both(x, y, false,Rounding::Nearest)
+    both(x, y, false, Rounding::Nearest)
 }
 
 /// `csin(x + iy)` to nearest for the boundary's in-place entry: `csinh(y + ix)` swapped.
 #[inline(always)]
 pub fn csin_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
-    both(y, x, true,Rounding::Nearest)
+    both(y, x, true, Rounding::Nearest)
 }
 
 /// `csinh(x + iy)` in `mode` by the quick tier, or `None`.
 #[inline(always)]
 pub fn csinh(x: f64, y: f64, mode: Rounding) -> Option<((f64, f64), Status)> {
-    Some((both(x, y, false,mode)?, Status::flags(Flags::INEXACT)))
+    Some((both(x, y, false, mode)?, Status::flags(Flags::INEXACT)))
 }
 
 /// `csin(x + iy)` in `mode` by the quick tier, or `None`.
 #[inline(always)]
 pub fn csin(x: f64, y: f64, mode: Rounding) -> Option<((f64, f64), Status)> {
-    Some((both(y, x, true,mode)?, Status::flags(Flags::INEXACT)))
+    Some((both(y, x, true, mode)?, Status::flags(Flags::INEXACT)))
 }
 
 /// The `csinh` quick tier for any format.
