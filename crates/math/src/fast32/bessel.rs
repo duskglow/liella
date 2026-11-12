@@ -296,8 +296,10 @@ mod tests {
                         if let Some((v, s)) = super::super::eval(f, x, m) {
                             taken += 1;
                             let (w, t) = accurate(f, x, m);
+                            // Status's equality is flags and errno; `hw` is a hint whose supersets
+                            // are all correct (the accurate path reports every bit).
                             assert!(
-                                v.to_bits() == w.to_bits() && std::format!("{s:?}") == std::format!("{t:?}"),
+                                v.to_bits() == w.to_bits() && s == t,
                                 "{f:?}({x:e}) {m:?}: fast {v:e} {s:?}, accurate {w:e} {t:?}"
                             );
                         }
