@@ -1,0 +1,11 @@
+id = "D-NEW"
+series = "D-27"
+section = "s26-29"
+spec = "§27"
+ann = "—"
+status = "active"
+story = "DL-16-PLAN"
+date = "2026-11-12"
+body = '''
+**`dlopen`: one object chain, one writer lock, one publication point before the constructors (phase 14 DL-16, plan/ph14/dl-16-dlopen.md §1 and §4; refines plan/ph14/design.md §5 and §9).** One namespace, `LM_ID_BASE`; the loaded objects form one append-only chain owned by `ld.so`. One writer lock per namespace: a futex lock inside `ld.so` (no libc calls), re-entrant for its owning thread; `dlopen` (later `dlclose` and `dlmopen`) holds it for the whole call. Readers take no lock (D-27.1): `dl_iterate_phdr`, `_dl_find_object`, `dladdr`, `dlsym`, the lazy resolver and the slow path of `__tls_get_addr` read published state only, each through one function, `read_section`, which is empty in DL-16 and gets DL-17's per-thread reader epochs. Publication is one point per `dlopen`, after the second relocation pass and before the constructors: the chain append, the global-scope append, the address index and `dlpi_adds` together, so code that a constructor starts in another thread can unwind through and look up the new objects; `dlopen` returns after the constructors. Why: lock-free readers keep unwinding and `dl_iterate_phdr` off the writer's path (callbacks run without the lock, ruling #2607), a constructor that waits on a thread calling `dlsym` cannot deadlock, and DL-17 adds reclamation without changing any reader.
+'''

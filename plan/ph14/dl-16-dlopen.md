@@ -7,7 +7,8 @@
 Status: PROPOSED (planning story). It refines item 20 of `plan/06-phases/17-phase-14-dynamic-linking.md` and
 `plan/ph14/design.md` §5, §6, §8, §9, §10; where it is more precise it says so. Pending decisions:
 `records/pending/DL-16-PLAN-1.toml` (object list, lock, visibility), `-2` (a failed `dlopen` leaves no trace),
-`-3` (handles and counts). DLOPEN-FAILURE-PATHS and DLSYM-SPECIAL-HANDLES are folded in (#2629, #2634, #2637, #2643):
+`-3` (handles and counts; ruling #5006), `-4` (static programs deferred; ruling #5005) and the registered compat
+placeholder `-5`. DLOPEN-FAILURE-PATHS and DLSYM-SPECIAL-HANDLES are folded in (#2629, #2634, #2637, #2643):
 their probes (`tools/probe/dl/run.sh`, `tools/probe/dl/handles/`) become DL-16's conformance programs.
 
 **What DL-16 builds on.** DL-7 `liella_ld::map` (D-27.15: reserve, map, unmap the reservation on failure), DL-8
@@ -103,7 +104,8 @@ probe P-5. **`dlvsym`**: exact version, hidden versions included, the base node'
 IFUNC definitions return the resolver's result; `STT_TLS` definitions return the calling thread's address (initial
 modules through DL-12's static offsets in DL-16b; `dlopen`'d modules in DL-16d). Failures set the probed texts
 (`<object>: undefined symbol: <name>[, version <v>]`; the program is the object for `RTLD_DEFAULT` and the NULL
-handle, the caller for `RTLD_NEXT`). A handle that Liella did not return is refused (pending decision 3).
+handle, the caller for `RTLD_NEXT`). A handle that Liella did not return is refused with a dlerror text (pending decision 3, ruling #5006): the special
+handles first, then one lookup in the address index or handle set, never a scan on the `dlsym` path.
 
 ## 3. Initialisers and failure
 
@@ -228,7 +230,10 @@ P-13 `dlopen` of the program by path, of `ld.so`, of `libc.so.6` by name (same h
 * **Security** (every DL story): `dlopen` names come from programs, often from configuration; the secure-mode search
   rules, the bounds checks of DL-7..DL-10 and the identity check apply; count saturation pins instead of wrapping.
   Malformed-object cases in every story's tests.
-* **Static programs**: `dlopen` in `libc.a` is not in DL-16 (RULING NEEDED in the hand-back).
+* **Static programs** (ruling #5005, pending decision 4): `dlopen` in `libc.a` is out of DL-16 and deferred, not
+  dropped. DL-16a gives `libc.a` failing entry points (`NULL` and a dlerror text, never a crash, no link error); a
+  differences row records it, with a registered compat placeholder (pending `-5`). A later phase-14 item, **DL-16S
+  `DL-DLOPEN-STATIC`** (its own story after DL-17 and DL-20), loads objects into static programs.
 
 ## 8. Story briefs: "The change" sections (for the coordinator)
 
@@ -248,7 +253,9 @@ the clause tests, not as skips). Plant: a helper left unbuilt must be caught.
 lock, the append-only chain with `LM_ID_BASE` only, the new-set load (D-27.16 search with the caller as requester,
 `(dev, ino)` identity, D-27.15 map, version check, two-pass relocation, one publication, D-27.19 init), modes
 `NOW`/`LAZY` (eager)/`LOCAL`/`NOLOAD`/`NODELETE`, counts with saturation, the failure unwind, per-thread dlerror in the
-loader arena. Proof: `s27_1_c_1*` and `s27_1_f_0` with every dlerror text of `dynlink.md`; the three failure plants.
+loader arena, and failing `dlopen`/`dlsym`/`dlvsym`/`dlerror` entry points in `libc.a` (ruling #5005: `NULL` and a
+dlerror text, never a crash). Proof: `s27_1_c_1*`, `s27_1_c_5` and `s27_1_f_0` with every dlerror text of
+`dynlink.md`; a static program's `dlopen` fails with a text; the three failure plants.
 
 **DL-16b `DL-DLSYM`.** Implement `dlsym` and `dlvsym` (plan §2): handle scopes, `RTLD_DEFAULT`, `RTLD_NEXT` through
 the caller's object, `RTLD_GLOBAL` and promotion, `RTLD_DEEPBIND`, the unique-symbol table with pinning, IFUNC and
@@ -263,5 +270,10 @@ the constructor corpus; a C++ exception through a `dlopen`'d object; a concurren
 
 **DL-16d `DL-DLOPEN-TLS-SURPLUS`.** Let `dlopen` load objects with `PT_TLS` into the static surplus (plan §5) on top of
 DL-15's thread list and module table: module ids, first-fit placement, initialisation in every live thread, dtv
-update, `dlsym` of `STT_TLS`. Proof: `s27_1_c_4` and the surplus part of `s27_3`; threads created before and after;
-the exhaustion text; plant: one live thread skipped.
+update, `dlsym` of `STT_TLS`. Proof: the surplus part of `s27_3` (`s27_1_c_4` is DL-17's); threads created before
+and after; the exhaustion text; plant: one live thread skipped.
+
+**DL-16S `DL-DLOPEN-STATIC`** (later phase-14 item, after DL-17 and DL-20; ruling #5005). Let a program linked with
+`libc.a` load shared objects: probe the reference first (what is loaded, which libc the object binds to, TLS), then
+decide the design and whether it is the default or the registered compat option (pending `-5`). Until it lands the
+DL-16a failing entry points and the differences row stand.

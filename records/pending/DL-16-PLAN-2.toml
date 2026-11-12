@@ -1,0 +1,11 @@
+id = "D-NEW"
+series = "D-27"
+section = "s26-29"
+spec = "§27"
+ann = "SEC"
+status = "active"
+story = "DL-16-PLAN"
+date = "2026-11-12"
+body = '''
+**A failed `dlopen` leaves no trace (phase 14 DL-16, plan/ph14/dl-16-dlopen.md §2 and §3; DLOPEN-FAILURE-PATHS folded in, #2629).** Relocation of a new set runs in two passes. Pass 1 resolves every symbol reference of the whole set (memo by symbol index, L14-7), checks versions (`VERNEED` against `VERDEF`) and places TLS; it may fail and runs no foreign code. Pass 2 applies the relocations in D-27.17's order and cannot fail. So every failure point comes before the first IFUNC resolver or constructor of the attempt. The way back, in reverse order: TLS module ids and surplus ranges released; every new object's reservation unmapped (D-27.15) and its descriptor closed; counts bumped on already-loaded objects restored; nothing published (chain, scopes, unique table, address index); the attempt's loader-arena memory freed; one dlerror text set. `dlpi_adds` and `dlpi_subs` follow the probe: a refusal at the header changes neither, an attempt that mapped k objects bumps both by k (they count objects ever mapped and ever unmapped). Why: a half-loaded object, or a resolver that ran for an object that never loads, is state no caller can see or undo. Plants: skip the root's unmap on a missing dependency; skip restoring a dependency's count; publish before pass 1 ends. Probe P-10 records whether the reference runs IFUNC resolvers in a failing `dlopen`; if it does, a neutral differences row.
+'''
