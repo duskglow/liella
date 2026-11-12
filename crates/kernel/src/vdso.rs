@@ -88,6 +88,8 @@ pub struct Vdso<'a> {
 impl<'a> Vdso<'a> {
     /// Parse `image` (the whole mapping). `None` if anything required is missing or out of
     /// bounds.
+    // LAYOUT-HOTKEY-INLINE-STABLE: release already inlines it; always inlined, its code stays in the keyed caller in both profiles.
+    #[inline(always)]
     pub fn parse(image: &'a [u8]) -> Option<Vdso<'a>> {
         image_len(image)?;
         let phoff = usz(u64_at(image, 32)?)?;
@@ -151,6 +153,8 @@ impl<'a> Vdso<'a> {
     }
 
     /// Name of version index `ndx` from the version definitions.
+    // LAYOUT-HOTKEY-INLINE-STABLE: release already inlines it; always inlined, its code stays in the keyed caller in both profiles.
+    #[inline(always)]
     fn version_name(&self, ndx: u16) -> Option<&'a [u8]> {
         let mut def = self.verdef?;
         loop {
@@ -182,6 +186,8 @@ impl<'a> Vdso<'a> {
     /// answers are those of separate lookups, also for a damaged image: a symbol entry or name that
     /// cannot be read ends every lookup still open (each would have stopped there), a version or
     /// address that cannot be read ends only the lookups of that symbol's name.
+    // LAYOUT-HOTKEY-INLINE-STABLE: release already inlines it; always inlined, its code stays in the keyed caller in both profiles.
+    #[inline(always)]
     pub fn lookup_many<const N: usize>(&self, names: &[&[u8]; N], version: &[u8]) -> [Option<usize>; N] {
         let mut out = [None; N];
         let mut open = [true; N];

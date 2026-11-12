@@ -371,6 +371,8 @@ fn resolve_vdso(base: usize) -> [usize; 5] {
     out
 }
 
+// LAYOUT-HOTKEY-INLINE-STABLE: a fixed boundary for its start-up/fork hot-text key (off the hot paths: the call is free).
+#[inline(never)]
 fn vdso_fn(which: usize) -> Option<usize> {
     if VDSO_STATE.load(Ordering::Acquire) == 0 {
         let fns = resolve_vdso(sysinfo_ehdr());

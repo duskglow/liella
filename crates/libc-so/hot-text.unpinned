@@ -1,0 +1,38 @@
+# Start-up and fork keys of hot-text.list that may name a function without a fixed boundary
+# (LAYOUT-HOTKEY-INLINE-STABLE; `cargo xtask static`, xtask/src/hottext.rs `check_pinned`). Every other Rust key
+# of those tiers must name a #[inline(never)] function. <v0 key> TAB <reason>. A line whose key gained a fixed
+# boundary or left the tiers is an error. These keys can still go dead when unrelated code moves LLVM's
+# inlining budget; the build's dead-key check and `cargo xtask hottext-repair` remain their guard.
+_RNvNtC15liella_boundary6locale13refresh_words	a call boundary costs start-up instructions (+3 to +18 in fast, +18 to +45 in release with the other start-up marks: HOTTEXT-REGEN-UNBLOCK, handoff/hottext-regen-unblock.md)
+_RINvMNtC4core6optionINtNtC4core6option6OptionFKClOOaOOaElE6map_orlNCINvNtC15liella_boundary7runtime5startKb0_Es4_0EC15liella_boundary	a function of core: no attribute of ours can pin it
+_RINvNtC13liella_legacy13exit_handlers16run_thread_dtorsNtNtC15liella_boundary4heap11KernelPagesNtNtC15liella_boundary4conv6CCallsNCNvNtC15liella_boundary7process16run_thread_dtors0EC15liella_boundary	a call boundary costs start-up instructions (+3 to +18 in fast, +18 to +45 in release with the other start-up marks: HOTTEXT-REGEN-UNBLOCK, handoff/hottext-regen-unblock.md)
+_RNvNtC15liella_boundary7process16run_thread_dtors	a call boundary costs start-up instructions (+3 to +18 in fast, +18 to +45 in release with the other start-up marks: HOTTEXT-REGEN-UNBLOCK, handoff/hottext-regen-unblock.md)
+_RINvNtC13liella_legacy12stdio_compat9with_listNtNtC15liella_boundary5stdio4GlueuNCINvNtC13liella_legacy12stdio_compat9flush_allNtNtC15liella_boundary5stdio4GlueE0EC15liella_boundary	a generic shared with the fopen/fclose/unlink instantiations: a call boundary is not free there
+_RNvMs8_NtC6liella3memINtNtC6liella3mem6TryBoxNtNtC15liella_boundary5stdio4SlotE3newC15liella_boundary	a generic of liella::mem shared with hot allocation paths: a call boundary is not free
+_RNvMs5_NtC5alloc7raw_vecNtNtC5alloc7raw_vec11RawVecInner11finish_growC15liella_boundary	a function of alloc: no attribute of ours can pin it
+_RNvNtC15liella_boundary4heap10rust_alloc	allocator path (every Rust allocation): a call boundary is not free
+_RINvMs3_NtC9liella_rt4heapNtNtC9liella_rt4heap4Heap10alloc_slowINtNtC15liella_boundary3sys8CSysImplKb0_ENtNtC15liella_boundary4heap11KernelPagesEC15liella_boundary	allocator path (malloc, free): a call boundary is not free
+_RINvMs3_NtC9liella_rt4heapNtNtC9liella_rt4heap4Heap11first_cacheINtNtC15liella_boundary3sys8CSysImplKb0_ENtNtC15liella_boundary4heap11KernelPagesEC15liella_boundary	allocator path (malloc, free): a call boundary is not free
+_RINvMs3_NtC9liella_rt4heapNtNtC9liella_rt4heap4Heap10cache_addrNtNtC15liella_boundary4heap11KernelPagesEC15liella_boundary	allocator path (malloc, free): a call boundary is not free
+_RINvMs3_NtC9liella_rt4heapNtNtC9liella_rt4heap4Heap6refillINtNtC15liella_boundary3sys8CSysImplKb0_ENtNtC15liella_boundary4heap11KernelPagesEC15liella_boundary	allocator path (malloc, free): a call boundary is not free
+_RINvMs3_NtC9liella_rt4heapNtNtC9liella_rt4heap4Heap7collectINtNtC15liella_boundary3sys8CSysImplKb0_ENtNtC15liella_boundary4heap11KernelPagesEC15liella_boundary	allocator path (malloc, free): a call boundary is not free
+_RINvMs3_NtC9liella_rt4heapNtNtC9liella_rt4heap4Heap9take_heldNtNtC15liella_boundary4heap11KernelPagesEC15liella_boundary	allocator path (malloc, free): a call boundary is not free
+_RINvMs3_NtC9liella_rt4heapNtNtC9liella_rt4heap4Heap12make_currentNtNtC15liella_boundary4heap11KernelPagesEC15liella_boundary	allocator path (malloc, free): a call boundary is not free
+_RNvNtC15liella_boundary4conv13internal_move	copy/fill hot path (memmove, memset callers): a call boundary is not free
+_RNvNtC13liella_legacy12stdio_compat5store	stdio hot path: a call boundary is not free
+_RINvNtC13liella_legacy12stdio_compat9write_rawNtNtC15liella_boundary5stdio4GlueEC15liella_boundary	stdio hot path: a call boundary is not free
+_RNvMs1_NtC15liella_boundary4heapNtNtC15liella_boundary4heap6Caller3new	allocator path (malloc): a call boundary is not free
+_RNvNtC15liella_boundary4conv4fill	copy/fill hot path (memmove, memset callers): a call boundary is not free
+_RNvNtC13liella_legacy12stdio_compat4load	stdio hot path: a call boundary is not free
+_RNvMNtC6liella6streamNtNtC6liella6stream5State5write	stdio write hot path: a call boundary is not free
+_RINvNtC13liella_legacy12stdio_compat5flushNtNtC15liella_boundary5stdio4GlueEC15liella_boundary	stdio hot path: a call boundary is not free
+_RNvMNtC6liella6streamNtNtC6liella6stream5State8drain_to	stdio write hot path: a call boundary is not free
+_RNvXs3_NtC13liella_legacy12stdio_compatINtNtC13liella_legacy12stdio_compat4LiveNtNtC15liella_boundary5stdio4GlueENtNtC6liella6stream7Backing5writeC15liella_boundary	stdio write hot path: a call boundary is not free
+_RNvNtC15liella_boundary6printf8vfprintf	printf hot path: a call boundary is not free
+_RINvNtC15liella_boundary5stdio4withINtNtC4core6result6ResultjNtNtC13liella_kernel5errno5ErrnoENCNvNtC15liella_boundary6printf8vfprintf0EC15liella_boundary	a function of core: no attribute of ours can pin it
+_RNCNvNtC15liella_boundary6printf8vfprintf0C15liella_boundary	a closure: no attribute of ours can pin it
+_RNvNtC15liella_boundary6printf9to_stream	printf hot path: a call boundary is not free
+_RNvNtC6liella6printf11simple_conv	printf hot path: a call boundary is not free
+_RNvMs3_NtC15liella_boundary6printfNtNtC15liella_boundary6printf8ToStream11put_general	printf hot path: a call boundary is not free
+_RNvMs3_NtC15liella_boundary6printfNtNtC15liella_boundary6printf8ToStream6finish	printf hot path: a call boundary is not free
+_RNvNtC15liella_boundary6printf4send	printf hot path: a call boundary is not free

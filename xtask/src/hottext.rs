@@ -353,6 +353,48 @@ impl V0<'_> {
             _ => self.path(i, out),
         }
     }
+
+    /// `[s <base-62-number>] <decimal> [_] <bytes>` (not punycode) -> (identifier, end).
+    fn name(&self, mut i: usize) -> Option<(String, usize)> {
+        if self.at(i)? == b's' {
+            i = self.base62(i + 1)?.1;
+        }
+        let (n, mut k) = self.decimal(i)?;
+        if self.at(k) == Some(b'_') {
+            k += 1;
+        }
+        let end = k.checked_add(n)?;
+        Some((std::str::from_utf8(self.b.get(k..end)?).ok()?.to_string(), end))
+    }
+
+    /// The parent of a function's name (see [`fn_site`]): `C` crate, `Nt` module, `M` inherent impl
+    /// or `X` trait impl -> (crate, modules, the self type's name for an impl, end).
+    fn owner(&mut self, i: usize) -> Option<(String, Vec<String>, Option<String>, usize)> {
+        match self.at(i)? {
+            b'C' => self.name(i + 1).map(|(k, e)| (k, Vec::new(), None, e)),
+            b'N' if self.at(i + 1)? == b't' => {
+                let (k, mut mods, None, j) = self.owner(i + 2)? else { return None };
+                let (m, e) = self.name(j)?;
+                mods.push(m);
+                Some((k, mods, None, e))
+            }
+            c @ (b'M' | b'X') => {
+                let j = if self.at(i + 1)? == b's' { self.base62(i + 2)?.1 } else { i + 1 };
+                let (k, mods, None, j) = self.owner(j)? else { return None };
+                let mut e = self.ty(j, &mut String::new())?;
+                let named = if self.at(j)? == b'I' { j + 1 } else { j };
+                if self.at(named)? != b'N' {
+                    return None;
+                }
+                let ty = self.name(self.path(named + 2, &mut String::new())?)?.0;
+                if c == b'X' {
+                    e = self.path(e, &mut String::new())?;
+                }
+                Some((k, mods, Some(ty), e))
+            }
+            _ => None,
+        }
+    }
 }
 
 fn strip_crate_hashes(s: &str) -> String {
@@ -1137,46 +1179,60 @@ fn may_name_regen_flag(path: &str) -> bool {
         || (path.starts_with("records/") && path.ends_with(".toml"))
 }
 
-/// A key of a non-generic free function in a module path (`_RNvNtC<crate><module>...<fn>`) ->
-/// (crate, modules, function); `None` for generic, impl, closure and C names.
-fn plain_path(key: &str) -> Option<(String, Vec<String>, String)> {
-    let mut s = key.strip_prefix("_RNv")?;
-    let mut depth = 1;
-    while let Some(r) = s.strip_prefix("Nt") {
-        s = r;
-        depth += 1;
-    }
-    s = s.strip_prefix('C')?;
-    let mut idents = Vec::new();
-    for _ in 0..=depth {
-        let n = s.bytes().take_while(u8::is_ascii_digit).count();
-        let len: usize = s.get(..n)?.parse().ok()?;
-        idents.push(s.get(n..n + len)?.to_string());
-        s = &s[n + len..];
-    }
-    if !s.is_empty() {
-        return None;
-    }
-    let f = idents.pop()?;
-    let krate = idents.remove(0);
-    Some((krate, idents, f))
+/// Where the function a v0 key names is defined (LAYOUT-HOTKEY-INLINE-STABLE): crate, module
+/// path, the self type's name for a method of an inherent or trait impl, the function's name.
+#[derive(Debug, PartialEq)]
+struct Site {
+    krate: String,
+    mods: Vec<String>,
+    owner: Option<String>,
+    f: String,
 }
 
-/// Whether every module-level definition of `fn f` in `text` carries `#[inline(never)]` among the
-/// attributes and comments directly above it; `None` when `text` defines no such function.
-fn inline_never(text: &str, f: &str) -> Option<bool> {
+/// The [`Site`] of a key naming a function, generic (`I ... E`) or not: `Nv` over a module path,
+/// an inherent impl (`M`) or a trait impl (`X`). `None` for a closure, a trait's provided method, a
+/// C name and anything that does not parse.
+fn fn_site(key: &str) -> Option<Site> {
+    let mut d = V0 { b: key.strip_prefix("_R")?.as_bytes(), depth: 0 };
+    let i = usize::from(d.at(0)? == b'I');
+    if d.at(i)? != b'N' || d.at(i + 1)? != b'v' {
+        return None;
+    }
+    let (krate, mods, owner, j) = d.owner(i + 2)?;
+    let f = d.name(j)?.0;
+    Some(Site { krate, mods, owner, f })
+}
+
+/// Whether every definition of `fn f` in `text` carries `#[inline(never)]` among the attributes and
+/// comments directly above it: the module-level definitions for a free function (`owner` `None`),
+/// the indented ones inside an `impl` block whose header line names `owner` for a method; `None`
+/// when `text` has no such definition.
+fn inline_never(text: &str, f: &str, owner: Option<&str>) -> Option<bool> {
     let lines: Vec<&str> = text.lines().collect();
-    let mut found = None;
+    let (mut found, mut header) = (None, None);
     for (i, l) in lines.iter().enumerate() {
-        let mut rest = *l;
+        let t = l.trim_start();
+        if t.len() == l.len() && !t.is_empty() && !t.starts_with("#[") && !t.starts_with("//") {
+            header = (t.starts_with("impl") || t.starts_with("unsafe impl")).then_some(t);
+        }
+        let in_place = match owner {
+            None => t.len() == l.len(),
+            Some(o) => t.len() < l.len() && header.is_some_and(|h| h.split(|c: char| !(c.is_alphanumeric() || c == '_')).any(|w| w == o)),
+        };
+        let mut rest = t;
         for q in ["pub(crate) ", "pub(super) ", "pub ", "const ", "unsafe ", "extern \"C\" "] {
             rest = rest.strip_prefix(q).unwrap_or(rest);
         }
         let Some(after) = rest.strip_prefix("fn ").and_then(|r| r.strip_prefix(f)) else { continue };
-        if !after.starts_with('(') && !after.starts_with('<') {
+        if !in_place || (!after.starts_with('(') && !after.starts_with('<')) {
             continue;
         }
-        let marked = lines[..i].iter().rev().take_while(|a| a.starts_with("#[") || a.starts_with("//")).any(|a| a.trim() == "#[inline(never)]");
+        let marked = lines[..i]
+            .iter()
+            .map(|a| a.trim())
+            .rev()
+            .take_while(|a| a.starts_with("#[") || a.starts_with("//"))
+            .any(|a| a == "#[inline(never)]");
         found = Some(found.unwrap_or(true) && marked);
     }
     found
@@ -1193,20 +1249,85 @@ fn module_source(root: &Path, krate: &str, mods: &[String]) -> Option<(String, S
     candidates.into_iter().find_map(|p| fs::read_to_string(&p).ok().map(|t| (p.strip_prefix(root).unwrap_or(&p).display().to_string(), t)))
 }
 
-/// The tiers whose plain functions must be `#[inline(never)]` (HOTTEXT-REGEN-UNBLOCK): the fork
-/// tier only. Marking the start-up tier too cost 3 to 18 user instructions on the start-up rows
-/// (`process::run_thread_dtors` and `locale::refresh_words` stop being inlined), so it waits for
-/// an owner ruling (handoff/hottext-regen-unblock.md); the fork tier's functions are off the
-/// start-up path.
-const INLINE_NEVER_TIERS: [&str; 1] = ["fork"];
+/// The tiers whose keys fail `cargo xtask so` when dead (D-X.47), so whose Rust functions must keep
+/// their symbol in both profiles whatever unrelated code does to LLVM's inlining budget: two libm
+/// merges inlined `spawn::wait4` away (2026-11-07), and on 2026-11-12 two libm changes inlined
+/// `Vdso::lookup_many::<5>` (#4986) and another start-up function (#4991) in the fast archive.
+const INLINE_NEVER_TIERS: [&str; 2] = ["startup", "fork"];
 
-/// `cargo xtask static` (HOTTEXT-REGEN-UNBLOCK): (1) no tracked file but [`may_name_regen_flag`]'s
-/// names [`REGEN_FLAG`], so no gate can build with the dead-key check off; (2) every key of an
-/// [`INLINE_NEVER_TIERS`] tier that names a non-generic function of a workspace crate is
-/// `#[inline(never)]` in the source, so the function keeps its symbol (and its key) in both
-/// profiles whatever unrelated code does to the inliner's budget (two libm merges inlined
-/// `spawn::wait4` away and failed the build on 2026-11-07). Generic, impl and closure keys are
-/// not checked here; the build check of [`group`] still covers them.
+/// The start-up and fork keys that may name a function without a fixed boundary, one line each:
+/// `<key>\t<reason>` (LAYOUT-HOTKEY-INLINE-STABLE). A key belongs here only when a call boundary is
+/// not free (a hot path, or a measured start-up cost) or no attribute of ours can pin it (a
+/// closure, a function of `core` or `alloc`, a generic shared with hot instantiations).
+pub const UNPINNED_LIST: &str = "crates/libc-so/hot-text.unpinned";
+
+/// The lines of [`UNPINNED_LIST`]: key -> reason. `#` comments and blank lines skipped.
+fn parse_unpinned(text: &str) -> Result<BTreeMap<String, String>, String> {
+    let mut out = BTreeMap::new();
+    for (n, l) in text.lines().enumerate() {
+        if l.trim().is_empty() || l.starts_with('#') {
+            continue;
+        }
+        match l.split('\t').collect::<Vec<_>>()[..] {
+            [k, why] if k.starts_with("_R") && !why.trim().is_empty() => {
+                if out.insert(k.to_string(), why.to_string()).is_some() {
+                    return Err(format!("{UNPINNED_LIST} line {}: {k} listed twice", n + 1));
+                }
+            }
+            _ => return Err(format!("{UNPINNED_LIST} line {}: {l:?}: want <v0 key>\\t<reason>", n + 1)),
+        }
+    }
+    Ok(out)
+}
+
+/// Why `key` (a key of an [`INLINE_NEVER_TIERS`] tier) has no fixed boundary, `None` when it has one:
+/// a C name (an exported or assembly symbol always exists), or a workspace function whose every
+/// definition is `#[inline(never)]`.
+fn unpinned_reason(root: &Path, key: &str) -> Option<String> {
+    if !key.starts_with("_R") {
+        return None;
+    }
+    let Some(s) = fn_site(key) else { return Some("a closure or other symbol no attribute of ours can pin".to_string()) };
+    if !s.krate.starts_with("liella") {
+        return Some(format!("a function of crate {} (no attribute of ours can pin it)", s.krate));
+    }
+    let what = format!("fn {}{}", s.owner.as_ref().map_or(String::new(), |o| format!("{o}::")), s.f);
+    match module_source(root, &s.krate, &s.mods) {
+        None => Some(format!("module source of {}::{} not found", s.krate, s.mods.join("::"))),
+        Some((path, text)) => match inline_never(&text, &s.f, s.owner.as_deref()) {
+            Some(true) => None,
+            Some(false) => Some(format!("{path}: {what} is not #[inline(never)]")),
+            None => Some(format!("{path}: no definition of {what} found")),
+        },
+    }
+}
+
+/// The fixed-boundary check of [`static_check`] on the parsed list and unpinned lines: errors.
+fn check_pinned(root: &Path, entries: &[Entry], unpinned: &BTreeMap<String, String>) -> Vec<String> {
+    let mut errs = Vec::new();
+    let pinned_tier = |k: &str| entries.iter().any(|e| e.key == k && INLINE_NEVER_TIERS.contains(&e.tier));
+    for e in entries.iter().filter(|e| INLINE_NEVER_TIERS.contains(&e.tier)) {
+        match (unpinned_reason(root, &e.key), unpinned.contains_key(&e.key)) {
+            (Some(why), false) => errs.push(format!(
+                "hot-text.list: {} ({} key): {why}: unrelated code can make LLVM inline it and kill the key; mark it #[inline(never)] where a call boundary is free, or #[inline(always)] into a keyed caller and drop the key, or list it in {UNPINNED_LIST} with the reason",
+                e.key, e.tier
+            )),
+            (None, true) if e.key.starts_with("_R") => errs.push(format!("{UNPINNED_LIST}: {} has a fixed boundary now: remove its line", e.key)),
+            _ => {}
+        }
+    }
+    for k in unpinned.keys().filter(|k| !pinned_tier(k)) {
+        errs.push(format!("{UNPINNED_LIST}: {k} is no start-up or fork key of hot-text.list: remove its line"));
+    }
+    errs
+}
+
+/// `cargo xtask static` (HOTTEXT-REGEN-UNBLOCK, LAYOUT-HOTKEY-INLINE-STABLE): (1) no tracked file but
+/// [`may_name_regen_flag`]'s names [`REGEN_FLAG`], so no gate can build with the dead-key check off;
+/// (2) every Rust key of an [`INLINE_NEVER_TIERS`] tier names a workspace function that is
+/// `#[inline(never)]` in the source (free, generic, inherent or trait method alike), so it keeps its
+/// symbol (and its key) in both profiles, or is listed in [`UNPINNED_LIST`] with the reason; a line
+/// there that no longer applies is an error too.
 pub fn static_check(root: &Path) -> Result<(), String> {
     let mut errs = Vec::new();
     for p in crate::labnames::tracked_with(root, true)? {
@@ -1219,26 +1340,14 @@ pub fn static_check(root: &Path) -> Result<(), String> {
     }
     let list = root.join("crates/libc-so/hot-text.list");
     let entries = parse_list(&fs::read_to_string(&list).map_err(|e| format!("{}: {e}", list.display()))?)?;
-    for e in entries.iter().filter(|e| INLINE_NEVER_TIERS.contains(&e.tier)) {
-        let Some((krate, mods, f)) = plain_path(&e.key) else { continue };
-        if !krate.starts_with("liella") {
-            continue;
-        }
-        match module_source(root, &krate, &mods) {
-            None => errs.push(format!("hot-text.list: {} ({}): module source of {krate}::{} not found", e.key, e.tier, mods.join("::"))),
-            Some((path, text)) => match inline_never(&text, &f) {
-                Some(true) => {}
-                Some(false) => errs.push(format!("{path}: fn {f} ({} key in hot-text.list) needs #[inline(never)]: inlined, its key goes dead and fails `so`", e.tier)),
-                None => errs.push(format!("{path}: no module-level fn {f} ({} key {} in hot-text.list)", e.tier, e.key)),
-            },
-        }
-    }
+    let unpinned = parse_unpinned(&fs::read_to_string(root.join(UNPINNED_LIST)).map_err(|e| format!("{UNPINNED_LIST}: {e}"))?)?;
+    errs.extend(check_pinned(root, &entries, &unpinned));
     if errs.is_empty() { Ok(()) } else { Err(errs.join("\n")) }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ar_members, before_group, check_lists, check_renames, cluster_align, head_alignments, cluster_bytes, cluster_section, clusters_at_end, dead_key_verdict, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, repair_lists, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
+    use super::{ar_members, before_group, check_lists, check_renames, cluster_align, head_alignments, cluster_bytes, cluster_section, clusters_at_end, dead_key_verdict, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, parse_unpinned, check_pinned, fn_site, Site, positions, regen_mode, rename_for, repair_lists, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
     use std::collections::{BTreeMap, BTreeSet};
     use std::sync::atomic::Ordering;
 
@@ -1267,23 +1376,77 @@ mod tests {
 
     #[test]
     fn listed_plain_functions_must_be_inline_never() {
-        // HOTTEXT-REGEN-UNBLOCK (no spec clause: build tooling): a start-up/fork key of a plain
-        // function maps to its module, and the definition must carry #[inline(never)].
-        assert_eq!(plain_path("_RNvNtC15liella_boundary5spawn5wait4"), Some(("liella_boundary".to_string(), vec!["spawn".to_string()], "wait4".to_string())));
-        assert_eq!(plain_path("_RNvNtNtC9liella_rt3a_b1c4f_un"), Some(("liella_rt".to_string(), vec!["a_b".to_string(), "c".to_string()], "f_un".to_string())));
-        assert_eq!(plain_path("_RNvC5plain3fun"), Some(("plain".to_string(), vec![], "fun".to_string())));
-        assert_eq!(plain_path("_RINvNtC15liella_boundary7runtime5startKb0_EC15liella_boundary"), None);
-        assert_eq!(plain_path("_RNvMs_NtC9liella_rt4heap4Heap4grow"), None);
-        assert_eq!(plain_path("__waitpid"), None);
-        assert_eq!(plain_path("_RNvNtC15liella_boundary5spawn5wait4x"), None);
+        // HOTTEXT-REGEN-UNBLOCK, LAYOUT-HOTKEY-INLINE-STABLE (no spec clause: build tooling): a
+        // start-up/fork key of a free, generic, inherent or trait-impl function maps to its module
+        // and owner, and the definition must carry #[inline(never)].
+        let site = |k: &str, m: &[&str], o: Option<&str>, f: &str| Some(Site { krate: k.to_string(), mods: m.iter().map(|s| s.to_string()).collect(), owner: o.map(str::to_string), f: f.to_string() });
+        assert_eq!(fn_site("_RNvNtC15liella_boundary5spawn5wait4"), site("liella_boundary", &["spawn"], None, "wait4"));
+        assert_eq!(fn_site("_RNvNtNtC9liella_rt3a_b1c4f_un"), site("liella_rt", &["a_b", "c"], None, "f_un"));
+        assert_eq!(fn_site("_RNvC5plain3fun"), site("plain", &[], None, "fun"));
+        assert_eq!(fn_site("_RINvNtC15liella_boundary7runtime5startKb0_EC15liella_boundary"), site("liella_boundary", &["runtime"], None, "start"));
+        assert_eq!(fn_site("_RNvMs_NtC9liella_rt4heapNtNtC9liella_rt4heap4Heap4grow"), site("liella_rt", &["heap"], Some("Heap"), "grow"));
+        // The key #4986 killed: a const-generic method of an inherent impl.
+        assert_eq!(
+            fn_site("_RINvMNtC13liella_kernel4vdsoNtNtC13liella_kernel4vdso4Vdso11lookup_manyKj5_EC15liella_boundary"),
+            site("liella_kernel", &["vdso"], Some("Vdso"), "lookup_many")
+        );
+        // A trait impl for a generic type: the owner is the self type, not the trait.
+        assert_eq!(
+            fn_site("_RNvXs3_NtC13liella_legacy12stdio_compatINtNtC13liella_legacy12stdio_compat4LiveNtNtC15liella_boundary5stdio4GlueENtNtC6liella6stream7Backing5writeC15liella_boundary"),
+            site("liella_legacy", &["stdio_compat"], Some("Live"), "write")
+        );
+        assert_eq!(fn_site("_RINvMNtC4core6optionINtNtC4core6option6OptionlE6map_orlEC15liella_boundary"), site("core", &["option"], Some("Option"), "map_or"));
+        assert_eq!(fn_site("_RNCNvNtC15liella_boundary6printf8vfprintf0C15liella_boundary"), None);
+        assert_eq!(fn_site("__waitpid"), None);
+        assert_eq!(fn_site("_RNvNtC15liella_boundary5spawn5wai"), None);
         let src = "/// doc\n#[inline(never)]\npub fn wait4(a: i32) {}\n#[cold]\nfn other() {}\nfn wait44() {}\n";
-        assert_eq!(inline_never(src, "wait4"), Some(true));
-        assert_eq!(inline_never(src, "other"), Some(false));
-        assert_eq!(inline_never(src, "missing"), None);
+        assert_eq!(inline_never(src, "wait4", None), Some(true));
+        assert_eq!(inline_never(src, "other", None), Some(false));
+        assert_eq!(inline_never(src, "missing", None), None);
         // An attribute separated by a blank line or an indented (method) definition does not count.
-        assert_eq!(inline_never("#[inline(never)]\n\nfn g() {}\n", "g"), Some(false));
-        assert_eq!(inline_never("impl X {\n    #[inline(never)]\n    fn h() {}\n}\n", "h"), None);
-        assert_eq!(inline_never("#[inline(never)]\npub(crate) extern \"C\" fn k<T>() {}\n", "k"), Some(true));
+        assert_eq!(inline_never("#[inline(never)]\n\nfn g() {}\n", "g", None), Some(false));
+        assert_eq!(inline_never("impl X {\n    #[inline(never)]\n    fn h() {}\n}\n", "h", None), None);
+        assert_eq!(inline_never("#[inline(never)]\npub(crate) extern \"C\" fn k<T>() {}\n", "k", None), Some(true));
+        // A method counts only inside an impl block of its owner.
+        let methods = "impl<'a> Vdso<'a> {\n    /// doc\n    #[inline(never)]\n    pub fn parse(i: &[u8]) {}\n}\nimpl Other {\n    fn parse() {}\n}\nimpl Pages for KernelPages {\n    fn map(&self) {}\n}\n";
+        assert_eq!(inline_never(methods, "parse", Some("Vdso")), Some(true));
+        assert_eq!(inline_never(methods, "parse", Some("Other")), Some(false));
+        assert_eq!(inline_never(methods, "map", Some("KernelPages")), Some(false));
+        assert_eq!(inline_never(methods, "parse", Some("Vds")), None);
+        assert_eq!(inline_never(methods, "parse", None), None);
+        // Unpinned lines: one reason per key, no duplicates, Rust keys only.
+        assert_eq!(parse_unpinned("# c\n_Rk\thot path\n").unwrap().get("_Rk").map(String::as_str), Some("hot path"));
+        assert!(parse_unpinned("_Rk\thot\n_Rk\tagain\n").unwrap_err().contains("listed twice"));
+        assert!(parse_unpinned("_Rk\n").unwrap_err().contains("want <v0 key>"));
+        assert!(parse_unpinned("malloc\tC name\n").unwrap_err().contains("want <v0 key>"));
+    }
+
+    #[test]
+    fn startup_keys_without_a_fixed_boundary_fail_unless_listed() {
+        // LAYOUT-HOTKEY-INLINE-STABLE (no spec clause: build tooling): on a fixture tree, an
+        // unmarked start-up method fails, a listed one passes, a marked one passes and makes its
+        // line stale, a closure or core key needs a line, a C key never does, a line of a key that
+        // is not a start-up/fork key is stale, and other tiers are not checked.
+        let root = std::env::temp_dir().join(format!("liella-pinned-{}", std::process::id()));
+        let src = root.join("crates/kernel/src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(root.join("crates/kernel/Cargo.toml"), "[package]\nname = \"liella-kernel\"\n").unwrap();
+        std::fs::write(src.join("vdso.rs"), "impl<'a> Vdso<'a> {\n    #[inline(never)]\n    pub fn parse() {}\n    fn lookup_many<const N: usize>() {}\n}\n").unwrap();
+        let parse = "_RNvMNtC13liella_kernel4vdsoNtNtC13liella_kernel4vdso4Vdso5parse";
+        let many = "_RINvMNtC13liella_kernel4vdsoNtNtC13liella_kernel4vdso4Vdso11lookup_manyKj5_EC15liella_boundary";
+        let closure = "_RNCNvNtC15liella_boundary6printf8vfprintf0C15liella_boundary";
+        let list = format!("_start\tstartup\tfast,release\n{parse}\tstartup\tfast\n{many}\tstartup\tfast\n{closure}\tfork\tfast\n_RNvNtC13liella_kernel4vdso1x\tlocale\tfast\n");
+        let entries = parse_list(&list).unwrap();
+        let errs = check_pinned(&root, &entries, &BTreeMap::new());
+        assert_eq!(errs.len(), 2, "{errs:?}");
+        assert!(errs[0].contains("Vdso::lookup_many is not #[inline(never)]") && errs[0].contains("startup key"), "{errs:?}");
+        assert!(errs[1].contains("a closure") && errs[1].contains("fork key"), "{errs:?}");
+        let listed: BTreeMap<String, String> = [many, closure, parse, "_RNvNtC13liella_kernel4vdso1x"].iter().map(|k| (k.to_string(), "why".to_string())).collect();
+        let errs = check_pinned(&root, &entries, &listed);
+        assert_eq!(errs.len(), 2, "{errs:?}");
+        assert!(errs[0].contains(parse) && errs[0].contains("has a fixed boundary now"), "{errs:?}");
+        assert!(errs[1].contains("1x is no start-up or fork key"), "{errs:?}");
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
