@@ -1,55 +1,53 @@
-# LAYOUT-HOTKEY-INLINE-STABLE (-3): handoff
+# LAYOUT-HOTKEY-INLINE-STABLE (-4): handoff
 
-State: branch `task/layout-hotkey-inline-stable-3` (base next d1b3a596c, not merged), head in
-handoff/reports/LAYOUT-HOTKEY-INLINE-STABLE-3.json. Build role keke:~/w/n1 (Zen 1). Scratch scripts on keke:
-`~/work/LAYOUT-HOTKEY-INLINE-STABLE-3/` (probe-job.sh, faultdiag.sh, faultrun.sh, dummy-bessel.rs, fmap-*/syms-*/sec-* outputs).
--1/-2 history: the -2 version of this file (on `task/layout-hotkey-inline-stable-2`).
+State: branch `task/layout-hotkey-inline-stable-4` (stacks on -3; base next d1b3a596c, not merged), head in
+handoff/reports/LAYOUT-HOTKEY-INLINE-STABLE-4.json. Build role keke:~/w/n1 (Zen 1). Scratch on keke:
+`~/work/LAYOUT-HOTKEY-INLINE-STABLE-4/` (lhis4.c percall spec, probe-job.sh, fmap.sh, faults.txt, fmap-*.txt).
+-1..-3 history: the -3 version of this file (on `task/layout-hotkey-inline-stable-3`).
 
 ## Decisions in force
 
-- Rulings #4997, #5024 (the check covers every tier; ratchet), #5025 (record pending:
-  `records/pending/LAYOUT-HOTKEY-INLINE-STABLE-3-1.toml`, D-X series, id to be assigned by the coordinator).
-- `cargo xtask static` (`hottext`, `check_pinned`): every Rust key of EVERY tier names an `#[inline(never)]` workspace
-  function or has a line `<key>\t<tier>\t<reason>` in `crates/libc-so/hot-text.unpinned`; a stale line (boundary
-  gained, key gone, tier changed) fails. One file with a tier column (not one per tier): one check, one stale rule,
-  and a key changing tier shows as one edited line that has to be justified again.
-- Pinned in -3: `locale::builtin`, `nscache::real_secs`, `iconv::load` (the keys a dummy libm growth killed).
-- hot-text.unpinned: 30 start-up lines from -1/-2, plus 41 closure/other-crate lines and 298 lines for the newly
-  checked tiers (stdio 26, locale 42, tool 50, extra 180, generics included): plain functions say "boundary cost
-  not measured yet", generics give the generic reason. The ratchet's starting point, not settled reasons (RULING below).
+- Rulings #4997, #5024, #5025, #5068 (the 241 plain functions enter hot-text.unpinned as the ratchet's start with
+  "boundary cost not measured yet"), #5069 (the coordinator assigns the D-X id: record
+  `records/pending/LAYOUT-HOTKEY-INLINE-STABLE-3-1.toml`, points (4) and (5) added in -4).
+- `cargo xtask static` (`check_pinned`): every Rust key of every tier is `#[inline(never)]` or has a
+  `<key>\t<tier>\t<reason>` line in `crates/libc-so/hot-text.unpinned` (unchanged in -4).
+- NEW (-4): a key whose fixed boundary costs instructions is not pinned; its function is `#[inline(always)]` into its
+  callers and `cargo xtask hottext-repair --at <rev>` drops the dead key (no key left for a growth to kill).
+- Coordinator 11-10: #5026 (release start-up text fault, `liella_sys_fstat` 0x240 B past the first fault-around window)
+  lands as is; LAYOUT-FIRST-WINDOW (priority 96, held until this lands) fixes it structurally.
 
-## Done in -3 (evidence, keke logs `~/logs/<label>.log`)
+## Done in -4 (keke logs `~/logs/<label>.log`)
 
-- `lhis3-lint0` rc 0: clippy + static on the inherited head (green).
-- #5026 root cause (`lhis3-fd-base`, `lhis3-fd-head`, `lhis3-fr-rel`, `lhis3-fr-fast`: perf page-fault map of
-  the `tool` probe, tools/hottext/faultmap.py): release base 52 / head 53 recorded faults, the only difference is
-  ONE `.text` page: `liella_sys_fstat` (stdio tier, hot-text.list position 104, called for the locale archive and
-  stdout). The text VMA starts at 0x408000, so the kernel's first fault-around window is 0x408000..0x417fff (clipped
-  to the VMA start, then 16 pages). Base puts fstat at 0x417e00 (inside), head at 0x418040 (0x240 bytes of start-up
-  growth from -2's pins: one page past the window), so head takes a fault at 0x418000. NOT a data object (the -2
-  note's "data phases" were the test's labels; the extra page is text at every phase). Fast: base = head (51).
-  strace -k: both call fstat through `liella_sys_fstat` (same syscalls).
-- Check extended + tier column + unpinned lines + pins + pending record (commits 8be97fb77, 69f19a54d).
-  `lhis3-lint1` rc 0 (xtask hottext tests 19 pass, clippy -D warnings, static), `lhis3-lint2` rc 0 (records check,
-  static) on the committed tree.
-- Dummy growth on the new code (`lhis3-probe-headdummy` rc 0, head + dummy-bessel.rs): fast AND release `so` pass
-  (no dead key in any tier), hot_text_products 23/23 in both. Tool probe: fast 52, release 54 (bound 56).
-
-## Exact next step
-
-1. #5026 (must be fixed before landing, ALWAYS FORWARD): give back the 0x240+ bytes of the release start-up text that
-   pushed `liella_sys_fstat` out of the first window, or place fstat inside a window the tool run already touches.
-   The cliff is structural (whatever sits at 0x418000 jitters): the robust fix is to pin the first window's end, e.g.
-   the start-up group sized/aligned so the keys first touched by every probe end before VMA start + 64 KiB, with a
-   test that `liella_sys_fstat` (and the start-up group) lie below it. Check the fault map with faultrun.sh at each
-   phase, both profiles; the counts must equal base (release tool 53 in the relay harness, fast 51/52).
-2. Counts for the 3 new pins (setlocale rows for `locale::builtin`, NSS cache rows for `real_secs`, iconv rows for
-   `iconv::load`): `cargo xtask bench --compare --counters <bench>`; revert any pin that costs.
-3. Then the direct gate, plants (check_pinned tier rules: stale tier line, extended tier) via `cargo xtask plants`,
-   hot_text_products per phase on the final head.
+- `lhis4-lint0` rc 0: clippy + static on the inherited head.
+- Counts (wl_percall, instructions:u per call, base = next merge-base d1b3a596c, spec lhis4.c):
+  - `nscache::real_secs` pin: free (getpwnam_r_root 5688.6 = next 5688.6; getservbyname_r 12413.5 vs 12412.7). Kept.
+  - `iconv::load` pin: +35/+34 (iconv_short 779 -> 814, iconv_reset 251 -> 285). Now `#[inline(always)]`, key dropped
+    (repair): iconv_short 779 = next, iconv_reset 251 = next (`lhis4-percall-exp`, `lhis4-percall-bisect`).
+  - `locale::builtin` pin: about +25 on setlocale_ctype_posix (pinned 2438.7 / 2447.2, unpinned 2419.7 / 2417.2;
+    sd 7-8); setlocale_all_c and setlocale_query equal next. Now `#[inline(always)]`, key dropped (repair).
+- Products + hot_text_products per phase, both profiles, on head 785f7a604 (`lhis4-probe-head`), on next d1b3a596c
+  (`lhis4-probe-base`) and on head + dummy libm growth (`lhis4-probe-headdummy`): all `so` ok, all hot_text_products
+  ok. No dead key in either profile with the dummy growth. Fast: every probe equal to next. Release: tool 54 vs 53,
+  locale 51 vs 50 (bound 51), localtime 18 vs 17, localtime_mktime 18 vs 17; every other probe equal. Fault map
+  (`lhis4-fmap3`, fmap.sh): in tool, locale and localtime the ONLY extra fault is the `.text` page 0x418000 (first
+  page past the first fault-around window, 0x408000..0x417fff); every other section count equals next. One cause:
+  #5026, which shows in every release probe that calls fstat, not only tool. The dummy run has the same numbers.
+- Gate and plants: see the report json (`lhis4-gate`, `lhis4-plants`, file handoff/LAYOUT-HOTKEY-INLINE-STABLE-4-plants.txt).
 
 ## Open / RULING NEEDED
 
-- The 241 plain locale/tool/extra/stdio functions in the ratchet with "boundary cost not measured yet": accept as the
-  ratchet's start (recommended: pin them in batches later, each with counts), or require counts for each before landing.
-- Pinning `iconv::load` adds a call per iconv() call: counts pending (step 2).
+- #5026 also adds +1 to the release locale (50 -> 51, at its bound 51), localtime and localtime_mktime probes (same
+  page). The 11-10 decision named only the tool probe. Recommend: accept them under the same decision (one fault, one
+  fix in LAYOUT-FIRST-WINDOW), and tell LAYOUT-FIRST-WINDOW to check all four probes.
+- setlocale(LC_CTYPE, "POSIX") per call is +170 over next on the -2 head already (next 2244.2 sd 0.9; -2 head 2417.2;
+  final head ~2420-2447, sd 7-8), before any -3 pin; not caused by the -3/-4 changes. Only -1/-2 change pins and lists
+  (start-up keys, data keys); no change on the setlocale path, and the spread grew from 0.9 to 7-8, so the extra count
+  depends on addresses (a layout effect, likely stack or data alignment in the string kernels). Not bisected further
+  (budget). Recommend: a short follow-up story to attribute it (wl_percall with --base 38e278e6f, the -1 head; then
+  wl_trace of one call), before or with LAYOUT-FIRST-WINDOW.
+
+## Exact next step
+
+Coordinator: rule on the two items above; then land (the gate and plants named in the report). Follow-ups: pin the
+"boundary cost not measured yet" keys in batches with counts (#5068); LAYOUT-FIRST-WINDOW.
