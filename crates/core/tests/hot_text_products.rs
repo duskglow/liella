@@ -102,6 +102,8 @@ const LOCALE_BOUND: u64 = 51;
 /// (66 plus 2), TRUE_BOUND stays 23. STARTUP-FAULTS-RESTORE-5: 60 -> 58 (see TRUE_BOUND).
 const TOOL_BOUND: u64 = 56;
 const RUNS: usize = 5;
+/// Every mode of `page_faults.c` whose first-call state is start-up state (the bounds below count each).
+const STARTUP_PROBE_MODES: [&str; 10] = ["true", "locale", "tool", "fork", "mktime", "localtime", "localtime_mktime", "float", "strings", "rebind"];
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -1102,7 +1104,10 @@ fn isolated_data_script(dir: &Path) -> PathBuf {
 /// moves with unrelated changes. The probe is linked with every `.data`, `.bss` and `.lbss` input
 /// section on a 64 KiB boundary of its own and `true` is traced with `perf record -e page-faults -d`:
 /// a fault in a static of at most 4 KiB in a section of its own outside `.data1` (what
-/// `xtask/src/coldbss.rs` moves by key) is named. No spec clause (layout of the products).
+/// `xtask/src/coldbss.rs` moves by key) is named. LAYOUT-STARTUP-STATE-TIME (#4901): `localtime_mktime`
+/// (setenv, the first localtime_r and the first mktime) is traced the same way, so a first-call static
+/// left undeclared is named here, not found later as a fault that moved with emission order.
+/// No spec clause (layout of the products).
 #[test]
 fn init_startup_data_accesses_are_in_the_data1_cluster() {
     let dir = std::env::temp_dir().join(format!("liella-startup-access-{}", std::process::id()));
@@ -1117,48 +1122,118 @@ fn init_startup_data_accesses_are_in_the_data1_cluster() {
         .filter(|o| map.lines().any(|l| !l.starts_with(' ') && l.split_whitespace().next() == Some(*o)))
         .flat_map(|o| output_inputs(&map, o))
         .collect();
-    let rec = Command::new("perf")
-        .args(["record", "-q", "-e", "page-faults", "-c", "1", "-d", "-o"])
-        .arg(&data)
-        .arg("--")
-        .arg(&exe)
-        .arg("true")
-        .current_dir("/")
-        .env_clear()
-        .env("LANG", "en_US.UTF-8")
-        .stdout(Stdio::null())
-        .output();
-    let rec = match rec {
-        Ok(r) => r,
-        Err(e) => {
+    // LAYOUT-STARTUP-STATE-TIME (#4901): `localtime_mktime` runs start-up, setenv("TZ"), the first
+    // localtime_r (zone load) and the first mktime; a static those first calls touch outside `.data1`
+    // sits on a `.bss` page whose place follows emission order, and its fault moved into the first
+    // localtime_r with unrelated code growth (time_compat::GENERATION, sys::TSC_STATE, process::TABLE_ON
+    // and ENV_OWNED). Each mode's trace is checked the same way. LAYOUT-STARTUP-STATE-LOCALE (#4915):
+    // every start-up probe mode, so setlocale's statics (the `locale` and `tool` probes read 50/51 and
+    // 54/55/56 by `.bss` pad) and those of the other first calls are named too.
+    let (mut touched, mut bad) = (std::collections::BTreeSet::new(), std::collections::BTreeSet::new());
+    for mode in STARTUP_PROBE_MODES {
+        let rec = Command::new("perf")
+            .args(["record", "-q", "-e", "page-faults", "-c", "1", "-d", "-o"])
+            .arg(&data)
+            .arg("--")
+            .arg(&exe)
+            .arg(mode)
+            .current_dir("/")
+            .env_clear()
+            .env("LANG", "en_US.UTF-8")
+            .stdout(Stdio::null())
+            .output();
+        let rec = match rec {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = std::fs::remove_dir_all(&dir);
+                eprintln!("SKIP init_startup_data_accesses_are_in_the_data1_cluster: perf cannot be run ({e}); the fault data addresses need perf");
+                return;
+            }
+        };
+        let err = String::from_utf8_lossy(&rec.stderr).into_owned();
+        if !rec.status.success() && (err.contains("perf_event_paranoid") || err.contains("Permission denied")) {
             let _ = std::fs::remove_dir_all(&dir);
-            eprintln!("SKIP init_startup_data_accesses_are_in_the_data1_cluster: perf cannot be run ({e}); the fault data addresses need perf");
+            eprintln!("SKIP init_startup_data_accesses_are_in_the_data1_cluster: page-fault events are not permitted here: {}", err.trim());
             return;
         }
-    };
-    let err = String::from_utf8_lossy(&rec.stderr).into_owned();
-    if !rec.status.success() && (err.contains("perf_event_paranoid") || err.contains("Permission denied")) {
-        let _ = std::fs::remove_dir_all(&dir);
-        eprintln!("SKIP init_startup_data_accesses_are_in_the_data1_cluster: page-fault events are not permitted here: {}", err.trim());
-        return;
-    }
-    assert!(rec.status.success(), "perf record of `page_faults true` failed: {}", err.trim());
-    let script_out = Command::new("perf").args(["script", "-F", "addr", "-i"]).arg(&data).output().expect("perf script");
-    let _ = std::fs::remove_dir_all(&dir);
-    let addrs: Vec<u64> = String::from_utf8_lossy(&script_out.stdout).split_whitespace().filter_map(|w| u64::from_str_radix(w, 16).ok()).collect();
-    assert!(!addrs.is_empty(), "perf recorded no page fault of `page_faults true`");
-    let (mut touched, mut bad) = (std::collections::BTreeSet::new(), std::collections::BTreeSet::new());
-    for a in addrs {
-        let Some((name, _, size, file)) = inputs.iter().find(|s| s.1 <= a && a < s.1 + s.2) else { continue };
-        touched.insert(format!("{name} ({size} bytes, {file})"));
-        // Only a static in a section of its own is moved by key (D-X.64); a larger one stays where it is.
-        let own = (name.starts_with(".data.") && !name.starts_with(".data.rel.ro")) || name.starts_with(".bss.") || name.starts_with(".lbss.");
-        if own && *size <= 4096 {
-            bad.insert(format!("{name} ({size} bytes, {file})"));
+        assert!(rec.status.success(), "perf record of `page_faults {mode}` failed: {}", err.trim());
+        let script_out = Command::new("perf").args(["script", "-F", "addr", "-i"]).arg(&data).output().expect("perf script");
+        let addrs: Vec<u64> = String::from_utf8_lossy(&script_out.stdout).split_whitespace().filter_map(|w| u64::from_str_radix(w, 16).ok()).collect();
+        assert!(!addrs.is_empty(), "perf recorded no page fault of `page_faults {mode}`");
+        for a in addrs {
+            let Some((name, _, size, file)) = inputs.iter().find(|s| s.1 <= a && a < s.1 + s.2) else { continue };
+            touched.insert(format!("{mode}: {name} ({size} bytes, {file})"));
+            // Only a static in a section of its own is moved by key (D-X.64); a larger one stays where it is.
+            let own = (name.starts_with(".data.") && !name.starts_with(".data.rel.ro")) || name.starts_with(".bss.") || name.starts_with(".lbss.");
+            // The probe's own objects (`strings` writes its `.data.rel`) are not the library's to declare.
+            if own && *size <= 4096 && file.contains("libc.a(") {
+                bad.insert(format!("{mode}: {name} ({size} bytes, {file})"));
+            }
+            // LAYOUT-STARTUP-STATE-LOCALE-3 (ruling #4942): the first-call cluster (`.lbss` itself; the cold
+            // tables are `.lbss.<symbol>`) holds no state `true` touches, or every process pays its page.
+            if mode == "true" && name == ".lbss" && file.contains("libc.a(") {
+                bad.insert(format!("true: first-call cluster {name} ({size} bytes, {file}): every-process state declared after `cluster first-call`"));
+            }
         }
     }
+    let _ = std::fs::remove_dir_all(&dir);
     eprintln!("start-up accesses in .data/.bss/.lbss outside .data1: {touched:#?}");
     assert!(bad.is_empty(), "STARTUP-DATA-KEYS: start-up touches statics outside the .data1 cluster (declare each in crates/libc-so/startup-state.list): {bad:#?}");
+}
+
+/// LAYOUT-STARTUP-STATE-LOCALE (ruling #4923): within each library object, the start-up state in `.data1`
+/// is linked in the order of `crates/libc-so/startup-state.list` (`xtask/src/coldbss.rs::state_order`),
+/// not in the order the compiler emitted it: that order changed with any code change elsewhere, and the
+/// `.data1` pages then held other objects (the tool probe read 54 on next and 55 at 9 pads on a branch
+/// that only added libm code). The probe's map gives each `.data1` input section and its object; every
+/// declared static found there (by symbol, as the list names it) must follow the list within its
+/// object. No spec clause (layout of the products).
+#[test]
+fn init_startup_state_follows_the_declared_order() {
+    let dir = std::env::temp_dir().join(format!("liella-state-order-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let map = link_map(&dir, &root().join("target/liella/liella-crt1.o"));
+    let nm = Command::new("nm").args(["-n", "--defined-only"]).arg(dir.join("page_faults")).output().expect("nm");
+    let _ = std::fs::remove_dir_all(&dir);
+    // LAYOUT-STARTUP-STATE-LOCALE-3 (ruling #4942): and the first-call cluster (`.lbss` inputs named `.lbss`
+    // itself), in list order within each cluster, starting a page.
+    let first_call: Vec<(String, u64, u64, String)> = output_inputs(&map, ".lbss").into_iter().filter(|s| s.0 == ".lbss" && s.2 > 0).collect();
+    let lead = first_call.iter().find(|s| s.3.contains("libc.a(")).expect("no first-call cluster (.lbss) from libc.a in the link map");
+    assert_eq!(lead.1 % 4096, 0, "STATE-ORDER: the first-call cluster starts at {:#x}, not on a page (FIRST_CALL_ALIGN)", lead.1);
+    let inputs: Vec<(String, u64, u64, String)> = output_inputs(&map, ".data1").into_iter().chain(first_call).collect();
+    let list = std::fs::read_to_string(root().join("crates/libc-so/startup-state.list")).expect("startup-state.list");
+    // (entry position, a symbol matcher): a path by its v0 tail, a symbol or section entry by name.
+    let entries: Vec<String> = list.lines().map(|l| l.split('#').next().unwrap_or("").trim()).filter(|l| !l.is_empty()).map(str::to_string).collect();
+    let position = |sym: &str| -> Option<usize> {
+        let stem = symbol_stem(sym);
+        entries.iter().position(|e| {
+            let f: Vec<&str> = e.split_whitespace().filter(|w| *w != "fast-only").collect();
+            match f.as_slice() {
+                ["symbol", n] => stem == *n,
+                ["section", s] => [".data.rel.local.", ".data.", ".bss."].iter().find_map(|p| s.strip_prefix(*p)) == Some(stem),
+                [path] => stem.ends_with(&path.split("::").map(|s| format!("{}{s}", s.len())).collect::<String>()),
+                _ => false,
+            }
+        })
+    };
+    let (mut last, mut seen, mut bad) = (std::collections::BTreeMap::<String, (usize, String)>::new(), 0_usize, Vec::new());
+    for l in String::from_utf8_lossy(&nm.stdout).lines() {
+        let w: Vec<&str> = l.split_whitespace().collect();
+        let (Some(a), Some(name)) = (w.first().and_then(|a| u64::from_str_radix(a, 16).ok()), w.get(2)) else { continue };
+        let Some((cluster, _, _, file)) = inputs.iter().find(|s| s.1 <= a && a < s.1 + s.2.max(1)) else { continue };
+        let file = &format!("{cluster} {file}");
+        let Some(p) = position(name) else { continue };
+        seen = seen.saturating_add(1);
+        if let Some((q, prev)) = last.get(file).filter(|(q, _)| *q > p) {
+            bad.push(format!("{file}: {name} (entry {p}) after {prev} (entry {q})"));
+        }
+        let keep = last.get(file).is_none_or(|(q, _)| *q <= p);
+        if keep {
+            last.insert(file.clone(), (p, (*name).to_string()));
+        }
+    }
+    assert!(seen.saturating_mul(2) >= entries.len(), "only {seen} declared statics found in .data1 of {} entries (symbols renamed?)", entries.len());
+    assert!(bad.is_empty(), "STATE-ORDER: .data1 is not in startup-state.list order: {bad:#?}");
 }
 
 /// LAYOUT-DATA-CLUSTERS-4 (D-X.68, D-27.10): every static PIE starts whatever the phase of its data.

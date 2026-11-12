@@ -673,6 +673,41 @@ fn hyperbolic_hardware_sqrt_agrees_sampled() {
     assert!(taken > 150_000, "{taken}");
 }
 
+/// The 256 bits of 2/π behind `TRIG_LARGE` are the generated table's, and its entries at both
+/// ends and the middle are ⌊2^K/π⌋ mod 2^128 (K = 123, 177, 231), computed independently with
+/// Machin's formula in integers. (No spec clause: LIBM-TINY-FASTPATHS-2.)
+#[test]
+fn trig_large_table_is_two_over_pi() {
+    assert_eq!(TWO_OVER_PI_256[..], t::TWO_OVER_PI[..4]);
+    assert_eq!(TRIG_LARGE[0], 0x028b_e60d_b939_1054_a7f0_9d5f_47d4_d377);
+    assert_eq!(TRIG_LARGE[54], 0x1529_fc27_57d1_f534_ddc0_db62_9599_3c43);
+    assert_eq!(TRIG_LARGE[108], 0x4d37_7036_d8a5_664f_10e4_107f_9458_eaf7);
+}
+
+/// trig_core_wide above 2^19 (reduce_large): sin, cos (< TRIG_BOUND ulp) and tan (< TAN_BOUND
+/// ulp) against the accurate path's `sin_cos` on every 2003rd encoding of [2^19, 2^128) of either
+/// sign; below 2^19 the same `double`s as trig_core (or the same refusal). (No spec clause:
+/// LIBM-TINY-FASTPATHS-2.)
+#[test]
+fn trig_core_wide_is_within_its_bound_above_2_19() {
+    let ulp = |y: f64| f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
+    let mut seen = 0u32;
+    for x in (0x4900_0000u32..0x7f80_0000).step_by(2003).flat_map(|b| [b, b | 1 << 31]).map(f32::from_bits) {
+        let Some((s, c)) = trig_core_wide(x) else { continue };
+        seen += 1;
+        let (fs, fc) = crate::trig::sin_cos(f64::from(x));
+        for (y, f, b, n) in [(s, fs, TRIG_BOUND, "sin"), (c, fc, TRIG_BOUND, "cos"), (s / c, fs.div(fc), TAN_BOUND, "tan")] {
+            let err = crate::dd::Dd::from(y).sub(f).to_f64();
+            assert!(err.abs() <= b * ulp(y), "trig_core_wide {n}({x:e}): {} ulp", err / ulp(y));
+        }
+    }
+    assert!(seen > 900_000, "{seen}");
+    let bits = |v: Option<(f64, f64)>| v.map(|(s, c)| (s.to_bits(), c.to_bits()));
+    for x in (0..0x4900_0000u32).step_by(4099).flat_map(|b| [b, b | 1 << 31]).map(f32::from_bits) {
+        assert_eq!(bits(trig_core_wide(x)), bits(trig_core(x)), "{:#010x}", x.to_bits());
+    }
+}
+
 /// The `float` sin, cos and tan entries with the boundary's conversion (`f64::from`, what its
 /// in-place `cvtss2sd` computes) answer exactly where, and exactly what, the bit-built entries do,
 /// on every 16411th `float` encoding: the operand handed to the core is x's `double` and each
@@ -928,11 +963,11 @@ fn fast_path_agrees_exhaustively() {
 /// `f` against the tiered oracle (ruling #2889) on `xs`, `est` its family's estimator: one
 /// oracle call per operand the fast path takes in any mode, the accurate path only for the
 /// modes the double-double tier leaves undecided; the number of calls taken.
-pub(super) fn agree_oracle(f: Fast, est: impl Fn(f32) -> crate::oracle32::Est, xs: impl Iterator<Item = f32>, tally: &crate::oracle32::Tally) -> u64 {
+pub(super) fn agree_oracle(f: Fast, get: impl Fn(f32, Rounding) -> Option<(f32, Status)>, est: impl Fn(f32) -> crate::oracle32::Est, xs: impl Iterator<Item = f32>, tally: &crate::oracle32::Tally) -> u64 {
     use crate::oracle32 as o;
     let mut taken = 0;
     for x in xs {
-        let got = o::MODES.map(|m| eval(f, x, m));
+        let got = o::MODES.map(|m| get(x, m));
         if got.iter().all(Option::is_none) {
             continue;
         }
@@ -952,7 +987,13 @@ pub(super) fn agree_oracle(f: Fast, est: impl Fn(f32) -> crate::oracle32::Est, x
 /// estimator; `LIELLA_SWEEP_STRIDE` thins the sweep); prints the calls taken and how often the
 /// oracle needed the mp path.
 pub(super) fn exhaustive_oracle(f: Fast, name: &str, est: impl Fn(f32) -> crate::oracle32::Est + Sync) {
+    exhaustive_oracle_by(f, name, est, |x, m| eval(f, x, m));
+}
+
+/// [`exhaustive_oracle`] with `get` in place of [`eval`]: the fast path and what its entry adds
+/// before the accurate path (erff and erfcf: the tiny operands' direct paths, D-10.107).
+pub(super) fn exhaustive_oracle_by(f: Fast, name: &str, est: impl Fn(f32) -> crate::oracle32::Est + Sync, get: impl Fn(f32, Rounding) -> Option<(f32, Status)> + Sync) {
     let tally = crate::oracle32::Tally::default();
-    let taken = exhaustive_by(|xs| agree_oracle(f, &est, xs.iter().copied(), &tally));
+    let taken = exhaustive_by(|xs| agree_oracle(f, &get, &est, xs.iter().copied(), &tally));
     std::println!("{name} fast path taken {taken} of {} calls; oracle: {}", 4u64 << 32, tally.summary());
 }

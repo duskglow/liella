@@ -1,0 +1,11 @@
+{"task": "LIBM-RETHINK-ERFC", "model": "opus", "tokens": null,
+ "result": "erff subnormal-result and erfcf tiny bands answered by exact direct paths (CF-proved), verification jobs pending; f64 erf tiny left as next step",
+ "branch": "task/libm-rethink-erfc", "head": null,
+ "gate": {"affected": "not started", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["f64 erf at subnormal x is 254 vs 31 instructions on next, not 1.5-3e5 (fixed elsewhere); |x| < 2^-55 (50% of bit patterns) is 217-254 vs 21-31"],
+ "refused": [],
+ "improvement": "the tail probe tool lives only on its story branch; landing validation/libm_tail would save every libm rethink a git-show and copy step",
+ "next_step": "read libm-rethink-erfc-verify and -plants, start the gate; then the f64 |x| < 2^-55 integer path (handoff)",
+ "report_file": "handoff/LIBM-RETHINK-ERFC.md",
+ "jobs": ["kanon:libm-rethink-erfc-verify", "kanon:libm-rethink-erfc-plants"]}

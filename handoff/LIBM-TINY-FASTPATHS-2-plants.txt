@@ -1,0 +1,8 @@
+# LIBM-TINY-FASTPATHS-2 plants (cargo xtask plants; docs/plants.md). The f32 trig fast path reduces 2^19 <= |x| < inf
+# by Payne-Hanek in fixed point (reduce_large, TRIG_LARGE). Each plant breaks one step of the reduction; the bound test
+# (against the accurate path, every 2003rd encoding above 2^19) or the table pin must fail.
+round-half-dropped | crates/math/src/fast32/trig.rs | lit:(p.wrapping_add(1 << 120) >> 121) as usize ==> (p >> 121) as usize | cargo test -p liella-math --release --lib -- fast32::tests::trig | msg:(trig_core_wide_is_within_its_bound_above_2_19.*FAILED|trig_core_wide (sin|cos|tan))
+sign-dropped | crates/math/src/fast32/trig.rs | lit:let p = if b >> 31 != 0 { p.wrapping_neg() } else { p }; ==> let p = p; | cargo test -p liella-math --release --lib -- fast32::tests::trig | msg:(trig_core_wide_is_within_its_bound_above_2_19.*FAILED|trig_core_wide (sin|tan))
+table-window-shifted | crates/math/src/fast32/trig.rs | lit:hi >> (6 - i) ==> hi >> (7 - i) | cargo test -p liella-math --release --lib -- fast32::tests::trig | msg:trig_large_table_is_two_over_pi.*FAILED
+pi4-precision-cut | crates/math/src/fast32/trig.rs | lit:0x6487_ed51_10b4_611a ==> 0x6487_ed51_1cb4_611a | cargo test -p liella-math --release --lib -- fast32::tests::trig | msg:(trig_core_wide_is_within_its_bound_above_2_19.*FAILED|trig_core_wide (sin|cos|tan))
+scale-exponent-off | crates/math/src/fast32/trig.rs | lit:956 - u64::from(s) ==> 957 - u64::from(s) | cargo test -p liella-math --release --lib -- fast32::tests::trig | msg:(trig_core_wide_is_within_its_bound_above_2_19.*FAILED|trig_core_wide (sin|cos|tan))
