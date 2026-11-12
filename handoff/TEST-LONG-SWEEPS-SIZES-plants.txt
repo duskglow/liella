@@ -2,3 +2,6 @@
 # The three math fast-tier sweeps are runner rows at 10^5 (ruling #5061); the check must catch a row dropped or left unsized.
 gamma-row-dropped | xtask/src/longsweeps.rs | perl:s#\n    it\("crates/math/tests/fast_gamma\.rs", "fast_gamma"[^\n]*\n[^\n]*\n[^\n]*\n#\n# | cargo test -p xtask --bin xtask longsweeps:: | msg:environment-scaled test `double_gamma_fast_tier_matches_the_accurate_path` is named by no runner
 bessel-row-unsized | xtask/src/longsweeps.rs | lit:.env(&[("LIELLA_BESSEL_SWEEP", "100000")]) ==> | cargo test -p xtask --bin xtask longsweeps:: | msg:`double_bessel_fast_tier_matches_the_accurate_path` reads its size from LIELLA_BESSEL_SWEEP, which its runner row does not set
+# cargo xtask plants results (2 plants: 2 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# gamma-row-dropped: CAUGHT, caught by xtask longsweeps::tests::the_tables_match_the_tree
+# bessel-row-unsized: CAUGHT, caught by xtask longsweeps::tests::the_tables_match_the_tree
