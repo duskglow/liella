@@ -13,9 +13,13 @@
 //!   release runs that already run every accuracy shard (D-10.57). The ordinary gate leaves them out.
 //! - `exhaustive` (every `float` operand, 10^8 to 10^9 operands, or 2^32 to 2^34 calls each: minutes to hours):
 //!   run only by `cargo xtask long-sweeps --group exhaustive`, a weekly job on an idle build host (ruling #4750).
-//!   A row's `secs` is the test time of one run where it was measured (the libtest `finished in` figure rounded
-//!   up, build excluded; TEST-LONG-SWEEPS-BOUNDARY on a Skylake-SP build host, Xeon Platinum 8151, a 6-CPU jobrun slot at load
-//!   15 to 25), so that job can budget its slot.
+//!   A row's `secs` is the test time of one run where it was measured (`Took`: the libtest `finished in` figure
+//!   rounded up, build excluded; `Over`: the limit the run was stopped at), so that job can budget its slot. The
+//!   boundary quick and log rows and math quick_log: TEST-LONG-SWEEPS-BOUNDARY on a Skylake-SP build host, Xeon
+//!   Platinum 8151, a 6-CPU jobrun slot at load 15 to 25. The s10 and core rows: TEST-LONG-SWEEPS-BOUNDARY-2 on a
+//!   Broadwell-EP build host, Xeon E5-2699 v4, each row alone on the 7 CPUs of its jobrun slot under a 1800 s
+//!   limit, with up to three other rows on the host's other CPUs (load 20 to 30 of 35 CPUs). The one-pass `float`
+//!   sweeps take 14 to 23 min each, so the group as a whole runs for hours: longer than one jobrun slot allows.
 //!
 //! `cargo xtask long-sweeps [--group long|exhaustive|count|all] [--only <test>]... [--list]` (default `long`; `--only`
 //! keeps the rows of those full test names) runs each sweep of the group once, in release, in its crate's package, by its exact name (`-- --include-ignored --exact
@@ -174,22 +178,25 @@ pub const SWEEPS: &[Sweep] = &[
     it("crates/boundary/tests/log_quick.rs", "log_quick", "log_family_both_builds_round_correctly", Group::Long).env(QUICK_LOG).secs(12),
     it("crates/boundary/tests/log_quick.rs", "log_quick", "log_family_quick_fma_error_within_bound", Group::Exhaustive).env(QUICK_LOG).secs(484),
     it("crates/boundary/tests/pow_quick.rs", "pow_quick", "pow_entry_tiers_round_correctly", Group::Long).env(&[("LIELLA_POW_SWEEP", "25000000")]).secs(36),
-    it(S10, "s10_math_symbols", "math_double_fast_entry_sweep", Group::Exhaustive).env(&[("LIELLA_FE_SWEEP_CHUNKS", "200")]),
-    it(S10, "s10_math_symbols", "math_expf_onepass_sweep", Group::Exhaustive).env(STRIDE1),
-    it(S10, "s10_math_symbols", "math_exp2f_onepass_sweep", Group::Exhaustive).env(STRIDE1),
-    it(S10, "s10_math_symbols", "math_exp10f_onepass_sweep", Group::Exhaustive).env(STRIDE1),
-    it(S10, "s10_math_symbols", "math_logf_onepass_sweep", Group::Exhaustive).env(STRIDE1),
-    it(S10, "s10_math_symbols", "math_log2f_onepass_sweep", Group::Exhaustive).env(STRIDE1),
-    it(S10, "s10_math_symbols", "math_log10f_onepass_sweep", Group::Exhaustive).env(STRIDE1),
-    it(S10, "s10_math_symbols", "math_asinf_onepass_sweep", Group::Exhaustive).env(STRIDE1),
-    it(S10, "s10_math_symbols", "math_acosf_onepass_sweep", Group::Exhaustive).env(STRIDE1),
-    it(S10, "s10_math_symbols", "math_atanf_onepass_sweep", Group::Exhaustive).env(STRIDE1),
-    it(S10, "s10_math_symbols", "math_atan2f_onepass_pairs", Group::Exhaustive).env(&[("LIELLA_PAIRS", "250000000")]),
-    it(S10, "s10_math_symbols", "math_hypotf_fast_path_sweep", Group::Exhaustive),
+    it(S10, "s10_math_symbols", "math_double_fast_entry_sweep", Group::Exhaustive).env(&[("LIELLA_FE_SWEEP_CHUNKS", "200")]).over(1800),
+    it(S10, "s10_math_symbols", "math_expf_onepass_sweep", Group::Exhaustive).env(STRIDE1).secs(1136),
+    it(S10, "s10_math_symbols", "math_exp2f_onepass_sweep", Group::Exhaustive).env(STRIDE1).secs(1155),
+    it(S10, "s10_math_symbols", "math_exp10f_onepass_sweep", Group::Exhaustive).env(STRIDE1).secs(1187),
+    it(S10, "s10_math_symbols", "math_logf_onepass_sweep", Group::Exhaustive).env(STRIDE1).secs(941),
+    it(S10, "s10_math_symbols", "math_log2f_onepass_sweep", Group::Exhaustive).env(STRIDE1).secs(939),
+    it(S10, "s10_math_symbols", "math_log10f_onepass_sweep", Group::Exhaustive).env(STRIDE1).secs(1058),
+    it(S10, "s10_math_symbols", "math_asinf_onepass_sweep", Group::Exhaustive).env(STRIDE1).secs(1334),
+    it(S10, "s10_math_symbols", "math_acosf_onepass_sweep", Group::Exhaustive).env(STRIDE1).secs(1135),
+    it(S10, "s10_math_symbols", "math_atanf_onepass_sweep", Group::Exhaustive).env(STRIDE1).secs(1305),
+    it(S10, "s10_math_symbols", "math_atan2f_onepass_pairs", Group::Exhaustive).env(&[("LIELLA_PAIRS", "250000000")]).secs(68),
+    it(S10, "s10_math_symbols", "math_hypotf_fast_path_sweep", Group::Exhaustive).secs(864),
     // liella-core
-    lib("crates/core/src/num/glibc_diff.rs", "num::glibc_diff::differential_millions", Group::Exhaustive).env(&[("LIELLA_GLIBC_DIFF_N", "2000000")]),
-    lib("crates/core/src/num/format.rs", "num::format::tests::scaled_general_matches_the_general_path_on_millions", Group::Exhaustive)
-        .env(&[("LIELLA_PF_DIFF_N", "4000000"), ("LIELLA_PF_DIFF_SEED", "11400714819323198485")]),
+    lib("crates/core/src/num/glibc_diff.rs", "num::glibc_diff::differential_millions", Group::Exhaustive)
+        .env(&[("LIELLA_GLIBC_DIFF_N", "2000000")])
+        .secs(102),
+    lib("crates/core/src/num/format.rs", "num::format::tests::scaled_general_matches_the_general_path_on_millions", Group::Long)
+        .env(&[("LIELLA_PF_DIFF_N", "4000000"), ("LIELLA_PF_DIFF_SEED", "11400714819323198485")])
+        .secs(7),
 ];
 
 /// The ignored or scaled tests that no runner runs, each with why: `(file, item, reason)`. The item is the test
