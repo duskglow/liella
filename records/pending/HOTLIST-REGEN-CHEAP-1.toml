@@ -1,0 +1,9 @@
+id = "D-NEW"
+series = "D-X"
+section = "x"
+status = "active"
+story = "HOTLIST-REGEN-CHEAP"
+date = "2026-11-12"
+body = '''
+**The hot-list regen of both profiles builds only what its traces link, traces in parallel and checks by regrouping (`tools/hottext/regen.sh . --both`).** Pending: the outputs must be shown byte-identical to the one-profile `--build` path on the same tree (handoff/HOTLIST-REGEN-CHEAP.md). `cargo xtask so --hottext-regen --libc-only <dir>` builds `libc.a` and `liella-crt1.o` exactly as `so` does (step 1 and the start object) into `target/product/regen/<profile>`, never `target/liella`, and keeps the archive as the grouping received it (`hot-text.pre-group.a`). The traces of one profile run at once (`HOTTEXT_JOBS`, default all CPUs); each keeps its number, so the merge reads them in the fixed probe order and the lists do not depend on which trace ends first. The fast traces run while the release products build, then the release traces; the merges run fast, then release, as before. The release build reads `hot-text.list`, `startup-text.keys`, `probe-text.keys` and `startup-data.keys` (the start-up read-only group and the grouping), so when the fast merge changes one of them the release products are rebuilt and retraced after it: the release outputs are then those of products built from the same lists as the one-profile path builds them. The closing check is `cargo xtask hottext-recheck`: the grouping, its cluster check and the dead-key check (enforced) rerun on each profile's saved archive with the rewritten list, in place of a second full `so` (its libc.so.6, libm, ld.so and layout check are the gate's own `so`). Why: one regen cost 19 to 29 min, 79% of it four full product builds (HOTLIST-TRAIN-REGEN).
+'''
