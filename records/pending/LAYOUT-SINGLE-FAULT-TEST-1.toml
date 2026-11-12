@@ -1,6 +1,6 @@
 id = "D-NEW"
-series = "D-10"
-section = "s10"
+series = "D-X"
+section = "x"
 status = "active"
 story = "LAYOUT-SINGLE-FAULT-TEST"
 date = "2026-11-12"
