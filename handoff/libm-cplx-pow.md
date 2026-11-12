@@ -1,45 +1,40 @@
-# LIBM-CPLX-POW handoff: cpow/cpowf quick + middle tiers (envelope path landed on the branch)
+# LIBM-CPLX-POW handoff: cpow/cpowf quick + middle tiers, middle bounds proved (run 3)
 
-State: branch task/libm-cplx-pow-2 (stacks on task/libm-cplx-pow), code head 0b8e2fd51; role keke:~/w/n2.
-Run 2 (LIBM-CPLX-POW-2) stopped at the 180k context checkpoint after the code, its tests and the jobs below.
-Decisions in force: D-10.53, D-10.74, D-10.99, D-10.25, D-10.17. No decision record for this tier yet (next step).
+State: branch task/libm-cplx-pow-3 (continues -2's branch; 11 commits behind next, no merge allowed). Code head
+78bff2d8f; role mei:~/w/s1. Run 3 stopped at the 180k context checkpoint (Effort: max budget).
+Decisions in force: D-10.53, D-10.74, D-10.99, D-10.25, D-10.17. No decision record for this tier yet.
 
-## What is in
+## Blocker found in run 3 (not this branch): `cargo xtask so` fails on this tree
 
-* `crates/math/src/complex_fast_pow.rs` (child module `complex_fast::pow`, reaches the private helpers by
-  `super::`): quick tier (`clog_parts` + `fast64::exp_kernel(reduce_pow)` + trig kernels with `Φ.lo` folded),
-  a per-part strict test (`|P.lo| > eps`, then `round`: the interval holds no double and no midpoint), a cold
-  middle tier near 2^-99 per declined part (`exp_log::log_dd`, `trig::atan_dd`, `wide_dd::exp_dd` with `E.lo`
-  folded, `sin_or_cos_dd`), `cpowf` by the 25-bit-grid test `round32` (all modes), `cpow_any`. The module
-  comment holds the error analysis (E/Φ absolute errors carried through exp; part bound).
-* `complex.rs`: `cpow` tries `cpow_any` first; `cpow_route` = the old ziv ladder (tests' reference).
-* `fast64::reduce_pow` made `pub(crate)`.
-* Tests `complex_fast_pow_tests.rs`: tiers = route bit for bit (values + flags) in 4 modes, double and float,
-  5 bands (typical, |z| within 1e-6 of 1, branch cut, |w| up to 64, real exponents); the middle tier must
-  decide every sampled part; exact parts ((3+4i)^1.5, ^2, ^0.5) decline in every mode.
-* Plants: handoff/LIBM-CPLX-POW-2-plants.txt (strict test dropped; arg bound loosened to 2^-60).
+-2's gate (276 product-test failures) and plants (rc 2, BASELINE FAILED) share one cause: `xtask so`
+stops with `hot-text.list: 1 key(s) match no function section of the fast-profile libc.a:
+_RNvNtC6liella6locale7builtin`. Reproduced on mei (job libm-cplx-pow-3-lint0: clippy 0, static 0, so 1).
+The branch touches only crates/math; another story's probe of next plus a 3-line dummy change failed the same
+way (mei job lhis2-probe-nextdummy, 11-12 13:44), as did libm-cplx-sincos-2-plants on keke: the inlining of
+`locale::builtin` flips with unrelated code growth (layout-jitter family; HOTTEXT-REGEN-HOSTS chain). Not chased
+(no regen, no hot-text.absent line). Until it is fixed, `xtask plants` (it builds the products first), the
+`affected` gate and percall cannot pass on any tree.
 
-## Decline rates (from the bounds; NOT yet measured)
+## Done in run 3 (#5023, #5022)
 
-Quick: about 2^-10 per part (atan2's 2^-65 dominates). Middle: bound about 2^-97 relative for |w log z| <= 2^4,
-so about 2^-44 per quick decline (2^-54 per part) to the route; it grows with |c|, |d| (absolute ℓ errors times
-|w|): about 2^-37 at |w| = 2^10. The coordinator's target (<= 2^-30 per part to the 384-bit route) holds by the
-bound in every band; the measured per-band table is the next step (sweep below).
+* `exp_log::log_dd` and `trig::atan_dd` carry step-by-step proofs (doc comments): primitives (JMP 2017 Alg. 6
+  and 4 cited; mul_f64 3u², mul 8u², div 5u² derived there), series truncation, f64 tails, table facts,
+  per-branch sums. Proved 29.8u² and 34.6u²; constants `LOG_DD_REL = 32u²`, `ATAN_DD_REL = 36u²`.
+* complex_fast_pow.rs: `LR_REL`, `LR_ABS` (sum_squares' 2^-104.4 halved), `LI_REL` (+ div, sub, 2·PI_2)
+  derived from them (the old 2x estimates are gone; the old constants were 4-7x above the proofs, so no
+  past result was wrong).
+* Test `cpow_middle_bounds_cover_their_proofs`: |s| <= 2^-8.4 per LOG_C bucket, LOG_L/ATAN_J64/LN2/PI_2
+  within u² (mp), the proofs' sums vs every constant, 4000 sampled log_dd/atan_dd errors vs mp.
+* Sweep `cpow_decline_rates` per |w log z| band (2^-6..1, 1..16, 16..512), 2^21 operands each: asserts no
+  middle decline and the bound-implied rate <= 2^-30 per part; long-sweeps row in xtask/src/longsweeps.rs.
+  Result: see job libm-cplx-pow-3-check1 (mei) and the report.
+* Plants file handoff/LIBM-CPLX-POW-3-plants.txt (strict test + each bound halved); NOT RUN (blocker above).
 
-## Open / not verified
+## Next step (continuation, after the hot-text fix lands)
 
-* Middle-tier constants LR_REL/LR_ABS/LI_REL rest on an a-priori estimate of `log_dd` and `atan_dd` (no
-  stated bound in their files) with a factor 2+ margin; the tests compare against the route only. A test that
-  measures their errors against `crate::mp` is still to write.
-* The ignored decline-rate sweep was dropped: `xtask static` (long-sweeps) needs a runner row for every
-  ignored test. Re-add it with that row (see how `cexp_quick_tier_sweep` is registered).
-
-## Next step (continuation)
-
-1. Read the gate and plants results (JOBS in the hand-back); fix any red.
-2. Decision record: `cargo xtask records new decision D-NEW --series D-10 --story LIBM-CPLX-POW-2` (method,
-   bounds, strict test, rates; cite Joldes-Muller-Popescu 2017, Lindemann-Weierstrass caveat).
-3. Decline-rate sweep with a long-sweeps row; per-band table here; mp-based bound tests for log_dd/atan_dd.
-4. In-place entry: `cplx2_fast` in crates/boundary/src/mathret.rs (mirror `cplx_fast`), rows `cpow f`/`d` in
-   posix/s10_math.tsv, `cargo xtask math-gen`; an in-place `cpow_nearest` needs every intermediate normal.
-5. percall typical and hard rows (with and without `--tunables glibc.cpu.hwcaps=-FMA`) vs next and glibc.
+1. Sync; run `cargo xtask plants handoff/LIBM-CPLX-POW-3-plants.txt` and the `affected` gate (base origin/next).
+2. Decision record: `cargo xtask records new decision D-NEW --series D-10 --story <story>` (method, proofs,
+   strict test, measured rates; cite Joldes-Muller-Popescu 2017).
+3. In-place entry: `cplx2_fast` in crates/boundary/src/mathret.rs (mirror `cplx_fast`), rows `cpow f`/`d` in
+   posix/s10_math.tsv, `cargo xtask math-gen`.
+4. percall typical and hard rows (with and without `--tunables glibc.cpu.hwcaps=-FMA`) vs next and glibc.

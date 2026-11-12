@@ -1,7 +1,7 @@
 //! The `cpow`/`cpowf` tiers against the 384-bit route (Clauses: s10_5_c_0, s10_0_f_0: where a
 //! tier answers, it is the route's result bit for bit, in every mode, flags included).
 
-#![allow(clippy::unwrap_used, clippy::float_cmp)]
+#![allow(clippy::unwrap_used, clippy::float_cmp, clippy::indexing_slicing)] // fixed table indices
 
 use super::*;
 use crate::complex::cpow_route;
@@ -97,7 +97,7 @@ fn cpow_middle_bounds_cover_their_proofs() {
             let r = dd::abs(m * c - 1.0) + 2.0 * u;
             assert!(r / (2.0 - r) <= (-8.4f64).exp2(), "LOG_C bucket {i}");
         }
-        if tb::LOG_L[k][0] != 0 {
+        if f64::from_bits(tb::LOG_L[k][0]) != 0.0 {
             assert!(rel(mpd(Dd::of(tb::LOG_L[k])), mp::ln(Mp::from_f64(c)).neg()) <= rep, "LOG_L {i}");
         }
     }
