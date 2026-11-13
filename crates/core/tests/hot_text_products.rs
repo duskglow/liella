@@ -90,8 +90,9 @@ use liella_kernel::uapi::{ADDR_NO_RANDOMIZE, PERSONALITY_QUERY};
 /// 11, setlocale + printf 50, tool 54. LOCALE_BOUND 52 -> 51.
 /// LAYOUT-TRACE-DEFAULT (trace-at-build is the default: every build groups from a trace of itself, so a
 /// change that adds no start-up code no longer moves these counts; the bounds now sit at the highest
-/// measured count, no margin). Skylake-SP and Zen 1 hosts, both profiles, next and next plus an unrelated
-/// libm change, every run identical (warm-up + 5, twice), fast / release: startup only 11 / 10,
+/// measured count, no margin). Skylake-SP and Zen 1 hosts (next and next plus an unrelated libm change) and
+/// Haswell-EP and Broadwell-EP hosts (LAYOUT-TRACE-DEFAULT-3), both profiles, every run on every host
+/// identical (warm-up + 5, twice), fast / release: startup only 11 / 10,
 /// setlocale + printf 46 / 47, tool 50 / 49, fork child 5 / 5, localtime and localtime + mktime 17 / 18,
 /// float 3 / 3. TRUE_BOUND 17 -> 11, LOCALE_BOUND 51 -> 47, TOOL_BOUND 56 -> 50, FORK_BOUND 6 -> 5,
 /// LOCALTIME_BOUND and LOCALTIME_MKTIME_BOUND 20 -> 18, FLOAT_BOUND 5 -> 3.
@@ -340,7 +341,7 @@ fn init_first_mktime_after_localtime_r_takes_no_fault() {
 /// the same 64 KiB window: Zen 1 host role, every run identical, 18 (the mktime block back behind
 /// strftime's functions: 19; the rule-years table four times longer: 21). LOCALTIME_BOUND 22 -> 20
 /// (18 plus 2).
-/// LAYOUT-TRACE-DEFAULT: 20 -> 18, the highest count of both hosts and profiles (see TRUE_BOUND).
+/// LAYOUT-TRACE-DEFAULT: 20 -> 18, the highest count of the four host classes and both profiles (see TRUE_BOUND).
 const LOCALTIME_BOUND: u64 = 18;
 
 /// The first `localtime_r` (zone load included) and the first `mktime` after it, counted
@@ -352,7 +353,7 @@ const LOCALTIME_BOUND: u64 = 18;
 /// Bound = 20 plus 2, as for LOCALTIME_BOUND.
 /// PERF-ZONE-LOAD-FAULTS-3 (merge of next, see LOCALTIME_BOUND): Zen 1 host role, every run
 /// identical, 18. Bound 22 -> 20 (18 plus 2).
-/// LAYOUT-TRACE-DEFAULT: 20 -> 18, the highest count of both hosts and profiles (see TRUE_BOUND).
+/// LAYOUT-TRACE-DEFAULT: 20 -> 18, the highest count of the four host classes and both profiles (see TRUE_BOUND).
 const LOCALTIME_MKTIME_BOUND: u64 = 18;
 
 #[test]
@@ -395,7 +396,7 @@ fn init_first_localtime_r_stays_within_its_page_fault_bound() {
 /// Haswell-EP host role, after the change: 4 in every run (text and the first stack page); bound
 /// = that plus 2 for layout-only deltas, below the six stack faults alone of the inlined frame.
 /// STARTUP-FAULTS-RESTORE-4: fast 2, release 4 (Haswell-EP host, relay harness); FLOAT_BOUND 6 -> 5.
-/// LAYOUT-TRACE-DEFAULT: 3 in both profiles on both hosts (see TRUE_BOUND); FLOAT_BOUND 5 -> 3.
+/// LAYOUT-TRACE-DEFAULT: 3 in both profiles on all four host classes (see TRUE_BOUND); FLOAT_BOUND 5 -> 3.
 const FLOAT_BOUND: u64 = 3;
 
 #[test]
@@ -446,7 +447,7 @@ fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
 /// LAYOUT-DATA-CLUSTERS-7 (D-X.70): 5 in both profiles at every `data` pad (Haswell-EP host, every run
 /// identical; next read 6 release and 7 fast) once the state the child reads joined the `.data1` cluster,
 /// whose pages start-up touches, so the bound is 6.
-/// LAYOUT-TRACE-DEFAULT: 5 in both profiles on both hosts (see TRUE_BOUND); FORK_BOUND 6 -> 5.
+/// LAYOUT-TRACE-DEFAULT: 5 in both profiles on all four host classes (see TRUE_BOUND); FORK_BOUND 6 -> 5.
 const FORK_BOUND: u64 = 5;
 
 #[test]

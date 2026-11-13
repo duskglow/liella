@@ -1,7 +1,7 @@
 # LAYOUT-TRACE-DEFAULT: trace-at-build is the default of every product build
 
-State: branch `task/layout-trace-default-2` (run 2; HEAD in handoff/reports/LAYOUT-TRACE-DEFAULT-2.json), on top of
-`task/layout-trace-default` (run 1). Plan: `plan/layout-rethink.md` section 4, rulings #5190-#5194; LT-1 is
+State: branch `task/layout-trace-default-3` (run 3; HEAD in handoff/reports/LAYOUT-TRACE-DEFAULT-3.json), on top of
+`task/layout-trace-default-2` (run 2) and `task/layout-trace-default` (run 1). Plan: `plan/layout-rethink.md` section 4, rulings #5190-#5194; LT-1 is
 `handoff/LAYOUT-TRACE-AT-BUILD.md` (D-X.88). Decision: `records/pending/LAYOUT-TRACE-DEFAULT-1.toml` (D-NEW, series
 D-X, amends D-X.88; CI holds the branch until the coordinator assigns its id). Plants:
 `handoff/LAYOUT-TRACE-DEFAULT-plants.txt` (8). The story's work is done; nothing is left but landing.
@@ -47,6 +47,30 @@ Base vs libm-merged (scratch scripts cmpout.sh / secdiff.py, not in the tree):
   build; the other three fast lists and all release lists are identical. Same fault table in all. Not chased (the
   fault table is what is bounded); a candidate for LT-2 / LT-3 if fast lists must be exactly reproducible.
 
+## Run 3: the other two gate hosts (shiki, kanon)
+
+Script `proof3.sh` (scratch, not in the tree): run 2's proof.sh as a measurement (records each rc and goes on;
+no `again` step). Default so, layout-check, hot_text_products twice per profile, each probe warm-up + 5 runs.
+Tree: the inherited head bdfe810cf (the run-3 edits are comments, the pending record and handoff only).
+* shiki (Xeon E5-2697 v3, Haswell-EP), role sh1: `layout-trace-default-3-shiki-proof` rc 0.
+* kanon (Xeon E5-2699 v4, Broadwell-EP), RAM copy `/mnt/zram/claude/LAYOUT-TRACE-DEFAULT-3/proof-1`:
+  `layout-trace-default-3-kanon-proof` rc 0.
+* Every run identical on both hosts. libc.a byte-identical shiki vs kanon (fast md5 5e2c126a..., release
+  8c31146f...). Kernel 6.8.0-147 on both.
+
+Four-host table (bounded value = lowest of 5 runs; the highest single run equals it everywhere):
+
+| fast / release | true | locale | tool | fork | localtime | lt+mktime | float | text win | ro win | rw pages |
+|---|---|---|---|---|---|---|---|---|---|---|
+| mei (Skylake-SP), keke (Zen 1) [run 2] | 11 / 10 | 46 / 47 | 50 / 49 | 5 / 5 | 17 / 18 | 17 / 18 | 3 / 3 | 2 / 2 | 1 / 1 | 11 / 14 |
+| shiki (Haswell-EP), kanon (Broadwell-EP) [run 3] | 11 / 10 | 46 / 47 | 50 / 49 | 5 / 5 | 17 / 18 | 17 / 18 | 3 / 3 | 2 / 2 | 1 / 1 | 11 / 14 |
+| highest of the four = branch bound | 11 | 47 | 50 | 5 | 18 | 18 | 3 | 2 / 2 | 1 / 1 | 11 / 14 |
+| origin/next ba84cb320 bound | 17 | 51 | 56 | 6 | 20 | 20 | 5 | 4 / 4 | 1 / 1 | 20 / 21 |
+
+So no bound or budget moves in run 3: each already equals the four-host highest, and each is at or below
+next's. No host exceeds next's bound. The record (records/pending/LAYOUT-TRACE-DEFAULT-1.toml) and the
+hot_text_products comments now cite all four host classes.
+
 ## Release check for the CI gate (brief step 5)
 
 After the fast `cargo xtask affected --tier full --run`, in the same tree (it replaces the fast products, so last):
@@ -76,7 +100,7 @@ After the fast `cargo xtask affected --tier full --run`, in the same tree (it re
 
 * Do not redo: the tracer survey (run 1: gdb 15.1 with Python on mei, keke, shiki, kanon; timing hosts build nothing),
   the code, the proof comparison above.
-* The bounds have no margin: shiki / kanon were not measured (the brief named mei and keke). A count above a bound
-  there is a finding about that host, not a reason to raise the bound.
+* The bounds have no margin. All four gate host classes now measure exactly at them (run 3). A count above a bound
+  on some other host is a finding about that host, not a reason to raise the bound.
 * Next: LT-5 (delete the committed lists, the dead-key and pin checks, the hot-lists lane and the train regen step);
   `0` goes with it.
