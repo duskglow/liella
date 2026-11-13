@@ -25,5 +25,5 @@ ld --verbose | sed -n '/^=====/,/^=====/p' | sed '1d;$d' \
 [ "$(grep -c 'SUBALIGN(65536)' "$work/isolated.ld")" -ge 3 ] || { echo "startup_data: ld --verbose: .data/.bss output sections not found" >&2; exit 1; }
 cc -std=gnu17 -O1 -static -nostdlib -fno-builtin -Wl,-T,"$work/isolated.ld" "$P/liella-crt1.o" \
     "$T/crates/core/tests/oracle/page_faults.c" "$P/libc.a" -lgcc -o "$work/page_faults_isolated"
-python3 "$here/startup_data.py" "$work/page_faults" "$work/page_faults_isolated" "$L/startup-text.keys" "$profile" \
+python3 -B "$here/startup_data.py" "$work/page_faults" "$work/page_faults_isolated" "$L/startup-text.keys" "$profile" \
     "$L/startup-data.keys" "$@"

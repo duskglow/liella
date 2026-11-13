@@ -1032,6 +1032,8 @@ fn trace_layout(root: &Path, product: &Path, profile: Profile) -> Result<(), Str
         .arg(root)
         .args(["--replace", "--all-modes", "--products"])
         .arg(&tdir)
+        // No Python helper of the trace may leave bytecode (`__pycache__`) in the tree.
+        .env("PYTHONDONTWRITEBYTECODE", "1")
         .env(crate::hotlists::ENV, &lists)
         .current_dir(root)
         .stdout(logf)

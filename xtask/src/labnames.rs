@@ -89,6 +89,10 @@ fn walk(root: &Path, dir: &Path, handoff: bool, out: &mut Vec<String>) {
         let rel = p.strip_prefix(root).map(|r| r.to_string_lossy().into_owned()).unwrap_or_default();
         // Sync bookkeeping (`.synced*`, `.changed*`, e.g. `.changed.xtask`) and build output (`target/`, `fuzz/target/`, and
         // `conformance/build/`, which the gate's conformance step writes) are not part of the tree.
+        // Python bytecode caches are build debris wherever they appear (they embed the path they were compiled from).
+        if p.file_name().is_some_and(|n| n == "__pycache__") || rel.ends_with(".pyc") {
+            continue;
+        }
         if rel == "target" || rel == "fuzz/target" || rel == "conformance/build" || rel == ".git" || (!handoff && rel.starts_with("handoff")) || rel.starts_with(".synced") || rel.starts_with(".changed") {
             continue;
         }
@@ -145,16 +149,39 @@ mod tests {
     #[test]
     fn walk_skips_build_output() {
         let root = std::env::temp_dir().join(format!("liella-walk-{}", std::process::id()));
-        for d in ["conformance/build", "target", "src"] {
+        for d in ["conformance/build", "target", "src", "tools/hottext/__pycache__"] {
             std::fs::create_dir_all(root.join(d)).unwrap();
         }
-        for f in ["conformance/build/s27_a.key", "target/x", "src/a.rs", ".synced"] {
+        for f in ["conformance/build/s27_a.key", "target/x", "src/a.rs", ".synced", "tools/hottext/__pycache__/keys.cpython-312.pyc", "tools/stray.pyc"] {
             std::fs::write(root.join(f), "x").unwrap();
         }
         let mut v = Vec::new();
         walk(&root, &root, false, &mut v);
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(v, vec!["src/a.rs".to_string()]);
+    }
+
+    /// The trace-at-build helpers must not write bytecode into the tree: every `python3` run by a tools/hottext
+    /// script passes `-B` (no spec clause: build hygiene).
+    #[test]
+    fn hottext_scripts_run_python_without_bytecode() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tools/hottext");
+        let mut seen = 0;
+        for e in std::fs::read_dir(&dir).unwrap().flatten() {
+            let p = e.path();
+            if p.extension().is_none_or(|x| x != "sh") {
+                continue;
+            }
+            for (n, l) in std::fs::read_to_string(&p).unwrap().lines().enumerate() {
+                let t = l.trim_start();
+                if t.starts_with('#') || !t.contains("python3 ") {
+                    continue;
+                }
+                seen += 1;
+                assert!(t.contains("python3 -B "), "{}:{}: python3 without -B writes __pycache__ into the tree", p.display(), n + 1);
+            }
+        }
+        assert!(seen >= 8, "found only {seen} python3 invocations: the scan is not looking at the scripts");
     }
 
     #[test]
