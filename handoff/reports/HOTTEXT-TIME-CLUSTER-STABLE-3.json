@@ -1,0 +1,17 @@
+{"task": "HOTTEXT-TIME-CLUSTER-STABLE-3", "model": "opus", "tokens": null,
+ "result": "merged origin/next 2c917bce5 (recheck.rs conflict: both sides had #[inline(always)] on TscGate::fresh; kept it with next's comment, tsc_holds stays always-inlined); direct gate green; plants 3 caught / 2 equivalent; next + this branch + libm-cplx-pow-5 / sincos-5: mktime after localtime_r 0 faults at all 39 pads, both profiles",
+ "branch": "task/hottext-time-cluster-stable-3", "head": "a2700e8b3",
+ "gate": {"affected": "9 suites ok: 10035 passed / 0 failed (+ conformance 21/0), htcs3-gate", "peak": "15G"}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "release tool count still 56-57 over cold pads (57 at cold 0xC000), as on next in run 2; TOOL_BOUND 56 holds at the data-phase test's four pads",
+  "fast tool count on next + sincos-5 + this branch reaches 56 at cold pad 0x5000 (54-55 on pow-5); within the bound, not one of the test's pads"],
+ "refused": [],
+ "impact": [
+  {"kind": "unblock", "what": "LIBM-CPLX-POW-6 and LIBM-CPLX-SINCOS-6: this merged head + their -5 branches pass the five time/layout tests in both profiles, mktime 0 at all 39 pads per profile", "before": null, "after": null, "unit": null, "measured": true},
+  {"kind": "correctness", "what": "first mktime after localtime_r takes no page fault in either profile whatever the inliner does with TscGate::fresh / tsc_holds / entry_at (carried from runs 1-2, re-proved on the merged head)", "before": null, "after": 0, "unit": "faults", "measured": true}],
+ "improvement": "a CI merge conflict between identical attributes with different comments cost a whole run; a merge driver that auto-resolves comment-only conflicts (or the train resolving trivially-equal code) would save these continuations",
+ "next_step": "coordinator: verify JOBS, land, unhold LIBM-CPLX-POW-6 / LIBM-CPLX-SINCOS-6",
+ "report_file": "handoff/HOTTEXT-TIME-CLUSTER-STABLE.md",
+ "jobs": ["kanon:htcs3-lint1", "kanon:htcs3-gate", "kanon:htcs3-plants", "kanon:htcs3-proof-pow", "kanon:htcs3-proof-sincos"],
+ "superseded": ["kanon:htcs3-lint0 (inherited head 90580ef28, step 0, rc 0)"]}

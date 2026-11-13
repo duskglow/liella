@@ -362,8 +362,8 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast64.rs:1039` `pub fn pow(x: f64, y: f64, neg: bool, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `x^y = ±e^(y·ln x)` for a positive finite `x != 1` (the magnitude of the caller's `x`), a finite `y`, the sign `neg` (`x < 0` and `y` an odd integer).
 - `fast64.rs:1056` `fn pow_eps(v: Dd, tail: f64, dz: f64) -> f64` — bound: undocumented — doc: [`pow`]'s bound `eps + 1.02·|v.hi|·dz` on the error of `v` (proof at [`pow`]).
 - `fast64.rs:1061` `fn step(h: f64, up: bool) -> f64` — bound: undocumented — doc: The neighbour of a nonzero finite `h` toward +∞ (`up`) or −∞.
-- `fast64.rs:1078` `pub(crate) fn settle(y: Dd, eps: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: The correctly rounded `(y ± eps)·2^m` in `mode`, or `None` when the interval holds a rounding boundary (or the result is outside the ranges handled here).
-- `fast64.rs:1122` `fn tiny(y: Dd, e: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: [`settle`] for a positive result with `m <= -1022` (subnormal, or in the lowest normal binade, where the grid is 2^-1074 throughout; anything at or above 2^-102…
+- `fast64.rs:1082` `pub(crate) fn settle(y: Dd, eps: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: The correctly rounded `(y ± eps)·2^m` in `mode`, or `None` when the interval holds a rounding boundary (or the result is outside the ranges handled here).
+- `fast64.rs:1129` `fn tiny(y: Dd, e: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: [`settle`] for a positive result with `m <= -1022` (subnormal, or in the lowest normal binade, where the grid is 2^-1074 throughout; anything at or above 2^-102…
 
 ## fast_bessel.rs (fast_bessel)
 
@@ -417,6 +417,13 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast_gamma.rs:160` `pub fn lgamma(x: f64, mode: Rounding) -> Option<((f64, Status), i32)>` — bound: undocumented — doc: `lgamma x` correctly rounded in `mode` and the sign of `Γ(x)`, for `x` in [`domain`] other than 1 and 2 (exact zeros), or `None` (the caller runs the accurate p…
 - `fast_gamma.rs:169` `pub fn tgamma_kernel(x: f64) -> Option<(Dd, f64, i32)>` — bound: undocumented — doc: `tgamma x` as `(y, eps, m)`, `1 <= |y.hi| < 2`: `|Γ(x) − y·2^m| <= eps·2^m`, or `None`.
 - `fast_gamma.rs:183` `pub fn tgamma(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `tgamma x` correctly rounded in `mode` for a non-integer `x` in [`domain`], or `None`.
+- `fast_gamma.rs:217` `pub fn lgamma_tiny(x: f64) -> Option<(Dd, f64, i32)>` — bound: undocumented — doc: `lgamma x` for `0 < |x| < 2^-60` as `(y, eps, sign)`: `lnΓ(x) = −ln|x| − γx + R`, `|R| <= ζ(2)x²/2 < 2^-120` (the series' terms alternate and decrease).
+- `fast_gamma.rs:237` `pub fn tgamma_tiny(x: f64) -> Option<(Dd, f64, i32)>` — bound: undocumented — doc: `tgamma x` for `0 < |x| < 2^-60` (subnormals included) as `(y, eps, m)` for [`fast64::settle`]: `Γ(x) = 1/x − γ + R`, `|R| <= 0.99|x| + |x|² < 2^-59.9` (DLMF 5.…
+- `fast_gamma.rs:264` `pub fn lgamma_large(x: f64) -> Option<(Dd, f64, i32)>` — bound: undocumented — doc: `lgamma x` for `16 <= x < X_BIG` as `(y, eps)`: Stirling, `lnΓ(x) = x(ln x − 1) − ln(x)/2 + ln(2π)/2 + S`, `S = Σ_{k=1}^{10} c_k x^{1−2k}` within `|c_11|·x^-21 …
+- `fast_gamma.rs:300` `fn binade(v: f64) -> i32` — bound: undocumented — doc: The unbiased binade of a normal nonzero `v`.
+- `fast_gamma.rs:309` `fn settle_wide(y: Dd, eps: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: [`fast64::settle`] for `(y ± eps)·2^m` with `m` up to the overflow.
+- `fast_gamma.rs:318` `pub fn lgamma_band(x: f64, mode: Rounding) -> Option<((f64, Status), i32)>` — bound: undocumented — doc: `lgamma` on the bands above, correctly rounded, with `Γ(x)`'s sign, or `None` (the caller runs the accurate path): `|x| < 2^-60`, and `x >= 16` (overflow from `…
+- `fast_gamma.rs:332` `pub fn tgamma_band(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `tgamma` for `0 < |x| < 2^-60`, correctly rounded, or `None` ([`tgamma_tiny`] normalizes `y` for [`settle_wide`]; `x = ±2^-1024` is its one case left to the acc…
 
 ## fast_special.rs (fast_special)
 
