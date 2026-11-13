@@ -24,11 +24,16 @@ xz_utils_build() { ./configure --disable-shared --disable-nls --disable-doc && m
 xz_utils_test() { make -j"$J" check; }
 
 # sqlite3: the Tcl test suite needs the Tcl development files (not on the host); the suite that runs without
-# them is `make fuzztest` (fuzzcheck over the fuzz databases in test/), plus the shell build itself.
+# them is fuzzcheck over the fuzz databases in test/ (`make fuzztest` also builds sessionfuzz, which needs
+# zlib.h, also not on the host). --disable-load-extension: Liella's libc.so.6 does not export dlsym and
+# dlclose yet (DL-16b, DL-17), so the extension loader does not link; Debian builds it enabled.
 sqlite3_src=sqlite3
 sqlite3_kind=rc
-sqlite3_build() { ./configure --disable-shared --disable-tcl --disable-readline && make -j"$J" sqlite3; }
-sqlite3_test() { make -j"$J" fuzztest; }
+sqlite3_build() {
+    ./configure --disable-shared --disable-tcl --disable-readline --disable-load-extension &&
+        make -j"$J" sqlite3 fuzzcheck
+}
+sqlite3_test() { ./fuzzcheck test/fuzzdata*.db; }
 
 grep_src=grep
 grep_kind=automake

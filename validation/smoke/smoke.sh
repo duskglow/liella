@@ -175,7 +175,7 @@ run_one() {
             timeout "$limit" sh -c '. "$1"; "$2"' sh "$here/programs.sh" "${name}_build") > "$r.build.log" 2>&1; then
         built=yes
     else
-        built=no; status="build failed (exit $?)"
+        brc=$?; built=no; status="build failed (exit $brc)"
     fi
     if [ "$side" = liella ]; then
         if "$here/check-elf.sh" "$ldso" "$sys" "$b" > "$r.check.log" 2>&1; then check=ok; else check=FAIL; fi
