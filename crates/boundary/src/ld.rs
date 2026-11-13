@@ -453,34 +453,12 @@ fn install_tls(mods: &[Option<Module>], biases: &[u64], placed: &[Option<Placed>
     let fail = || -> ! { refuse(b"ld.so: cannot set up the initial thread's TLS\n") };
     let tp = base.wrapping_add(usize::try_from(area.tp).unwrap_or(0));
     let tp64 = u64::try_from(tp).unwrap_or(0);
-    for ((m, p), b) in mods.iter().zip(placed).zip(biases) {
-        let (Some(m), Some(p)) = (m, p) else { continue };
-        let (Ok(src), Ok(n), Ok(dst)) = (usize::try_from(b.wrapping_add(m.vaddr)), usize::try_from(m.filesz), usize::try_from(tp64.wrapping_add_signed(p.tp_offset))) else { fail() };
-        if n == 0 {
-            continue;
-        }
-        // UNSAFE(slice): a module's TLS initialisation image in its loaded object.
-        #[allow(unsafe_code)]
-        // SAFETY: `ltls::image_in_load` / `program_tls` checked that [p_vaddr, p_vaddr + p_filesz) lies
-        // in the file part of one of the object's PT_LOADs, mapped readable at bias + p_vaddr.
-        let image = unsafe { conv::bytes_at(src, n) };
-        // UNSAFE(slice): the module's block in the area mapped above.
-        #[allow(unsafe_code)]
-        // SAFETY: `ltls::layout` placed the block's `p_memsz` >= `p_filesz` bytes inside the area's
-        // `len` bytes from `base`, mapped read-write above and not otherwise referenced yet.
-        unsafe { conv::bytes_at_mut(dst, n) }.copy_from_slice(image);
-    }
+    record_thread_tls(mods, biases, placed, area);
     let dtv_at = base.wrapping_add(usize::try_from(area.dtv).unwrap_or(0));
-    // DTV_HEADER (2, asserted above) words, then a slot per object.
-    let mut dtv = [0u64; 2 + OBJECTS_MAX];
-    let Some(dtv) = dtv.get_mut(..usize::try_from(area.dtv_words).unwrap_or(usize::MAX)) else { fail() };
-    ltls::fill_dtv(dtv, GENERATION.load(Relaxed), tp64, placed);
-    // UNSAFE(slice): the dtv in the area mapped above.
-    #[allow(unsafe_code)]
-    // SAFETY: `ltls::layout` reserved `dtv_words` words at `area.dtv` (8-aligned) inside the area.
-    let out = unsafe { conv::bytes_at_mut(dtv_at, dtv.len().wrapping_mul(8)) };
-    for (o, w) in out.chunks_exact_mut(8).zip(dtv.iter()) {
-        o.copy_from_slice(&w.to_ne_bytes());
+    // A fresh zero mapping: each block's bytes past its image are zero already (not written, so
+    // a large `.tbss` costs no page until the program touches it).
+    if fill_static(tp, dtv_at, false).is_none() {
+        fail()
     }
     // UNSAFE(slice): the thread block at the new thread pointer.
     #[allow(unsafe_code)]
@@ -505,6 +483,116 @@ fn install_tls(mods: &[Option<Module>], biases: &[u64], placed: &[Option<Placed>
     if crate::arch::set_thread_pointer(tp).is_err() {
         fail()
     }
+}
+
+/// The initially loaded modules' blocks, which every thread's static area repeats (DL-15
+/// `DL-TLS-THREADS`, design §7, D-27.20): per placed module `[image address, p_filesz, p_memsz,
+/// module ID, block offset from TP]` in module order. Written by [`record_thread_tls`] while the
+/// process has one thread and before any object's code runs; only read afterwards.
+static THREAD_MODS: [[AtomicU64; 5]; OBJECTS_MAX] = [const { [const { AtomicU64::new(0) }; 5] }; OBJECTS_MAX];
+/// Entries of [`THREAD_MODS`] in use (stored last).
+static THREAD_MODS_LEN: AtomicUsize = AtomicUsize::new(0);
+/// Words of a thread's dtv (`DTV_HEADER` + one per module).
+static THREAD_DTV_WORDS: AtomicU64 = AtomicU64::new(0);
+/// Bytes a new thread's static area needs below its thread pointer: the blocks and the surplus as
+/// in the initial area, then the dtv under them (`StartInfo::tls_size`).
+static THREAD_TLS_SIZE: AtomicU64 = AtomicU64::new(0);
+/// The thread pointer's alignment (`StartInfo::tls_align`).
+static THREAD_TLS_ALIGN: AtomicU64 = AtomicU64::new(0);
+
+/// Record what [`fill_static`] needs to repeat the initial thread's static area in another thread:
+/// each placed module's image (`biases[i]` + `p_vaddr`, `p_filesz`), `p_memsz`, module ID and offset.
+fn record_thread_tls(mods: &[Option<Module>], biases: &[u64], placed: &[Option<Placed>], area: &Area) {
+    let mut n = 0usize;
+    for ((m, p), b) in mods.iter().zip(placed).zip(biases) {
+        let (Some(m), Some(p), Some(slot)) = (m, p, THREAD_MODS.get(n)) else { continue };
+        for (w, v) in slot.iter().zip([b.wrapping_add(m.vaddr), m.filesz, m.memsz, p.module, u64::from_ne_bytes(p.tp_offset.to_ne_bytes())]) {
+            w.store(v, Relaxed);
+        }
+        n = n.wrapping_add(1);
+    }
+    // ARCH(x86_64): variant II, the blocks and the surplus in the `area.tp` bytes below TP; variant I
+    // (A-4) places them above the TCB and needs its own thread layout.
+    let size = area.dtv_words.checked_mul(8).and_then(|d| area.tp.checked_add(d)).unwrap_or(0);
+    THREAD_DTV_WORDS.store(area.dtv_words, Relaxed);
+    THREAD_TLS_SIZE.store(size, Relaxed);
+    THREAD_TLS_ALIGN.store(area.align, Relaxed);
+    THREAD_MODS_LEN.store(n, Release);
+}
+
+/// Fill a thread's static area from [`THREAD_MODS`]: each block's image at `tp` + its offset, then
+/// (`zero`) zeros up to its `p_memsz`; the dtv at `dtv_at` (generation, slot count, one block
+/// address per module). `None` when a recorded value does not fit (never for a recorded layout).
+fn fill_static(tp: usize, dtv_at: usize, zero: bool) -> Option<()> {
+    let tp64 = u64::try_from(tp).ok()?;
+    let n = THREAD_MODS_LEN.load(Acquire);
+    let mut placed: [Option<Placed>; OBJECTS_MAX] = [None; OBJECTS_MAX];
+    for (slot, p) in THREAD_MODS.iter().take(n).zip(placed.iter_mut()) {
+        let [src, filesz, memsz, module, off]: [u64; 5] = core::array::from_fn(|i| slot.get(i).map_or(0, |w| w.load(Relaxed)));
+        let off = i64::from_ne_bytes(off.to_ne_bytes());
+        *p = Some(Placed { module, tp_offset: off });
+        let (src, filesz, memsz) = (usize::try_from(src).ok()?, usize::try_from(filesz).ok()?, usize::try_from(memsz).ok()?);
+        let dst = usize::try_from(tp64.wrapping_add_signed(off)).ok()?;
+        let len = if zero { memsz } else { filesz };
+        if len == 0 {
+            continue;
+        }
+        // UNSAFE(slice): the module's block in the thread's static area.
+        #[allow(unsafe_code)]
+        // SAFETY: `ltls::layout` placed the block's `p_memsz` >= `p_filesz` bytes at its offset below TP,
+        // inside the area of every thread: the initial one [`map_area`] mapped, or one the C library
+        // mapped with `StartInfo::tls_size` bytes below `tp` for a thread that does not run yet.
+        let block = unsafe { conv::bytes_at_mut(dst, len) };
+        let (init, rest) = block.split_at_mut(filesz.min(len));
+        if !init.is_empty() {
+            // UNSAFE(slice): the module's TLS initialisation image in its loaded object.
+            #[allow(unsafe_code)]
+            // SAFETY: `ltls::image_in_load` / `program_tls` checked that [p_vaddr, p_vaddr + p_filesz)
+            // lies in the file part of one of the object's PT_LOADs, mapped readable at bias + p_vaddr
+            // for the process's lifetime (no object is unloaded).
+            init.copy_from_slice(unsafe { conv::bytes_at(src, init.len()) });
+        }
+        rest.fill(0);
+    }
+    let mut dtv = [0u64; 2 + OBJECTS_MAX];
+    let dtv = dtv.get_mut(..usize::try_from(THREAD_DTV_WORDS.load(Relaxed)).ok()?)?;
+    ltls::fill_dtv(dtv, GENERATION.load(Relaxed), tp64, placed.get(..n)?);
+    // UNSAFE(slice): the dtv in the thread's area.
+    #[allow(unsafe_code)]
+    // SAFETY: `dtv_at` is 8-aligned with `dtv_words` words reserved there: `area.dtv` in the initial
+    // area (`ltls::layout`), or the lowest `dtv_words` words of a new thread's `tls_size` bytes.
+    let out = unsafe { conv::bytes_at_mut(dtv_at, dtv.len().wrapping_mul(8)) };
+    for (o, w) in out.chunks_exact_mut(8).zip(dtv.iter()) {
+        o.copy_from_slice(&w.to_ne_bytes());
+    }
+    Some(())
+}
+
+/// `StartInfo::tls_init` (DL-15 `DL-TLS-THREADS`, design §7): the static area of a thread the C
+/// library is about to start, below its thread pointer `tp`. Every block gets its image and zeros to
+/// `p_memsz` (the C library may reuse an exited thread's mapping), the dtv goes in the lowest words
+/// of the area (`tls_size` bytes below `tp`), and the thread block's dtv word points at it. Called
+/// by the creating thread, concurrently with other creations: it reads only the recorded table.
+extern "C" fn thread_tls_init(tp: usize) -> usize {
+    let size = usize::try_from(THREAD_TLS_SIZE.load(Acquire)).unwrap_or(0);
+    let dtv_at = tp.wrapping_sub(size);
+    if size == 0 || fill_static(tp, dtv_at, true).is_none() {
+        refuse(b"ld.so: cannot set up a new thread's TLS\n");
+    }
+    let slot = tp.wrapping_add(usize::try_from(Native::DTV_SLOT).unwrap_or(0));
+    // UNSAFE(slice): the dtv word of the new thread's block.
+    #[allow(unsafe_code)]
+    // SAFETY: the C library passes the thread pointer of a block it mapped read-write (`TCB_SIZE`
+    // bytes from `tp`, the dtv word inside them) for a thread that does not run yet.
+    unsafe { conv::bytes_at_mut(slot, 8) }.copy_from_slice(&dtv_at.to_ne_bytes());
+    0
+}
+
+/// `StartInfo::tls_release` (DL-15, design §7): the thread at `tp` is ending. Its static blocks and
+/// dtv lie in the C library's mapping and go with it, so nothing is left to release; the hook is the
+/// place for the loader's per-thread state that does not (dynamic blocks, DL-19).
+extern "C" fn thread_tls_release(_tp: usize) -> usize {
+    0
 }
 
 /// `__libc_stack_end` (spec §1.1, §27.4; exported by `ld.so` at `GLIBC_2.2.5`, R14-12, D-27.20):
@@ -918,6 +1006,12 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
     run_init(&hooks[..n], &edges[..ne], sp, early.map(|f| f.early_init), rseq_size)
 }
 
+/// The address of one of the loader's `extern "C" fn(usize) -> usize` hooks.
+#[allow(clippy::as_conversions)] // a function's address has no conversion other than `as`
+fn fn_addr(f: extern "C" fn(usize) -> usize) -> usize {
+    (f as *const ()).expose_provenance()
+}
+
 /// Most `DT_NEEDED` links over all objects of one start.
 const EDGES_MAX: usize = 1024;
 
@@ -981,6 +1075,10 @@ fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<
             init_array: w(prog.init_array.addr),
             init_array_len: w(prog.init_array.len),
             rseq_size,
+            tls_size: usize::try_from(THREAD_TLS_SIZE.load(Relaxed)).unwrap_or(0),
+            tls_align: usize::try_from(THREAD_TLS_ALIGN.load(Relaxed)).unwrap_or(0),
+            tls_init: fn_addr(thread_tls_init),
+            tls_release: fn_addr(thread_tls_release),
         };
         let at = core::ptr::from_ref(&info).expose_provenance();
         let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), args(at), 0, 0);
@@ -1059,6 +1157,10 @@ impl liella_ld::reloc::Image for ProcImage {
 
     fn protect(&mut self, at: u64, len: u64, prot: i32) -> Result<(), ()> {
         raw::mprotect(word(at)?, word(len)?, prot).map_err(|_| ())
+    }
+
+    fn tlsdesc_static(&mut self) -> Option<u64> {
+        Some(crate::arch::tlsdesc_static())
     }
 }
 

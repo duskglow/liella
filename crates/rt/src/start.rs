@@ -334,6 +334,19 @@ pub mod private {
         /// plus `tls::RSEQ_OFFSET` (`__rseq_size` as the loader publishes it); 0: none registered,
         /// so the C library registers none for new threads either (D-27.26).
         pub rseq_size: usize,
+        /// The loader's per-thread TLS interface (DL-15 `DL-TLS-THREADS`, design §7): the bytes a
+        /// new thread's static area needs directly below its thread pointer (every initially loaded
+        /// module's block, the surplus and the dtv; 0: the C library may not create threads).
+        pub tls_size: usize,
+        /// The alignment the thread pointer of a new thread needs (a power of two).
+        pub tls_align: usize,
+        /// `extern "C" fn(tp) -> usize`: fill the static area below `tp` of a thread not started yet
+        /// (each module's image, then zeros to its `p_memsz`, and the dtv) and store the dtv's
+        /// address in the thread block's dtv word. The block's other words are the C library's.
+        pub tls_init: usize,
+        /// `extern "C" fn(tp) -> usize`: the thread at `tp` is ending (its last call into the
+        /// loader); the area itself goes with the thread's mapping.
+        pub tls_release: usize,
     }
 
     #[cfg(test)]
