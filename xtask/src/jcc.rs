@@ -163,6 +163,12 @@ fn base_name(section: &str) -> &str {
     section.strip_prefix(".text.hot.").or_else(|| section.strip_prefix(".text.")).unwrap_or(section)
 }
 
+/// The section names of `objdump -h -w` text (any member) whose base name is in `only`, sorted, each once.
+fn selected_sections(headers: &str, only: &BTreeSet<String>) -> Vec<String> {
+    let names: BTreeSet<String> = parse_headers(headers).into_keys().map(|(_, s)| s).filter(|s| only.contains(base_name(s))).collect();
+    names.into_iter().collect()
+}
+
 /// The errors of one disassembly: every section (or, with `only`, the sections whose base name is in it).
 fn check_text(disasm: &str, headers: &str, only: Option<&BTreeSet<String>>) -> (usize, Vec<String>) {
     let aligns = parse_headers(headers);
@@ -199,8 +205,16 @@ fn tool(cmd: &mut Command, what: &str) -> Result<String, String> {
 
 /// Check one archive or object; `only`: the section base names to check (None: every code section).
 pub fn check_file(path: &Path, only: Option<&BTreeSet<String>>) -> Result<usize, String> {
-    let d = tool(Command::new("objdump").args(["-d", "-w"]).arg(path), "objdump -d")?;
     let h = tool(Command::new("objdump").args(["-h", "-w"]).arg(path), "objdump -h")?;
+    let d = match only {
+        None => tool(Command::new("objdump").args(["-d", "-w"]).arg(path), "objdump -d")?,
+        // Only the sections `check_text` reads: objdump -d of the whole 14 MB libc.a took 225 s, of its 47 hot
+        // sections 0.1 s (LAYOUT-CHECK-VERDICT-CACHE). None of them: nothing to disassemble (no jump, an error below).
+        Some(o) => match selected_sections(&h, o) {
+            s if s.is_empty() => String::new(),
+            s => tool(Command::new("objdump").args(["-d", "-w"]).args(s.iter().flat_map(|n| ["-j", n.as_str()])).arg(path), "objdump -d -j <the hot sections>")?,
+        },
+    };
     let (jumps, errors) = check_text(&d, &h, only);
     if jumps == 0 {
         return Err(format!("jcc-check: {}: no jump found in the checked sections (nothing was checked)", path.display()));
@@ -325,5 +339,16 @@ mod tests {
         assert_eq!(check_text(d, h, Some(&other)).0, 0, "a section not named is not checked");
         let h32 = h.replace("2**4", "2**5");
         assert!(check_text(d, &h32, None).1.is_empty());
+    }
+
+    #[test]
+    fn archive_check_disassembles_exactly_the_named_sections() {
+        // no spec clause (D-4.67, LAYOUT-CHECK-VERDICT-CACHE): the -j list of the archive check is every section,
+        // in any member, whose base name the padded files declare (hot prefixes or none), each once, and no other.
+        let row = |m: &str, s: &str, a: u32| format!("\n{m}:     file format elf64-x86-64\n\nSections:\nIdx Name Size VMA LMA File off Algn Flags\n  0 {s} 00000004  0000000000000000  0000000000000000  00000040  2**{a}  CONTENTS, CODE\n");
+        let h = [row("a.o", ".text.sorted.h3.liella_machine_x", 5), row("b.o", ".text.liella_machine_x", 5), row("c.o", ".text.hot.liella_machine_y", 5), row("d.o", ".text.other", 5), row("e.o", ".text.sorted.h3.liella_machine_x", 6)].concat();
+        let only: BTreeSet<String> = ["liella_machine_x".to_string(), "liella_machine_y".to_string()].into();
+        assert_eq!(selected_sections(&h, &only), [".text.hot.liella_machine_y", ".text.liella_machine_x", ".text.sorted.h3.liella_machine_x"]);
+        assert!(selected_sections(&h, &["z".to_string()].into()).is_empty(), "no hot section: nothing selected");
     }
 }

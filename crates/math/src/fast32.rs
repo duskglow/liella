@@ -45,7 +45,7 @@ pub use clog_csqrt::{clogf, clogf_nearest, csqrtf, csqrtf_nearest};
 use erf::{erf_core, erf_refused, erfc_core, erfc_refused, ERFC_DELTA, ERF_DELTA};
 use exp_log::*;
 pub use gamma::{eval_lgamma, eval_tgamma};
-use gamma::{gamma_core, lgamma_core, TGAMMA_DELTA};
+use gamma::{gamma_core, TGAMMA_DELTA};
 use hyperbolic::*;
 use inv_trig::*;
 use trig::*;
@@ -369,10 +369,7 @@ pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)> {
         Fast::Erf => (erf_core(x)?, ERF_DELTA, "erff"),
         Fast::Erfc => (erfc_core(x)?, ERFC_DELTA, "erfcf"),
         Fast::Tgamma => (gamma_core(f64::from(x))?, TGAMMA_DELTA, "tgammaf"),
-        Fast::Lgamma => {
-            let (y, d) = lgamma_core(x)?;
-            (y, d, "lgammaf")
-        }
+        Fast::Lgamma => return eval_lgamma(x, mode).map(|r| r.0),
         Fast::J0 => return bessel_eval(0, x, mode, "j0f"),
         Fast::J1 => return bessel_eval(1, x, mode, "j1f"),
         Fast::Y0 => return bessel_eval(2, x, mode, "y0f"),

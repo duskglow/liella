@@ -323,6 +323,13 @@ pub mod private {
         pub auxv: usize,
         /// The stack end (`__libc_stack_end`): the initial stack pointer.
         pub stack_end: usize,
+        /// The program's `DT_INIT` (relocated address, 0: none). `ld.so` leaves the program's
+        /// own initialisation to `__libc_start_main` (design §14, D-27.24).
+        pub init: usize,
+        /// The program's `DT_INIT_ARRAY` (relocated address, 0: none).
+        pub init_array: usize,
+        /// Entries in the program's `DT_INIT_ARRAY`.
+        pub init_array_len: usize,
         /// The size of the initial thread's rseq area the loader registered at the thread pointer
         /// plus `tls::RSEQ_OFFSET` (`__rseq_size` as the loader publishes it); 0: none registered,
         /// so the C library registers none for new threads either (D-27.26).

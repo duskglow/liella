@@ -184,3 +184,172 @@ pub fn tgamma(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     let (y, eps, m) = tgamma_kernel(x)?;
     fast64::settle(y, eps, m, mode)
 }
+
+// The bands outside [`domain`] (LIBM-RETHINK-GAMMA, D-10.105): closed forms instead of the
+// 384-bit path. Series: lnΓ(1 + x) = −γx + Σ_{k≥2} (−1)^k ζ(k) x^k / k and its exponential
+// (DLMF 5.7.3, 5.7.1); Stirling's series (DLMF 5.11.1) with its remainder bound for real x > 0
+// (DLMF 5.11.ii: smaller than the first omitted term). Every result goes through
+// [`fast64::settle`] (Ziv's rounding test, A. Ziv, ACM TOMS 17(3), 1991).
+
+/// Euler's γ as a double-double.
+const EULER: Dd = Dd { hi: f64::from_bits(0x3fe2_788c_fc6f_b619), lo: f64::from_bits(0xbc56_cb90_701f_bfab) };
+/// ln(2π)/2 and 1/12 as double-doubles.
+const HALF_LN_2PI: Dd = Dd { hi: f64::from_bits(0x3fed_67f1_c864_beb5), lo: f64::from_bits(0xbc86_5b5a_1b7f_f5df) };
+const TWELFTH: Dd = Dd { hi: f64::from_bits(0x3fb5_5555_5555_5555), lo: f64::from_bits(0x3c55_5555_5555_5555) };
+/// Stirling's c_k = B_2k / (2k(2k − 1)), k = 2..10 (the doubles nearest the rationals).
+const STIRLING: [u64; 9] = [
+    0xbf66_c16c_16c1_6c17, 0x3f4a_01a0_1a01_a01a, 0xbf43_8138_1381_3814, 0x3f4b_951e_2b18_ff23, 0xbf5f_6ab0_d999_3c7d,
+    0x3f7a_41a4_1a41_a41a, 0xbf9e_4286_cb0f_5398, 0x3fc6_fe96_381e_0680, 0xbff6_4767_0118_1f3a,
+];
+/// 2^-968 (γx stays normal above it), 2^-110, 2^-70, 2^-512, 2^512, 2^1012, 2^1015.
+const G_MIN: f64 = f64::from_bits(0x0370_0000_0000_0000);
+const E110: f64 = f64::from_bits(0x3910_0000_0000_0000);
+const E70: f64 = f64::from_bits(0x3b90_0000_0000_0000);
+const SC_LO: f64 = f64::from_bits(0x1ff0_0000_0000_0000);
+const SC_UP: f64 = f64::from_bits(0x5ff0_0000_0000_0000);
+/// 2^1015: from here `lnΓ(x) > DBL_MAX` (the threshold is about 2.56e305 < 2^1015).
+pub const X_OVER: f64 = f64::from_bits(0x7f60_0000_0000_0000);
+
+/// `lgamma x` for `0 < |x| < 2^-60` as `(y, eps, sign)`: `lnΓ(x) = −ln|x| − γx + R`,
+/// `|R| <= ζ(2)x²/2 < 2^-120` (the series' terms alternate and decrease). `γx` is formed for
+/// `|x| >= 2^-968` only (below, `|γx| < 2^-968` joins the bound): its rounding `< 2^-113`, `γ.lo·x`
+/// `< 2^-116`. The difference rounds within `2^-96·|y|` (`|y| >= 41.5`). `Γ(x)` has `x`'s sign.
+pub fn lgamma_tiny(x: f64) -> Option<(Dd, f64, i32)> {
+    let a = dd::abs(x);
+    if !(a > 0.0 && a < TINY) {
+        return None;
+    }
+    let (ln, le) = fast64::log_dd(a)?;
+    let g = if a >= G_MIN { -EULER.hi * x } else { 0.0 };
+    let y = Dd::from(g).sub(ln);
+    Some((y, le + E96 * dd::abs(ln.hi) + E110, if x < 0.0 { -1 } else { 1 }))
+}
+
+/// `tgamma x` for `0 < |x| < 2^-60` (subnormals included) as `(y, eps, m)` for [`fast64::settle`]:
+/// `Γ(x) = 1/x − γ + R`, `|R| <= 0.99|x| + |x|² < 2^-59.9` (DLMF 5.7.1). With `s = 2^512` when
+/// `|x| < 2^-512` (else 1; exact scaling), `q = RN(1/(x·s))`, `|q| <= 2^510`, and the residual
+/// `r = 1 − q·x·s` is exact (`two_prod`, then two exact subtractions: `r` is representable, the
+/// classical division residual). So `Γ(x)/s = q + r/(x·s) − γ/s + R/s`: `lo = RN(r/(xs) − γ.hi/s)`
+/// is within `2^-52·(|r/(xs)| + |lo|)`, and `γ.lo + R < 2^-56` (over `s`). Directed results with
+/// `r = 0` (`x` a power of two) are decided by `lo`'s sign only while it clears `settle`'s slack.
+/// A subnormal `x` scales exactly too (`x·2^512 >= 2^-562`, normal), and `q <= 2^562`; then
+/// `m` reaches 1074 (`|Γ(x)| >= 2^1022`), which [`tgamma_band`] rounds or takes as an overflow.
+pub fn tgamma_tiny(x: f64) -> Option<(Dd, f64, i32)> {
+    let a = dd::abs(x);
+    if !(a > 0.0 && a < TINY) {
+        return None;
+    }
+    let (xs, s, k) = if a < SC_LO { (x * SC_UP, SC_LO, 512) } else { (x, 1.0, 0) };
+    let q = 1.0 / xs;
+    let p = two_prod(q, xs);
+    let r = (1.0 - p.hi) - p.lo;
+    let rx = r / xs;
+    let lo = rx - EULER.hi * s;
+    let y = fast_two_sum(q, lo);
+    let eps = f64::EPSILON * (dd::abs(rx) + dd::abs(lo)) + s * f64::from_bits(0x3c70_0000_0000_0000);
+    let e = binade(y.hi);
+    let sc = dd::pow2(-e);
+    Some((y.scale(sc), eps * sc, e + k))
+}
+
+/// `lgamma x` for `16 <= x < X_BIG` as `(y, eps)`: Stirling, `lnΓ(x) = x(ln x − 1) − ln(x)/2 +
+/// ln(2π)/2 + S`, `S = Σ_{k=1}^{10} c_k x^{1−2k}` within `|c_11|·x^-21 < 2^-80` of the series'
+/// value. `ln x` by [`fast64::log_dd`] (`le`, times `x` in the product); `(ln x − 1)·x` and the
+/// sums `2^-96·(|p| + 2)`; `1/(12x)` as a double-double (`u = 1/x` with its exact residual,
+/// `2^-104` relative, `<= 2^-110`); the rest of `S` in `double`, `|rest| <= 6.8e-7`, within
+/// `2^-72`. `y >= 27.9`. Returned as `(y, eps, m)` for [`settle_wide`]: `m = 0` below `2^512`
+/// (`y < 2^522`). From `2^512` on, everything runs on the scale `2^-512` (exact: Dekker's split
+/// overflows above `2^996`, and `y` reaches `2^1024` before `X_OVER`), `S < 2^-515` joins `E70`,
+/// and `y` is normalized into `[1, 2)` with `m` its binade.
+pub fn lgamma_large(x: f64) -> Option<(Dd, f64, i32)> {
+    if !(HI..X_OVER).contains(&x) {
+        return None;
+    }
+    let (ln, le) = fast64::log_dd(x)?;
+    if x >= SC_UP {
+        let xm = x * SC_LO;
+        let p = ln.add_f64(-1.0).mul_f64(xm);
+        let y = p.sub(ln.scale(0.5 * SC_LO)).add(HALF_LN_2PI.scale(SC_LO));
+        let eps = le * xm + E96 * (dd::abs(p.hi) + 2.0 * SC_LO) + E70 * SC_LO;
+        let e = binade(y.hi);
+        let sc = dd::pow2(-e);
+        return Some((y.scale(sc), eps * sc, e + 512));
+    }
+    let p = ln.add_f64(-1.0).mul_f64(x);
+    let uh = 1.0 / x;
+    let s = if x < 67_108_864.0 {
+        let pr = two_prod(uh, x);
+        let ul = ((1.0 - pr.hi) - pr.lo) / x;
+        let w = uh * uh;
+        let c = |k: usize| f64::from_bits(STIRLING[k]);
+        let mut t = c(8);
+        for k in (0..8).rev() {
+            t = t * w + c(k);
+        }
+        let s1 = two_prod(TWELFTH.hi, uh);
+        fast_two_sum(s1.hi, s1.lo + (TWELFTH.hi * ul + TWELFTH.lo * uh) + uh * w * t)
+    } else {
+        // x >= 2^26: 1/(12x) in `double` (< 2^-83 off) and the rest (< 2^-86) join E70.
+        Dd::from(TWELFTH.hi * uh)
+    };
+    let y = p.sub(ln.scale(0.5)).add(HALF_LN_2PI).add(s);
+    Some((y, le * x + E96 * (dd::abs(p.hi) + 2.0) + E70, 0))
+}
+
+/// The unbiased binade of a normal nonzero `v`.
+fn binade(v: f64) -> i32 {
+    i32::try_from((v.to_bits() >> 52) & 0x7ff).unwrap_or(0) - 1023
+}
+
+/// [`fast64::settle`] for `(y ± eps)·2^m` with `m` up to the overflow. For `m >= 1023`, `y` must
+/// be normalized with `|y.hi|` in `[1, 2)` (so `|y.lo| <= 2^-53`) and `eps < 2^-54`. Then
+/// `m >= 1024` puts the value at or beyond `2^1024·(1 − 2^-54)`, an overflow in every mode,
+/// except `|y.hi| = 1` at `m = 1024`: the value may lie just under `2^1024`, where the roundings
+/// toward zero give `DBL_MAX` without an overflow; that one case goes to the accurate path.
+fn settle_wide(y: Dd, eps: f64, m: i32, mode: Rounding) -> Option<(f64, Status)> {
+    if m >= 1024 {
+        return (m > 1024 || dd::abs(y.hi) > 1.0).then(|| crate::elem::overflow::<f64>(y.hi < 0.0, mode));
+    }
+    fast64::settle(y, eps, m, mode)
+}
+
+/// `lgamma` on the bands above, correctly rounded, with `Γ(x)`'s sign, or `None` (the caller runs
+/// the accurate path): `|x| < 2^-60`, and `x >= 16` (overflow from `X_OVER`).
+pub fn lgamma_band(x: f64, mode: Rounding) -> Option<((f64, Status), i32)> {
+    if x >= X_OVER {
+        return (x < f64::INFINITY).then(|| (crate::elem::overflow::<f64>(false, mode), 1));
+    }
+    if x >= HI {
+        let (y, eps, m) = lgamma_large(x)?;
+        return settle_wide(y, eps, m, mode).map(|r| (r, 1));
+    }
+    let (y, eps, sign) = lgamma_tiny(x)?;
+    fast64::settle(y, eps, 0, mode).map(|r| (r, sign))
+}
+
+/// `tgamma` for `0 < |x| < 2^-60`, correctly rounded, or `None` ([`tgamma_tiny`] normalizes `y`
+/// for [`settle_wide`]; `x = ±2^-1024` is its one case left to the accurate path).
+pub fn tgamma_band(x: f64, mode: Rounding) -> Option<(f64, Status)> {
+    let (y, eps, m) = tgamma_tiny(x)?;
+    settle_wide(y, eps, m, mode)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `settle` at `m = 1023` with a value a quarter ulp beyond `DBL_MAX`: the roundings away from
+    /// zero step to `2^1024`, the overflow in the mode (flags and `ERANGE`), the others give
+    /// `DBL_MAX`. No band operand is known to land in that half-ulp window, so it is checked here.
+    #[test]
+    fn settle_rounds_binade_1023_beyond_dbl_max_to_the_overflow() {
+        // Clauses: s10_3_c_0 (D-10.13, D-10.105).
+        let pos = Dd { hi: f64::from_bits(0x3fff_ffff_ffff_ffff), lo: f64::from_bits(0x3c80_0000_0000_0000) };
+        let neg = Dd { hi: f64::from_bits(0xbfff_ffff_ffff_ffff), lo: f64::from_bits(0xbc80_0000_0000_0000) };
+        assert_eq!(fast64::settle(pos, 0.0, 1023, Rounding::Up), Some(crate::elem::overflow::<f64>(false, Rounding::Up)));
+        assert_eq!(fast64::settle(neg, 0.0, 1023, Rounding::Down), Some(crate::elem::overflow::<f64>(true, Rounding::Down)));
+        for mode in [Rounding::Nearest, Rounding::Down, Rounding::Zero] {
+            assert_eq!(fast64::settle(pos, 0.0, 1023, mode).map(|r| r.0), Some(f64::MAX), "{mode:?}");
+        }
+    }
+}

@@ -1,7 +1,8 @@
 # Keys of hot-text.list (every tier) that may name a function without a fixed boundary
 # (LAYOUT-HOTKEY-INLINE-STABLE; `cargo xtask static`, xtask/src/hottext.rs `check_pinned`). Every other Rust key
-# must name a #[inline(never)] function. <v0 key> TAB <tier> TAB <reason>; the tier is the key's tier in
-# hot-text.list. A line whose key gained a fixed boundary, left the list or changed tier is an error. A ratchet
+# must name a #[inline(never)] function. <v0 key> TAB <tier> TAB <reason>; the tier is the key's tier when the
+# line was written, a note only: the train's regen may move a key to another tier, so it is not compared
+# (HOTTEXT-UNPINNED-TIER). A line whose key gained a fixed boundary or left the list is an error. A ratchet
 # (rulings #4997, #5024): lines may only be removed. These keys can still go dead when unrelated code moves
 # LLVM's inlining budget; the build's dead-key check and `cargo xtask hottext-repair` remain their guard.
 _RNvNtC15liella_boundary6locale13refresh_words	startup	a call boundary costs start-up instructions (+3 to +18 in fast, +18 to +45 in release with the other start-up marks: HOTTEXT-REGEN-UNBLOCK, handoff/hottext-regen-unblock.md)
@@ -113,7 +114,6 @@ _RINvNtC15liella_boundary4conv12move_regionshEC15liella_boundary	extra	a generic
 _RINvNtC13liella_legacy13global_locale15replace_changedNtNtC15liella_boundary6locale4GlueEC15liella_boundary	locale	a generic: #[inline(never)] on its definition binds every instantiation, the hot ones too; listed when the check reached this tier (ruling #5024)
 _RINvNtC13liella_legacy13global_locale7replaceNtNtC15liella_boundary6locale4GlueEC15liella_boundary	locale	a generic: #[inline(never)] on its definition binds every instantiation, the hot ones too; listed when the check reached this tier (ruling #5024)
 _RINvNtC13liella_legacy13global_locale18intern_name_lockedNtNtC15liella_boundary6locale4GlueEC15liella_boundary	locale	a generic: #[inline(never)] on its definition binds every instantiation, the hot ones too; listed when the check reached this tier (ruling #5024)
-_RINvNtC6liella6locale11find_cachedINtNtC13liella_legacy13global_locale5FilesNtNtC15liella_boundary6locale4GlueEEC15liella_boundary	locale	a generic: #[inline(never)] on its definition binds every instantiation, the hot ones too; listed when the check reached this tier (ruling #5024)
 _RNvMs2_NtC6liella6localeNtNtC6liella6locale6Locale4with	locale	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
 _RNvNtNtC6liella6locale4name10acceptable	locale	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
 _RINvNtC6liella6locale10find_namedINtNtC13liella_legacy13global_locale5FilesNtNtC15liella_boundary6locale4GlueEEC15liella_boundary	locale	a generic: #[inline(never)] on its definition binds every instantiation, the hot ones too; listed when the check reached this tier (ruling #5024)
@@ -137,7 +137,6 @@ _RNvMNtNtC6liella6locale6table3NtNtNtC6liella6locale6table36Table310runs_equal	l
 _RNvNtNtC6liella6locale4name12same_codeset	locale	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
 _RNvMs2_NtC6liella6localeNtNtC6liella6locale6Locale11item_parsed	locale	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
 _RNvMNtNtC6liella6locale7collateNtNtNtC6liella6locale7collate7Collate5parse	locale	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
-_RINvNtC6liella6locale14attach_charmapINtNtC13liella_legacy13global_locale5FilesNtNtC15liella_boundary6locale4GlueEEC15liella_boundary	locale	a generic: #[inline(never)] on its definition binds every instantiation, the hot ones too; listed when the check reached this tier (ruling #5024)
 _RNvXs0_NtC6liella6localeNtNtC6liella6locale6LocaleNtNtC4core3cmp9PartialEq2eq	locale	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
 _RINvNtC13liella_legacy13global_locale13intern_lockedNtNtC15liella_boundary6locale4GlueEC15liella_boundary	locale	a generic: #[inline(never)] on its definition binds every instantiation, the hot ones too; listed when the check reached this tier (ruling #5024)
 _RNvMs2_NtNtC6liella6locale4viewNtNtNtC6liella6locale4view10LocaleView3new	locale	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
@@ -288,7 +287,6 @@ _RNvMs4_NtNtC6liella7pattern7wordexpINtNtNtC6liella7pattern7wordexp8ExpanderNtNt
 _RNvXs2_NtC15liella_boundary8patternsNtNtC15liella_boundary8patterns9CollectedNtNtNtC6liella7pattern7wordexp5Words4push	extra	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
 _RINvNtNtC6liella2fs4temp4makeINtNtC15liella_boundary3sys8CSysImplKb0_EEC15liella_boundary	extra	a generic: #[inline(never)] on its definition binds every instantiation, the hot ones too; listed when the check reached this tier (ruling #5024)
 _RNvNtC15liella_boundary7catalog4bind	extra	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
-_RINvNtC13liella_legacy4intl4bindINtNtC15liella_boundary3sys8CSysImplKb0_ENtNtC15liella_boundary7catalog8CatalogsEC15liella_boundary	extra	a generic: #[inline(never)] on its definition binds every instantiation, the hot ones too; listed when the check reached this tier (ruling #5024)
 _RINvNtC13liella_legacy4intl6internNtNtC15liella_boundary7catalog8CatalogsEC15liella_boundary	extra	a generic: #[inline(never)] on its definition binds every instantiation, the hot ones too; listed when the check reached this tier (ruling #5024)
 _RINvNtC13liella_legacy4intl9translateINtNtC15liella_boundary3sys8CSysImplKb0_ENtNtC15liella_boundary7catalog8CatalogsEC15liella_boundary	extra	a generic: #[inline(never)] on its definition binds every instantiation, the hot ones too; listed when the check reached this tier (ruling #5024)
 _RNvNtC6liella7catalog19untranslated_locale	extra	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
@@ -317,9 +315,7 @@ _RNvMs0_NtC13liella_legacy4intlNtNtC13liella_legacy4intl10Resolution8set_plan	ex
 _RNvMNtNtC6liella7catalog2moNtNtNtC6liella7catalog2mo2Mo6hinted	extra	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
 _RNvMNtNtC6liella7catalog2moNtNtNtC6liella7catalog2mo2Mo4form	extra	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
 _RNvNtC15liella_boundary7catalog10textdomain	extra	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
-_RINvNtC13liella_legacy4intl10textdomainINtNtC15liella_boundary3sys8CSysImplKb0_ENtNtC15liella_boundary7catalog8CatalogsEC15liella_boundary	tool	a generic: #[inline(never)] on its definition binds every instantiation, the hot ones too; listed when the check reached this tier (ruling #5024)
 _RNvNtC15liella_boundary7options6getopt	tool	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
-_RINvNtC6liella6getopt4nextNtNtC15liella_boundary7options5CArgsNtNtC15liella_boundary7options6CLongsEC15liella_boundary	tool	a generic: #[inline(never)] on its definition binds every instantiation, the hot ones too; listed when the check reached this tier (ruling #5024)
 _RNvNtC15liella_boundary6locale10localeconv	tool	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
 _RNvMs2_NtC6liella6localeNtNtC6liella6locale6Locale6string	tool	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
 _RNvNtC15liella_boundary6locale10lconv_char	tool	boundary cost not measured yet: listed when the check reached this tier (ruling #5024); pin it only with counts that show no cost
