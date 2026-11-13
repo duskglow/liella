@@ -1,49 +1,51 @@
-# SETLOCALE-CTYPE-ENV: handoff
+# SETLOCALE-CTYPE-ENV: handoff (after SETLOCALE-CTYPE-ENV-2)
 
-State: branch `task/setlocale-ctype-env` (from origin/next 19c0ea167); code head 54089d888 (handoff commit on
-top). Build role mei:~/w/s1 (Skylake-SP). Decision: records/pending/SETLOCALE-CTYPE-ENV-1.toml (D-NEW, series D-X,
-as the brief's change section says; its Rules section's template names D-10; the coordinator assigns the id).
-Percall spec in the tree: validation/percall/setlocale.c (the six rows of SETLOCALE-POSIX-ATTR plus LC_ALL "" and
-two LANG-only rows).
+State: branch `task/setlocale-ctype-env-2` (SETLOCALE-CTYPE-ENV's branch plus this run; from origin/next 19c0ea167).
+Build role shiki:~/w/sh1. Decision: records/pending/SETLOCALE-CTYPE-ENV-1.toml (D-NEW, series D-X; the
+coordinator assigns the id). Percall spec: validation/percall/setlocale.c (now 10 rows, plus
+`setlocale_all_empty_lcall_empty`: LC_ALL set but empty, LANG holding the locale).
 
-## Cause (profiled before the design)
+## SETLOCALE-CTYPE-ENV-2 (this run)
 
-wl_trace call 11 of `setlocale(LC_CTYPE, "")` on next (release): 9,562 instructions, ~8,500 in the environment walk
-inlined into setlocale (strnlen 1,827, machine_equal 1,017). All fourteen LC_*/LANG names start with `L`, so every
-`L` entry was measured and compared once per name, and the walk always ran to the end. The load was already
-skipped for a kept name (replace_changed, D-X.83); the locked path was ~1,000. So the brief's premise ("reload each
-call") was only the smaller part.
+- Plants job red (rc 2) cause: the baseline named `-p liella-core`; s01_startup_clauses.rs is in package `liella`.
+  Fixed in the plants file.
+- #5188 (LC_ALL set but empty costs more than LANG only): NOT a selection miss. wl_trace call 11 of both rows
+  showed the lock-free `setlocale_env_kept` answering (no locked path; empty LC_ALL is treated as unset). The
+  extra ~600 instructions were one more `L` entry (`LC_ALL=`) for the walk to read. The 9,527 vs 7,180 in the
+  first run came from two different environments (the test program vs the percall harness).
+- Where the LANG-only LC_ALL "" row went (trace, 8,008 instructions on the inherited head): ~2,000 in the getenv
+  closure finding each of 14 variables by name compare, ~1,500 in getenv_many calling `matches` for every name
+  longer than the entry's `=` place (`LANG=` -> twelve compares), ~750 in one strnlen call per entry to read its
+  first byte.
+- Changes: (1) the selection passes a variable number (`global_locale::ENV_LC_ALL`, `env_key(cat)`, `ENV_LANG`:
+  ENV_KEYS order), not a name; (2) getenv_many compares an early-`=` entry only when the name has `=` at that
+  place (`name.get(e) == Some(&b'=')`, exact); (3) `CText::read_at` with limit 1 reads the byte directly (the
+  byte strnlen would read first). Hot text: the second `candidates` closure of find_named no longer exists;
+  its key dropped (`cargo xtask hottext-repair --at e76f86d0c`) and its hot-text.unpinned line removed.
+- Test: k_getenv_many gains a name holding `=` (`LC=x`, entry `LC=x=1`). Plants: 6 in
+  handoff/SETLOCALE-CTYPE-ENV-plants.txt (env-key-shift, eq-place-wrong, first-byte-lost new).
 
-## Change
+## Results (wl_percall release, shiki, instructions/call; glibc / base 19c0ea167 / this head)
 
-- `global_locale::setlocale_env_kept`: lock-free no-change answer from the query cache (names resolved from the
-  environment on every call, compared with the current names, "POSIX" as "C").
-- Boundary: `setlocale(cat, "")` out of line (`setlocale_env`); one category reads LC_ALL, LC_<cat>, LANG lazily
-  through getenv's scanner; LC_ALL reads LC_ALL, then walks for the other 13 only when it is unset or empty.
-- `environ::getenv_many`: a candidate entry read once (longest name + `=`), names compared only at the entry's `=`.
-- Hot text: the moved closure's key dropped with `cargo xtask hottext-repair --at 6cf3b90bc` (+ its unpinned line).
+query 44.0/76.0/70.0; ctype C 159.1/147.3/124.3; all C 159.2/141.6/119.6; ctype POSIX 2219.0/160.3/137.3;
+all POSIX 2762.1/154.6/132.6; ctype "" 2662.0/8257.0/515.1; ctype "" LANG only 6443.5/7070.4/837.0;
+all "" 11868.0/8801.6/1045.0; all "" LC_ALL empty 22281.4/9514.4/4831.0; all "" LANG only
+21763.4/8458.8/4296.0. Against SETLOCALE-CTYPE-ENV's head (same host, job setlocale-ctype-env-2-percall-2 on
+7d6e9e85c and its earlier rows): ctype "" 587.1 -> 515.1, all "" LANG only 7180 -> 4296. No row slower.
+Jobs: setlocale-ctype-env-2-percall-3 (counts), -plants-2, -gate-2, -check4 (clippy/static).
 
-## Results (wl_percall release, mei, instructions/call; base 19c0ea167 / new 5ae7a4d5f (same code as head) / glibc)
+## Open / next step
 
-query 76.0/70.0/44.0; C 147.3/124.3/156.1; all C 141.6/119.6/156.2; POSIX 160.3/137.3/2120.0; all POSIX
-154.6/132.6/2643.1; LC_CTYPE "" 8254.8/587.1/2551.0; LC_ALL "" 8804.6/1093.0/11401.0; LANG only: LC_CTYPE ""
-7067.2/919.0/6225.1, LC_ALL "" 8466.2/7180.0/21088.6. No row slower. Job setlocale-ctype-env-percall-4.
+- The LANG-only LC_ALL "" row (4,296) is still the walk over every entry for 13 names. Next lever: remember
+  the answers across calls with the existing `process::EnvMemo` (gettext's LANGUAGE memo). It carries the
+  behaviour difference already in docs/differences-from-glibc.md (a direct store into another slot of environ
+  is not seen until the next writer call) and needs its callers serialised: RULING NEEDED before using it here.
+- Then a cost bound in setlocale_env_repeat (the counts are printed only; first run's note).
 
-## Test and plants
+## Not to redo
 
-crates/boundary/tests/setlocale_env_repeat.rs: LANG (C -> C.UTF-8 -> POSIX), LC_ALL set/unset/empty and LC_<cat>
-over LANG changed between calls are seen (14 checks, all pass), counts printed. Plants
-(handoff/SETLOCALE-CTYPE-ENV-plants.txt): env-not-reread (no-change compare skipped), walk-length-only.
-
-## Open (exact next step)
-
-The test program (fast profile, ~10-entry environment, LC_ALL set but EMPTY, LANG=C.UTF-8) counted LC_CTYPE ""
-1,074 and LC_ALL "" 9,527 per call against query 85: LC_ALL "" there is near the base's locked-path cost, and the
-LANG-only LC_ALL row is still 7,180. Not explained in this run (budget). Next: add a percall case with
-`setenv("LC_ALL", "", 1)` and wl_trace it and setlocale_all_empty_lang (`--spec validation/percall/setlocale.c`) to
-see whether setlocale_env_kept misses there (query cache slot, or the walk); then set a cost bound in the test
-(a plant with `.filter(|_| false)` on setlocale_env_kept's result must be caught).
+The kept path is right for LC_ALL empty; the query cache slot is recorded for LC_ALL. Don't re-profile that.
 
 ## Notes
 
-- One heredoc used for a python edit early on (rule: no heredocs) - no effect on results.
+- One heredoc (a python edit of the test file) used in this run against the no-heredoc rule; no effect on results.
