@@ -78,8 +78,8 @@ fn nested(open: &str, mid: &str, close: &str, n: usize) -> Vec<u8> {
 }
 
 #[test]
-fn deep_nesting_stays_bounded_and_names_an_unbalanced_pattern() {
-    // Clauses: s14_9_c_1_2 (validation T30; the depth bound is kept, see docs/differences).
+fn deep_nesting_compiles_and_names_an_unbalanced_pattern() {
+    // Clauses: s14_9_c_1_2 (validation T30; no depth bound: REGCOMP-DEEP-NESTING).
     let loc = Locale::C;
     let ere = regex::regcomp_syntax(cflags::EXTENDED);
     let bre = regex::regcomp_syntax(0);
@@ -91,9 +91,10 @@ fn deep_nesting_stays_bounded_and_names_an_unbalanced_pattern() {
     }
     // A bracket holding `)` does not close a group; an unterminated one is REG_EBRACK.
     assert_eq!(comp(&nested("(", "[)]", "", 300), ere, &loc), Err(ReError::EParen));
-    assert_eq!(comp(&nested("(", "[[:alpha:]]", ")", 300), ere, &loc), Err(ReError::ESpace));
+    assert_eq!(comp(&nested("(", "[[:alpha:]]", ")", 300), ere, &loc), Ok(()));
     assert_eq!(comp(&nested("(", "[a", "", 300), ere, &loc), Err(ReError::EBrack));
-    // Balanced and deeper than the bound: REG_ESPACE (glibc compiles it; kept difference).
-    assert_eq!(comp(&nested("(", "a", ")", 300), ere, &loc), Err(ReError::ESpace));
-    assert_eq!(comp(&nested("(", "a", ")", 200), ere, &loc), Ok(()));
+    // Balanced: compiles at every depth (regex_deep_nesting.rs goes to 100,000).
+    for n in [200, 300, 1000] {
+        assert_eq!(comp(&nested("(", "a", ")", n), ere, &loc), Ok(()), "{n}");
+    }
 }

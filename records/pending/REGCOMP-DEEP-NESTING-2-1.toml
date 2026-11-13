@@ -1,0 +1,12 @@
+id = "D-NEW"
+series = "D-14"
+section = "s14"
+spec = "§14.9"
+ann = "—"
+status = "active"
+story = "REGCOMP-DEEP-NESTING-2"
+date = "2026-11-13"
+tests = ["crates/core/tests/regex_deep_nesting.rs::deep_groups_and_alternations_compile_and_match", "crates/core/tests/regex_deep_nesting.rs::deep_nesting_runs_on_a_small_stack", "crates/core/tests/regex_pre14_triage.rs::deep_nesting_compiles_and_names_an_unbalanced_pattern"]
+body = '''
+**regcomp has no nesting-depth limit; the native stack does not grow with nesting** (REGCOMP-DEEP-NESTING, coordinator ruling #5468: a limit that refuses valid input is a bug, keep the safety and widen acceptance). The parser refused 256 or more nested groups with `REG_ESPACE` (`MAX_DEPTH`); that limit is removed, and every pass that recursed on nesting depth now keeps its work on a heap stack, so depth costs memory only. The passes (`crates/core/src/pattern/regex/`): (1) the parser (`Parser::tree`: open groups on a stack of levels, branches and items of all open levels on one work stack), formerly mutual recursion through alternation, branch and group; (2) `hide_subpatterns` (pre-order walk with an explicit stack, renumbering in one forward pass); (3) the tree itself is an arena (`Parsed::nodes`, every node after its children, children as indices), so dropping it cannot recurse, and each node's `nullable` and group range are computed when it is added (formerly recursive `nullable` and `group_range` walks, also quadratic in repetition nesting); (4) the compiler (`Builder::compile`: an explicit frame stack and a repetition state machine replace the mutually recursive `node`/`rep`, emitting the instructions in the same order). The matcher works on the flat program and did not recurse. `Stack<T, N>` keeps N entries inline and spills to a fallible heap vector (`REG_ESPACE` when that fails), so ordinary patterns allocate nothing extra. The size caps stay (D-14.8's 2^21 matcher states; ruling #5482): nested repetitions `((a)*)*...` grow the states with the square of the depth and are refused from depth 915. Tests: groups (ERE and BRE) and nested alternations at 255, 256, 1,000, 10,000 and 100,000 levels compile and match with the reference's offsets (subexpressions checked up to 1,000), and the 100,000-level patterns compile and match on a thread with a 64 KiB stack. The regex_oracle test copy keeps its own limit (test-only, never in the products).
+'''
