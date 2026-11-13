@@ -86,12 +86,31 @@ pub fn differing(a: &Path, b: &Path) -> Vec<&'static str> {
     GENERATED.iter().copied().filter(|g| fs::read(a.join(g)).ok() != fs::read(b.join(g)).ok()).collect()
 }
 
-/// Where the generated lists of `root` are read from (see the module doc), and the info line to print once.
-/// `env` is [`ENV`]'s value, `train` whether this is the train.
-pub fn resolve(root: &Path, env: Option<&Path>, train: bool) -> Result<(PathBuf, Option<String>), String> {
-    if let Some(d) = env {
-        return Ok((d.to_path_buf(), None));
+/// What decides where the generated lists are read from, besides the tree: the [`ENV`] override directory and
+/// whether this is the train. [`resolve`] takes it explicitly so that its tests never depend on the environment
+/// they run in (the CI gate itself runs with `LIELLA_TRAIN=1`); only [`dir`] reads this process's.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Mode {
+    /// [`ENV`]'s value (unset or empty: none).
+    pub over: Option<PathBuf>,
+    /// `LIELLA_TRAIN=1` ([`train`]).
+    pub train: bool,
+}
+
+impl Mode {
+    /// The mode of this process: its [`ENV`] and `LIELLA_TRAIN`.
+    pub fn from_env() -> Mode {
+        Mode { over: std::env::var_os(ENV).filter(|v| !v.is_empty()).map(PathBuf::from), train: train() }
     }
+}
+
+/// Where the generated lists of `root` are read from under `mode` (see the module doc), and the info line to print
+/// once.
+pub fn resolve(root: &Path, mode: &Mode) -> Result<(PathBuf, Option<String>), String> {
+    if let Some(d) = &mode.over {
+        return Ok((d.clone(), None));
+    }
+    let train = mode.train;
     let (tracked, out) = (root.join(TRACKED), root.join(OUT));
     let Ok(stamp) = fs::read_to_string(out.join(STAMP)) else { return Ok((tracked, None)) };
     let here = tree_hash(root);
@@ -122,18 +141,20 @@ pub fn resolve(root: &Path, env: Option<&Path>, train: bool) -> Result<(PathBuf,
     Ok((out, Some(info)))
 }
 
-/// [`resolve`] for this process (its [`ENV`] and `LIELLA_TRAIN`), once; the info line is printed the first time.
+/// [`resolve`] for this process ([`Mode::from_env`]), once per root; the info line is printed the first time.
 pub fn dir(root: &Path) -> Result<PathBuf, String> {
-    static DIR: OnceLock<Result<PathBuf, String>> = OnceLock::new();
-    DIR.get_or_init(|| {
-        let env = std::env::var_os(ENV).filter(|v| !v.is_empty()).map(PathBuf::from);
-        let r = resolve(root, env.as_deref(), train());
+    type Resolved = (PathBuf, Result<PathBuf, String>);
+    static DIR: OnceLock<Resolved> = OnceLock::new();
+    let once = || {
+        let r = resolve(root, &Mode::from_env());
         if let Ok((_, Some(info))) = &r {
             println!("{info}");
         }
         r.map(|(d, _)| d)
-    })
-    .clone()
+    };
+    let (first, r) = DIR.get_or_init(|| (root.to_path_buf(), once()));
+    // xtask has one root per process; another root is resolved for itself, never given the first one's answer.
+    if first == root { r.clone() } else { once() }
 }
 
 /// The path to read generated list `name` (one of [`GENERATED`]) from.
@@ -144,11 +165,16 @@ pub fn path(root: &Path, name: &str) -> Result<PathBuf, String> {
     Ok(dir(root)?.join(name))
 }
 
-/// A workspace-relative path as a reader opens it: `crates/libc-so/<generated list>` through [`path`], anything
-/// else under `root` (the layout contracts name their key files this way).
+/// A workspace-relative path as a reader opens it: `crates/libc-so/<generated list>` in [`dir`], anything else
+/// under `root` (the layout contracts name their key files this way).
 pub fn rel(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    rel_in(root, rel, || dir(root))
+}
+
+/// [`rel`] with the directory of the generated lists given (`lists`, called only for a generated list).
+fn rel_in(root: &Path, rel: &str, lists: impl FnOnce() -> Result<PathBuf, String>) -> Result<PathBuf, String> {
     match rel.strip_prefix(TRACKED).and_then(|r| r.strip_prefix('/')) {
-        Some(name) if GENERATED.contains(&name) => path(root, name),
+        Some(name) if GENERATED.contains(&name) => Ok(lists()?.join(name)),
         _ => Ok(root.join(rel)),
     }
 }
@@ -210,7 +236,7 @@ pub fn cmd(root: &Path, args: &[String]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{differing, rel, resolve, tree_hash, GENERATED, OUT, STAMP, TRACKED};
+    use super::{differing, rel_in, resolve, tree_hash, Mode, GENERATED, OUT, STAMP, TRACKED};
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -229,6 +255,16 @@ mod tests {
         root
     }
 
+    /// The modes are explicit: these tests read neither `LIELLA_TRAIN` nor `LIELLA_HOT_LISTS` of the process (the CI
+    /// gate runs them with `LIELLA_TRAIN=1`).
+    fn branch() -> Mode {
+        Mode { over: None, train: false }
+    }
+
+    fn train() -> Mode {
+        Mode { over: None, train: true }
+    }
+
     fn stamp(root: &Path) {
         fs::write(root.join(OUT).join(STAMP), format!("{}\n", tree_hash(root))).unwrap();
     }
@@ -239,9 +275,9 @@ mod tests {
     fn train_fails_on_a_stale_tracked_list() {
         let root = tree("train");
         stamp(&root);
-        assert_eq!(resolve(&root, None, true).unwrap(), (root.join(TRACKED), None));
+        assert_eq!(resolve(&root, &train()).unwrap(), (root.join(TRACKED), None));
         fs::write(root.join(TRACKED).join("startup-text.keys"), "# old\nkey_old\tstartup\tfast,release\n").unwrap();
-        let e = resolve(&root, None, true).unwrap_err();
+        let e = resolve(&root, &train()).unwrap_err();
         assert!(e.contains("crates/libc-so/startup-text.keys is stale"), "{e}");
         let _ = fs::remove_dir_all(&root);
     }
@@ -253,14 +289,15 @@ mod tests {
         let root = tree("branch");
         fs::write(root.join(TRACKED).join("hot-text.list"), "# old\nkey_old\tstartup\tfast,release\n").unwrap();
         stamp(&root);
-        let (dir, info) = resolve(&root, None, false).unwrap();
+        let (dir, info) = resolve(&root, &branch()).unwrap();
         assert_eq!(dir, root.join(OUT));
         let info = info.expect("an info line");
         assert!(info.contains("hot-text.list differ from the tracked copies"), "{info}");
         assert_eq!(differing(&root.join(TRACKED), &root.join(OUT)), ["hot-text.list"]);
         // `rel` routes a contract's tracked key path to the fresh copy, a hand-written input to the tree.
-        assert_eq!(rel(&root, "crates/libc-so/hot-text.list").unwrap(), root.join(OUT).join("hot-text.list"));
-        assert_eq!(rel(&root, "crates/libc-so/hot-text.clusters").unwrap(), root.join(TRACKED).join("hot-text.clusters"));
+        let fresh = || resolve(&root, &branch()).map(|(d, _)| d);
+        assert_eq!(rel_in(&root, "crates/libc-so/hot-text.list", fresh).unwrap(), root.join(OUT).join("hot-text.list"));
+        assert_eq!(rel_in(&root, "crates/libc-so/hot-text.clusters", fresh).unwrap(), root.join(TRACKED).join("hot-text.clusters"));
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -270,7 +307,7 @@ mod tests {
     #[test]
     fn a_regeneration_of_another_tree_is_not_read() {
         let root = tree("other");
-        assert_eq!(resolve(&root, None, false).unwrap(), (root.join(TRACKED), None));
+        assert_eq!(resolve(&root, &branch()).unwrap(), (root.join(TRACKED), None));
         stamp(&root);
         let before = tree_hash(&root);
         fs::write(root.join(TRACKED).join("probe-text.keys"), "# changed\n").unwrap();
@@ -278,12 +315,12 @@ mod tests {
         fs::create_dir_all(root.join("crates/core/src")).unwrap();
         fs::write(root.join("crates/core/src/lib.rs"), "fn moved() {}\n").unwrap();
         assert_ne!(tree_hash(&root), before);
-        let (dir, info) = resolve(&root, None, false).unwrap();
+        let (dir, info) = resolve(&root, &branch()).unwrap();
         assert_eq!(dir, root.join(TRACKED));
         assert!(info.is_some_and(|i| i.contains("another tree state")));
-        assert_eq!(resolve(&root, None, true).unwrap().0, root.join(TRACKED), "the train ignores it too");
+        assert_eq!(resolve(&root, &train()).unwrap().0, root.join(TRACKED), "the train ignores it too");
         let over = root.join("over");
-        assert_eq!(resolve(&root, Some(&over), true).unwrap(), (over, None));
+        assert_eq!(resolve(&root, &Mode { over: Some(over.clone()), train: true }).unwrap(), (over, None));
         let _ = fs::remove_dir_all(&root);
     }
 }
