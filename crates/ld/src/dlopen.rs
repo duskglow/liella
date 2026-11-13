@@ -3,7 +3,9 @@
 //! P-2, P-13; D-27.34): the mode word, the verdict on a candidate file, the open count and the
 //! dlerror texts. The boundary driver (`crates/boundary/src/ld.rs`) opens, maps, relocates and runs.
 
+use crate::arch::Arch;
 use crate::elf::{et, pt, Elf, ElfError};
+use crate::map::{self, MapError};
 
 /// `RTLD_LAZY` (`<dlfcn.h>`). Bound eagerly, like `RTLD_NOW`, until DL-20 brings lazy binding.
 pub const RTLD_LAZY: i32 = 0x1;
@@ -93,8 +95,18 @@ pub enum Refusal {
     NotElf,
     /// `EI_CLASS` is `ELFCLASS32`.
     Class32,
-    /// Another `EI_CLASS` value.
+    /// Another `EI_CLASS` value (probed: the same text as `ELFCLASS32`, tools/probe/dl/gaps).
     Class,
+    /// `EI_VERSION` is not `EV_CURRENT`.
+    IdentVersion,
+    /// `e_version` is not `EV_CURRENT`.
+    Version,
+    /// `e_phentsize` is not the ELF64 program header size.
+    Phentsize,
+    /// No `PT_LOAD`, or none holding the program headers.
+    NoSegments,
+    /// A malformed `PT_LOAD` layout (misaligned, unsorted, overlapping, too large).
+    Segments,
     /// `EI_DATA` is not this machine's byte order.
     Data,
     /// `EI_OSABI` is neither System V nor GNU.
@@ -124,8 +136,13 @@ impl Refusal {
     pub fn text(self) -> &'static [u8] {
         match self {
             Refusal::TooShort => b"file too short",
-            Refusal::NotElf | Refusal::Class => b"invalid ELF header",
-            Refusal::Class32 => b"wrong ELF class: ELFCLASS32",
+            Refusal::NotElf => b"invalid ELF header",
+            Refusal::Class32 | Refusal::Class => b"wrong ELF class: ELFCLASS32",
+            Refusal::IdentVersion => b"ELF file version ident does not match current one",
+            Refusal::Version => b"ELF file version does not match current one",
+            Refusal::Phentsize => b"ELF file's phentsize not the expected size",
+            Refusal::NoSegments => b"object file has no loadable segments",
+            Refusal::Segments => b"ELF load command address/offset not page-aligned",
             // ARCH(x86_64): this machine's objects are little-endian (aarch64's too).
             Refusal::Data => b"ELF file data encoding not little-endian",
             Refusal::OsAbi => b"ELF file OS ABI invalid",
@@ -136,7 +153,7 @@ impl Refusal {
             Refusal::Executable => b"cannot dynamically load executable",
             Refusal::PieExecutable => b"cannot dynamically load position-independent executable",
             Refusal::Directory => b"cannot read file data: Is a directory",
-            Refusal::NoDynamic => b"object has no dynamic section",
+            Refusal::NoDynamic => b"object file has no dynamic section",
             Refusal::StaticTls => b"cannot allocate memory in static TLS block",
         }
     }
@@ -164,9 +181,38 @@ pub fn of_elf_error(e: ElfError) -> Refusal {
         ElfError::UnsupportedOsAbi(_) => Refusal::OsAbi,
         ElfError::UnsupportedType(_) => Refusal::Type,
         ElfError::WrongMachine(_) => Refusal::Machine,
+        ElfError::BadIdentVersion(_) => Refusal::IdentVersion,
+        ElfError::BadVersion(_) => Refusal::Version,
+        ElfError::BadPhentsize(_) => Refusal::Phentsize,
         ElfError::OutOfRange(_) => Refusal::Truncated,
         _ => Refusal::Malformed,
     }
+}
+
+/// The refusal for a file the mapping planner rejected.
+pub fn of_map_error(e: MapError) -> Refusal {
+    match e {
+        MapError::Elf(e) => of_elf_error(e),
+        MapError::NotLoadable => Refusal::Type,
+        MapError::NoSegments => Refusal::NoSegments,
+        _ => Refusal::Segments,
+    }
+}
+
+/// The verdict on a candidate file's bytes, in the probed order (tools/probe/dl/gaps): the header,
+/// then the loadable segments, then [`loadable`]. `page` is the page size.
+///
+/// # Errors
+///
+/// The [`Refusal`].
+pub fn check<A: Arch>(file: &[u8], page: u64) -> Result<Elf<'_>, Refusal> {
+    let elf = Elf::parse::<A>(file).map_err(of_elf_error)?;
+    if elf.header().e_type == et::EXEC {
+        return Err(Refusal::Executable);
+    }
+    map::plan::<A>(&elf, page).map_err(of_map_error)?;
+    loadable(&elf)?;
+    Ok(elf)
 }
 
 /// Whether a parsed candidate may be loaded by `dlopen`: executables are refused (P-13), an object
