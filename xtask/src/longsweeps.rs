@@ -143,6 +143,7 @@ pub const SWEEPS: &[Sweep] = &[
     lib("crates/math/src/complex_fast_tests.rs", "complex_fast::tests::cexp_quick_tier_sweep", Group::Long),
     lib("crates/math/src/complex_fast_ls_tests.rs", "complex_fast::ls_tests::clog_csqrt_quick_tier_sweep", Group::Long),
     lib("crates/math/src/complex_fast_sinh_tests.rs", "complex_fast::sinh::tests::csinh_quick_tier_sweep", Group::Long),
+    lib("crates/math/src/complex_fast_pow_tests.rs", "complex_fast::pow::tests::cpow_decline_rates", Group::Long),
     it("crates/math/tests/fast_bessel_n.rs", "fast_bessel_n", "bessel_n_tier_sweep", Group::Long).env(&[("LIELLA_BESSEL_N_SWEEP", "10000000")]),
     // The double special-function fast tiers against their 384-bit paths at 10^5 operands per function and mode
     // (ruling #5061; the gate runs 1500 to 2000). Each took 60 s or more, so they run weekly (ruling #5062).

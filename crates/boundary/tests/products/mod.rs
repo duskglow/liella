@@ -281,6 +281,22 @@ fn libc_by_path(dir: &std::path::Path) -> PathBuf {
     out
 }
 
+/// Liella's `ld.so` and a `libc.so` linker script in `dir` for linking against Liella's
+/// `libc.so.6` by path, the way an installed `libc.so` script does: the C library, the link-time
+/// archive, and the loader for the symbols the ABI places in it (`__libc_stack_end`,
+/// `__tls_get_addr`; R14-12), as needed. Link with `-nodefaultlibs`, the script and `-lgcc`.
+pub(crate) fn liella_link_script(dir: &std::path::Path) -> (PathBuf, PathBuf) {
+    require_products();
+    let ld = root().join("target/liella/ld-linux-x86-64.so.2");
+    assert!(ld.exists(), "{} is missing: run `cargo xtask so`", ld.display());
+    let nonshared = std::process::Command::new("cc").arg("-print-file-name=libc_nonshared.a").output().expect("cc");
+    let nonshared = String::from_utf8_lossy(&nonshared.stdout).trim().to_string();
+    assert!(std::path::Path::new(&nonshared).is_absolute(), "the host compiler has no libc_nonshared.a ({nonshared:?})");
+    let libc = dir.join("libc.so");
+    std::fs::write(&libc, format!("GROUP ( {} {nonshared} AS_NEEDED ( {} ) )\n", libc_by_path(dir).display(), ld.display())).expect("libc.so script");
+    (ld, libc)
+}
+
 /// Self-checking conformance programs linked dynamically by the host's compiler: run on the
 /// host's glibc (the oracle), then the same source linked with the host's start files against
 /// Liella's `libc.so.6` (by path, through a `libc.so` script) with Liella's `ld.so` as its
@@ -294,16 +310,7 @@ pub(crate) fn conformance_dynamic(names: &[&str]) {
     require_products();
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("dynamic-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("scratch");
-    let ld = root().join("target/liella/ld-linux-x86-64.so.2");
-    assert!(ld.exists(), "{} is missing: run `cargo xtask so`", ld.display());
-    // Link the way an installed `libc.so` linker script does: the C library, the link-time archive,
-    // and the loader for the symbols the ABI places in it (`__libc_stack_end`, `__tls_get_addr`;
-    // R14-12), as needed.
-    let nonshared = std::process::Command::new("cc").arg("-print-file-name=libc_nonshared.a").output().expect("cc");
-    let nonshared = String::from_utf8_lossy(&nonshared.stdout).trim().to_string();
-    assert!(std::path::Path::new(&nonshared).is_absolute(), "the host compiler has no libc_nonshared.a ({nonshared:?})");
-    let libc = dir.join("libc.so");
-    std::fs::write(&libc, format!("GROUP ( {} {nonshared} AS_NEEDED ( {} ) )\n", libc_by_path(&dir).display(), ld.display())).expect("libc.so script");
+    let (ld, libc) = liella_link_script(&dir);
     for name in names {
         let src = root().join(format!("conformance/c/{name}.c"));
         let text = std::fs::read_to_string(&src).expect("conformance source");

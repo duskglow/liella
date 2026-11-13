@@ -623,6 +623,9 @@ pub(crate) fn csqrt_any<F: Float>(x: F, y: F, mode: Rounding) -> Option<((F, F),
 pub mod sinh;
 pub use sinh::{csin_nearest, csinh_nearest};
 
+#[path = "complex_fast_pow.rs"]
+pub mod pow;
+
 #[cfg(test)]
 #[path = "complex_fast_tests.rs"]
 mod tests;

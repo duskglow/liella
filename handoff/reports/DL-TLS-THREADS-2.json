@@ -1,0 +1,13 @@
+{"task": "DL-TLS-THREADS-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: LAYOUT-JITTER: gate2 red explained (fast tool 55 at cold 0x800 = setlocale_locked, outside the hot group, crossing a 64 KiB window); head merged with origin/next passes the data-phase test on mei in both profiles; no code change",
+ "branch": "task/dl-tls-threads-2", "head": null,
+ "gate": {"affected": "not rerun (held for the #4347 ruling); data-phase test: head fast 1 failed (reproduced), head+next 2/2 profiles passed on mei", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "How start-up layout jitter rule #4347 applies to this story: the red is cold-text jitter outside the hot group (setlocale_locked crossing 0x650000 at cold 0x800); unpadded counts equal origin/next; merged with next the test passes on the CI host class", "recommendation": "land the branch; leave the jitter to LAYOUT-RETHINK trace-at-build"}],
+ "informational": ["Re-applying bbe7c0530 (cost fix) makes locale::publish_global a dead hot-text key (body in thread::each_block<publish_global closure>, outside the group): fast tool 54->55 and locale 51->52 at every phase; DL-TLS-THREADS-COST must repair the keys in both profiles", "origin/next itself moves fast tool to 55/56 at cold 0x4000/0x5000 (the test's pads miss them)", "mei and keke give identical lowest counts for the same products", "rule slip: one python heredoc to patch a scratch copy of measure.py"],
+ "refused": [],
+ "impact": [{"kind": "none", "what": "diagnosis and measurement only (no code change); unpadded start-up faults head vs origin/next", "before": 54, "after": 54, "unit": "fast tool-mode minor faults", "measured": true}],
+ "improvement": "the data-phase test could print the faulting function names (perf attribution, as diag.py does) so a jitter red explains itself without a pad sweep",
+ "next_step": "owner ruling on #4347 for this story; then land, then DL-TLS-THREADS-COST (repair publish_global/candidates hot-text keys, show fast tool back at 54)",
+ "report_file": "handoff/DL-TLS-THREADS-2-report.md",
+ "jobs": ["dl-tls-threads-2-lint1", "dl-tls-threads-2-meas-h", "keke:dl-tls-threads-2-meas-keke"]}

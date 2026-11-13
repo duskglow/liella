@@ -35,8 +35,9 @@ if [ $phase != merge ]; then
 cc -std=gnu17 -O1 -static -nostdlib -fno-builtin "$P/liella-crt1.o" "$T/crates/core/tests/oracle/page_faults.c" \
     "$P/libc.a" -lgcc -o "$work/page_faults"
 echo x > "$work/in.txt"
+canon_prepare  # LAYOUT-TRACE-HOST-CANONICAL: the tree's host data (canon_host.sh)
 for m in $MODES; do
-    run_traced "$work/names.$m" "$work/gdb.$m.log" -i PATH="$PATH" LANG=en_US.UTF-8 HOT_TEXT_STDIN="$work/in.txt" HOT_TEXT_FOLLOW_FORK= -- "$work/page_faults" "$m"
+    run_traced "$work/names.$m" "$work/gdb.$m.log" LANG=en_US.UTF-8 HOT_TEXT_STDIN="$work/in.txt" HOT_TEXT_FOLLOW_FORK= -- "$work/page_faults" "$m"
 done
 traces_wait || exit 1
 fi
