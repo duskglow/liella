@@ -723,3 +723,16 @@ pub fn newlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cats: &[Cat], name: &[u8], b
     let l = replace(m, base, cats, &names).ok_or(Errno::ENOENT)?;
     intern_locked(m, l)
 }
+
+/// `newlocale(mask, "", base)`: `base` with each category in `cats` taken from the locale the
+/// environment names for it ([`env_name`], as `setlocale(cat, "")` reads it). The new locale's
+/// handle, or `ENOENT` when a name does not resolve.
+pub fn newlocale_env<S: Sys, M: Mapper>(sys: &S, m: &M, cats: &[Cat], getenv: &dyn Fn(&[u8]) -> Option<&'static [u8]>, base: Locale) -> KResult<usize> {
+    let mut names: [&[u8]; 12] = [b"C"; 12];
+    for &c in cats {
+        *names.get_mut(c.index()).ok_or(Errno::EINVAL)? = env_name(c, getenv);
+    }
+    let _g = LOCK.lock(sys);
+    let l = replace(m, base, cats, &names).ok_or(Errno::ENOENT)?;
+    intern_locked(m, l)
+}

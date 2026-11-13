@@ -106,3 +106,72 @@ fn locale_behaviour_equals_the_reference() {
         assert!(s, "recorded difference no longer seen: {:?}", KNOWN[i]);
     }
 }
+
+/// The environments `newlocale_mask.c` runs in: the first without arguments (every mask row),
+/// the rest with one (only the `""` rows): `LC_ALL` set, `LC_ALL` empty with `LC_CTYPE` set,
+/// an unknown `LC_CTYPE`, and no variable at all.
+const MASK_RUNS: [&[(&str, &str)]; 5] = [
+    &[("LANG", "en_US.UTF-8"), ("LC_NUMERIC", "C.UTF-8")],
+    &[("LC_ALL", "C.UTF-8"), ("LANG", "en_US.UTF-8")],
+    &[("LC_ALL", ""), ("LC_CTYPE", "C.UTF-8"), ("LANG", "en_US.UTF-8")],
+    &[("LC_CTYPE", "xx_YY.NOPE"), ("LANG", "en_US.UTF-8")],
+    &[],
+];
+
+#[test]
+fn newlocale_masks_equal_the_reference() {
+    // Clauses: s7_3_c_1, s7_3_f_0 (NEWLOCALE-LC-ALL-BIT; spec/behaviour/newlocale-mask.md):
+    // `1 << LC_ALL` alone is every category, with any other bit `EINVAL`; `""` takes each
+    // category from the environment; a NULL name is `EINVAL`.
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let locales = r.join("target/test-locales");
+    std::fs::create_dir_all(&locales).unwrap();
+    if !ensure_locale(&locales, "en_US.UTF-8") {
+        skip_note::skipped("skipped: no localedef");
+        return;
+    }
+    if skip_note::missing("cc") {
+        skip_note::skipped("skipped: no C compiler");
+        return;
+    }
+    let dir = r.join("target/test-oracles");
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = r.join("crates/core/tests/oracle/newlocale_mask.c");
+    let (host, ours) = (dir.join("newlocale_mask_host"), dir.join("newlocale_mask_liella"));
+    let mut cmd = Command::new("cc");
+    cmd.args(["-std=gnu17", "-O1"]).arg(&src);
+    assert!(oracle::build(cmd, &host), "newlocale_mask.c does not build against the host C library");
+    let mut cmd = Command::new("cc");
+    cmd.args(["-std=gnu17", "-O1", "-static", "-nostdlib", "-fno-builtin"]).arg(r.join("target/liella/liella-crt1.o")).arg(&src).arg(r.join("target/liella/libc.a")).arg("-lgcc");
+    assert!(oracle::build(cmd, &ours), "newlocale_mask.c does not link against the products");
+    let run = |exe: &Path| -> String {
+        let mut out = String::new();
+        for (k, vars) in MASK_RUNS.iter().enumerate() {
+            let mut c = Command::new(exe);
+            c.env_clear().env("LOCPATH", &locales).envs(vars.iter().copied());
+            if k > 0 {
+                c.arg("env");
+            }
+            let o = c.output().unwrap();
+            assert!(o.status.success(), "{} failed: {:?}", exe.display(), o.status);
+            out.push_str(&String::from_utf8_lossy(&o.stdout));
+        }
+        out
+    };
+    let (want, got) = (run(&host), run(&ours));
+    assert!(want.contains("bit6 mask=0x40 name=\"C\" base=NULL: ok"), "the reference accepts 1 << LC_ALL:\n{want}");
+    // The one recorded difference: where the reference leaves errno 0 on a failed load into a
+    // base (or from the environment), Liella sets ENOENT (s7_3_f_0). Both return NULL.
+    let mut diffs = 0;
+    for (k, (w, g)) in want.lines().zip(got.lines()).enumerate() {
+        if w != g && !(w.ends_with("NULL errno=0 base_kept=yes") || w.ends_with("NULL errno=0 base_kept=-")) {
+            diffs += 1;
+            eprintln!("line {}:\n  glibc  {w}\n  liella {g}", k + 1);
+        } else if w != g {
+            assert_eq!(w.replace("errno=0", "errno=2"), g, "line {}: only errno may differ", k + 1);
+        }
+    }
+    assert_eq!(want.lines().count(), got.lines().count(), "line counts differ");
+    assert_eq!(diffs, 0, "lines that differ from the reference");
+}
