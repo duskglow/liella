@@ -1,52 +1,43 @@
 # CONF-DYN-HELPERS (DL-16H): a dynamic mode for the conformance harness
 
-**State.** Branch `task/conf-dyn-helpers`, **based on `origin/task/dl-libc-start-10`** (fast-forward from
-next 5e5ec2a57): on next a dynamically linked program cannot start under Liella's ld.so (job
-`conf-dyn-helpers-so1`, mei: "libc.so.6: ... the library search is not available in this build"; next also lacks the
-dynamic `__libc_start_main`). My commits sit on top of eb99c12df and are separate from DL-LIBC-START's. Role mei:~/w/s1.
-Status: INCOMPLETE (context checkpoint). Head: see handoff/reports/CONF-DYN-HELPERS.json.
+**State.** Branch `task/conf-dyn-helpers-2` (continues `task/conf-dyn-helpers`), **based on
+`origin/task/dl-libc-start-10`** (merged again at 84fb8d645 on 11-13): on next a dynamically linked program cannot
+start under Liella's ld.so (no run-path search, no dynamic `__libc_start_main`). My commits are separate from
+DL-LIBC-START's; CI must wait until DL-LIBC-START-10 lands. Role shiki:~/w/sh1. Head: handoff/reports/CONF-DYN-HELPERS-2.json.
+Status: COMPLETE (gate, plants, lint green on c4418a65d; the commit after it adds only handoff/).
 
-**Done (two WIP commits).**
-- `conformance/run.sh`: dynamic-link mode builds two helper sets and two programs: the reference's (host cc, host
-  libc) and Liella's (`-nodefaultlibs` against a copy of `target/liella/libc.so.6` without DT_SONAME through a
-  `libc.so` script with the host's `libc_nonshared.a`, interpreter `target/liella/ld-linux-x86-64.so.2`; the same
-  method as `conformance_dynamic` in crates/boundary/tests/products/mod.rs, because ld.so has no search on the run
-  path yet). Linked helpers go in by path. Both runs are judged by the EXPECT-* directives. New directives:
-  `DLOPEN-HELPERS`, `HELPER-FLAGS: <helper> <flags>` (run in conformance/c/helpers, `-L` at the helper dir),
-  `LINK-EXPORT-DYNAMIC`, `PENDING-LIELLA: <story>` (reference must pass; Liella failing = `PENDING` line, counted;
-  Liella passing = FAIL; any build failure = FAIL; pending programs link with `--unresolved-symbols=ignore-all`).
-  Programs get `CONF_HELPERS` (+ `LD_LIBRARY_PATH`) = their helper dir. Each helper's .so is removed before the build
-  and checked to exist after it, in both sets (the plant target). Summary line adds `(N of them pending on Liella)`.
-- Programs: `s27_dlsym_handles` (DLSYM-SPECIAL-HANDLES probe + dlsym/dlvsym failure texts; pending DL-16b),
-  `s27_dlopen_failures` (run.sh errors corpus: 13 file cases made at run time, missing dep / undefined symbol /
-  version via helpers with soname and version-script tricks, mode 0, undefined bit 0x10, NOLOAD, P-6 clearing;
-  pending DL-16a), `s27_dynlink_helper_dlsym` now pending DL-16b. Helpers dlh_handle1/2, dlf_* + dlf_v1/v2.map.
-  Left out on purpose: LAZY with an undefined function (DL-20's interim), dlclose, dlinfo (DL-17/18).
-- `xtask/src/affected.rs`: any file under conformance/c/helpers/ selects every conformance program (map files).
-- conformance/README.md rewritten for the mode.
+**Decisions in force.** Pending record `records/pending/CONF-DYN-HELPERS-2-1.toml` (series D-27, id to be assigned):
+two builds judged by the same EXPECT-* directives, by-path libc until the run-path search, PENDING-LIELLA semantics,
+helper selection in `affected`.
 
-**Verified.** `conf-dyn-helpers-try3` (mei, head 56fe768db's code): the three programs pass on the reference with every
-probed text, and are PENDING on Liella (rc 139 / 127 as expected); s01_abort (static) still passes. 4 passed 0 failed.
+**Done.**
+- CONF-DYN-HELPERS (two WIP commits): `conformance/run.sh` dynamic-link mode (directives `LINK-HELPERS`,
+  `DLOPEN-HELPERS`, `HELPER-FLAGS`, `LINK-EXPORT-DYNAMIC`, `PENDING-LIELLA`), programs `s27_dlsym_handles`,
+  `s27_dlopen_failures` (pending), `s27_dynlink_helper_dlsym` (now pending DL-16b), helpers, `affected.rs` selection
+  of `conformance/c/helpers/`, conformance/README.md.
+- CONF-DYN-HELPERS-2: clause tests `s27_1_f_0` (s27_dlopen_failures, PENDING until DL-16a) and `s27_1_c_3`
+  (s27_dlsym_handles, PENDING until DL-16b) in crates/core/tests/s27_dynlink_clauses.rs (now a specified file; the
+  other 17 clauses stay stubs); each asserts its program's PENDING line by name. Plants in
+  handoff/CONF-DYN-HELPERS-plants.txt (helper unbuilt in either set, the existence check (equivalent, reason in the
+  file), both arms of the pending verdict). Decision record above.
 
-**Next step (about 30-40 calls).**
-1. Clause tests in `crates/core/tests/s27_dynlink_clauses.rs` (still the generated stub file: replace the header line
-   by `// Specified (phase 14).` as other specified files do): `s27_1_f_0` runs `s27_dlopen_failures`, `s27_1_c_3`
-   runs `s27_dlsym_handles`, each through conformance/run.sh and asserting the output holds
-   `conformance: PENDING <name> on Liella until DL-16a|DL-16b` (named, counted; run.sh fails the day Liella passes).
-   Doc comments name the clause and the pending story.
-2. Plants file `handoff/CONF-DYN-HELPERS-plants.txt` (docs/plants.md format), at least: skip `build_helper` for the
-   Liella set (`build_helper "$h" "$ldir"` -> `true`), skip it for the reference set, drop the existence check is
-   EQUIVALENT only if the build checks still catch it (test it), drop `pend` FAIL branch (Liella passing not caught:
-   needs a fake pass, mark equivalent with reason or plant `[ "$ok" -eq 1 ]` -> `true`). cmd: `cargo xtask affected
-   --only conformance:s27_dlopen_failures --with-exports --run` or `-p liella-core --test s27_dynlink_clauses`; msg
-   `helper .* (was not built|does not build)`.
-3. Pending decision record: `cargo xtask records new decision D-NEW --series D-27 --story CONF-DYN-HELPERS` (harness
-   design: two builds, by-path libc until the run-path search lands, PENDING-LIELLA semantics).
-4. clippy, static, direct gate `cargo xtask affected --run --base origin/next` (the base is dl-libc-start-10: the
-   gate will also select its files; pass `--base origin/task/dl-libc-start-10` if the coordinator prefers, say so),
-   plants job; handback-check.
+- CONF-DYN-HELPERS-2 also fixed `cargo xtask affected`'s failure report (D-X.27) for the inherited run.sh refactor:
+  `verdict()` labels misses `<name> (reference|Liella)` and each run has its own stderr file; `conformance_failures`
+  now prefixes the run and tails the files the FAIL line names; format test updated, new test
+  `a_failed_dynamic_link_conformance_program_reports_the_failing_run` (the first gate failed on the format test).
 
-**Do not redo.** The base decision and its probe; the reference texts (all match).
+**Jobs (shiki), final code head c4418a65d.** `conf-dyn-helpers-2-lint3` (clippy, static, records check: rc 0),
+`conf-dyn-helpers-2-gate2` (`affected --run --base origin/next`, which also selects DL-LIBC-START-10's files: 32
+suites ok, 11697 passed, 0 failed; conformance 132 passed, 0 failed, 3 pending on Liella; peak 14G),
+`conf-dyn-helpers-2-plants2` (7 plants: 6 CAUGHT, 1 EQUIVALENT, no WARN). Superseded: `conf-dyn-helpers-2-gate`
+(rc 1: the xtask format test above, plus one fstree_equals_the_reference miss that passed on rerun, see the report),
+`-plants` (older head), `-lint0..2`, `-xt1/2` (targeted checks).
 
-**Open questions.** When ld.so's run path gains the library search, drop the by-path libc copy and link Liella's
-builds against libc.so.6 by soname (a dlopen'd helper's DT_NEEDED `libc.so.6` must then match the loaded libc).
+**Open questions.** When ld.so's run path gains the library search, drop the by-path libc copy (`dyn_setup` in
+run.sh) and link Liella's builds against libc.so.6 by soname (a dlopen'd helper's DT_NEEDED `libc.so.6` must then
+match the loaded libc). Static TLS exhaustion (part of s27_1_f_0's text) has no program yet.
+
+**Next step.** When DL-16a / DL-16b land: their run fails on the PENDING-LIELLA FAIL line; remove the directive from
+the program and replace `assert_pending` in the clause test by a plain run (`conformance(&[...])`).
+
+**Do not redo.** The base decision and its probe; the reference texts (all match); the clause tests and plants.
