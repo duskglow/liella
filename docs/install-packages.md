@@ -65,6 +65,12 @@ tools/deb/proof.sh target/deb trixie      # unprivileged chroot (mmdebstrap --mo
 tools/deb/proof.sh target/deb excalibur   # needs Devuan's keyring (KEYRING=...)
 ```
 
+`proof.sh` takes the suite from its official mirror (`deb.debian.org`, `deb.devuan.org/merged`);
+`MIRROR=<url>` names a mirror of that archive instead. Trust comes from the keyring, not the
+transport: apt accepts only an index signed by a key in `KEYRING`, so a plain-HTTP mirror is fine.
+The packages' `Maintainer` is `Liella Maintainers <liella@koiren.ai>`; `DEB_MAINTAINER` overrides
+it for a rebuild.
+
 `build.sh` builds the release profile with the packages' loader layout (`LIELLA_PREFIX=/usr/lib/liella`,
 `LIELLA_LIBDIR=usr/lib/x86_64-linux-gnu`); it needs `cargo`, `dpkg-deb` and `strip`. The build is
 reproducible: building the same commit twice gives byte-identical packages (times from

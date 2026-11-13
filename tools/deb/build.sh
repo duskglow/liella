@@ -44,7 +44,8 @@ done
 
 sysroot=/usr/lib/liella
 ma=x86_64-linux-gnu
-maint=${DEB_MAINTAINER:-Liella project <liella-packaging@invalid>}
+# The project's packaging address (owner 2026-11-13); DEB_MAINTAINER overrides it for a rebuild.
+maint=${DEB_MAINTAINER:-Liella Maintainers <liella@koiren.ai>}
 
 if [ -z "$products" ]; then
     [ -z "$version" ] || { echo "build.sh: --version goes with --products" >&2; exit 2; }

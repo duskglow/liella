@@ -5,7 +5,9 @@
 #
 # SUITE: trixie (Debian stable, https://deb.debian.org/debian) or excalibur (Devuan,
 # http://deb.devuan.org/merged; Devuan's mirror network serves plain HTTP, apt checks the
-# signatures with the keyring). Only those official mirrors are used.
+# signatures with the keyring). MIRROR names a mirror of the suite's archive instead (for
+# example a local one; plain HTTP is fine: apt accepts only an index signed by a key in KEYRING,
+# and the packages by their hashes in that index).
 #
 # In the chroot (tools/deb/inside.sh): install the packages; build and run the smoke programs
 # with liella-gcc/liella-g++ (dynamic and static); check that the system's programs still run and
@@ -14,7 +16,8 @@
 # equal). Prints inside.sh's "proof:" lines; exit 1 when any is FAIL.
 #
 # Environment: MMDEBSTRAP (default: mmdebstrap on PATH), KEYRING (default: the suite's keyring in
-# /usr/share/keyrings), PROOF_LINTIAN=0 to skip lintian.
+# /usr/share/keyrings), MIRROR (default: the suite's official mirror above), PROOF_LINTIAN=0 to
+# skip lintian.
 set -eu
 [ $# -ge 2 ] || { echo "usage: tools/deb/proof.sh DEBDIR SUITE [LOGDIR]" >&2; exit 2; }
 debdir=$(cd "$1" && pwd)
@@ -27,6 +30,8 @@ case $suite in
     excalibur) mirror=http://deb.devuan.org/merged; keyring=${KEYRING:-/usr/share/keyrings/devuan-archive-keyring.gpg} ;;
     *) echo "proof.sh: suite $suite: trixie or excalibur" >&2; exit 2 ;;
 esac
+mirror=${MIRROR:-$mirror}
+echo "proof: INFO suite $suite from $mirror"
 [ -e "$keyring" ] || { echo "proof.sh: no keyring $keyring (set KEYRING: a keyring file or a directory of them)" >&2; exit 2; }
 command -v "$mm" > /dev/null || [ -x "$mm" ] || { echo "proof.sh: no mmdebstrap (set MMDEBSTRAP)" >&2; exit 2; }
 
