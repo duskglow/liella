@@ -1133,9 +1133,9 @@ execvp	GLIBC_2.2.5	crates/boundary/src/posix/s18_processes.rs:103	ret::zero
 execvpe	GLIBC_2.11	crates/boundary/src/posix/s18_processes.rs:109	ret::zero
 exit	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:68	process::exit
 exp	(math-gen)	crates/boundary/src/posix/s10_math.tsv:92	mret::elem32_onepass
-exp	(math-gen)	crates/boundary/src/posix/s10_math.tsv:93	mret::elem_fast
+exp	(math-gen)	crates/boundary/src/posix/s10_math.tsv:93	mret::elem_fast_dir
 exp	(math-gen)	crates/boundary/src/posix/s10_math.tsv:94	mret::elem
-exp	GLIBC_2.29	crates/boundary/src/posix/s10_math_gen.rs:1759	mret::elem_fast
+exp	GLIBC_2.29	crates/boundary/src/posix/s10_math_gen.rs:1759	mret::elem_fast_dir
 exp10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:100	mret::elem
 exp10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:98	mret::elem32_onepass
 exp10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:99	mret::elem_fast
@@ -1154,8 +1154,8 @@ exp2f32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1824	mret::elem_fa
 exp2f64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1829	mret::elem_fast
 expf	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1844	mret::elem32_onepass
 expf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1854	mret::elem32_onepass
-expf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1859	mret::elem_fast
-expf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1864	mret::elem_fast
+expf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1859	mret::elem_fast_dir
+expf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1864	mret::elem_fast_dir
 explicit_bzero	GLIBC_2.25	crates/boundary/src/posix/s04_strings.rs:143	ret::unit
 expm1	(math-gen)	crates/boundary/src/posix/s10_math.tsv:101	mret::elem
 expm1	(math-gen)	crates/boundary/src/posix/s10_math.tsv:102	mret::elem_fast
