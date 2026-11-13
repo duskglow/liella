@@ -333,3 +333,23 @@ pub fn tgamma_band(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     let (y, eps, m) = tgamma_tiny(x)?;
     settle_wide(y, eps, m, mode)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `settle` at `m = 1023` with a value a quarter ulp beyond `DBL_MAX`: the roundings away from
+    /// zero step to `2^1024`, the overflow in the mode (flags and `ERANGE`), the others give
+    /// `DBL_MAX`. No band operand is known to land in that half-ulp window, so it is checked here.
+    #[test]
+    fn settle_rounds_binade_1023_beyond_dbl_max_to_the_overflow() {
+        // Clauses: s10_3_c_0 (D-10.13, D-10.105).
+        let pos = Dd { hi: f64::from_bits(0x3fff_ffff_ffff_ffff), lo: f64::from_bits(0x3c80_0000_0000_0000) };
+        let neg = Dd { hi: f64::from_bits(0xbfff_ffff_ffff_ffff), lo: f64::from_bits(0xbc80_0000_0000_0000) };
+        assert_eq!(fast64::settle(pos, 0.0, 1023, Rounding::Up), Some(crate::elem::overflow::<f64>(false, Rounding::Up)));
+        assert_eq!(fast64::settle(neg, 0.0, 1023, Rounding::Down), Some(crate::elem::overflow::<f64>(true, Rounding::Down)));
+        for mode in [Rounding::Nearest, Rounding::Down, Rounding::Zero] {
+            assert_eq!(fast64::settle(pos, 0.0, 1023, mode).map(|r| r.0), Some(f64::MAX), "{mode:?}");
+        }
+    }
+}
