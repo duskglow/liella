@@ -751,7 +751,9 @@ fn init_startup_group_ends_inside_the_first_fault_around_window() {
         .and_then(|w| u64::from_str_radix(w[2].trim_start_matches("0x"), 16).ok())
         .expect("no executable LOAD segment in the probe");
     let (start, end) = (seg & !0xfff, (seg & !0xfff) + FIRST_WINDOW);
-    let list = std::fs::read_to_string(r.join("crates/libc-so/hot-text.list")).expect("hot-text.list");
+    // The list the products were grouped from (LAYOUT-TRACE-AT-BUILD: a trace-mode build's own list,
+    // whose start-up tier differs from the committed one); the first-window keys stay hand-kept.
+    let list = std::fs::read_to_string(generated_list("hot-text.list")).expect("hot-text.list");
     let startup = list.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).take_while(|l| l.split('\t').nth(1) == Some("startup")).count();
     let first = std::fs::read_to_string(r.join("crates/libc-so/hot-text.first-window")).expect("hot-text.first-window");
     let group = startup + first.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).count();
