@@ -1,10 +1,11 @@
 # LAYOUT-TRACE-DEFAULT: trace-at-build is the default of every product build
 
-State: branch `task/layout-trace-default-3` (run 3; HEAD in handoff/reports/LAYOUT-TRACE-DEFAULT-3.json), on top of
-`task/layout-trace-default-2` (run 2) and `task/layout-trace-default` (run 1). Plan: `plan/layout-rethink.md` section 4, rulings #5190-#5194; LT-1 is
-`handoff/LAYOUT-TRACE-AT-BUILD.md` (D-X.88). Decision: `records/pending/LAYOUT-TRACE-DEFAULT-1.toml` (D-NEW, series
-D-X, amends D-X.88; CI holds the branch until the coordinator assigns its id). Plants:
-`handoff/LAYOUT-TRACE-DEFAULT-plants.txt` (8). The story's work is done; nothing is left but landing.
+State: branch `task/layout-trace-default-4` (run 4; HEAD in handoff/reports/LAYOUT-TRACE-DEFAULT-4.json), origin/next
+d01086da3 merged into run 3's head c605d4486, on top of runs 1-3 (`task/layout-trace-default{,-2,-3}`). Plan:
+`plan/layout-rethink.md` section 4, rulings #5190-#5194; LT-1 is `handoff/LAYOUT-TRACE-AT-BUILD.md` (D-X.88).
+Decision: `records/decisions/D-X/D-X.92.toml` (amends D-X.88; id assigned in run 3). Plants:
+`handoff/LAYOUT-TRACE-DEFAULT-plants.txt` (8; run 4 changed no code, only a budget value and record text). The
+story's work is done; nothing is left but landing.
 
 ## What changed
 
@@ -83,6 +84,43 @@ cargo clippy --all-features -D warnings) rc 0, and `layout-trace-default-3-gate`
 xtask change) rc 0: 11745 passed / 0 failed in 32 suites, conformance 132 / 0, peak 16G, 50 min beside the
 shiki proof.
 
+## Run 4: merged with next (DL-DLOPEN-TLS-SURPLUS-3), rw fast 11 -> 12
+
+Why -3 went red in CI: on the train head (mei, fast) STARTUP-DATA-WINDOWS counted 12 written start-up pages
+against the branch's rw-budget-fast 11. Every other contract and test passed.
+
+Run 4 merged origin/next d01086da3 (clean) and ran run 3's proof3.sh (scratch: default so, layout-check,
+hot_text_products twice per profile, warm-up + 5 runs per probe) on the merged head 9b3c46367 in RAM copies
+(`/mnt/zram/claude/LAYOUT-TRACE-DEFAULT-4/proof-1`; keke `/dev/shm/claude/LAYOUT-TRACE-DEFAULT-4/proof-1`).
+Jobs: mei `layout-trace-default-4-mei-proof`, keke `-keke-proof`, shiki `-shiki-proof`, kanon `-kanon-proof`.
+Each ends rc 1 BY DESIGN: the fast `so` failed its layout check at the old budget of 11 (the products were still
+written and measured in full). mei moved, so shiki and kanon were measured too (coordinator note). Every run
+was identical. Release libc.a was byte-identical on all four hosts (md5 7467865d...). Fast libc.a was identical
+on mei, shiki and kanon (35f7cf21...) and differs on keke (161e68b2...); runs 2 and 3 saw the same effect for
+the fast hot-text list, and the fault table does not move.
+
+| fast / release | true | locale | tool | fork | localtime | lt+mktime | float | text win | ro win | rw pages |
+|---|---|---|---|---|---|---|---|---|---|---|
+| -3 table, four hosts (run 3, base ba84cb320) | 11 / 10 | 46 / 47 | 50 / 49 | 5 / 5 | 17 / 18 | 17 / 18 | 3 / 3 | 2 / 2 | 1 / 1 | 11 / 14 |
+| merged head, mei, keke, shiki, kanon (run 4) | 11 / 10 | 46 / 47 | 50 / 49 | 5 / 5 | 17 / 18 | 17 / 18 | 3 / 3 | 2 / 2 | 1 / 1 | **12** / 14 |
+| branch bound (run 4) | 11 | 47 | 50 | 5 | 18 | 18 | 3 | 2 / 2 | 1 / 1 | **12** / 14 |
+| origin/next d01086da3 bound | 17 | 51 | 56 | 6 | 20 | 20 | 5 | 4 / 4 | 1 / 1 | 20 / 21 |
+
+Change (fec641f89): `layout/contracts.tsv` rw-budget-fast 11 -> 12; D-X.92 records the merged-head numbers and the
+cause. Every other bound stays and still matches the measurement, and every bound is still below next's.
+
+The rise comes from placement alone (coordinator question): the layout check lists
+`liella_boundary::heap::RESERVE_MEM` (64 KiB zeroed array at 0x897c18, 0xc18 into a page) "alone" on pages
+0x897000 and 0x898000, and printf's `Env::text_only::C` (0x856ef8-0x857288) "alone" on 0x856000, the page before
+the other printf data. The traced data clusters could pack both: put the reserve page-aligned at the end of the
+rw cluster, and put `text_only::C` next to the printf data on 0x857000. By page count that would read 10 fast (an
+estimate, not measured). It is not done here (LT-2 clusters by phase).
+
+Run 4 jobs on shiki role sh1: `layout-trace-default-4-lint0` (inherited head c605d4486: xtask clippy + static)
+rc 0; on the final tree fec641f89, `layout-trace-default-4-lint1` (xtask clippy, static, cargo clippy
+--all-features -D warnings) rc 0, and `layout-trace-default-4-gate` (`cargo xtask affected --run`, escalated to
+FULL by the xtask change; its fast `so` runs the contracts at the new budget): see the report json for its result.
+
 ## Release check for the CI gate (brief step 5)
 
 After the fast `cargo xtask affected --tier full --run`, in the same tree (it replaces the fast products, so last):
@@ -112,7 +150,11 @@ After the fast `cargo xtask affected --tier full --run`, in the same tree (it re
 
 * Do not redo: the tracer survey (run 1: gdb 15.1 with Python on mei, keke, shiki, kanon; timing hosts build nothing),
   the code, the proof comparison above.
-* The bounds have no margin. All four gate host classes now measure exactly at them (run 3). A count above a bound
-  on some other host is a finding about that host, not a reason to raise the bound.
+* The bounds have no margin. All four gate host classes measure exactly at them (run 3; again on the merged head in
+  run 4). A count above a bound on some other host is a finding about that host, not a reason to raise the bound.
+  Moving next (zero-margin budgets) can still red the train through placement alone (run 4's rw page); until LT-2
+  packs the data clusters, the response is to measure the merged head and set the budget to that.
+* This chain has reached -4 (here for next moving under a zero-margin budget, not a code defect): RUT RULE says a
+  step-back review by a fresh agent comes before any -5.
 * Next: LT-5 (delete the committed lists, the dead-key and pin checks, the hot-lists lane and the train regen step);
   `0` goes with it.
