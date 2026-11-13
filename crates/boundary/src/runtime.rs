@@ -7,7 +7,8 @@
 //! `liella_rt::tls`, `liella::config` and `crate::process`.
 
 use core::ffi::{c_char, c_int, c_void};
-use core::sync::atomic::Ordering::{Relaxed, Release};
+use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
+use core::sync::atomic::{AtomicBool, AtomicUsize};
 
 use liella::config::Tunables;
 use liella_kernel::auxv::Auxv;
@@ -305,7 +306,10 @@ fn addr0(f: Fn0) -> usize {
 
 /// Start step 3 for [`early_init`]: `environ`, the arguments (the native interface's), the program
 /// names and `__libc_stack_end`, as [`start`] publishes them (kept apart so the static start's code
-/// and its hot-text keys stay as they are; DL-14 makes `start` skip its copy under Liella's `ld.so`).
+/// and its hot-text keys stay as they are; under Liella's `ld.so`, `start` skips its copy, D-27.24).
+/// [`start_under_liella_ld`] calls it again to undo `.preinit_array` changes (inlined at both
+/// sites: no hot-text key of its own).
+#[inline(always)]
 fn publish(argv_addr: usize, n_args: usize, envp: usize, stack_end: usize) {
     ffi::environ.store(envp, Release);
     process::ARGV.store(argv_addr, Release);
@@ -330,8 +334,10 @@ fn publish(argv_addr: usize, n_args: usize, envp: usize, stack_end: usize) {
 /// `ld.so` calls it after relocation and before any constructor, `.preinit_array` included, so
 /// constructors see an initialised C library: the auxiliary vector, steps 3 and 4 (`environ`, the
 /// program names, `__libc_stack_end`, the tunables and the CPU paths). The NULL-folding guard is
-/// decided at the first small copy or fill (`dispatch::resolve_fold`). `__libc_start_main` runs
-/// the same steps again with the same values (DL-14 makes it skip them).
+/// decided at the first small copy or fill (`dispatch::resolve_fold`). `__libc_start_main` then
+/// skips steps 1-4 but publishes `environ` and the program names again ([`start_under_liella_ld`],
+/// D-27.24): a `.preinit_array` function's `setenv` or change to the program names is undone, a
+/// constructor's stays.
 pub fn early_init(info: usize) {
     // UNSAFE(slice): the start description `ld.so` passes.
     #[allow(unsafe_code)]
@@ -352,8 +358,89 @@ pub fn early_init(info: usize) {
     crate::thread::set_loader_rseq(info.rseq_size != 0);
     // The tunables without diagnostics (`ld.so` read the string already).
     let secure = aux.get(AT_SECURE).is_some_and(|v| v != 0);
+    // Secure mode's standard descriptors, before any constructor can open a file in their place
+    // (`ld.so` cleared the unsafe variables already; D-27.24).
+    if secure && start::open_std_fds(&CSys).is_err() {
+        die(b"cannot open /dev/null on a closed standard descriptor");
+    }
     let tunables = process::getenv(crate::startup_names::GLIBC_TUNABLES).map_or(Tunables::default(), |v| Tunables::parse(strz::env_value(v), secure));
     let _ = cpu::init_with(&tunables);
+    for (slot, v) in PROGRAM_INIT.iter().zip([info.init, info.init_array, info.init_array_len]) {
+        slot.store(v, Relaxed);
+    }
+    // Last: `__libc_start_main` takes the dynamic path once this is set (D-27.24).
+    EARLY_DONE.store(true, Release);
+}
+
+/// Set by [`early_init`]: Liella's `ld.so` started the program and ran start steps 1-4, so
+/// `__libc_start_main` must not run them again (D-27.24). Never set in a static program or under
+/// another loader, which never calls `__liella_libc_early_init`.
+static EARLY_DONE: AtomicBool = AtomicBool::new(false);
+
+/// The program's `DT_INIT`, `DT_INIT_ARRAY` and its entry count, as `ld.so` passed them to
+/// [`early_init`] (0: none).
+static PROGRAM_INIT: [AtomicUsize; 3] = [const { AtomicUsize::new(0) }; 3];
+
+/// `__libc_start_main` in a program Liella's `ld.so` started (design §14, D-27.24): `ld.so` made
+/// the initial thread (step 1), cleared the environment in secure mode and called [`early_init`]
+/// (steps 2-4) before any constructor; it ran the program's `.preinit_array` and every shared
+/// object's initialisation. Left here: the thread's kernel registrations and the library's own
+/// state, `rtld_fini` (each object's termination, the program's `.fini_array` included), the
+/// initial `environ` and program names published again (a `.preinit_array` function's changes do
+/// not reach the constructors or `main`), then the program's own `DT_INIT` and `DT_INIT_ARRAY`
+/// (new crt1, `init` NULL) or `init` (old crt1), each with `(argc, argv, envp)`, then `main`. An
+/// old crt1's `fini` is not registered: `rtld_fini` already runs the program's termination, and
+/// running `fini` as well would run its `.fini_array` twice.
+#[inline(never)]
+fn start_under_liella_ld(main: Option<Main>, argc: c_int, argv_addr: usize, init: Option<Fn0>, rtld_fini: Option<Fn0>) -> ! {
+    let n_args = usize::try_from(argc).unwrap_or(0);
+    let envp = argv_addr.wrapping_add(n_args.wrapping_add(1).wrapping_mul(8));
+    let t = tb::current();
+    if let Ok(tid) = CSys.set_tid_address(&t.tid) {
+        t.tid.store(u32::try_from(tid).unwrap_or(0), Relaxed);
+    }
+    // Threads need the loader's TLS interface (DL-15); until then, as under another loader.
+    crate::thread::forbid();
+    // The program's start-up x87 control word (D-10.5), before any of its code runs from here.
+    let cw = ffi::liella_link_fpu_control();
+    // ARCH(x86_64): x87 control word reset at start-up; FPCR on aarch64 (A-9)
+    if cw != X87_DEFAULT_CONTROL {
+        CSys.set_x87_control(cw);
+    }
+    let secure = process::secure();
+    crate::heap::perturb_from_start(process::getenv(crate::startup_names::GLIBC_TUNABLES).and_then(|v| Tunables::malloc_perturb(strz::env_value(v), secure)));
+    crate::nscache::start(secure);
+    // rseq stays with the loader (DL-13): libc registers no area of its own here.
+    crate::thread::RSEQ_OWNED.store(false, Release);
+    crate::thread::init_initial(false);
+    crate::cancel::install();
+    // 5. Termination, then the program's initialisation.
+    if let Some(f) = rtld_fini {
+        process::register(process::entry(ATEXIT, addr0(f), 0, 0));
+    }
+    // The initial environment and names again, before the program's own initialisation.
+    publish(argv_addr, n_args, envp, ffi::__libc_stack_end.load(Acquire));
+    let a = |v: usize| i64::from_ne_bytes(v.to_ne_bytes());
+    match init {
+        // Before 2.34, crt1 passed `__libc_csu_init(argc, argv, envp)`, which runs the arrays.
+        Some(f) => {
+            let _ = ffi::liella_machine_call3(addr0(f), i64::from(argc), a(argv_addr), a(envp));
+        }
+        None => {
+            let [dt_init, array, len] = PROGRAM_INIT.each_ref().map(|w| w.load(Relaxed));
+            if dt_init != 0 {
+                let _ = ffi::liella_machine_call3(dt_init, i64::from(argc), a(argv_addr), a(envp));
+            }
+            if array != 0 {
+                run_array(array, array.wrapping_add(len.wrapping_mul(8)), argc, argv_addr, envp);
+            }
+        }
+    }
+    // 6. main, then exit.
+    let argv_ptr: *mut *mut c_char = core::ptr::with_exposed_provenance_mut(argv_addr);
+    let envp_ptr: *mut *mut c_char = core::ptr::with_exposed_provenance_mut(envp);
+    let status = main.map_or(0, |m| m(argc, argv_ptr, envp_ptr));
+    process::exit(status)
 }
 
 /// `__libc_start_main(main, argc, argv, init, fini, rtld_fini, stack_end)`; with `PIE`, the
@@ -361,6 +448,13 @@ pub fn early_init(info: usize) {
 // LAYOUT-HOTKEY-INLINE-STABLE: a fixed boundary for its start-up/fork hot-text key (off the hot paths: the call is free).
 #[inline(never)]
 pub fn start<const PIE: bool>(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Option<Fn0>, fini: Option<Fn0>, rtld_fini: Option<Fn0>, stack_end: *mut c_void) -> ! {
+    // 1. The initial thread: a static program has no thread pointer yet.
+    // ARCH(x86_64): static-or-dynamic test through ARCH_GET_FS; aarch64 reads TPIDR_EL0 (A-4)
+    let static_program = CSys.arch_prctl_get(ArchGet::Fs).map_or(true, |fs| fs == 0);
+    // Liella's `ld.so` ran steps 1-4 already (D-27.24); a static program never tests the flag.
+    if !static_program && EARLY_DONE.load(Acquire) {
+        start_under_liella_ld(main, argc, argv.expose_provenance(), init, rtld_fini)
+    }
     let n_args = usize::try_from(argc).unwrap_or(0);
     let argv_addr = argv.expose_provenance();
     let envp = argv_addr.wrapping_add(n_args.wrapping_add(1).wrapping_mul(8));
@@ -376,9 +470,6 @@ pub fn start<const PIE: bool>(main: Option<Main>, argc: c_int, argv: *mut *mut c
     // `/proc/self/auxv`).
     crate::sys::set_sysinfo_ehdr(aux.get(AT_SYSINFO_EHDR).and_then(|v| usize::try_from(v).ok()).unwrap_or(0));
 
-    // 1. The initial thread: a static program has no thread pointer yet.
-    // ARCH(x86_64): static-or-dynamic test through ARCH_GET_FS; aarch64 reads TPIDR_EL0 (A-4)
-    let static_program = CSys.arch_prctl_get(ArchGet::Fs).map_or(true, |fs| fs == 0);
     let mut relro = None;
     let mut pie = None;
     if static_program {

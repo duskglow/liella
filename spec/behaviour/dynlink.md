@@ -124,6 +124,7 @@ with gcc 13.3 / binutils, black box: only the values the bound functions return 
 | program linked against `libv.so` | `f`→VER_2 (the default at link time), `f@VER_1`→VER_1, `h@VER_2`→VER_2 |
 | `dlsym` | `f`→VER_2, `h`→NULL (`undefined symbol: h`), `b`→base, `g`→VER_1, `m`→VER_3 (base or default only) |
 | `dlvsym` | `f`/VER_1, `f`/VER_2, `h`/VER_1, `h`/VER_2 bind that version; `f`/VER_9, `b`/VER_1, `b`/`libv.so` (the base node's name) → NULL (`undefined symbol: f, version VER_9`) |
+| an unversioned (base, index 1) `f` earlier in the scope, against `libv.so`'s own `f@@VER_1` reference (`JUMP_SLOT`) (DL-LIBC-START-6 probe, Zen 1 host, glibc 2.39) | in the program (exported; the object has `versym`) → the program's; in an `LD_PRELOAD` object with `versym` → the preloaded one; a program's needed `f@VER_1` (`vna_other`) against the same preload → the preloaded one (a versioned reference accepts a base definition; the program's `__fpu_control` reaches libc this way) |
 | program needing VER_1/VER_2 run against the unversioned stub | `no version information available (required by ./ver)` twice, then an internal consistency message from the loader, exit 127 |
 | weak `w` in `libw1.so`, strong `w` in `libw2.so` | link order w1,w2 → the weak one; w2,w1 → the strong one; `LD_DYNAMIC_WEAK=1` → unchanged |
 | undefined weak data and function references | both 0 |
