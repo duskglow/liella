@@ -46,6 +46,11 @@ pub struct Mode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModeError {
     /// A bit outside [`KNOWN`] (checked first, so also without a binding mode; P-1).
+    ///
+    /// The bits `0x01000000` to `0x80000000` (eight bits) are reserved for Liella: they are
+    /// refused here today, owe glibc's internal use of them nothing, and stay available for a
+    /// possible future Liella-defined meaning (none planned; any use is a new public-interface
+    /// decision, not a change made here).
     Unknown,
     /// Neither `RTLD_LAZY` nor `RTLD_NOW`.
     NoBinding,
