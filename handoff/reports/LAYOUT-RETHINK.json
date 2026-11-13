@@ -1,6 +1,6 @@
 {"task": "LAYOUT-RETHINK", "model": "opus", "tokens": null,
  "result": "Recommend a start-up layout traced from the build being grouped (no function name crosses a build); prototype held next's fault counts in 21 of 22 rows, both profiles, byte-identical rebuilds, contracts green; plan/layout-rethink.md + pending D-X record",
- "branch": "task/layout-rethink", "head": "73654dde7",
+ "branch": "task/layout-rethink", "head": "22330b1fa",
  "gate": {"affected": "no code change: cargo xtask static on the final head (lr-static)", "peak": null},
  "accepted_first_attempt": null,
  "rulings": [
