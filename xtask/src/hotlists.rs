@@ -91,7 +91,7 @@ pub fn differing(a: &Path, b: &Path) -> Vec<&'static str> {
 /// that trace ([`Layout::Traced`], the default of every product build since LAYOUT-TRACE-DEFAULT); `ungrouped`: the
 /// explicit opt-out for a builder without a tracer, an ungrouped product ([`Layout::Ungrouped`]); `0`: the committed
 /// lists ([`Layout::Committed`]), kept for the list tooling (regen, repair, bench comparisons) until LT-5 deletes
-/// those lists. A regen build (`--hottext-regen`) reads the committed lists whatever the default.
+/// those lists. A regen build ([`crate::hottext::REGEN_FLAG`]) reads the committed lists whatever the default.
 pub const TRACE_ENV: &str = "LIELLA_LAYOUT_TRACE";
 /// The marker `so` writes next to products it grouped from a trace of their own build (or left ungrouped): line 1
 /// the directory of the lists it used (`target/product/<profile>`), then `<list> <hash>` per list (so the layout
@@ -112,7 +112,7 @@ pub enum Layout {
 
 impl Layout {
     /// The layout `value` of [`TRACE_ENV`] selects for a product build; `regen`: the build is a regen build
-    /// (`--hottext-regen`), which traces nothing itself and reads the committed lists (it is what
+    /// ([`crate::hottext::REGEN_FLAG`]), which traces nothing itself and reads the committed lists (it is what
     /// `tools/hottext/regen.sh` traces), so with it only an unset (or empty) switch or `0` is accepted.
     pub fn parse(value: Option<&str>, regen: bool) -> Result<Layout, String> {
         let layout = match value.unwrap_or("") {
@@ -123,7 +123,7 @@ impl Layout {
             v => return Err(format!("{TRACE_ENV}={v:?}: want unset or 1 (trace at build, the default), ungrouped (no tracer: ungrouped product) or 0 (the committed lists: list tooling until LT-5)")),
         };
         if regen && layout != Layout::Committed {
-            return Err(format!("so: {TRACE_ENV}={} and --hottext-regen together: a regen build reads the committed lists", value.unwrap_or("")));
+            return Err(format!("so: {TRACE_ENV}={} and {} together: a regen build reads the committed lists", value.unwrap_or(""), crate::hottext::REGEN_FLAG));
         }
         Ok(layout)
     }
@@ -456,7 +456,7 @@ mod tests {
         assert_eq!(Layout::parse(Some(""), true), Ok(Layout::Committed));
         assert_eq!(Layout::parse(Some("0"), true), Ok(Layout::Committed));
         for explicit in ["1", "ungrouped"] {
-            assert!(Layout::parse(Some(explicit), true).unwrap_err().contains("--hottext-regen"), "{explicit}");
+            assert!(Layout::parse(Some(explicit), true).unwrap_err().contains(crate::hottext::REGEN_FLAG), "{explicit}");
         }
         for bad in ["yes", "true", "2", "Ungrouped", " 1"] {
             for regen in [false, true] {
@@ -466,7 +466,7 @@ mod tests {
     }
 
     /// LAYOUT-TRACE-DEFAULT (no spec clause: build tooling): the list tooling builds from the committed lists, so
-    /// every product build `tools/hottext/regen.sh` runs is a regen build (`--hottext-regen`) or names
+    /// every product build `tools/hottext/regen.sh` runs is a regen build (`crate::hottext::REGEN_FLAG`) or names
     /// `LIELLA_LAYOUT_TRACE=0`; a plain `cargo xtask so` there would trace its own layout and check nothing of the
     /// list it just rewrote.
     #[test]
@@ -476,7 +476,7 @@ mod tests {
         let builds: Vec<&str> = sh.lines().filter(|l| !l.trim_start().starts_with('#') && l.contains("cargo xtask so")).collect();
         assert!(builds.len() >= 3, "regen.sh: found {} product builds, expected the --both, --build and rewritten-list builds", builds.len());
         for l in builds {
-            assert!(l.contains("--hottext-regen") || l.contains(&format!("{TRACE_ENV}=0 cargo xtask so")), "regen.sh builds with the default layout (trace at build): {l}");
+            assert!(l.contains(crate::hottext::REGEN_FLAG) || l.contains(&format!("{TRACE_ENV}=0 cargo xtask so")), "regen.sh builds with the default layout (trace at build): {l}");
         }
     }
 
