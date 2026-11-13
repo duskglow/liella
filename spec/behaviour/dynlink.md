@@ -41,6 +41,23 @@ listed with `nm -D` (the public ABI). No source, disassembly or debugger was use
 | `dlsym` missing | `<object>: undefined symbol: <name>`; for `RTLD_DEFAULT`/`RTLD_NEXT` the object is the calling program |
 | `dlvsym` missing version | `<object>: undefined symbol: <name>, version <version>` (also for an object without versions) |
 | `dlinfo` request 9999 | returns -1, `unsupported dlinfo request` (no object prefix) |
+| non-ELF file of 64 bytes or more (64, 4096, 65536 bytes of text; 4096 zero bytes) | `invalid ELF header` |
+| `EI_CLASS` 0, 3 or 255 | `wrong ELF class: ELFCLASS32` (the 32-bit text for every class but 64-bit) |
+| `EI_VERSION` 0 | `ELF file version ident does not match current one` |
+| `e_version` 0 | `ELF file version does not match current one` |
+| `e_phentsize` 32 | `ELF file's phentsize not the expected size` |
+| `e_phnum` 0, or every `PT_LOAD` retyped `PT_NULL` | `object file has no loadable segments` |
+| `PT_DYNAMIC` retyped `PT_NULL` | `object file has no dynamic section` |
+| a `PT_LOAD` whose `p_vaddr` and `p_offset` differ modulo the page | `ELF load command address/offset not page-aligned` |
+| `e_ehsize` 0; a `PT_LOAD` with `p_align` 3 | loads (Liella refuses both as malformed headers: `malformed ELF object`, its reader's rule) |
+
+The rows after `dlinfo` are the gaps probe (`tools/probe/dl/gaps/run.sh SCRATCH`, record `== gaps` and
+`== noload-pending`, ruling #5266, DL-DLOPEN-LOAD-2; same host and settings as above). It also settles
+that an `RTLD_NOLOAD` miss clears a pending dlerror text (`dlerror()` is NULL after a failed open then
+a NOLOAD miss), as a successful open and a NOLOAD hit do. Liella's dlopen uses these texts
+(`liella_ld::dlopen::Refusal`) and checks the header, then the loadable segments, then the dynamic
+section, in that order. Liella uses the misaligned-segment text for every malformed `PT_LOAD` layout
+its planner refuses (`map::MapError::BadSegments`), a choice the probe does not decide.
 
 Other calls: `dlopen("")` and `dlopen(NULL)` return a handle (the program); `RTLD_NOW|RTLD_LAZY`
 is accepted; `RTLD_NOLOAD` of an unloaded object returns NULL with **no** dlerror text; an object
