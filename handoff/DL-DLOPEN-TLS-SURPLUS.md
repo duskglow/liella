@@ -41,9 +41,17 @@ The design; the reading of DL-15; the Surplus maths. Shapes measured worse: imag
 section (+2.0), hook test alone with the copy outside (+3.0): any late test costs a compare and a branch,
 so the static path needs a saving elsewhere on it to stay at or below base.
 
-## Jobs (run 3, shiki)
-See handoff/reports/DL-DLOPEN-TLS-SURPLUS-3.json `jobs`: lint (clippy + static), gate (direct tier),
-plants (11: the 7 of run 2 + 4 on the run-3 code), percall thread_create, cbench_startup counters.
+## Jobs (run 3, shiki; code 02ea26118, later commits handoff/ and the record only)
+- `dl-dlopen-tls-surplus-3-gate`: escalated to FULL by the tool (the branch changes xtask/src/so.rs, as in run 2):
+  32 suites ok, 11737 passed, 0 failed, 1269 ignored; conformance 133 passed, 0 failed; peak 16G, rc 0.
+- `dl-dlopen-tls-surplus-3-plants2`: 11 plants, 11 CAUGHT, 0 WARN (the 7 of run 2 + create-no-loader-tls,
+  create-no-image-copy, start-words-one, clone-words-swapped). The first run (`-plants`) caught all 11 but the
+  four new msg regexes guessed the harness wording (WARN-NO-MSG); fixed from the real failure lines.
+- `dl-dlopen-tls-surplus-3-percall3`: thread_create_join 35922.1 (base 35940.2, glibc 2274.0).
+- `dl-dlopen-tls-surplus-3-startup` (cbench_startup --compare --counters; Haswell, no limit row for this CPU):
+  startup_instr_c 2147, setloc 67444, printf 71247, wctype 68468 (glibc 119766 / 145025 / 146800 / 145237).
+  Static start-up runs no new code on this branch (an export and a constant); no base count on this host.
+- `dl-dlopen-tls-surplus-3-lint2`: clippy + static + records check on the final head.
 
 ## Next step (exact)
 Land it (after DL-16c and DL-16b, wire dlsym of STT_TLS as above). Separately: the `KEYS.span()` story.
