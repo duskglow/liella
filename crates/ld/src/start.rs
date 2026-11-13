@@ -193,7 +193,7 @@ pub mod private {
     use crate::reloc::Obj;
     use crate::symbols::{Object, Request, Want};
 
-    pub use liella_rt::start::private::{BUILD_TAG, EARLY_INIT, NODE, StartInfo, TAG_LEN, TAG_PREFIX};
+    pub use liella_rt::start::private::{BUILD_TAG, EARLY_INIT, NODE, StartInfo, TAG_LEN, TAG_PREFIX, THREAD_WALK};
 
     /// The loader's build tag (`liella_rt::start::private::tag`), compared with the C library's.
     pub const TAG: [u8; TAG_LEN] = liella_rt::start::private::tag(option_env!("LIELLA_BUILD_TAG"));

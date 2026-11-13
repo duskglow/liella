@@ -4,7 +4,7 @@
 //! dlerror texts. The boundary driver (`crates/boundary/src/ld.rs`) opens, maps, relocates and runs.
 
 use crate::arch::Arch;
-use crate::elf::{et, pt, Elf, ElfError};
+use crate::elf::{et, Elf, ElfError};
 use crate::map::{self, MapError};
 
 /// `RTLD_LAZY` (`<dlfcn.h>`). Bound eagerly, like `RTLD_NOW`, until DL-20 brings lazy binding.
@@ -127,7 +127,8 @@ pub enum Refusal {
     Directory,
     /// No dynamic section.
     NoDynamic,
-    /// A `PT_TLS` segment: the static surplus for `dlopen`ed modules is DL-16d's (plan §5).
+    /// A `PT_TLS` block that does not fit in the static surplus (plan §5; dynamic blocks are
+    /// DL-19's), or one that cannot have a place there (its alignment, no module slot left).
     StaticTls,
 }
 
@@ -216,7 +217,7 @@ pub fn check<A: Arch>(file: &[u8], page: u64) -> Result<Elf<'_>, Refusal> {
 }
 
 /// Whether a parsed candidate may be loaded by `dlopen`: executables are refused (P-13), an object
-/// needs a dynamic section, and an object with `PT_TLS` waits for DL-16d.
+/// needs a dynamic section. A `PT_TLS` segment is placed later, in the static surplus (DL-16d).
 ///
 /// # Errors
 ///
@@ -228,9 +229,6 @@ pub fn loadable(elf: &Elf<'_>) -> Result<(), Refusal> {
     let Ok(Some(d)) = elf.dynamic() else { return Err(Refusal::NoDynamic) };
     if d.get(DT_FLAGS_1).is_some_and(|f| f & DF_1_PIE != 0) {
         return Err(Refusal::PieExecutable);
-    }
-    if elf.find(pt::TLS).is_some() {
-        return Err(Refusal::StaticTls);
     }
     Ok(())
 }

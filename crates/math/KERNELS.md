@@ -181,49 +181,50 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 
 ## fast64/quick.rs (f64 quick)
 
-- `fast64/quick.rs:270` `fn ma(a: f64, b: f64, c: f64) -> f64` — bound: undocumented — doc: `a·b + c` in two roundings (the SSE2 build).
-- `fast64/quick.rs:276` `fn no_lo(_th: f64, _rh: f64, _u: f64) -> f64` — bound: undocumented — doc: The low part of `th·rh` the SSE2 build drops (bound term 1).
-- `fast64/quick.rs:286` `fn dekker_lo(a: f64, b: f64, p: f64) -> f64` — bound: undocumented — doc: `a·b − p` exactly for `p = RN(a·b)` without FMA (Dekker's product, Veltkamp's splitting at 27 bits; Dekker 1971): expm1's SSE2 build keeps `th·rh`'s low part, w…
-- `fast64/quick.rs:306` `pub fn exp_quick_parts(x: f64) -> Option<(f64, f64, f64)>` — bound: undocumented — doc: `e^x = (zh + zl)·sc` within `rho·|zh|·sc` for `2^-60 <= |x| < 708`, else `None` (module doc).
-- `fast64/quick.rs:325` `pub fn exp2_quick_parts(x: f64) -> Option<(f64, f64, f64)>` — bound: undocumented — doc: `2^x = (zh + zl)·sc` within `RHO_FAM_*·|zh|·sc` for `2^-60 <= |x| < 1021`, else `None` (module doc, "exp2 and exp10").
-- `fast64/quick.rs:343` `pub fn exp10_quick_parts(x: f64) -> Option<(f64, f64, f64)>` — bound: undocumented — doc: `10^x = (zh + zl)·sc` within `RHO_FAM_*·|zh|·sc` for `2^-60 <= |x| < 307` other than the integers `1 ..= 23`, else `None` (module doc, "exp2 and exp10").
-- `fast64/quick.rs:367` `fn kernel<const X: bool>(kb: u64, rh: f64, rl: f64) -> (f64, f64, f64)` — bound: undocumented — doc: The kernel shared by exp, exp2 and exp10: `2^(k/128)·e^(rh + rl)` as `(zh, zl, 2^m)` from `kb = k + 1023·128` (module doc, from `T_j` on).
-- `fast64/quick.rs:381` `fn side<const X: bool>(kb: u64, rh: f64, rl: f64, q: f64) -> (f64, f64)` — bound: undocumented — doc: The kernel from `T_j` on: `T_j·(1 + rh + rl + q)` as `(zh, zl)` for `j = kb mod 128` and `q ≈ e^rh − 1 − rh` (module doc, from `y = T·(1 + r + q)`).
-- `fast64/quick.rs:401` `fn exp_pm<const X: bool>(a: f64) -> (f64, f64, f64, f64, u64)` — bound: undocumented — doc: `e^a` and `e^-a` from one reduction, for `2^-60 <= a < 23` (module doc, "cosh, sinh, tanh"): `(zh, zl, qh, ql, kb)` with `e^a = (zh + zl)·2^m` and `e^-a = (qh +…
-- `fast64/quick.rs:424` `pub fn sinh_quick_parts(x: f64) -> Option<(f64, f64, f64)>` — bound: undocumented — doc: `sinh|x| = (h + l)·sc` within `RHO_M1·|h|·sc` for `2^-60 <= |x| < 708`, else `None` (module doc, "cosh, sinh, tanh"): the odd series below `2^-5`, `e^a/2` from …
-- `fast64/quick.rs:453` `pub fn cosh_quick_parts(x: f64) -> Option<(f64, f64, f64)>` — bound: undocumented — doc: `cosh x = (h + l)·sc` within `RHO_M1·|h|·sc` for `2^-60 <= |x| < 708`, else `None` (as [`sinh_quick_parts`], with the even series below `2^-5`).
-- `fast64/quick.rs:482` `pub fn tanh_quick_parts(x: f64) -> Option<(f64, f64)>` — bound: undocumented — doc: `tanh|x| = h + l` within `RHO_M1·|h|` for `2^-60 <= |x| <= 22`, else `None` (module doc, "cosh, sinh, tanh"): `N/(N + 2)` with `N = e^(2a) − 1` from [`expm1_qui…
-- `fast64/quick.rs:512` `pub fn sinh_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `sinh`'s in-place fast path (as [`expm1_tiered`]): the quick phase, then on a miss or outside its domain tier 2 (`fast64::sinh_nearest` in the same build, out o…
-- `fast64/quick.rs:524` `pub fn cosh_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `cosh`'s in-place fast path (as [`sinh_tiered`]).
-- `fast64/quick.rs:536` `pub fn tanh_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `tanh`'s in-place fast path (as [`sinh_tiered`]).
-- `fast64/quick.rs:550` `pub fn hyp_quick(f: u8, x: f64) -> Option<f64>` — bound: undocumented — doc: The quick phase of `sinh`, `cosh` or `tanh` alone (`f` 0, 1, 2): the correctly rounded result, or `None` when the phase declines (tests only).
-- `fast64/quick.rs:566` `pub fn exp_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: The correctly rounded `e^x` (round to nearest) when the quick phase's test decides it, else `None` (the caller runs [`super::exp_nearest`]).
-- `fast64/quick.rs:578` `pub fn exp_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `exp`'s in-place fast path (D-10.51): the quick phase, then on a miss tier 2 (`fast64::exp_nearest` in the same build, out of line).
-- `fast64/quick.rs:591` `pub fn exp2_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: The correctly rounded `2^x` (round to nearest) when the quick phase's test decides it, else `None`.
-- `fast64/quick.rs:602` `pub fn exp2_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `exp2`'s in-place fast path (as [`exp_tiered`]): the quick phase, then on a miss tier 2 (`fast64::exp2_nearest` in the same build, out of line; it answers integ…
-- `fast64/quick.rs:616` `pub fn exp10_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: The correctly rounded `10^x` (round to nearest) when the quick phase's test decides it, else `None`.
-- `fast64/quick.rs:627` `pub fn exp10_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `exp10`'s in-place fast path (as [`exp_tiered`]): the quick phase, then on a miss tier 2 (`fast64::exp10_nearest` in the same build, out of line).
-- `fast64/quick.rs:643` `pub fn expm1_quick_parts(x: f64) -> Option<(f64, f64)>` — bound: undocumented — doc: `e^x − 1 = zh + zl` within `RHO_M1·|zh|` for `2^-60 <= |x| < 708`, `x > −37`, else `None` (module doc, "expm1"): the series with an exact head below `2^-5`, els…
-- `fast64/quick.rs:684` `pub fn expm1_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: The correctly rounded `e^x − 1` (round to nearest) when the quick phase's test decides it, else `None`.
-- `fast64/quick.rs:694` `pub fn expm1_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `expm1`'s in-place fast path (as [`exp_tiered`]): the quick phase, then on a miss or outside its domain tier 2 (`fast64::expm1_nearest` in the same build, out o…
-- `fast64/quick.rs:708` `fn tier2_expm1(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`expm1_tiered`] (and its answer outside the quick domain), out of line and cold.
-- `fast64/quick.rs:715` `fn tier2_sinh(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`sinh_tiered`] (and its answer outside the quick domain), out of line and cold.
-- `fast64/quick.rs:722` `fn tier2_cosh(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`cosh_tiered`] (as [`tier2_sinh`]).
-- `fast64/quick.rs:729` `fn tier2_tanh(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`tanh_tiered`] (as [`tier2_sinh`]).
-- `fast64/quick.rs:737` `fn tier2_exp2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp2_tiered`] (and its answer outside the quick domain: NaN, infinities, integers), out of line and cold.
-- `fast64/quick.rs:744` `fn tier2_exp10(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp10_tiered`] (as [`tier2_exp2`]).
-- `fast64/quick.rs:752` `fn tier2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp_tiered`] (the SSE2 build of [`super::exp_nearest`]), out of line and cold so the quick phase keeps its registers: about 0.5% of calls reach it.
-- `fast64/quick.rs:756` `quick!(; #[inline(always)]; ma; no_lo; dekker_lo; C_SSE2; C_FAM_SSE2);`
-- `fast64/quick.rs:774` `fn ma(a: f64, b: f64, c: f64) -> f64` — bound: undocumented — doc: `a·b + c` in one rounding.
-- `fast64/quick.rs:781` `fn lo(th: f64, rh: f64, u: f64) -> f64` — bound: undocumented — doc: `th·rh − u` exactly for `u = RN(th·rh)` (2MultFMA; the product is far from underflow).
-- `fast64/quick.rs:790` `fn tier2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp_tiered`] in the FMA build (`fast64::fused::exp_nearest`), out of line and cold: under 0.01% of calls reach it.
-- `fast64/quick.rs:799` `fn tier2_exp2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp2_tiered`] in the FMA build (`fast64::fused::exp2_nearest`), out of line and cold.
-- `fast64/quick.rs:808` `fn tier2_exp10(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp10_tiered`] in the FMA build (`fast64::fused::exp10_nearest`), out of line and cold.
-- `fast64/quick.rs:817` `fn tier2_expm1(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`expm1_tiered`] in the FMA build (`fast64::fused::expm1_nearest`), out of line and cold.
-- `fast64/quick.rs:826` `fn tier2_sinh(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`sinh_tiered`] in the FMA build (`fast64::fused::sinh_nearest`), out of line and cold.
-- `fast64/quick.rs:834` `fn tier2_cosh(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`cosh_tiered`] in the FMA build (as [`tier2_sinh`]).
-- `fast64/quick.rs:842` `fn tier2_tanh(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`tanh_tiered`] in the FMA build (as [`tier2_sinh`]).
-- `fast64/quick.rs:846` `quick!` entries: 
+- `fast64/quick.rs:308` `fn ma(a: f64, b: f64, c: f64) -> f64` — bound: undocumented — doc: `a·b + c` in two roundings (the SSE2 build).
+- `fast64/quick.rs:314` `fn no_lo(_th: f64, _rh: f64, _u: f64) -> f64` — bound: undocumented — doc: The low part of `th·rh` the SSE2 build drops (bound term 1).
+- `fast64/quick.rs:324` `fn dekker_lo(a: f64, b: f64, p: f64) -> f64` — bound: undocumented — doc: `a·b − p` exactly for `p = RN(a·b)` without FMA (Dekker's product, Veltkamp's splitting at 27 bits; Dekker 1971): expm1's SSE2 build keeps `th·rh`'s low part, w…
+- `fast64/quick.rs:344` `pub fn exp_quick_parts(x: f64) -> Option<(f64, f64, f64)>` — bound: undocumented — doc: `e^x = (zh + zl)·sc` within `rho·|zh|·sc` for `2^-60 <= |x| < 708`, else `None` (module doc).
+- `fast64/quick.rs:369` `pub fn exp_directed<const UP: bool>(x: f64) -> Option<f64>` — bound: undocumented — doc: `e^x` rounded in the caller's direction (down, up or toward zero, read by nothing here: the arithmetic runs in it) for `2^-60 <= |x| < 708` when the directed te…
+- `fast64/quick.rs:392` `pub fn exp2_quick_parts(x: f64) -> Option<(f64, f64, f64)>` — bound: undocumented — doc: `2^x = (zh + zl)·sc` within `RHO_FAM_*·|zh|·sc` for `2^-60 <= |x| < 1021`, else `None` (module doc, "exp2 and exp10").
+- `fast64/quick.rs:410` `pub fn exp10_quick_parts(x: f64) -> Option<(f64, f64, f64)>` — bound: undocumented — doc: `10^x = (zh + zl)·sc` within `RHO_FAM_*·|zh|·sc` for `2^-60 <= |x| < 307` other than the integers `1 ..= 23`, else `None` (module doc, "exp2 and exp10").
+- `fast64/quick.rs:434` `fn kernel<const X: bool>(kb: u64, rh: f64, rl: f64) -> (f64, f64, f64)` — bound: undocumented — doc: The kernel shared by exp, exp2 and exp10: `2^(k/128)·e^(rh + rl)` as `(zh, zl, 2^m)` from `kb = k + 1023·128` (module doc, from `T_j` on).
+- `fast64/quick.rs:448` `fn side<const X: bool>(kb: u64, rh: f64, rl: f64, q: f64) -> (f64, f64)` — bound: undocumented — doc: The kernel from `T_j` on: `T_j·(1 + rh + rl + q)` as `(zh, zl)` for `j = kb mod 128` and `q ≈ e^rh − 1 − rh` (module doc, from `y = T·(1 + r + q)`).
+- `fast64/quick.rs:468` `fn exp_pm<const X: bool>(a: f64) -> (f64, f64, f64, f64, u64)` — bound: undocumented — doc: `e^a` and `e^-a` from one reduction, for `2^-60 <= a < 23` (module doc, "cosh, sinh, tanh"): `(zh, zl, qh, ql, kb)` with `e^a = (zh + zl)·2^m` and `e^-a = (qh +…
+- `fast64/quick.rs:491` `pub fn sinh_quick_parts(x: f64) -> Option<(f64, f64, f64)>` — bound: undocumented — doc: `sinh|x| = (h + l)·sc` within `RHO_M1·|h|·sc` for `2^-60 <= |x| < 708`, else `None` (module doc, "cosh, sinh, tanh"): the odd series below `2^-5`, `e^a/2` from …
+- `fast64/quick.rs:520` `pub fn cosh_quick_parts(x: f64) -> Option<(f64, f64, f64)>` — bound: undocumented — doc: `cosh x = (h + l)·sc` within `RHO_M1·|h|·sc` for `2^-60 <= |x| < 708`, else `None` (as [`sinh_quick_parts`], with the even series below `2^-5`).
+- `fast64/quick.rs:549` `pub fn tanh_quick_parts(x: f64) -> Option<(f64, f64)>` — bound: undocumented — doc: `tanh|x| = h + l` within `RHO_M1·|h|` for `2^-60 <= |x| <= 22`, else `None` (module doc, "cosh, sinh, tanh"): `N/(N + 2)` with `N = e^(2a) − 1` from [`expm1_qui…
+- `fast64/quick.rs:579` `pub fn sinh_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `sinh`'s in-place fast path (as [`expm1_tiered`]): the quick phase, then on a miss or outside its domain tier 2 (`fast64::sinh_nearest` in the same build, out o…
+- `fast64/quick.rs:591` `pub fn cosh_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `cosh`'s in-place fast path (as [`sinh_tiered`]).
+- `fast64/quick.rs:603` `pub fn tanh_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `tanh`'s in-place fast path (as [`sinh_tiered`]).
+- `fast64/quick.rs:617` `pub fn hyp_quick(f: u8, x: f64) -> Option<f64>` — bound: undocumented — doc: The quick phase of `sinh`, `cosh` or `tanh` alone (`f` 0, 1, 2): the correctly rounded result, or `None` when the phase declines (tests only).
+- `fast64/quick.rs:633` `pub fn exp_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: The correctly rounded `e^x` (round to nearest) when the quick phase's test decides it, else `None` (the caller runs [`super::exp_nearest`]).
+- `fast64/quick.rs:645` `pub fn exp_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `exp`'s in-place fast path (D-10.51): the quick phase, then on a miss tier 2 (`fast64::exp_nearest` in the same build, out of line).
+- `fast64/quick.rs:658` `pub fn exp2_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: The correctly rounded `2^x` (round to nearest) when the quick phase's test decides it, else `None`.
+- `fast64/quick.rs:669` `pub fn exp2_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `exp2`'s in-place fast path (as [`exp_tiered`]): the quick phase, then on a miss tier 2 (`fast64::exp2_nearest` in the same build, out of line; it answers integ…
+- `fast64/quick.rs:683` `pub fn exp10_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: The correctly rounded `10^x` (round to nearest) when the quick phase's test decides it, else `None`.
+- `fast64/quick.rs:694` `pub fn exp10_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `exp10`'s in-place fast path (as [`exp_tiered`]): the quick phase, then on a miss tier 2 (`fast64::exp10_nearest` in the same build, out of line).
+- `fast64/quick.rs:710` `pub fn expm1_quick_parts(x: f64) -> Option<(f64, f64)>` — bound: undocumented — doc: `e^x − 1 = zh + zl` within `RHO_M1·|zh|` for `2^-60 <= |x| < 708`, `x > −37`, else `None` (module doc, "expm1"): the series with an exact head below `2^-5`, els…
+- `fast64/quick.rs:751` `pub fn expm1_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: The correctly rounded `e^x − 1` (round to nearest) when the quick phase's test decides it, else `None`.
+- `fast64/quick.rs:761` `pub fn expm1_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `expm1`'s in-place fast path (as [`exp_tiered`]): the quick phase, then on a miss or outside its domain tier 2 (`fast64::expm1_nearest` in the same build, out o…
+- `fast64/quick.rs:775` `fn tier2_expm1(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`expm1_tiered`] (and its answer outside the quick domain), out of line and cold.
+- `fast64/quick.rs:782` `fn tier2_sinh(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`sinh_tiered`] (and its answer outside the quick domain), out of line and cold.
+- `fast64/quick.rs:789` `fn tier2_cosh(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`cosh_tiered`] (as [`tier2_sinh`]).
+- `fast64/quick.rs:796` `fn tier2_tanh(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`tanh_tiered`] (as [`tier2_sinh`]).
+- `fast64/quick.rs:804` `fn tier2_exp2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp2_tiered`] (and its answer outside the quick domain: NaN, infinities, integers), out of line and cold.
+- `fast64/quick.rs:811` `fn tier2_exp10(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp10_tiered`] (as [`tier2_exp2`]).
+- `fast64/quick.rs:819` `fn tier2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp_tiered`] (the SSE2 build of [`super::exp_nearest`]), out of line and cold so the quick phase keeps its registers: about 0.5% of calls reach it.
+- `fast64/quick.rs:823` `quick!(; #[inline(always)]; ma; no_lo; dekker_lo; C_SSE2; C_FAM_SSE2; RHO_DIR_SSE2);`
+- `fast64/quick.rs:841` `fn ma(a: f64, b: f64, c: f64) -> f64` — bound: undocumented — doc: `a·b + c` in one rounding.
+- `fast64/quick.rs:848` `fn lo(th: f64, rh: f64, u: f64) -> f64` — bound: undocumented — doc: `th·rh − u` exactly for `u = RN(th·rh)` (2MultFMA; the product is far from underflow).
+- `fast64/quick.rs:857` `fn tier2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp_tiered`] in the FMA build (`fast64::fused::exp_nearest`), out of line and cold: under 0.01% of calls reach it.
+- `fast64/quick.rs:866` `fn tier2_exp2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp2_tiered`] in the FMA build (`fast64::fused::exp2_nearest`), out of line and cold.
+- `fast64/quick.rs:875` `fn tier2_exp10(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp10_tiered`] in the FMA build (`fast64::fused::exp10_nearest`), out of line and cold.
+- `fast64/quick.rs:884` `fn tier2_expm1(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`expm1_tiered`] in the FMA build (`fast64::fused::expm1_nearest`), out of line and cold.
+- `fast64/quick.rs:893` `fn tier2_sinh(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`sinh_tiered`] in the FMA build (`fast64::fused::sinh_nearest`), out of line and cold.
+- `fast64/quick.rs:901` `fn tier2_cosh(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`cosh_tiered`] in the FMA build (as [`tier2_sinh`]).
+- `fast64/quick.rs:909` `fn tier2_tanh(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`tanh_tiered`] in the FMA build (as [`tier2_sinh`]).
+- `fast64/quick.rs:913` `quick!` entries: 
 
 ## fast64/quick_invhyp.rs (f64 quick_invhyp)
 

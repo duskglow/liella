@@ -35,6 +35,13 @@ pub extern "C" fn __liella_libc_early_init(info: *const c_void) {
     crate::runtime::early_init(info.expose_provenance())
 }}
 
+export! { runtime "LIELLA_PRIVATE";
+#[cfg(feature = "runtime")]
+pub extern "C" fn __liella_thread_walk(cb: usize, ctx: usize) -> usize {
+    // Liella's `ld.so` gives a `dlopen`ed module's static TLS block to every thread (DL-16d).
+    crate::thread::walk_threads(cb, ctx)
+}}
+
 export! { runtime "GLIBC_2.34";
 #[cfg(feature = "runtime")]
 pub extern "C" fn __libc_start_main(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Option<Fn0>, fini: Option<Fn0>, rtld_fini: Option<Fn0>, stack_end: *mut c_void) -> c_int {

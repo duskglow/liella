@@ -1,0 +1,11 @@
+{"task": "LAYOUT-TRACE-AT-BUILD-2", "model": "opus", "tokens": null,
+ "result": "regen.sh --all-modes checks the trace set against every page_faults.c mode and fails the trace-mode so by name; 4/4 plants CAUGHT",
+ "branch": "task/layout-trace-at-build-2", "head": "6e93a9d84",
+ "gate": {"affected": "11692 passed / 0 failed (32 suites; conformance 130/0)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["the three trace-set plants are caught by `cargo xtask so` itself (the plants tool prints 'caught by no test the log names'), by the check's message"], "refused": [],
+ "impact": [{"kind": "coverage", "what": "trace-set coverage check (every page_faults.c mode traced under LIELLA_LAYOUT_TRACE=1) and plants: 4 CAUGHT (2 previously survived, 1 new)", "before": 1, "after": 4, "unit": "plants caught", "measured": true},
+            {"kind": "unblock", "what": "LAYOUT-TRACE-AT-BUILD (LT-1) lands; LT-2, LT-3, LT-4 stack on it", "before": null, "after": null, "unit": null, "measured": false}],
+ "improvement": "a trace set that must match a measured list should be checked by name at trace time; fault-count plants on placement pass by luck",
+ "next_step": "land; then LT-2 (clusters by probe phase), LT-3, LT-4",
+ "report_file": "handoff/LAYOUT-TRACE-AT-BUILD.md",
+ "jobs": ["ltab2-gate", "ltab2-plants", "ltab2-release"]}
