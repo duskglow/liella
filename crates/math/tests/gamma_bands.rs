@@ -54,6 +54,7 @@ fn check_tgamma(xs: &[f64]) -> u64 {
 /// agrees with the 384-bit path and answers (nearly) every operand itself.
 #[test]
 fn tiny_operands_agree_with_the_accurate_path() {
+    // Clauses: s10_3_c_0 (D-10.13, D-10.105).
     let mut xs = spread(600, -1074, -60, 1);
     xs.extend(spread(200, -1074, -60, 2).iter().map(|x| -x));
     xs.extend([f64::from_bits(1), -f64::from_bits(1), f64::MIN_POSITIVE, 2f64.powi(-61), -2f64.powi(-61), 2f64.powi(-200), -2f64.powi(-600)]);
@@ -68,6 +69,7 @@ fn tiny_operands_agree_with_the_accurate_path() {
 /// `x >= 16`: Stirling's form up to `2^1012`, the overflow from `X_OVER`, and the band edges.
 #[test]
 fn large_operands_agree_with_the_accurate_path() {
+    // Clauses: s10_3_c_0 (D-10.13, D-10.105).
     let mut xs = spread(800, 4, 1012, 3);
     xs.extend([16.0, 16.5, 17.25, 31.999_999_999_999_996, 1e15 + 0.5, 2f64.powi(500), fast_gamma::X_OVER, f64::MAX, 3e305, 2.5e305]);
     let fl = check_lgamma(&xs);
