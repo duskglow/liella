@@ -30,12 +30,16 @@ child): the gate job below is the first traced build inside the gate.
 
 ## Jobs started (not yet read)
 
-keke (role n3, head 97c1112e7):
-* `layout-trace-default-lint2`: clippy, static, `cargo test -p xtask hotlists`.
+Superseded: `layout-trace-default-lint2` (stopped: static's hottext check refused the literal regen flag in
+hotlists.rs, found by handback-check; fixed in 4e3ac0709, comments and messages only),
+`layout-trace-default-gate` (stopped while queued: it would have tested 97c1112e7), `-lint` / `-kproof` (stopped
+while queued, before a resync). The role still holds 97c1112e7: sync it (rc 0, not 4) once kproof2 and the
+plants end, then run lint (clippy + static + `cargo test -p xtask hotlists`) and the gate on the final head.
+
+keke (role n3, head 97c1112e7, products identical to the final head):
 * `layout-trace-default-kproof2`: `~/work/LAYOUT-TRACE-DEFAULT/proof.sh ~/w/n3 /dev/shm/claude/LAYOUT-TRACE-DEFAULT/out-n3`:
   default `so` + `layout-check` + `hot_text_products --nocapture` twice (each probe warm-up + 5 runs), fast then
   release; lists and libc.a kept in the out dir.
-* `layout-trace-default-gate`: waits for kproof2, then `~/bin/gate 16G ... cargo xtask affected --run --base origin/next`.
 * `layout-trace-default-plants`: 5 plants, `--dir /dev/shm/claude/LAYOUT-TRACE-DEFAULT/plants-1`.
 * `layout-trace-default-kbesl`: proof.sh on `/dev/shm/claude/LAYOUT-TRACE-DEFAULT/besl` = head cc19fd05e merged
   (git merge-tree, no branch changed) with `origin/task/libm-f32-bessel-large-5` (libm-only; -6 is not pushed).
