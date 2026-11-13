@@ -67,10 +67,10 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast32/gamma.rs:33` `fn horner<const N: usize>(c: &[u64; N], s: f64) -> f64` — bound: undocumented — doc: c[0] + s·(c[1] + s·(...)) by Horner.
 - `fast32/gamma.rs:48` `pub(super) fn gamma_core(xd: f64) -> Option<f64>` — bound: undocumented — doc: Γ(x) as a `double` with relative error ≤ 55.1u (u = 2^-53), for 2^-20 ≤ |x|, -42 < x < 36, x not a negative integer (`None` outside).
 - `fast32/gamma.rs:79` `fn ln64(v: f64) -> f64` — bound: undocumented — doc: ln v for a positive normal `double` v in [2^-181, 2^181], absolute error ≤ (1.45 + 2|y|)u.
-- `fast32/gamma.rs:104` `pub(super) fn lgamma_core(x: f32) -> Option<(f64, u64)>` — bound: undocumented — doc: lnΓ(x) = ln|Γ(x)| as a `double` y and its margin (ulp of y), piecewise, for a finite x: * |x - 1| ≤ 1/8: y = z·q(z), z = x - 1 exact.
-- `fast32/gamma.rs:115` `fn lgamma_core_signed(x: f32) -> Option<(f64, u64, i32)>` — bound: undocumented — doc: [`lgamma_core`] and the sign of Γ(x) (1 or -1).
-- `fast32/gamma.rs:147` `pub fn eval_lgamma(x: f32, mode: Rounding) -> Option<((f32, Status), i32)>` — bound: undocumented — doc: `lgammaf` by the fast path with the sign of Γ(x) (`signgam`), or `None` (see [`eval`]): the value as `eval(Fast::Lgamma, ..)`, the sign from Γ(x) itself ([`lgam…
-- `fast32/gamma.rs:154` `pub fn eval_tgamma(x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `tgammaf` by the fast path, or `None` (see [`eval`]).
+- `fast32/gamma.rs:120` `fn lgamma_core_signed(x: f32) -> Option<(f64, u64, i32, bool)>` — bound: undocumented — doc: [`lgamma_core`] and the sign of Γ(x) (1 or -1).
+- `fast32/gamma.rs:178` `fn lgamma_edge(xd: f64) -> Option<(f64, u64, i32, bool)>` — bound: undocumented — doc: lnΓ(x) for the operands [`lgamma_core_signed`]'s `double` pieces refuse, as its (y, margin in ulp of y, sign of Γ(x)), or `None` (the poles, x ≤ -16 off the pol…
+- `fast32/gamma.rs:206` `pub fn eval_lgamma(x: f32, mode: Rounding) -> Option<((f32, Status), i32)>` — bound: undocumented — doc: `lgammaf` by the fast path with the sign of Γ(x) (`signgam`), or `None` (see [`eval`]): the value as `eval(Fast::Lgamma, ..)`, the sign from Γ(x) itself ([`lgam…
+- `fast32/gamma.rs:214` `pub fn eval_tgamma(x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `tgammaf` by the fast path, or `None` (see [`eval`]).
 
 ## fast32/hyperbolic.rs (f32 hyperbolic)
 
@@ -130,20 +130,20 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 ## fast32.rs (f32 core)
 
 - `fast32.rs:343` `pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `f(x)` for `float` `x` by the fast path, or `None` when the operand is outside its domain or the rounding test fails (the caller then runs the accurate path).
-- `fast32.rs:386` `fn finish(x: f32, y: f64, delta: u64, mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test on y, the statistics under `name` and the hardware flags (see [`eval`]).
-- `fast32.rs:396` `include!("fast32_tables.rs");`
-- `fast32.rs:410` `pub(crate) fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32>` — bound: undocumented — doc: The rounding test and the final rounding of y = f·(1 + θ), |y - f| < `delta` ulp(y).
-- `fast32.rs:437` `pub fn eval_nearest(f: Fast, x: f32) -> Option<f32>` — bound: undocumented — doc: `f(x)` rounded to nearest by the fast path, for the in-place entry of a caller in the default MXCSR (MATH-M6-ENVELOPE-COST prototype), or `None`.
-- `fast32.rs:489-503` `nearest_fn!` entries: exp_nearest, exp2_nearest, exp10_nearest, log_nearest, log2_nearest, log10_nearest, sin_nearest, cos_nearest, tan_nearest, sinh_nearest, cosh_nearest, tanh_nearest, asinh_nearest, acosh_nearest, atanh_nearest
-- `fast32.rs:509` `pub fn exp_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `expf` in the caller's rounding direction and MXCSR, which it does not read, by one `double` evaluation and one conversion (LIBM-F32-ONEPASS, D-10.63), or `None…
-- `fast32.rs:515` `pub fn exp2_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `exp2f` as [`exp_onepass_any`].
-- `fast32.rs:527` `pub fn exp10_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `exp10f` as [`exp_onepass_any`] (D-10.72): `c` = RN(128·log2 10), |x| < 37.9 (|x·log2 10| < 125.9, so [`exp_onepass`]'s range and proof hold unchanged: |z| < 2^…
-- `fast32.rs:536` `pub fn log_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `logf` in the caller's rounding direction and MXCSR, unread (D-10.72; proof at [`log_onepass`]).
-- `fast32.rs:542` `pub fn log2_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `log2f` as [`log_onepass_any`].
-- `fast32.rs:548` `pub fn log10_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `log10f` as [`log_onepass_any`].
-- `fast32.rs:566-586` `fast_fn!` entries: exp, exp2, exp10, log, log2, log10, log1p, sin, cos, tan, asin, acos, atan, expm1, cbrt, sinh, cosh, tanh, asinh, acosh, atanh
-- `fast32.rs:591` `pub fn erf(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `erf` for `float`: the fast path, else [`erf_refused`] (the tiny operands' direct path, else the accurate path).
-- `fast32.rs:599` `pub fn erfc(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `erfc` for `float`: the fast path, else [`erfc_refused`] (as [`erf`]).
+- `fast32.rs:383` `fn finish(x: f32, y: f64, delta: u64, mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test on y, the statistics under `name` and the hardware flags (see [`eval`]).
+- `fast32.rs:393` `include!("fast32_tables.rs");`
+- `fast32.rs:407` `pub(crate) fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32>` — bound: undocumented — doc: The rounding test and the final rounding of y = f·(1 + θ), |y - f| < `delta` ulp(y).
+- `fast32.rs:434` `pub fn eval_nearest(f: Fast, x: f32) -> Option<f32>` — bound: undocumented — doc: `f(x)` rounded to nearest by the fast path, for the in-place entry of a caller in the default MXCSR (MATH-M6-ENVELOPE-COST prototype), or `None`.
+- `fast32.rs:486-500` `nearest_fn!` entries: exp_nearest, exp2_nearest, exp10_nearest, log_nearest, log2_nearest, log10_nearest, sin_nearest, cos_nearest, tan_nearest, sinh_nearest, cosh_nearest, tanh_nearest, asinh_nearest, acosh_nearest, atanh_nearest
+- `fast32.rs:506` `pub fn exp_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `expf` in the caller's rounding direction and MXCSR, which it does not read, by one `double` evaluation and one conversion (LIBM-F32-ONEPASS, D-10.63), or `None…
+- `fast32.rs:512` `pub fn exp2_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `exp2f` as [`exp_onepass_any`].
+- `fast32.rs:524` `pub fn exp10_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `exp10f` as [`exp_onepass_any`] (D-10.72): `c` = RN(128·log2 10), |x| < 37.9 (|x·log2 10| < 125.9, so [`exp_onepass`]'s range and proof hold unchanged: |z| < 2^…
+- `fast32.rs:533` `pub fn log_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `logf` in the caller's rounding direction and MXCSR, unread (D-10.72; proof at [`log_onepass`]).
+- `fast32.rs:539` `pub fn log2_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `log2f` as [`log_onepass_any`].
+- `fast32.rs:545` `pub fn log10_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `log10f` as [`log_onepass_any`].
+- `fast32.rs:563-583` `fast_fn!` entries: exp, exp2, exp10, log, log2, log10, log1p, sin, cos, tan, asin, acos, atan, expm1, cbrt, sinh, cosh, tanh, asinh, acosh, atanh
+- `fast32.rs:588` `pub fn erf(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `erf` for `float`: the fast path, else [`erf_refused`] (the tiny operands' direct path, else the accurate path).
+- `fast32.rs:596` `pub fn erfc(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `erfc` for `float`: the fast path, else [`erfc_refused`] (as [`erf`]).
 
 ## fast32_tables.rs (fast32_tables)
 
