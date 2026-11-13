@@ -1,7 +1,7 @@
 # LAYOUT-TRACE-AT-BUILD (LT-1): `cargo xtask so` traces its own build, opt-in
 
-State: branch `task/layout-trace-at-build-3` (LAYOUT-TRACE-AT-BUILD-2's head 5edb1b197 plus a merge of
-origin/next 8a2711482; HEAD in handoff/reports/LAYOUT-TRACE-AT-BUILD-3.json). Plan: `plan/layout-rethink.md`
+State: branch `task/layout-trace-at-build-4` (LAYOUT-TRACE-AT-BUILD-3's head 37009447e plus a merge of
+origin/next and a test fix; HEAD in handoff/reports/LAYOUT-TRACE-AT-BUILD-4.json). Plan: `plan/layout-rethink.md`
 section 4, rulings #5190-#5194. Decision: D-X.88 (`records/decisions/D-X/D-X.88.toml`). Plants:
 `handoff/LAYOUT-TRACE-AT-BUILD-plants.txt`.
 
@@ -81,6 +81,31 @@ startup/hot/probe keys, release 102/436/154; rc 0), ltab3-plants (4 plants, trac
 rc 0), ltab3-gate (affected --run --base origin/next, default mode: 32 suites, 11710 passed, 0 failed, conformance
 132/0, peak 16G, rc 0). Also ltab3-lint0 (clippy + static on the inherited head 5edb1b197: rc 0).
 
+## Merge with next, again (LAYOUT-TRACE-AT-BUILD-4, keke role n3)
+
+CI's merge_next stopped on `xtask/src/hottext.rs`: LAYOUT-FIRST-WINDOW (next) reads `hot-text.clusters` once at
+the top of `group()` and links the `hot-text.first-window` keys right after the start-up tier
+(`first_window_positions`). Resolution: the cluster file is read once for every layout; `Ungrouped` takes
+`positions()` of its empty list (no first-window key, no cluster); `Traced` applies the first-window keys to its
+own trace, and a first-window or cluster key the trace lacks (or places in the start-up tier / inside a cluster)
+fails with the `trace-at-build:` message naming both hand-kept files until LT-2. Regen builds keep next's fallback.
+The plant `ltab-rename-skips-first` moved from `positions()` to `link_positions()`, where `group()` now takes its
+link positions (a plant on `positions()` no longer reaches the grouping).
+
+Next's new test `init_startup_group_ends_inside_the_first_fault_around_window` failed in trace mode (fast): it
+counted the start-up tier of the COMMITTED `hot-text.list` (95 keys) while the trace-mode product is grouped from
+its own list (91 start-up keys; fstat at link position 91, 0x417980..0x41798c, inside the window 0x408000..0x418000).
+It counted puts and fread into the group and read a margin of -804 bytes. It now reads `generated_list("hot-text.list")`
+like the other list readers in that file (a plain build still reads the committed list). Not a layout regression:
+the real trace-mode group ends ~1.6 KiB inside the window.
+
+Jobs (keke, role n3): ltab4-lint0 (clippy + static on the inherited head 37009447e: rc 0); ltab4-so2 (clippy,
+static, xtask hottext unit tests 24 passed, then `LIELLA_LAYOUT_TRACE=1 so` + hot_text_products in fast, then
+release: 24 passed each; fast 101/482/152 startup/hot/probe keys, release 102/433/153; rc 0); ltab4-plants2
+(4 plants, trace mode, fast: 4 CAUGHT, 0 WARN, rc 0); ltab4-gate (affected --run --base origin/next, default
+mode; result in handoff/reports/LAYOUT-TRACE-AT-BUILD-4.json). Superseded: ltab4-so and ltab4-plants (rc 101 / 2:
+the first-window test above, before the fix).
+
 ## Jobs, LAYOUT-TRACE-AT-BUILD-2 (mei, role s1)
 
 ltab2-lint0 (clippy + static on the inherited head: rc 0); ltab2-plants (4 plants, trace mode, fast: 4 CAUGHT,
@@ -103,7 +128,11 @@ Logs and products: `~/work/LAYOUT-TRACE-AT-BUILD/{m1,m2,optout}` on shiki.
   profile on this host: setlocale + printf 53 > 51. With the switch it reads 50.
 * First run's jobs: ltab-gate and ltab-optout rc 0; ltab-plants rc 1 (the two survivors, fixed above).
 * Do not redo the merge: a later conflict in `build_archive_locked` resolves the same way (keep `layout`, take the
-  build call from next).
+  build call from next); one in `group()` keeps `layout` (Ungrouped: no list, no first-window, no cluster;
+  Traced: the `trace-at-build:` message) and next's single read of the hand-kept inputs.
+* Any new hot_text_products test that reads a list must use `generated_list()`, not `crates/libc-so/...`
+  directly, or it reads the wrong list for trace-mode products (the hand-kept inputs, clusters / first-window /
+  startup-state, stay in crates/libc-so).
 * Next step: land; then LT-2 (clusters by probe phase), LT-3 (ptrace tracer), LT-4 (host-canonical, before the
   default changes). A new `page_faults.c` mode now needs a trace in regen.sh (or probe_text.sh MODES) or the
   trace-mode build fails by name. Do not redo: the fast/release tables, determinism, the coverage check.

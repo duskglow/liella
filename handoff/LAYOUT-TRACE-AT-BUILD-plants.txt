@@ -9,4 +9,8 @@ ltab-drop-probe-text-mode | tools/hottext/probe_text.sh | lit:MODES="localtime l
 # LAYOUT-TRACE-AT-BUILD-4: since LAYOUT-FIRST-WINDOW (next) group() takes its link positions from link_positions(),
 # not positions(), so the rename plant mutates link_positions' position map (the first key loses its position).
 ltab-rename-skips-first | xtask/src/hottext.rs | lit:        keys.entry(k.to_string()).or_insert(i); ==>         if i > 0 { keys.entry(k.to_string()).or_insert(i); } | env LIELLA_LAYOUT_TRACE=1 cargo xtask so && cargo test -p liella --test hot_text_products | msg:STARTUP-TEXT-WINDOWS|TEXT-PREFIX|outside the hot text|program: [0-9]+ page faults >
-# cargo xtask plants results, LAYOUT-TRACE-AT-BUILD-3 (4 plants: 4 CAUGHT); -4's run: handoff/LAYOUT-TRACE-AT-BUILD.md
+# cargo xtask plants results (4 plants: 4 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# ltab-drop-locale-probe: CAUGHT, caught by no test the log names
+# ltab-drop-tool-probe: CAUGHT, caught by no test the log names
+# ltab-drop-probe-text-mode: CAUGHT, caught by no test the log names
+# ltab-rename-skips-first: CAUGHT, caught by no test the log names
