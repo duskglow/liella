@@ -21,6 +21,12 @@ fn root() -> PathBuf {
 /// Calls in each counted loop.
 const CALLS: u64 = 2000;
 
+/// The most instructions per call `setlocale(cat, "C")` asked again may cost over
+/// `setlocale(cat, NULL)` asked again (the name's handling in the boundary and the inline
+/// compare): 75 measured on a Zen 1 host for both categories (fast profile), plus 10 for string
+/// kernels that differ by CPU class. A library call for the compare cost 20-35 more.
+const NAME_EXTRA: u64 = 85;
+
 // `perf_event_attr` as words (PERF_ATTR_SIZE_VER0 = 64 bytes): PERF_TYPE_HARDWARE (0) and the size
 // in word 0, PERF_COUNT_HW_INSTRUCTIONS (1), disabled | exclude_kernel | exclude_hv in word 5.
 // 298 = SYS_perf_event_open on x86-64; the ioctls are PERF_EVENT_IOC_ENABLE/DISABLE/RESET.
@@ -54,6 +60,16 @@ static uint64_t loop(int cat, const char *name) {
     if (!r || strcmp(r, "C") != 0 || MB_CUR_MAX != 1) bad++;
     return n;
 }
+static uint64_t query(int cat) {
+    if (!setlocale(LC_ALL, "C")) { printf("no C\n"); exit(1); }
+    ioctl(fd, 0x2403, 0);
+    ioctl(fd, 0x2400, 0);
+    for (int i = 0; i < CALLS; i++) sink += (uintptr_t)setlocale(cat, NULL);
+    ioctl(fd, 0x2401, 0);
+    uint64_t n = 0;
+    if (read(fd, &n, sizeof n) != sizeof n) { printf("noperf read %d\n", errno); exit(0); }
+    return n;
+}
 int main(void) {
     uint64_t attr[16] = {0};
     attr[0] = (uint64_t)64 << 32;
@@ -63,8 +79,10 @@ int main(void) {
     if (fd < 0) { printf("noperf %d\n", errno); return 0; }
     uint64_t c = loop(LC_CTYPE, "C"), posix = loop(LC_CTYPE, "POSIX");
     uint64_t all_c = loop(LC_ALL, "C"), all_posix = loop(LC_ALL, "POSIX");
-    printf("%d %llu %llu %llu %llu\n", bad, (unsigned long long)c, (unsigned long long)posix,
-           (unsigned long long)all_c, (unsigned long long)all_posix);
+    uint64_t q = query(LC_CTYPE), all_q = query(LC_ALL);
+    printf("%d %llu %llu %llu %llu %llu %llu\n", bad, (unsigned long long)c, (unsigned long long)posix,
+           (unsigned long long)all_c, (unsigned long long)all_posix, (unsigned long long)q,
+           (unsigned long long)all_q);
     return 0;
 }
 "#;
@@ -94,13 +112,15 @@ fn setlocale_posix_again_costs_what_c_costs() {
         return;
     }
     let v: Vec<u64> = text.split(' ').map(|w| w.parse().unwrap_or_else(|_| panic!("unexpected output {text:?}"))).collect();
-    let [bad, c, posix, all_c, all_posix] = v[..] else { panic!("unexpected output {text:?}") };
+    let [bad, c, posix, all_c, all_posix, q, all_q] = v[..] else { panic!("unexpected output {text:?}") };
     println!(
-        "user instructions per call over {CALLS} calls: LC_CTYPE \"C\" {}, \"POSIX\" {}; LC_ALL \"C\" {}, \"POSIX\" {}",
+        "user instructions per call over {CALLS} calls: LC_CTYPE \"C\" {}, \"POSIX\" {}, NULL {}; LC_ALL \"C\" {}, \"POSIX\" {}, NULL {}",
         c / CALLS,
         posix / CALLS,
+        q / CALLS,
         all_c / CALLS,
-        all_posix / CALLS
+        all_posix / CALLS,
+        all_q / CALLS
     );
     assert_eq!(bad, 0, "setlocale(cat, \"C\"/\"POSIX\") from C.UTF-8 did not report \"C\" with MB_CUR_MAX 1");
     // "POSIX" may cost its longer name (a few instructions per call), never another path: at most
@@ -112,6 +132,17 @@ fn setlocale_posix_again_costs_what_c_costs() {
             "setlocale_posix_repeat: {what} \"POSIX\" again {} instructions per call, \"C\" again {}: \"POSIX\" left the no-change path",
             alias / CALLS,
             plain / CALLS
+        );
+    }
+    // "C" again is answered from the query cache like the query itself: it may add only the
+    // name's own handling (its length, the no-change compare made inline), never a library call
+    // for the compare or the locked path's frame (SETLOCALE-C-ROWS: those were 20-35 per call).
+    for (what, query, asked) in [("LC_CTYPE", q, c), ("LC_ALL", all_q, all_c)] {
+        assert!(
+            asked <= query + NAME_EXTRA * CALLS,
+            "setlocale_posix_repeat: {what} \"C\" again {} instructions per call, the query again {}: more than {NAME_EXTRA} for the name",
+            asked / CALLS,
+            query / CALLS
         );
     }
 }
