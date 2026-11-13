@@ -1,9 +1,22 @@
-# LIBM-CPLX-POW handoff: cpow/cpowf quick + middle tiers, plants caught, per-call measured (run 5)
+# LIBM-CPLX-POW handoff: cpow/cpowf quick + middle tiers, plants caught, per-call measured (runs 5-6)
 
-State: branch task/libm-cplx-pow-5 (= -4's branch, merged with origin/next 51af84e06 in 9a8c60f52); head in
-handoff/reports/LIBM-CPLX-POW-5.json. Role mei:~/w/s2. Decisions in force: D-10.53, D-10.74, D-10.99, D-10.25,
-D-10.17; this tier's record is still pending (records/pending/LIBM-CPLX-POW-4-1.toml, D-NEW in series D-10: the
-coordinator assigns the id at landing).
+State: branch task/libm-cplx-pow-6 (= -5's branch 39bdc26ea, merged with origin/next e30374455 in 31775ac15); head
+in handoff/reports/LIBM-CPLX-POW-6.json. Role shiki:~/w/sh2. Decisions in force: D-10.53, D-10.74, D-10.99,
+D-10.25, D-10.17, and this tier's record D-10.118 (records/decisions/D-10/D-10.118.toml, id assigned).
+
+## Run 6 (held under ruling #4347, released: merge next and regate, nothing else)
+
+* -5's CI red (train 658) was only the three start-up page-fault tests in hot_text_products (the #4347 layout
+  jitter class); no code change was made for it.
+* Inherited head 39bdc26ea: `xtask clippy` + `static` clean (shiki `libm-cplx-pow-6-lint0`).
+* Merged origin/next e30374455: no conflicts. Clippy + static clean (`libm-cplx-pow-6-lint1`).
+* Direct-tier gate `cargo xtask affected --run --base origin/next` on 31775ac15 (shiki `libm-cplx-pow-6-gate`):
+  rc 0, 6 suites ok, 1563 passed / 0 failed / 256 ignored, peak 2.9G. It selected hot_text_products,
+  heap_meta_products and cold_bss_products (complex.rs is linked into libc.a), and `test -p liella` passed, so the
+  three tests that went red in CI pass on this head here.
+* Plants were not rerun: the three planted files (complex_fast_pow.rs, exp_log.rs, trig.rs) are identical to
+  39bdc26ea after the merge (`git diff --quiet`), and -5's `libm-cplx-pow-5-plants2` caught 6/6 on mei.
+* Next step for this branch: land it. The performance follow-ups below are a new story.
 
 ## Run 5 results
 
