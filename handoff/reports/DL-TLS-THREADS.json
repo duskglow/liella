@@ -6,8 +6,8 @@
  "branch": "task/dl-tls-threads",
  "head": null,
  "gate": {
-  "affected": "dl-tls-threads-gate2 (FULL escalation expected) running at hand-back",
-  "peak": null
+  "affected": "dl-tls-threads-gate2 (escalated FULL): 6492 passed / 1 failed (liella::hot_text_products init_data_clusters_hold_at_every_text_phase)",
+  "peak": "11G"
  },
  "accepted_first_attempt": null,
  "rulings": [
@@ -27,7 +27,8 @@
  "informational": [
   "fast xtask so lost two hot-text.list keys (locale::publish_global, a locale::name::candidates closure) after a thread.rs edit (bbe7c0530); reverted",
   "rule slips: one no-op empty heredoc, one sed -i on this story's pending record; revert commit lacks the Co-Authored-By trailer",
-  "dl-tls-threads-percall4 refused: role synced with an untracked handoff note (docs only); rerun as dl-tls-threads-percall5 with --rev 1f09927be"
+  "dl-tls-threads-percall4 refused: role synced with an untracked handoff note (docs only); rerun as dl-tls-threads-percall5 with --rev 1f09927be",
+  "dl-tls-threads-percall5 rc 2: wl_percall chose base cdafa3d1c (not primed); the measurement stands from dl-tls-threads-percall2 on the identical code tree 0460cc7fe"
  ],
  "refused": [],
  "impact": [
@@ -65,12 +66,11 @@
   }
  ],
  "improvement": "hot-text.list keys break on unrelated inlining moves; the so step could warn in the fast profile instead of failing a feature branch",
- "next_step": "collect gate2 (FULL), plants3, percall5; fix-forward story for the +29 instructions (bbe7c0530 + hot-text regen)",
+ "next_step": "find why init_data_clusters_hold_at_every_text_phase fails (likely the new libc .bss static LOADER_TLS in thread.rs moving the data clusters; check origin/next on keke with the same test), fix, rerun the failing suite; then collect plants3",
  "report_file": "handoff/DL-TLS-THREADS-report.md",
  "jobs": [
   "dl-tls-threads-lint3",
   "dl-tls-threads-gate2",
-  "dl-tls-threads-plants3",
-  "dl-tls-threads-percall5"
+  "dl-tls-threads-plants3"
  ]
 }

@@ -49,3 +49,15 @@ three rounds; per-thread errno) to exit 0: the test asserts it before Liella's r
   Co-Authored-By trailer (no amend allowed).
 - `tls_release` is a no-op hook (static blocks go with libc's mapping). Surplus bytes of a reused mapping are not
   cleared (DL-16d must initialise the surplus blocks it places, for new threads too).
+
+## Status at hand-back: INCOMPLETE (budget checkpoint)
+- dl-tls-threads-gate2 (final code 1f09927be; FULL escalation): 15 suites, 6492 passed, **1 failed**:
+  `liella::hot_text_products init_data_clusters_hold_at_every_text_phase`. Not diagnosed. The gate log shows only
+  the name; the message is in that test's own output. Likely cause: this change adds a libc `.bss` object
+  (`LOADER_TLS`, 4 words, thread.rs), and libc's data clusters are checked by that test. The change also
+  touches start-up code (early_init, start_under_liella_ld), so the LAYOUT-JITTER exemption does not apply.
+  Next: run that test alone on origin/next and on this head on keke, read its message, and place the new
+  words where the cluster rule wants them (or fold them into the existing TLS_IMAGE words as bbe7c0530 began).
+- dl-tls-threads-plants3: running at hand-back (the first plant CAUGHT; 3 of 3 were CAUGHT on 0460cc7fe).
+- dl-tls-threads-percall4 and -percall5: superseded (dirty sync marker; base cdafa3d1c not primed). The count
+  stands from dl-tls-threads-percall2 on the identical code tree.
