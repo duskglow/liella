@@ -715,9 +715,21 @@ fn lconv_words(l: &Locale) -> [usize; 12] {
 /// `setlocale` for C: the name's address, or 0.
 pub fn setlocale_c(category: i32, name: liella::error::KResult<Option<&[u8]>>) -> usize {
     match name {
-        Ok(n) => setlocale(category, n).map_or(0, |s| s.as_ptr().expose_provenance()),
+        Ok(n) => setlocale(category, n).map_or_else(|| setlocale_failed(category), |s| s.as_ptr().expose_provenance()),
         Err(_) => 0,
     }
+}
+
+/// A `setlocale` that returns NULL sets `errno` (`spec/behaviour/setlocale-errno.md`): `EINVAL`
+/// for a category number that names no category, otherwise `ENOENT`, the locale data of a name
+/// not being available, as `newlocale` reports it (D-7.18). A successful call leaves `errno`
+/// alone. Out of line: only failures pay for it.
+#[cold]
+#[inline(never)]
+fn setlocale_failed(category: i32) -> usize {
+    let known = category == 6 || Cat::from_number(category).is_some();
+    crate::errno::set(if known { liella::error::Errno::ENOENT } else { liella::error::Errno::EINVAL });
+    0
 }
 
 /// `newlocale` for C (`name` NULL: `EINVAL`).

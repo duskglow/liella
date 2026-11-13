@@ -1,0 +1,13 @@
+id = "D-NEW"
+series = "D-13"
+section = "s13"
+spec = "§13.2"
+ann = "ABI"
+status = "active"
+story = "SMOKE-ERRNO-FIXES"
+date = "2026-11-13"
+amends = "D-13.2"
+tests = ["crates/core/tests/s13_filesystem_clauses.rs::s13_2_f_0", "crates/core/tests/fstree_products.rs::fstree_equals_the_reference"]
+body = '''
+**A directory removed while open ends its stream; `errno` is left alone** (coordinator ruling #5467, 2026-11-13, replacing the removed-directory part of D-13.2). `getdents64` on such a directory fails with the kernel's `ENOENT` (`spec/behaviour/fstree.md`, removed directory); `DirStream::refill` (`crates/core/src/fs/dir.rs`) takes that `ENOENT` as the end of the directory, once the entries already buffered are used up and on every further call. So `readdir` and `readdir64` return NULL with `errno` unchanged, `readdir_r` and `readdir64_r` return 0 with a NULL result, `scandir` returns the entries it read, and the tree walks (`nftw`, `ftw`), `fts` and `glob`, which read through the same stream, see the directory end. Every other `getdents64` error is still reported. `getdents64` and `getdirentries` called directly still return the kernel's `ENOENT`. Found by AQOURS-SMOKE (F1: coreutils' `ls` test `removed-directory` expects `ls` in a removed directory to succeed); the record's rows in `fstree_products` now agree with the reference.
+'''
