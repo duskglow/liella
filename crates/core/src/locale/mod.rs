@@ -537,12 +537,24 @@ pub const ARCHIVE: &[u8] = b"/usr/lib/locale/locale-archive";
 pub const ALIAS_FILE: &[u8] = b"/usr/share/locale/locale.alias";
 
 /// The built-in locale named `name` and the name it reports, if it is one.
+// LAYOUT-HOTKEY-INLINE-STABLE-4: always inlined into its callers, so it has no hot-text key a libm growth
+// could kill; a fixed boundary cost about 25 instructions per setlocale(LC_CTYPE, "POSIX") (wl_percall).
+#[inline(always)]
 pub fn builtin(name: &'static [u8]) -> Option<(Data, &'static [u8])> {
     match name {
         b"C" | b"POSIX" => Some((Data::C, C_NAME)),
         b"C.UTF-8" | b"C.utf8" => Some((Data::CUtf8, name)),
         _ => None,
     }
+}
+
+/// The name a category selected by `name` reports: `"POSIX"` reports `"C"` (the same built-in
+/// locale, [`builtin`]); every other name reports itself. `setlocale` compares this, not the name
+/// as given, with the current name, so asking again for the locale a category already has is a
+/// no-op whichever of the two built-in names is used (s7_2_c_4; SETLOCALE-POSIX-ATTR).
+#[inline(always)]
+pub fn reported(name: &[u8]) -> &[u8] {
+    if name == b"POSIX" { C_NAME } else { name }
 }
 
 /// `dir/name/file` in a fixed buffer.

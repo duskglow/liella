@@ -33,6 +33,8 @@ pub static HEAP: Heap = Heap::new();
 pub struct KernelPages;
 
 impl Pages for KernelPages {
+    // LAYOUT-HOTKEY-INLINE-STABLE: a fixed boundary for its start-up/fork hot-text key (off the hot paths: the call is free).
+    #[inline(never)]
     fn map(&self, len: usize, align: usize, node: Option<u32>) -> Option<usize> {
         // Over-map by the alignment and cut the ends off, so that the range is aligned.
         let slack = if align > PAGE { align } else { 0 };

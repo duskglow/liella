@@ -31,7 +31,8 @@
 //! published (XTASK-SO-ATOMIC; two concurrent builds had left `libc.a` with zeroed members).
 //!
 //! The product crate lives outside the workspace (a `no_std` cdylib), so it builds in its own
-//! target directory, `target/product`. The products go to `target/liella`, never to a directory
+//! target directory, `target/product` (the interpreter, built with other flags, in `target/product/ld-pie`, so that
+//! no build rebuilds another's dependencies: [`ProductBuild`]). The products go to `target/liella`, never to a directory
 //! Cargo puts on `LD_LIBRARY_PATH` (`target/release`): a `libc.so.6` there would replace the
 //! host's C library for every build script and test Cargo runs.
 
@@ -832,6 +833,58 @@ impl Profile {
     }
 }
 
+/// One `cargo rustc` build of a product crate as a static archive (XTASK-SO-NOCHANGE-PROFILE).
+///
+/// Cargo keeps one copy of each dependency per target directory and profile, whatever flags and environment built it,
+/// and rebuilds it when the next build's differ (`CARGO_ENCODED_RUSTFLAGS`, and `LIELLA_BUILD_TAG`, which the
+/// library crates read with `option_env!`). The libc, libm and interpreter builds used to share `target/product`
+/// with three different settings, so every `xtask so` rebuilt the shared crates three times: about 200 s of a 201 s
+/// no-change build on a 4-core Zen 1 slot. So every build that shares a target directory sets the same flags and the
+/// same tag, and the interpreter, whose flags differ (`-Crelocation-model=pie`), has a target directory of its own.
+/// `so::tests::product_builds_sharing_a_target_directory_build_alike` holds the rule.
+pub(crate) struct ProductBuild {
+    /// The crate's manifest, relative to the workspace root.
+    pub manifest: &'static str,
+    /// The archive cargo writes, in `<target directory>/<profile>/`.
+    pub archive: &'static str,
+    /// The cargo target directory, relative to the product directory (`""`: the product directory itself).
+    pub subdir: &'static str,
+    /// The build's own flags, after the product flags every build gets (D-4.33).
+    pub extra: Option<&'static str>,
+}
+
+/// `libc.a` and `libc.so.6` (step 1).
+pub(crate) const LIBC_BUILD: ProductBuild = ProductBuild { manifest: "crates/libc-so/Cargo.toml", archive: "libc.a", subdir: "", extra: None };
+/// `libm.a` and `libm.so.6` ([`run_libm`]): the libc build's flags and tag, so the two share their dependencies.
+pub(crate) const LIBM_BUILD: ProductBuild = ProductBuild { manifest: "crates/libm-so/Cargo.toml", archive: "libm.a", subdir: "", extra: None };
+/// The interpreter ([`run_ld`]): its own flags, so its own target directory.
+pub(crate) const LD_BUILD: ProductBuild = ProductBuild { manifest: "crates/ld-so/Cargo.toml", archive: "libld_so.a", subdir: "ld-pie", extra: Some(LD_RUSTFLAGS) };
+
+impl ProductBuild {
+    /// The cargo target directory of this build in `product`.
+    pub(crate) fn target_dir(&self, product: &Path) -> std::path::PathBuf {
+        if self.subdir.is_empty() { product.to_path_buf() } else { product.join(self.subdir) }
+    }
+
+    /// The archive as cargo built it.
+    pub(crate) fn raw_archive(&self, product: &Path, profile: Profile) -> std::path::PathBuf {
+        self.target_dir(product).join(profile.name()).join(self.archive)
+    }
+
+    /// The `cargo rustc` command of this build in `product`. `rustflags` (measurement builds only, MEASURE-1) come
+    /// after the build's own flags; `tag` is the products' build tag ([`build_tag`]), set for every build.
+    pub(crate) fn command(&self, root: &Path, product: &Path, profile: Profile, rustflags: Option<&str>, tag: &str) -> Command {
+        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+        let mut cmd = Command::new(cargo);
+        cmd.current_dir(root).args(["rustc", "-q", "--profile", profile.name(), "--crate-type", "staticlib", "--manifest-path"]).arg(root.join(self.manifest)).arg("--target-dir").arg(self.target_dir(product));
+        let flags: Vec<&str> = self.extra.into_iter().chain(rustflags).collect();
+        let flags = flags.join("\x1f");
+        cmd.env("CARGO_ENCODED_RUSTFLAGS", crate::align::encoded_rustflags(root, (!flags.is_empty()).then_some(flags.as_str())));
+        cmd.env("LIELLA_BUILD_TAG", tag);
+        cmd
+    }
+}
+
 /// Which profile built the products now in `target/liella` (`None`: unknown, or none built). The
 /// marker is written last, after every product, and removed first, so a half-built set is unknown.
 pub fn built_profile(root: &Path) -> Option<Profile> {
@@ -863,17 +916,11 @@ pub fn build_archive(root: &Path, product: &Path, out: &Path, rustflags: Option<
 
 /// [`build_archive`] with the caller holding the lock of `product` (`run_so_as` holds it for the whole run).
 fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Option<&str>, profile: Profile) -> Result<(std::path::PathBuf, (usize, usize), crate::copies::Stats), String> {
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-    let manifest = root.join("crates/libc-so/Cargo.toml");
-    let mut cmd = Command::new(&cargo);
-    cmd.current_dir(root).args(["rustc", "-q", "--profile", profile.name(), "--crate-type", "staticlib", "--manifest-path"]).arg(&manifest).arg("--target-dir").arg(product);
     // Every product crate gets the 64-byte function alignment (D-4.33), then the caller's flags.
-    cmd.env("CARGO_ENCODED_RUSTFLAGS", crate::align::encoded_rustflags(root, rustflags));
-    cmd.env("LIELLA_BUILD_TAG", build_tag(root));
-    run(&mut cmd)?;
+    run(&mut LIBC_BUILD.command(root, product, profile, rustflags, &build_tag(root)))?;
     // Cargo's archive stays as cargo built it; the steps below work on a fresh copy, so every run
     // post-processes the same input once (a killed run cannot leave a half-edited archive behind).
-    let raw = product.join(profile.name()).join("libc.a");
+    let raw = LIBC_BUILD.raw_archive(product, profile);
     let archive = product.join(profile.name()).join("liella-processed.a");
     fs::copy(&raw, &archive).map_err(|e| format!("copy {}: {e}", raw.display()))?;
     // libc's math exports (`copysign`, `frexp`, ...) must not merge with compiler_builtins' copies,
@@ -898,16 +945,24 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
         run(Command::new(std::env::var("AR").unwrap_or_else(|_| "ar".into())).arg("s").arg(&archive))?;
     }
     localize_builtins(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &names, &product.join("libc-work"))?;
-    // The written start-up state into the `.data1` cluster first (D-X.64), so that a written object of
-    // 1 KiB or more joins it instead of `.lbss`; then the large zero-initialised tables after the small
-    // state words, out of the start-up pages (D-X.22).
-    crate::coldbss::move_startup_state(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, root, &product.join("state-work"))?;
-    crate::coldbss::move_cold_bss(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("coldbss-work"))?;
     // The library's own copies and fills call its internal entries, directly (D-X.15).
     let copies = crate::copies::direct_internal_copies(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("copies-work"))?;
     // (done in the archive as rustc built it, so `libc.so.6` and the weakened `libc.a` both get it)
+    // The written start-up state into the `.data1` cluster first (D-X.64), so that a written object of
+    // 1 KiB or more joins it instead of `.lbss`; then the large zero-initialised tables after the small
+    // state words, out of the start-up pages (D-X.22). Both after the copies pass: its `ld -r` join of the
+    // library's members merges every `.data1` input in member order, which would undo the declared order
+    // (ruling #4923); the declared statics' own sections survive the join.
+    crate::coldbss::move_startup_state(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, root, &product.join("state-work"))?;
+    crate::coldbss::move_cold_bss(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("coldbss-work"))?;
+    // A regen build keeps the archive as the grouping receives it: `cargo xtask hottext-recheck` reruns
+    // the grouping alone on it with the rewritten list (HOTLIST-REGEN-CHEAP).
+    if crate::hottext::regen_on() && rustflags.is_none() {
+        let saved = product.join(profile.name()).join(crate::hottext::PRE_GROUP_ARCHIVE);
+        fs::copy(&archive, &saved).map_err(|e| format!("copy {}: {e}", saved.display()))?;
+    }
     // The functions short programs run, grouped into `.text.hot.*` (PAGEFAULTS-2: fewer text faults).
-    let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &root.join("crates/libc-so/hot-text.list"), &product.join("hot-work"), rustflags.is_none().then(|| profile.name()))?;
+    let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &crate::hotlists::path(root, "hot-text.list")?, &root.join(crate::hotlists::TRACKED), &product.join("hot-work"), rustflags.is_none().then(|| profile.name()))?;
     println!("so: {hot} function sections grouped as hot text");
     // The read-only data start-up reads, after the grouping (it places STARTUP_NAMES), in one aligned section (D-X.62).
     let (ro, ro_bytes) = crate::startup_ro::place(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, root, &product.join("startup-ro-work"))?;
@@ -973,8 +1028,42 @@ fn check_no_link_edge(so: &Path) -> Result<(), String> {
     }
 }
 
+/// `liella-crt1.o` in `dir`, assembled for the `libc.a` there; returns its `-D` cluster alignments.
+fn build_crt1(root: &Path, cc: &str, dir: &Path) -> Result<Vec<String>, String> {
+    // Each start-up data cluster's start alignment, from its size over the whole archive (D-X.64).
+    let aligns = crate::startup_ro::cluster_aligns(&dir.join("libc.a"))?;
+    println!("so: start-up data cluster alignments {}", aligns.iter().map(|(d, a)| format!("{d}={a}")).collect::<Vec<_>>().join(" "));
+    let defines: Vec<String> = aligns.iter().map(|(d, a)| format!("-D{d}={a}")).collect();
+    let crt1 = tmp_name(&dir.join("liella-crt1.o"));
+    run(Command::new(cc).arg("-c").args(&defines).arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&crt1))?;
+    publish(&crt1, &dir.join("liella-crt1.o"))?;
+    Ok(defines)
+}
+
+/// `cargo xtask so` in the regen mode with [`crate::hottext::LIBC_ONLY_FLAG`] `<dir>` (HOTLIST-REGEN-CHEAP): only the products the
+/// regen's traces link, built exactly as [`run_so_as`] builds them (step 1 and the start object), into
+/// `dir`, with the `.profile` marker last. `target/liella` is not touched.
+pub fn run_regen_libc(root: &Path, dir: &Path, profile: Profile) -> Result<(), String> {
+    if !crate::hottext::regen_on() {
+        return Err(format!("so: {} is a regen build ({})", crate::hottext::LIBC_ONLY_FLAG, crate::hottext::REGEN_FLAG));
+    }
+    let product = root.join("target/product");
+    let _lock = lock_product_dir(&product)?;
+    fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let dir = fs::canonicalize(dir).map_err(|e| e.to_string())?;
+    if dir == fs::canonicalize(root.join("target/liella")).unwrap_or_default() {
+        return Err("so: --libc-only writes regen products, never into target/liella".into());
+    }
+    let _ = fs::remove_file(dir.join(".profile"));
+    println!("so: regen products (libc.a, liella-crt1.o), profile {}, into {}", profile.name(), dir.display());
+    build_archive_locked(root, &product, &dir.join("libc.a"), None, profile)?;
+    build_crt1(root, &std::env::var("CC").unwrap_or_else(|_| "cc".into()), &dir)?;
+    let marker = tmp_name(&dir.join(".profile"));
+    fs::write(&marker, format!("{}\n", profile.name())).map_err(|e| e.to_string())?;
+    publish(&marker, &dir.join(".profile"))
+}
+
 pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let product = root.join("target/product");
     let release = root.join("target/liella");
     // One product build per tree at a time; the lock is held to the end of this function.
@@ -1043,13 +1132,7 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     publish(&so, &so_final)?;
 
     // 4. The start object.
-    // Each start-up data cluster's start alignment, from its size over the whole archive (D-X.64).
-    let aligns = crate::startup_ro::cluster_aligns(&release.join("libc.a"))?;
-    println!("so: start-up data cluster alignments {}", aligns.iter().map(|(d, a)| format!("{d}={a}")).collect::<Vec<_>>().join(" "));
-    let defines: Vec<String> = aligns.iter().map(|(d, a)| format!("-D{d}={a}")).collect();
-    let crt1 = tmp_name(&release.join("liella-crt1.o"));
-    run(Command::new(&cc).arg("-c").args(&defines).arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&crt1))?;
-    publish(&crt1, &release.join("liella-crt1.o"))?;
+    let defines = build_crt1(root, &cc, &release)?;
     // The static-PIE start object (D-27.10): the same file, calling the relocating start.
     let rcrt1 = tmp_name(&release.join("liella-rcrt1.o"));
     run(Command::new(&cc).arg("-c").arg("-DLIELLA_STATIC_PIE").args(&defines).arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&rcrt1))?;
@@ -1080,8 +1163,8 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     println!("so: internal copies (D-X.15): {} references to the internal entries (redirected now: {}; made relaxable: {}), {kept} other uses of memcpy/memmove/memset kept", copies.internal, redirected.join(", "), copies.relaxable_internal);
     println!("so: GOT calls, jumps and loads made relaxable (D-X.15, PJ-19): {}, {} other GOT uses left as they are", copies.relaxable, copies.unrecognised);
     println!("so: target/liella/libc.a ({} functions overridable with internal calls bound to the library, {} names weak in place), libc.so.6 ({count} versioned symbols, {native} of them native), liella-crt1.o, liella-rcrt1.o, liella-gcrt1.o, libresolv placeholder", weak.0, weak.1);
-    run_libm(root, &cargo, &cc, &ar, profile)?;
-    run_ld(root, &cargo, &cc, profile)?;
+    run_libm(root, &cc, &ar, profile)?;
+    run_ld(root, &cc, profile)?;
     check_placement(root, &release)?;
     // R14-12: no shared product defines or exports a GLIBC_PRIVATE version.
     crate::placeholders::check_no_private(&release)?;
@@ -1108,14 +1191,13 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
 /// symbol is local in the linked object (version script), so the model's assumption holds.
 const LD_RUSTFLAGS: &str = "-Crelocation-model=pie";
 
-fn run_ld(root: &Path, cargo: &str, cc: &str, profile: Profile) -> Result<(), String> {
+fn run_ld(root: &Path, cc: &str, profile: Profile) -> Result<(), String> {
     use liella_ld::arch::Arch as _;
     let name = liella_ld::arch::Native::INTERP;
-    let manifest = root.join("crates/ld-so/Cargo.toml");
     let product = root.join("target/product");
     let release = root.join("target/liella");
-    run(Command::new(cargo).current_dir(root).args(["rustc", "-q", "--profile", profile.name(), "--crate-type", "staticlib", "--manifest-path"]).arg(&manifest).arg("--target-dir").arg(&product).env("CARGO_ENCODED_RUSTFLAGS", crate::align::encoded_rustflags(root, Some(LD_RUSTFLAGS))).env("LIELLA_BUILD_TAG", build_tag(root)))?;
-    let archive = product.join(profile.name()).join("libld_so.a");
+    run(&mut LD_BUILD.command(root, &product, profile, None, &build_tag(root)))?;
+    let archive = LD_BUILD.raw_archive(&product, profile);
     let entry = product.join("ld-entry.o");
     run(Command::new(cc).arg("-c").arg("-DLIELLA_LD").arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&entry))?;
     let map = product.join("ld.map");
@@ -1395,12 +1477,11 @@ const LIBM_DATA: [&str; 2] = ["signgam", "__signgam"];
 ///    defined by `libc.a`, and no heap (the math code does not allocate).
 /// 4. `target/liella/libm.so.6`, linked from that object against `libc.so.6` with the version
 ///    script of `libm.so.6`'s default versions; its dynamic symbol table is checked against it.
-fn run_libm(root: &Path, cargo: &str, cc: &str, ar: &str, profile: Profile) -> Result<(), String> {
-    let manifest = root.join("crates/libm-so/Cargo.toml");
+fn run_libm(root: &Path, cc: &str, ar: &str, profile: Profile) -> Result<(), String> {
     let product = root.join("target/product");
     let release = root.join("target/liella");
-    run(Command::new(cargo).current_dir(root).args(["rustc", "-q", "--profile", profile.name(), "--crate-type", "staticlib", "--manifest-path"]).arg(&manifest).arg("--target-dir").arg(&product).env("CARGO_ENCODED_RUSTFLAGS", crate::align::encoded_rustflags(root, None)))?;
-    let raw = product.join(profile.name()).join("libm.a");
+    run(&mut LIBM_BUILD.command(root, &product, profile, None, &build_tag(root)))?;
+    let raw = LIBM_BUILD.raw_archive(&product, profile);
     let (_, both, libm_only) = crate::math::owners(root)?;
     // The data objects of libm.so.6 (`signgam`, D-10.4) are not generated functions.
     let mut exports: BTreeSet<String> = libm_only.union(&both).filter(|s| !s.starts_with("liella_")).cloned().collect();
@@ -1539,6 +1620,40 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    /// No spec clause (product build tooling, XTASK-SO-NOCHANGE-PROFILE): the product builds that share a cargo target
+    /// directory build with the same flags and the same environment, so that none rebuilds another's dependencies
+    /// when nothing changed; the interpreter's own flags give it a directory of its own; every build sets the tag;
+    /// and each build's archive is read from its own directory.
+    #[test]
+    fn product_builds_sharing_a_target_directory_build_alike() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let product = root.join("target/product");
+        let mut by_dir: BTreeMap<String, (&str, Vec<String>)> = BTreeMap::new();
+        // Every product build `run_so_as` runs.
+        for b in [&LIBC_BUILD, &LIBM_BUILD, &LD_BUILD] {
+            for profile in [Profile::Fast, Profile::Release] {
+                let cmd = b.command(root, &product, profile, None, "src-0123456789abcdef");
+                let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+                let dir = args.iter().position(|a| a == "--target-dir").and_then(|i| args.get(i + 1)).cloned().unwrap_or_else(|| panic!("{}: no --target-dir", b.manifest));
+                assert_eq!(Path::new(&dir), b.target_dir(&product), "{}: built in another directory than its own", b.manifest);
+                assert!(b.raw_archive(&product, profile).starts_with(Path::new(&dir).join(profile.name())), "{}: archive read from another directory than the one cargo built it in", b.manifest);
+                let mut env: Vec<String> = cmd.get_envs().map(|(k, v)| format!("{}={:?}", k.to_string_lossy(), v.map(|v| v.to_string_lossy().into_owned()))).collect();
+                env.sort();
+                assert!(env.iter().any(|e| e.starts_with("LIELLA_BUILD_TAG=Some(\"src-0123456789abcdef\")")), "{}: built without the build tag: {env:?}", b.manifest);
+                match by_dir.get(&format!("{dir} {}", profile.name())) {
+                    Some((other, env0)) => assert_eq!(env0, &env, "{} and {other} share the target directory {dir} but build with other flags or environment: each rebuilds the other's dependencies on every `xtask so`", b.manifest),
+                    None => {
+                        by_dir.insert(format!("{dir} {}", profile.name()), (b.manifest, env));
+                    }
+                }
+            }
+        }
+        // The interpreter's flags differ from the libc build's, so it must be alone in its directory (checked above),
+        // and the libc and libm builds share theirs (one copy of the library crates, not two).
+        assert_ne!(LD_BUILD.target_dir(&product), LIBC_BUILD.target_dir(&product), "the interpreter shares the libc build's target directory");
+        assert_eq!(LIBM_BUILD.target_dir(&product), LIBC_BUILD.target_dir(&product), "libm builds its own copy of the library crates");
     }
 
     /// D-27.10 (no spec clause: start-up internals): the static-PIE anchor's member passes with a

@@ -102,6 +102,36 @@ fn tls_image() -> Option<TlsImage> {
     (w[2] != 0).then_some(TlsImage { addr: w[0], filesz: w[1], memsz: w[2], align: w[3] })
 }
 
+/// Liella's `ld.so` owns the modules' TLS (DL-15 `DL-TLS-THREADS`, design §7): the bytes a new
+/// thread's static area needs below its thread pointer, their alignment, and the loader's
+/// `tls_init` and `tls_release` (`StartInfo`); all 0 otherwise.
+static LOADER_TLS: [AtomicUsize; 4] = [const { AtomicUsize::new(0) }; 4];
+
+/// The loader's per-thread TLS interface (`__liella_libc_early_init`). Kept only when usable: an
+/// area size, an alignment that is a power of two no larger than a page (a mapping's base is only
+/// page-aligned), and both hooks; otherwise nothing is kept and threads stay refused.
+#[cfg_attr(not(feature = "runtime"), allow(dead_code))]
+pub(crate) fn set_loader_tls(size: usize, align: usize, init: usize, release: usize) {
+    if size == 0 || !align.is_power_of_two() || align > PAGE || init == 0 || release == 0 {
+        return;
+    }
+    for (slot, v) in LOADER_TLS.iter().zip([size, align, init, release]) {
+        slot.store(v, Release);
+    }
+}
+
+/// [`LOADER_TLS`] when set: (area size, alignment, `tls_init`, `tls_release`).
+fn loader_tls() -> Option<(usize, usize, usize, usize)> {
+    let [size, align, init, release]: [usize; 4] = core::array::from_fn(|i| LOADER_TLS.get(i).map_or(0, |a| a.load(Acquire)));
+    (init != 0).then_some((size, align, init, release))
+}
+
+/// Whether Liella's `ld.so` gave its per-thread TLS interface, so threads can be created.
+#[cfg_attr(not(feature = "runtime"), allow(dead_code))]
+pub(crate) fn loader_tls_ready() -> bool {
+    loader_tls().is_some()
+}
+
 /// A dynamically linked program under another `ld.so`: no thread creation (D-22.10).
 #[cfg_attr(not(feature = "runtime"), allow(dead_code))]
 pub(crate) fn forbid() {
@@ -677,7 +707,10 @@ fn take_mapping(lay: &Layout) -> KResult<usize> {
                 let base = d.map_base.load(Relaxed);
                 // The parts above the stack start clean; the stack itself need not.
                 let span = KEYS.span();
-                conv::zero_mapped(base + lay.tls, lay.keys - lay.tls);
+                // The loader's `tls_init` rewrites every block and the dtv below TP; the rest of
+                // its area (the surplus) is not cleared here.
+                let clean = if loader_tls().is_some() { lay.tp } else { lay.tls };
+                conv::zero_mapped(base + clean, lay.keys - clean);
                 conv::zero_mapped(base + lay.keys, (span * 16).min(KEY_AREA));
                 return Ok(base);
             }
@@ -783,7 +816,13 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
         }
         return Err(Errno::EAGAIN);
     }
-    let img = tls_image();
+    // Under Liella's `ld.so` the static area below TP is the loader's (every initially loaded
+    // module's block, the surplus and the dtv): reserved here, filled by its `tls_init`.
+    let loader = loader_tls();
+    let img = match loader {
+        Some((size, align, _, _)) => Some(TlsImage { addr: 0, filesz: 0, memsz: size, align }),
+        None => tls_image(),
+    };
     let stack_size = if a.stack_size == 0 { default_stack() } else { a.stack_size };
     let guard = a.guard.unwrap_or_else(|| DEFAULT_GUARD.load(Relaxed));
     let (lay, base, sp) = match a.stack {
@@ -799,8 +838,9 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
         }
     };
     let tp = base + lay.tp;
-    // The TLS block: the image, then zeros (fresh or cleared memory).
-    if let Some(t) = img {
+    // The TLS block: the image, then zeros (fresh or cleared memory). The loader's area is filled
+    // below, once the thread block exists.
+    if let (None, Some(t)) = (loader, img) {
         conv::copy_mapped(t.addr, base + lay.tls, t.filesz);
     }
     let me = tb::current();
@@ -817,6 +857,11 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
     b.locale.store(0, Relaxed);
     let daddr = base + lay.desc;
     b.thread.store(daddr, Release);
+    if let Some((_, _, init, _)) = loader {
+        // The images, zeros to each block's end, the dtv and the block's dtv word (a reused
+        // mapping holds an earlier thread's bytes there).
+        let _ = ffi::liella_machine_call3(init, i64::from_ne_bytes(tp.to_ne_bytes()), 0, 0);
+    }
     let d = tb::desc_at(daddr);
     d.init_robust(addr_of(&d.robust));
     let mut flags = DESC_CREATED;
@@ -957,6 +1002,10 @@ pub(crate) fn finish(result: usize) -> ! {
     // result table or resolver state again, which only these release.
     crate::users::thread_ending();
     crate::resolv::thread_ending();
+    // The loader's last word on this thread (its static area goes with the mapping).
+    if let Some((_, _, _, release)) = loader_tls() {
+        let _ = ffi::liella_machine_call3(release, i64::from_ne_bytes(tb::tp().to_ne_bytes()), 0, 0);
+    }
     crate::heap::HEAP.park(&CSys, &crate::heap::KernelPages);
     if LIVE.fetch_sub(1, AcqRel) == 1 && OWNED.load(Acquire) {
         crate::process::exit(0);

@@ -264,24 +264,77 @@ pub(crate) fn dynsym_line(name: &str) -> String {
     String::from_utf8_lossy(&o.stdout).lines().find(|l| l.contains(&format!(" {name}@"))).map(str::to_string).unwrap_or_default()
 }
 
-/// Self-checking conformance programs linked dynamically by the host's compiler and run on the
-/// host's glibc (the oracle): each must exit 0.
-///
-/// The same programs on Liella's `libc.so.6` wait for Liella's own `ld.so` (phase 14, ruling
-/// #814): the host's program interpreter cannot run Liella's `libc.so.6` in place of glibc's
-/// (exit 127). The caller reports that run as a skip (`skip_note::skipped`), never a silent
-/// pass; phase 14 adds it here (run under Liella's interpreter, check Liella's library was the
-/// one loaded). (`skip_note` is not declared here: test binaries that declare it themselves
-/// would load it twice, `clippy::duplicate_mod`.)
+/// A copy of `libc.so.6` in `dir` whose `DT_SONAME` tag is retagged `DT_CHECKSUM`, so a program
+/// linked against it names it by path: Liella's `ld.so` has no library search yet (#4537).
+fn libc_by_path(dir: &std::path::Path) -> PathBuf {
+    let mut so = std::fs::read(root().join("target/liella/libc.so.6")).expect("libc.so.6");
+    let word = |so: &[u8], at: usize, n: usize| so.get(at..at.saturating_add(n)).map_or(0, |b| b.iter().rev().fold(0usize, |v, &x| v.wrapping_shl(8) | usize::from(x)));
+    let (phoff, phentsize, phnum) = (word(&so, 0x20, 8), word(&so, 0x36, 2), word(&so, 0x38, 2));
+    // PT_DYNAMIC (2): its file offset and size.
+    let ph = (0..phnum).map(|i| phoff.wrapping_add(i.wrapping_mul(phentsize))).find(|&p| word(&so, p, 4) == 2).expect("libc.so.6 has PT_DYNAMIC");
+    let (off, len) = (word(&so, ph.wrapping_add(8), 8), word(&so, ph.wrapping_add(32), 8));
+    // DT_SONAME (14) becomes DT_CHECKSUM (0x6ffffdf8).
+    let at = (off..off.saturating_add(len)).step_by(16).find(|&o| word(&so, o, 8) == 14).expect("libc.so.6 has a DT_SONAME");
+    so.get_mut(at..at.saturating_add(8)).expect("the DT_SONAME entry").copy_from_slice(&0x6fff_fdf8u64.to_le_bytes());
+    let out = dir.join("libc-by-path.so");
+    std::fs::write(&out, &so).expect("libc copy");
+    out
+}
+
+/// Liella's `ld.so` and a `libc.so` linker script in `dir` for linking against Liella's
+/// `libc.so.6` by path, the way an installed `libc.so` script does: the C library, the link-time
+/// archive, and the loader for the symbols the ABI places in it (`__libc_stack_end`,
+/// `__tls_get_addr`; R14-12), as needed. Link with `-nodefaultlibs`, the script and `-lgcc`.
+pub(crate) fn liella_link_script(dir: &std::path::Path) -> (PathBuf, PathBuf) {
+    require_products();
+    let ld = root().join("target/liella/ld-linux-x86-64.so.2");
+    assert!(ld.exists(), "{} is missing: run `cargo xtask so`", ld.display());
+    let nonshared = std::process::Command::new("cc").arg("-print-file-name=libc_nonshared.a").output().expect("cc");
+    let nonshared = String::from_utf8_lossy(&nonshared.stdout).trim().to_string();
+    assert!(std::path::Path::new(&nonshared).is_absolute(), "the host compiler has no libc_nonshared.a ({nonshared:?})");
+    let libc = dir.join("libc.so");
+    std::fs::write(&libc, format!("GROUP ( {} {nonshared} AS_NEEDED ( {} ) )\n", libc_by_path(dir).display(), ld.display())).expect("libc.so script");
+    (ld, libc)
+}
+
+/// Self-checking conformance programs linked dynamically by the host's compiler: run on the
+/// host's glibc (the oracle), then the same source linked with the host's start files against
+/// Liella's `libc.so.6` (by path, through a `libc.so` script) with Liella's `ld.so` as its
+/// interpreter (design §14, D-27.24; #814): each must exit 0 both ways. Like the start files, the
+/// link-time archive `libc_nonshared.a` (`atexit`, `at_quick_exit`: not in `libc.so.6`'s ABI) is
+/// the host's, as in a program built on the host; Liella has none yet. No other shared C library
+/// is named and the loader has no search, so the library that runs is Liella's. A program's `RUN-ARGS`, `RUN-ENV` (distinct
+/// names) and `EXPECT-EXIT` directives apply as in `conformance/run.sh`; any other directive is
+/// refused, so a program that needs one is never run here without it.
 pub(crate) fn conformance_dynamic(names: &[&str]) {
     require_products();
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("dynamic-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("scratch");
+    let (ld, libc) = liella_link_script(&dir);
     for name in names {
+        let src = root().join(format!("conformance/c/{name}.c"));
+        let text = std::fs::read_to_string(&src).expect("conformance source");
+        let directive = |d: &str| text.lines().find_map(|l| l.strip_prefix(&format!("/* {d}: "))?.strip_suffix(" */").map(str::to_string));
+        for d in ["LINK-CXX", "LINK-HELPERS", "LINK-LIBM", "LINK-NOW", "LINK-UNWIND", "RUN-SECURE", "RUN-WRAP", "STATIC-PIE", "EXPECT-SIGNAL", "EXPECT-STDERR"] {
+            assert!(directive(d).is_none(), "{name}: {d} is not supported by the dynamic runner");
+        }
+        let args: Vec<String> = directive("RUN-ARGS").map(|a| a.split_whitespace().map(str::to_string).collect()).unwrap_or_default();
+        let env: Vec<(String, String)> = directive("RUN-ENV")
+            .map(|e| e.split_whitespace().map(|kv| kv.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())).expect("RUN-ENV: NAME=value")).collect())
+            .unwrap_or_default();
+        assert_eq!(env.iter().map(|(k, _)| k).collect::<BTreeSet<_>>().len(), env.len(), "{name}: repeated RUN-ENV names need conformance/run.sh");
+        let want: i32 = directive("EXPECT-EXIT").map_or(0, |n| n.trim().parse().expect("EXPECT-EXIT: a number"));
+        let run = |exe: &PathBuf| std::process::Command::new(exe).args(&args).env_clear().envs(env.iter().map(|(k, v)| (k, v))).output().expect("run");
         let exe = dir.join(name);
-        let cc = std::process::Command::new("cc").args(["-std=c17", "-O1"]).arg(root().join(format!("conformance/c/{name}.c"))).arg("-o").arg(&exe).output().expect("cc");
+        let cc = std::process::Command::new("cc").args(["-std=c17", "-O1"]).arg(&src).arg("-o").arg(&exe).output().expect("cc");
         assert!(cc.status.success(), "{name}: {}", String::from_utf8_lossy(&cc.stderr));
-        let o = std::process::Command::new(&exe).env_clear().output().expect("run");
-        assert!(o.status.success(), "{name} dynamic on glibc: {:?} {}", o.status, String::from_utf8_lossy(&o.stderr));    }
+        let o = run(&exe);
+        assert_eq!(o.status.code(), Some(want), "{name} dynamic on glibc: {:?} {}", o.status, String::from_utf8_lossy(&o.stderr));
+        let exe = dir.join(format!("{name}-liella"));
+        let cc = std::process::Command::new("cc").args(["-std=c17", "-O1", "-nodefaultlibs"]).arg(format!("-Wl,--dynamic-linker={}", ld.display())).arg(&src).arg(&libc).arg("-lgcc").arg("-o").arg(&exe).output().expect("cc");
+        assert!(cc.status.success(), "{name} against Liella's libc.so.6: {}", String::from_utf8_lossy(&cc.stderr));
+        let o = run(&exe);
+        assert_eq!(o.status.code(), Some(want), "{name} dynamic on Liella: {:?} {}", o.status, String::from_utf8_lossy(&o.stderr));
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -35,6 +35,7 @@ liella_boundary::process::AUXV_ADDR
 liella_boundary::process::ARGC
 liella_boundary::process::ARGV
 liella_boundary::process::EXIT_HANDLERS
+liella_boundary::runtime::EARLY_DONE  # __libc_start_main's dynamic-path flag: Liella's ld.so sets it, start reads it (D-27.24)
 symbol __libc_stack_end
 symbol program_invocation_name  # and its alias __progname_full
 symbol program_invocation_short_name  # and its alias __progname
@@ -126,6 +127,15 @@ symbol stderr
 liella_legacy::global_locale::GLOBAL
 liella_legacy::global_locale::LOCK
 liella_legacy::global_locale::C
+liella_legacy::nscache::NSCACHE
+# First-call state (LAYOUT-STARTUP-STATE-LOCALE-3, ruling #4942): what the first setlocale, setenv, localtime_r,
+# mktime and catalog lookups touch, never a process that makes none of those calls. The zero-filled objects go to
+# their own page-aligned cluster in `.lbss`, after `.bss` (xtask/src/coldbss.rs FIRST_CALL_SECTION): in `.data1`
+# they lay between the every-process tier and the C members' start-up words, and the `true` probe touched one page
+# more. Initialised ones (stdout, __tzname, ...) and those of another member than the Rust object stay in `.data1`,
+# after the every-process tier. Every entry after the next line is first-call state; hot_text_products names any
+# the `true` probe touches.
+cluster first-call
 # The first setlocale reads, then writes, the table counters and the secure-mode flag `process::secure`
 # caches. LAYOUT-DATA-CLUSTERS-9: once program_invocation_name is in the cluster, start-up no longer touches
 # the last `.bss` page, and the first of these left there costs setlocale a read and a write fault on it
@@ -143,10 +153,50 @@ liella_boundary::process::SECURE
 # The catalog change counter the first setlocale bumps (LAYOUT-DATA-CLUSTERS-11): after next's merge it was that
 # call's only write on the last `.bss` page start-up leaves untouched (one fault, setlocale + printf 51 -> 50).
 symbol _nl_msg_cat_cntr
-liella_legacy::nscache::NSCACHE
+# The flag every close reads first (csys/src/machine/points.S; LAYOUT-SINGLE-FAULT-TEST): in the assembly member's
+# shared `.data` the first close (the `rebind` probe's) read it on a page whose place followed emission order.
+symbol liella_machine_aio_used
+# The rest of what the first setlocale and the first printf to stdout touch (LAYOUT-STARTUP-STATE-LOCALE, #4915):
+# left in `.bss`/`.data`, their page followed emission order, and setlocale + printf read 50 or 51 and tool 54 to
+# 56 by `.bss` pad. hot_text_products `init_startup_data_accesses_are_in_the_data1_cluster` traces every probe.
+liella::locale::collate::ASCII_KEYS
+liella_legacy::intl::GENERATION
+liella_legacy::intl::SETTINGS
+symbol _IO_2_1_stdout_
+symbol stdout
 # The first zone load (localtime_r, tzset). time_compat's HEAD and CURRENT: the first localtime_r writes both
 # (LAYOUT-DATA-CLUSTERS-8: one fault each on untouched `.bss` pages; release localtime 19 before, 17 after, as next).
 liella::time::zone::NEXT_ID
 liella_legacy::time_compat::HEAD
 liella_legacy::time_compat::CURRENT
 section .data.rel.local.__tzname  # C: __tzname, tzname
+# The rest of what setenv("TZ"), the first localtime_r and the first mktime touch (LAYOUT-STARTUP-STATE-TIME, #4901):
+# left in `.bss`/`.data`, their page followed emission order, and with unrelated code growth the first localtime_r
+# took the read fault of time_compat::GENERATION and the write fault of sys::TSC_STATE on a page start-up leaves
+# untouched (+2). hot_text_products `init_startup_data_accesses_are_in_the_data1_cluster` traces `localtime_mktime`.
+liella_legacy::time_compat::GENERATION
+liella_boundary::sys::TSC_STATE
+symbol __daylight  # C: __daylight, daylight
+symbol __timezone  # C: __timezone, timezone
+# setenv's environment table (the first setenv builds it).
+liella_boundary::process::TABLE_ON
+liella_boundary::process::ENV_OWNED
+liella_boundary::process::ENV_CAP
+liella_boundary::process::ENV_VALUES
+liella_boundary::process::ENV_REPLACED
+# Message catalogs (LAYOUT-STARTUP-STATE-LOCALE, #4915): bindtextdomain/textdomain (tool), then the first
+# lookups and the rebind (rebind). Last, so that their pages are past every other tier's.
+liella_legacy::intl::LOCK
+liella_legacy::intl::DOMAIN
+liella_legacy::intl::STRINGS
+liella_legacy::intl::BINDINGS
+symbol _nl_domain_bindings
+liella_legacy::intl::CATALOGS
+liella_legacy::intl::ALIASES
+liella_legacy::intl::MEMO
+liella_legacy::intl::MEMO_NAME
+liella_legacy::intl::R_LAST
+liella_legacy::intl::R_NEXT
+liella_legacy::intl::R_PREV
+liella_legacy::intl::Host::language::LANGUAGE
+liella_legacy::intl::RESOLVED

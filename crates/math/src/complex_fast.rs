@@ -117,6 +117,10 @@ fn parts(x: f64, y: f64) -> Option<([(Dd, f64); 2], i32)> {
 ///
 /// In the FMA build the CPU must support FMA and the OS must save the AVX state (the
 /// `#[target_feature]` contract); the baseline build is safe.
+///
+/// A part the quick test declines makes this decline too: the middle tier is reached from the
+/// boundary's cold fallback ([`cexp`] through the envelope), never from here, so no operand has
+/// to stay live across the kernel for it (LIBM-CEXP-COLD-MIDDLE, D-10.99).
 $(#[$a])*
 $(#[$i])*
 pub fn cexp_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
@@ -184,7 +188,151 @@ fn round(p: Dd, eps: f64, m: i32, mode: Rounding) -> Option<f64> {
 #[inline(always)]
 pub fn cexp(x: f64, y: f64, mode: Rounding) -> Option<((f64, f64), Status)> {
     let ([(re, er), (im, ei)], m) = parts(x, y)?;
-    Some(((round(re, er, m, mode)?, round(im, ei, m, mode)?), Status::flags(Flags::INEXACT)))
+    let a = match round(re, er, m, mode) {
+        Some(v) => v,
+        None => middle(x, y, Part::Re, mode)?,
+    };
+    let b = match round(im, ei, m, mode) {
+        Some(v) => v,
+        None => middle(x, y, Part::Im, mode)?,
+    };
+    Some(((a, b), Status::flags(Flags::INEXACT)))
+}
+
+// ---------------------------------------------------------------------------------------------
+// The middle tier of `cexp` (LIBM-CEXP-ROUTE, D-10.99). A part whose quick rounding test cannot
+// decide (its exact value within about `2^-66` of a rounding boundary: about one part in a
+// thousand) is evaluated again near `2^-99` before the 384-bit route is consulted; only a part
+// within that of a boundary still reaches the route. Only [`cexp`] (the envelope's tier) calls
+// this out-of-line code: both builds of the in-place [`cexp_nearest`] decline such a part, and
+// the boundary's cold fallback then runs [`cexp`] (LIBM-CEXP-COLD-MIDDLE: the hot kernel keeps no
+// operand live for the call), so the in-place results stay bit-identical between the builds.
+//
+// * `e^x = V·2^s` from [`wide_dd::exp_dd`] within `2^-100·|V|` (its module comment: below
+//   `2^-103` proved), for `|x| < 2^14`.
+// * `sin y` or `cos y` as a double-double `T` within `TRIG_ABS = 2^-100` absolute
+//   ([`sin_or_cos`], `|y| < 2^20`). Reduction: `n = RN(RN(y·2/π))`, `|n| < 2^20`, so `|r| <=
+//   π/4 + 2^-31` for `r = y − n·π/2`. With `π/2 = P1 + P2 + P3 + δ` (`|δ| < 2^-163`):
+//   `n·P1 = h` and `n·P2 = g` exactly ([`dd::two_prod`]), `y − h.hi` exactly ([`dd::two_sum`]),
+//   then three double-double additions (`−h.lo`, `−g`, `−RN(n·P3)`), each within
+//   `3u²/(1 − 4u) < 2^-104.4` of its result for any signs (Joldes, Muller and Popescu, "Tight and
+//   rigorous error bounds for basic building blocks of double-word arithmetic", ACM TOMS 44(2),
+//   2017, Algorithms 4 and 6), every partial sum below `0.79`; `RN(n·P3)` within `2^-142`,
+//   `n·δ` below `2^-143`: `r̃` within `2^-103.6` of `r`, so the result moves by at most that
+//   (sine and cosine are 1-Lipschitz). Then `z = r̃·r̃` (`2^-102.6`, as the product above) and
+//   Taylor series in `z` by [`dd::horner`]: `cos r̃ = Σ (−1)^k z^k/(2k)!` and `sin r̃ = r̃·Σ (−1)^k
+//   z^k/(2k+1)!`, `k <= 13` (truncation below `2^-107` and `2^-102` relative to the sum,
+//   `z <= 0.617`), the coefficients double-doubles within `2^-106` (exact rationals rounded twice,
+//   Python `fractions`, pinned by the tests against the 384-bit arithmetic), the terms below
+//   `2^-54` (from `k = 8` for the sine, `k = 9` for the cosine) in `double` (`12u` of each).
+//   Each Horner step's product (`2^-102.5`) and sum (`2^-104.3`) errors are scaled by `z^k`; the
+//   partial sums stay within `1.1` times their leading coefficient (each next term at most `0.31`
+//   of the one before), so the sums are within `2^-102.4` absolute (`2^-102.2` with `z`'s own
+//   error, `|d cos √z/dz| <= 1/2`), the sine's final product with `r̃` within `2^-101.8`: with
+//   the reduction, below `2^-101.4 < TRIG_ABS`.
+// * `P = V ⊗ T` ([`Dd::mul`], `2^-102.6·A·B`, `A = |V.hi|`, `B = |T.hi|`): `|e^x·2^-s·t − P| <=
+//   2^-100·|V|·|t| + |V|·2^-100 + 2^-102.6·A·B < (A·B + A)·2^-99 = eps` with room for `eps`'s own
+//   evaluation (`|t| <= B·(1 + 2^-52) + 2^-100`). [`fast64::settle`] with `eps` then decides (or
+//   declines) in every mode, as the quick tier's interval test; scaling by `2^s` as [`scale`].
+//
+// No intermediate value comes near the subnormal range (`|r̃| >= 2^-30` for `n = 0`; for
+// `n != 0` no `double` lies within `2^-62` of a multiple of `π/2`, J.-M. Muller, "Elementary
+// Functions", 3rd ed., 2016, §11.3, and the Horner products stay normal for any `|r̃| > 2^-200`;
+// `|x| >= 2^-60` keeps `e^x`'s polynomial normal), so in
+// the in-place entry the only flag raised is `settle`'s inexact, as in the quick tier.
+
+/// Which part of `cexp`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Part {
+    /// `e^x·cos y`.
+    Re,
+    /// `e^x·sin y`.
+    Im,
+}
+
+/// `π/2 = P1 + P2 + P3` within `2^-163` (each the nearest `double` to the rest).
+const HALF_PI: [f64; 3] = [
+    f64::from_bits(0x3ff9_21fb_5444_2d18),
+    f64::from_bits(0x3c91_a626_3314_5c07),
+    f64::from_bits(0xb91f_1976_b7ed_8fbc),
+];
+/// `RN(2/π)`.
+const TWO_OVER_PI: f64 = f64::from_bits(0x3fe4_5f30_6dc9_c883);
+/// `2^-100`: the absolute bound of [`sin_or_cos`] (folded into [`MID_EPS`]; the tests check it).
+#[cfg(test)]
+const TRIG_ABS: f64 = f64::from_bits(0x39b0_0000_0000_0000);
+/// `2^-99`: the part's bound per unit of `A·B + A`.
+const MID_EPS: f64 = f64::from_bits(0x39c0_0000_0000_0000);
+/// `(−1)^k/(2k+1)!`, `k = 0..=13`, as double-doubles.
+const SIN_DD: [[u64; 2]; 14] = [
+    [0x3ff0000000000000, 0x0000000000000000],
+    [0xbfc5555555555555, 0xbc65555555555555],
+    [0x3f81111111111111, 0x3c01111111111111],
+    [0xbf2a01a01a01a01a, 0xbb6a01a01a01a01a],
+    [0x3ec71de3a556c734, 0xbb6c154f8ddc6c00],
+    [0xbe5ae64567f544e4, 0x3afc062e06d1f209],
+    [0x3de6124613a86d09, 0x3a8f28e0cc748ebe],
+    [0xbd6ae7f3e733b81f, 0xb9e1d8656b0ee8cb],
+    [0x3ce952c77030ad4a, 0x398ac981465ddc6c],
+    [0xbc62f49b46814157, 0xb8f2650f61dbdcb4],
+    [0x3bd71b8ef6dcf572, 0xb87d043ae40c4647],
+    [0xbb4761b41316381a, 0x37d3423c7d91404f],
+    [0x3ab3f3ccdd165fa9, 0xb7458ddadf344487],
+    [0xba1d1ab1c2dccea3, 0xb6a054d0c78aea14],
+];
+/// `(−1)^k/(2k)!`, `k = 0..=13`, as double-doubles.
+const COS_DD: [[u64; 2]; 14] = [
+    [0x3ff0000000000000, 0x0000000000000000],
+    [0xbfe0000000000000, 0x0000000000000000],
+    [0x3fa5555555555555, 0x3c45555555555555],
+    [0xbf56c16c16c16c17, 0x3bef49f49f49f49f],
+    [0x3efa01a01a01a01a, 0x3b3a01a01a01a01a],
+    [0xbe927e4fb7789f5c, 0xbb3cbbc05b4fa99a],
+    [0x3e21eed8eff8d898, 0xbac2aec959e14c06],
+    [0xbda93974a8c07c9d, 0xba305d6f8a2efd1f],
+    [0x3d2ae7f3e733b81f, 0x39a1d8656b0ee8cb],
+    [0xbca6827863b97d97, 0xb94eec01221a8b0b],
+    [0x3c1e542ba4020225, 0x387ea72b4afe3c2f],
+    [0xbb90ce396db7f853, 0x383aebcdbd20331c],
+    [0x3aff2cf01972f578, 0xb789ada5fcc1ab14],
+    [0xba688e85fc6a4e5a, 0x37071c37ebd16540],
+];
+
+/// `cos y` or `sin y` (by `part`) as a double-double within [`TRIG_ABS`], `2^-30 <= |y| < 2^20`.
+fn sin_or_cos(y: f64, part: Part) -> Dd {
+    let n = dd::nearest_int(y * TWO_OVER_PI);
+    let h = dd::two_prod(n, HALF_PI[0]);
+    let g = dd::two_prod(n, HALF_PI[1]);
+    let r = dd::two_sum(y, -h.hi).add(Dd::from(-h.lo)).add(g.neg()).add_f64(-(n * HALF_PI[2]));
+    let z = r.mul(r);
+    // The quadrant of `y` (`n mod 4`), plus one for the cosine: `cos y = sin(y + π/2)`.
+    let q = (dd::to_i32(n) + i32::from(part == Part::Re)) & 3;
+    let v = if q & 1 == 0 { r.mul(dd::horner(z, &SIN_DD, 8)) } else { dd::horner(z, &COS_DD, 9) };
+    if q & 2 == 0 { v } else { v.neg() }
+}
+
+/// The middle tier's part, its bound and its scale: `e^x·cos y` or `e^x·sin y ≈ P·2^s`,
+/// `|e^x·t·2^-s − P| <= eps` (see above); `None` outside the exponential's range.
+fn middle_part(x: f64, y: f64, part: Part) -> Option<(Dd, f64, i32)> {
+    let (v, s) = crate::wide_dd::exp_dd(&crate::float::decode(x))?;
+    let t = sin_or_cos(y, part);
+    let a = dd::abs(v.hi);
+    Some((v.mul(t), (a * dd::abs(t.hi) + a) * MID_EPS, s))
+}
+
+/// `P·2^s` rounded in `mode` when every value within `eps` of `P` rounds alike, else `None`.
+#[inline(always)]
+fn middle_round(p: Dd, eps: f64, s: i32, mode: Rounding) -> Option<f64> {
+    scale(fast64::settle(p, eps, 0, mode)?.0, s)
+}
+
+/// One part of `cexp(x + iy)` by the middle tier, for an operand inside the quick tier's range
+/// whose quick rounding test declined; `None` sends the operand to the 384-bit route.
+#[cold]
+#[inline(never)]
+fn middle(x: f64, y: f64, part: Part, mode: Rounding) -> Option<f64> {
+    let (p, eps, s) = middle_part(x, y, part)?;
+    middle_round(p, eps, s, mode)
 }
 
 /// A quick tier for any format: `d` for `double` operands, `f` for `float` ones, `None` for the
@@ -470,6 +618,9 @@ pub(crate) fn clog_any<F: Float>(x: F, y: F, mode: Rounding) -> Option<((F, F), 
 pub(crate) fn csqrt_any<F: Float>(x: F, y: F, mode: Rounding) -> Option<((F, F), Status)> {
     tier_any(x, y, |a, b| csqrt(a, b, mode), |a, b| fast32::csqrtf(a, b, mode, soft_sqrt))
 }
+
+#[path = "complex_fast_pow.rs"]
+pub mod pow;
 
 #[cfg(test)]
 #[path = "complex_fast_tests.rs"]

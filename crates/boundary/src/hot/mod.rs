@@ -60,7 +60,7 @@ fn sqrtsd_sse2(x: f64) -> f64 {
 }
 
 /// [`sqrtsd_sse2`] from a function without `#[target_feature]`. Also `sqrt`'s in-place root
-/// (`mathret`, D-10.71): the caller pins the operand behind its mode test first.
+/// (`mathret`, D-10.71), on the caller's own MXCSR with no mode test (D-10.101).
 #[inline(always)]
 pub(crate) fn sqrtsd(x: f64) -> f64 {
     // UNSAFE(hot-kernel) SAFETY: the callee needs only SSE2, which the x86-64 baseline

@@ -12,7 +12,8 @@ echo "copied $(date +%T)"
 cp "$role"/validation/mcs_hist.py "$out"/ || exit 1
 bash "$role"/validation/wl_prep.sh "$sha" > "$out"/prep.log 2>&1 || { echo "wl_prep failed"; tail -20 "$out"/prep.log; exit 1; }
 . "$role"/validation/wl_workloads.sh
-kit=$HOME/wl/kit/$sha/bin
+. "$role"/validation/wl_lock.sh   # wl_key: the kit is keyed by sha and products profile (WL-PREP-RELEASE-PROFILE)
+kit=$HOME/wl/kit/$(wl_key "$sha")/bin
 for d in "${WL_DEFS[@]}"; do
     name=${d%%|*} cmd=${d#*|}
     c=${cmd//@/$kit}

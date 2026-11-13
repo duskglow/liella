@@ -1,0 +1,19 @@
+# LAYOUT-DEADKEY-WARN: plants on the dead-key verdict (xtask/src/hottext.rs, ruling #5193 amending D-X.53 (2)).
+# The verdict is what `so`, the gate, the plants baseline and hottext-recheck reach (hottext::group) and what
+# hottext-repair's final check (check_lists) reaches; the tests pass the mode explicitly.
+# warn-fails: without the flag a dead key fails again (the old D-X.53 (2) verdict).
+warn-fails | xtask/src/hottext.rs | lit:unmatched_error(&[], stale, profile) ==> unmatched_error(dead, stale, profile) | cargo test -p xtask --bin xtask hottext:: | msg:dead_key_warns_and_fails_only_under_the_promotion_flag.*(FAILED|panicked)|panicked.*dead_key_warns_and_fails_only
+# unset-promotes: an unset LIELLA_PROMOTE is read as the promotion run, so every branch fails on a dead key.
+unset-promotes | xtask/src/hottext.rs | lit:promote.is_some_and(|v| v == "1") ==> promote.is_none_or(|v| v == "1") | cargo test -p xtask --bin xtask hottext:: | msg:dead_key_warns_and_fails_only_under_the_promotion_flag.*(FAILED|panicked)|panicked.*dead_key_warns_and_fails_only
+# promote-passes: with the flag a dead key passes (the promotion run would not catch it).
+promote-passes | xtask/src/hottext.rs | lit:DeadKeys::Promote => unmatched_error(dead, stale, profile) ==> DeadKeys::Promote => unmatched_error(&[], stale, profile) | cargo test -p xtask --bin xtask hottext:: | msg:(dead_key_warns_and_fails_only_under_the_promotion_flag|repair_drops_dead_keys).*(FAILED|panicked)|panicked.*(dead_key_warns_and_fails_only|repair_drops_dead_keys)
+# flag-never-read: LIELLA_PROMOTE=1 is not recognised, so the promotion run warns only.
+flag-never-read | xtask/src/hottext.rs | lit:promote.is_some_and(|v| v == "1") ==> promote.is_some_and(|v| v == "promote") | cargo test -p xtask --bin xtask hottext:: | msg:dead_key_warns_and_fails_only_under_the_promotion_flag.*(FAILED|panicked)|panicked.*dead_key_warns_and_fails_only
+# stale-warns: a stale hot-text.absent line (unchanged by the ruling) no longer fails without the flag.
+stale-warns | xtask/src/hottext.rs | lit:unmatched_error(&[], stale, profile) ==> unmatched_error(&[], &[], profile) | cargo test -p xtask --bin xtask hottext:: | msg:dead_key_warns_and_fails_only_under_the_promotion_flag.*(FAILED|panicked)|panicked.*dead_key_warns_and_fails_only
+# regen-enforced: the regen build (regen.sh) is no longer exempt when LIELLA_PROMOTE=1 is set.
+regen-enforced | xtask/src/hottext.rs | lit:        if regen { ==>         if regen && promote.is_none() { | cargo test -p xtask --bin xtask hottext:: | msg:dead_key_warns_and_fails_only_under_the_promotion_flag.*(FAILED|panicked)|panicked.*dead_key_warns_and_fails_only
+# warning-no-file: the warning line stops naming the list file it read.
+warning-no-file | xtask/src/hottext.rs | lit:in {file}: matches ==> in the list: matches | cargo test -p xtask --bin xtask hottext:: | msg:dead_key_warns_and_fails_only_under_the_promotion_flag.*(FAILED|panicked)|panicked.*dead_key_warns_and_fails_only
+# repair-ignores-mode: hottext-repair's final check always warns, even under the flag.
+repair-ignores-mode | xtask/src/hottext.rs | lit:match dead_key_verdict(&dead, &stale, p, file, mode) ==> match dead_key_verdict(&dead, &stale, p, file, DeadKeys::Warn) | cargo test -p xtask --bin xtask hottext:: | msg:(dead_key_warns_and_fails_only_under_the_promotion_flag|repair_drops_dead_keys).*(FAILED|panicked)|panicked.*(dead_key_warns_and_fails_only|repair_drops_dead_keys)

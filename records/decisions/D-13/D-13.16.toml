@@ -1,0 +1,8 @@
+id = "D-13.16"
+section = "s13"
+spec = "§13.1"
+ann = "KERN"
+status = "active"
+body = '''
+`fstree_diff.c`'s stat chain line (the kernel's symbolic-link limit, printed for comparison with `realpath`): the probe prints the first failure's chain index and errno (`first failure l40 stat ELOOP`), and retries a failure before l40 up to 3 times, counting one a retry resolves on stderr only; `fstree_equals_the_reference` fails, naming the line, when either side's chain does not stop with ELOOP at l40. **Why:** the test failed once in a gate with the reference's chain stopping at l33 (FSTREE-STAT-ERRNO); a black-box loop of the same `stat` calls on ext4 under a memory-cgroup limit with constant reclaim (82M, kernel 6.8) got ELOOP for chains of 23 to 40 links in about 1 of 5000 walks, all resolved by an immediate retry, and none at 88M or without the limit. The early ELOOP comes from the kernel's walk under reclaim, not from either C library, so the retry is at the cause; a failure that survives the retries still fails the test with its errno.
+'''

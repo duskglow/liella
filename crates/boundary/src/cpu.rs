@@ -225,6 +225,8 @@ pub fn avx2_in(state: u8) -> bool {
 
 /// Decide the paths from CPUID and the tunables (startup, spec §1.8): a tunable can switch a
 /// feature off, or ask for it (honoured only if the CPU has it), and set the thresholds.
+// LAYOUT-HOTKEY-INLINE-STABLE: a fixed boundary for its start-up/fork hot-text key (off the hot paths: the call is free).
+#[inline(never)]
 pub fn init_with(t: &Tunables) -> u8 {
     let f = features();
     let avx2 = avx2_wanted(&f, t);

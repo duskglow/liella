@@ -88,6 +88,8 @@ pub struct Vdso<'a> {
 impl<'a> Vdso<'a> {
     /// Parse `image` (the whole mapping). `None` if anything required is missing or out of
     /// bounds.
+    // LAYOUT-HOTKEY-INLINE-STABLE: release already inlines it; always inlined, its code stays in the keyed caller in both profiles.
+    #[inline(always)]
     pub fn parse(image: &'a [u8]) -> Option<Vdso<'a>> {
         image_len(image)?;
         let phoff = usz(u64_at(image, 32)?)?;
@@ -151,6 +153,8 @@ impl<'a> Vdso<'a> {
     }
 
     /// Name of version index `ndx` from the version definitions.
+    // LAYOUT-HOTKEY-INLINE-STABLE: release already inlines it; always inlined, its code stays in the keyed caller in both profiles.
+    #[inline(always)]
     fn version_name(&self, ndx: u16) -> Option<&'a [u8]> {
         let mut def = self.verdef?;
         loop {
@@ -182,6 +186,10 @@ impl<'a> Vdso<'a> {
     /// answers are those of separate lookups, also for a damaged image: a symbol entry or name that
     /// cannot be read ends every lookup still open (each would have stopped there), a version or
     /// address that cannot be read ends only the lookups of that symbol's name.
+    // LAYOUT-HOTKEY-INLINE-STABLE-2: a fixed boundary for its start-up hot-text key (#4986: fat LTO inlined it
+    // after unrelated libm growth). It runs once per process, so the call is free; its helpers below are always
+    // inlined into it (the fast-profile shape on next), so no other vdso key exists to go dead.
+    #[inline(never)]
     pub fn lookup_many<const N: usize>(&self, names: &[&[u8]; N], version: &[u8]) -> [Option<usize>; N] {
         let mut out = [None; N];
         let mut open = [true; N];
@@ -217,6 +225,9 @@ impl<'a> Vdso<'a> {
 
     /// Symbol `i`: `Some((Some(name), value))` for a defined global or weak function,
     /// `Some((None, _))` for any other symbol, `None` when the entry or its name cannot be read.
+    // LAYOUT-HOTKEY-INLINE-STABLE-2: inlined in both profiles on next; always inlined into the pinned
+    // `lookup_many`, so its code keeps that shape and never becomes its own (unpinned) start-up key.
+    #[inline(always)]
     fn defined_function(&self, i: usize) -> Option<(Option<&'a [u8]>, u64)> {
         let sym = self.symtab.checked_add(i.checked_mul(SYM_SIZE)?)?;
         let st_name = usz(u64::from(u32_at(self.image, sym)?))?;
@@ -231,6 +242,9 @@ impl<'a> Vdso<'a> {
 
     /// Whether symbol `i` has `version` (always, without a version table); `None` when its
     /// version index cannot be read.
+    // LAYOUT-HOTKEY-INLINE-STABLE-2: as `defined_function`: inlined in both profiles on next, always inlined
+    // so it stays inside the pinned `lookup_many`.
+    #[inline(always)]
     fn version_ok(&self, i: usize, version: &[u8]) -> Option<bool> {
         let Some(vs) = self.versym else { return Some(true) };
         let ndx = u16_at(self.image, vs.checked_add(i.checked_mul(2)?)?)?;

@@ -1,0 +1,10 @@
+# LIBM-F64-BESSEL-BANDS plants: the tiny band of the double Bessel fast tier (D-10.110).
+# Run: cargo xtask plants handoff/LIBM-F64-BESSEL-BANDS-plants.txt --dir <new RAM dir> --timeout 600
+tiny-below-down | crates/math/src/fast_bessel.rs | perl:s#Rounding::Down => !neg,#Rounding::Down => neg,# | cargo test -p liella-math --test fast_bessel double_bessel_tiny_band | msg:j[01]\([-0-9.e]+\) in Down: fast
+tiny-j0-sign | crates/math/src/fast_bessel.rs | perl:s#below\(1\.0, false, mode\)#below(1.0, true, mode)# | cargo test -p liella-math --test fast_bessel double_bessel_tiny_band | msg:j0\([-0-9.e]+\) in [A-Za-z]+: fast
+tiny-j1-sticky | crates/math/src/fast_bessel.rs | perl:s#sig: 2 \* m - 1,#sig: 2 * m,# | cargo test -p liella-math --test fast_bessel double_bessel_tiny_band | msg:j1\([-0-9.e]+\) in [A-Za-z]+: fast
+tiny-ln-scale | crates/math/src/fast_bessel.rs | perl:s#scale\(128\.0\)#scale(127.0)# | cargo test -p liella-math --test fast_bessel double_bessel_tiny_band | msg:y[01]\([-0-9.e]+\) in [A-Za-z]+: fast
+tiny-y1-corr | crates/math/src/fast_bessel.rs | perl:s#0\.5 \* k\.hi \* l\.hi#0.25 * k.hi * l.hi# | cargo test -p liella-math --test fast_bessel double_bessel_tiny_band | msg:y1\([-0-9.e]+\) in [A-Za-z]+: fast
+tiny-y1-overflow | crates/math/src/fast_bessel.rs | perl:s#if x < Y1_OVERFLOW \{#if x < Y1_OVERFLOW * 0.5 {# | cargo test -p liella-math --test fast_bessel double_bessel_tiny_band | msg:y1\([-0-9.e]+\) in [A-Za-z]+:
+tiny-y1-scale | crates/math/src/fast_bessel.rs | perl:s#round\(y, eps, 128, mode\)#round(y, eps, 0, mode)# | cargo test -p liella-math --test fast_bessel double_bessel_tiny_band | msg:y1\([-0-9.e]+\) in [A-Za-z]+:
+tiny-y1-safe | crates/math/src/fast_bessel.rs | perl:s#if x < Y1_SAFE \{#if x < Y1_OVERFLOW {# | cargo test -p liella-math --test fast_bessel double_bessel_tiny_band | msg:y1\([-0-9.e]+\) in [A-Za-z]+: fast status
