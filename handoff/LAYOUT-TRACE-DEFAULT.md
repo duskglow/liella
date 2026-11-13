@@ -64,9 +64,13 @@ After the fast `cargo xtask affected --tier full --run`, in the same tree (it re
   5 runs, 46); second release build byte-identical. Times under that load: fast `so` 1034 s, release `so` 549 s
   (after the fast build), release `so` again on the unchanged tree 250 s, hot_text_products 11-14 s. Run 1 on a
   quieter mei: release `so` 290 s, again 81 s, test 5 s. So the release check costs about 5-10 min on mei.
-* `layout-trace-default-2-gate` (85d33cf85, `cargo xtask affected --run`, escalated to FULL by the xtask change) and
-  `layout-trace-default-2-plants2` (8 plants, `/mnt/zram/claude/LAYOUT-TRACE-DEFAULT-2/plants-2`): running at hand-back;
-  plants 1-4 CAUGHT so far.
+* Superseded by 5e9cb79d2 (the hand-back id scan read the placeholder ids in the new rule d tests as unassigned ids;
+  the tests now use reserved-style ids, same cases): `layout-trace-default-2-gate` and `-plants2` (stopped; plants 1-5
+  CAUGHT by then), `-proof` (rc 0 on 85d33cf85, numbers above), `-lint2`.
+* Final head 5e9cb79d2: `layout-trace-default-2-lint3` rc 0 (clippy, static, xtask hotlists + layout tests);
+  `layout-trace-default-2-gate2` (`cargo xtask affected --run`, escalated to FULL by the xtask change),
+  `layout-trace-default-2-plants3` (8 plants, `/mnt/zram/claude/LAYOUT-TRACE-DEFAULT-2/plants-3`) and
+  `layout-trace-default-2-proof2` (proof.sh `again`, RAM copy `head2`): running at hand-back.
 
 ## Open / not to redo
 
