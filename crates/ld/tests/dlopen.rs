@@ -202,3 +202,32 @@ fn s27_1_c_1_dlopen_loads_and_refuses_with_texts() {
     }
     std::fs::remove_dir_all(&d).ok();
 }
+
+/// A statically linked program's `dlopen`: NULL, the text once, then NULL (ruling #5005, D-27.33).
+const STATIC_PROG: &str = r#"#include <dlfcn.h>
+#include <stdio.h>
+#include <string.h>
+int main(int argc, char **argv) {
+    char want[4200];
+    snprintf(want, sizeof want, "%s: shared objects cannot be loaded into a statically linked program", argv[1]);
+    void *h = dlopen(argv[1], RTLD_NOW);
+    const char *e = dlerror();
+    if (h || !e || strcmp(e, want) != 0) { fprintf(stderr, "static dlopen: got [%s]\n", e ? e : "(null)"); return 1; }
+    if (dlerror() != NULL) { fprintf(stderr, "static dlopen: second dlerror not NULL\n"); return 2; }
+    return 0;
+}
+"#;
+
+/// s27_1_f_0 (ruling #5005, D-27.33): in a program linked with `libc.a`, `dlopen` of an existing
+/// object fails with NULL and its text, `dlerror` gives it once, and nothing crashes.
+#[test]
+fn s27_1_f_0_static_program_dlopen_fails_with_text() {
+    let Some((d, _ld, _libc, crt1)) = setup("static") else { return };
+    let liba = target().join("liella/libc.a");
+    let lib = cc(&d, "libok.so", LIB_OK, &["-nostdlib", "-fPIC", "-shared"]);
+    let p = cc(&d, "sprog", STATIC_PROG, &["-static", "-nostdlib", crt1.to_str().unwrap(), liba.to_str().unwrap(), "-lgcc"]);
+    use std::os::unix::process::ExitStatusExt;
+    let o = Command::new(&p).arg(&lib).output().unwrap();
+    assert_eq!((o.status.code(), o.status.signal()), (Some(0), None), "static dlopen; stderr: {}", String::from_utf8_lossy(&o.stderr));
+    std::fs::remove_dir_all(&d).ok();
+}
