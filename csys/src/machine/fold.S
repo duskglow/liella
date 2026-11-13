@@ -284,7 +284,7 @@ __mempcpy:
  * page 0; nothing is ever written. Neither page refers to page 0 or page 1 through XREF; jumps
  * within a page need nothing. Both bodies are leaf code with no stack adjustment.
  * The section keeps the name of its first slot's function section, so the hot-text grouping
- * (crates/libc-so/hot-text.list, `liella_machine_memset`) still places it with the start-up code.
+ * (the build's traced hot-text.list, `liella_machine_memset`) still places it with the start-up code.
  * Slot offsets (one set for both pages; `.org` fails the build when a body outgrows its slot): */
 #define LIELLA_SLOT_MEMSET 0
 #define LIELLA_SLOT_CLASSED_ID 4032

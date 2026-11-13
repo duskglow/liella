@@ -122,13 +122,13 @@ if [ -f p_cat.c ]; then trace stdio en_US.UTF-8 ./p_cat; checks="$checks p_cat:$
 stdin=/dev/null trace locale en_US.UTF-8 ./page_faults locale
 stdin=/dev/null trace tool en_US.UTF-8 ./page_faults tool
 # LAYOUT-TRACE-AT-BUILD (LT-1): every other mode the bounds of hot_text_products.rs count, so a list traced
-# from nothing (--replace) holds what they run. After `tool`: the first touches above keep their order and
+# from this build alone holds what they run. After `tool`: the first touches above keep their order and
 # these add only what no earlier probe ran (tier fork for the child, extra for the rest).
 stdin=/dev/null follow=child trace fork en_US.UTF-8 ./page_faults fork
 for m in strings float mktime rebind; do stdin=/dev/null trace extra en_US.UTF-8 ./page_faults "$m"; done
 # STARTUP-TEXT-WINDOWS (D-X.49): the functions `page_faults true` runs (the probe whose start-up faults
 # crates/core/tests/hot_text_products.rs bounds, linked as that test links it), first-touch order, into
-# crates/libc-so/startup-text.keys; the layout check of layout/contracts.tsv counts their 64 KiB windows.
+# $L/startup-text.keys; the layout check of layout/contracts.tsv counts their 64 KiB windows.
 run_traced "$work/startup.names" "$work/gdb.startup.log" LANG=C HOT_TEXT_STDIN="$work/in.txt" HOT_TEXT_FOLLOW_FORK= -- ./page_faults true
 # D-X.62: the probe-text modes, traced with the others (probe_text.sh merges them below).
 probe_text_trace() { local rc=0; bash "$here/probe_text.sh" "$T" --products "$P" --trace-only "$work/probe" > "$work/probe.log" 2>&1 || rc=$?; echo $rc > "$work/probe.log.rc"; }

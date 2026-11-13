@@ -20,7 +20,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::hotlists::Layout;
 use crate::so::OWN_PREFIX;
@@ -330,49 +329,6 @@ impl V0<'_> {
             }
             b'B' => self.backref(i, out, Self::ty),
             _ => self.path(i, out),
-        }
-    }
-
-    /// `[s <base-62-number>] <decimal> [_] <bytes>` (not punycode) -> (identifier, end).
-    fn name(&self, mut i: usize) -> Option<(String, usize)> {
-        if self.at(i)? == b's' {
-            i = self.base62(i + 1)?.1;
-        }
-        let (n, mut k) = self.decimal(i)?;
-        if self.at(k) == Some(b'_') {
-            k += 1;
-        }
-        let end = k.checked_add(n)?;
-        Some((std::str::from_utf8(self.b.get(k..end)?).ok()?.to_string(), end))
-    }
-
-    /// The parent of a function's name (see [`fn_site`]): `C` crate, `Nt` module, `M` inherent impl
-    /// or `X` trait impl -> (crate, modules, the self type's name for an impl, end).
-    fn owner(&mut self, i: usize) -> Option<(String, Vec<String>, Option<String>, usize)> {
-        match self.at(i)? {
-            b'C' => self.name(i + 1).map(|(k, e)| (k, Vec::new(), None, e)),
-            b'N' if self.at(i + 1)? == b't' => {
-                let (k, mut mods, None, j) = self.owner(i + 2)? else { return None };
-                let (m, e) = self.name(j)?;
-                mods.push(m);
-                Some((k, mods, None, e))
-            }
-            c @ (b'M' | b'X') => {
-                let j = if self.at(i + 1)? == b's' { self.base62(i + 2)?.1 } else { i + 1 };
-                let (k, mods, None, j) = self.owner(j)? else { return None };
-                let mut e = self.ty(j, &mut String::new())?;
-                let named = if self.at(j)? == b'I' { j + 1 } else { j };
-                if self.at(named)? != b'N' {
-                    return None;
-                }
-                let parent_end = self.path(named + 2, &mut String::new())?;
-                let ty = self.name(parent_end)?.0;
-                if c == b'X' {
-                    e = self.path(e, &mut String::new())?;
-                }
-                Some((k, mods, Some(ty), e))
-            }
-            _ => None,
         }
     }
 }
@@ -918,7 +874,6 @@ pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, 
                 continue;
             }
             let Some(f) = function_of(name) else { continue };
-            matched.insert(key(f));
             let mut want = rename_for(name, f, &keys);
             if at_end {
                 if let Some((i, p)) = position_of(&want).and_then(|p| clusters.iter().position(|c| (c.first..=c.last).contains(&p)).map(|i| (i, p))) {
@@ -979,7 +934,8 @@ pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, 
     }
     if !changed.is_empty() {
         crate::so::run(Command::new(ar).current_dir(work).arg("r").arg(&archive).args(&changed))?;
-    }    let checked = check_renames(&archive_headers(&archive)?, &renames).map_err(|e| format!("{}: hot-text grouping: {e}", archive.display()))?;
+    }
+    let checked = check_renames(&archive_headers(&archive)?, &renames).map_err(|e| format!("{}: hot-text grouping: {e}", archive.display()))?;
     println!("so: hot-text grouping: {checked} section renames, all in effect");
     let _ = fs::remove_dir_all(work);
     if startup != 1 {
@@ -1015,9 +971,8 @@ pub fn static_check(root: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ar_members, before_group, check_lists, check_renames, cluster_align, head_alignments, cluster_bytes, cluster_section, clusters_at_end, dead_key_verdict, DeadKeys, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, parse_unpinned, check_pinned, fn_site, Site, positions, link_positions, parse_first_window, regen_mode, rename_for, repair_lists, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
+    use super::{ar_members, before_group, check_renames, cluster_align, head_alignments, cluster_bytes, cluster_section, clusters_at_end, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, is_startup_names, key, parse_list, positions, link_positions, parse_first_window, rename_for, retired_lists, section_for, RETIRED};
     use std::collections::{BTreeMap, BTreeSet};
-    use std::sync::atomic::Ordering;
 
     #[test]
     fn keys_drop_build_hashes() {
@@ -1218,36 +1173,23 @@ mod tests {
     }
 
     #[test]
-    fn startup_text_keys_lead_the_hot_text_list() {
-        // LAYOUT-TEXT-PIN-5, ruling #4417 (no spec clause: build layout, D-X.63 / D-X.49): every
-        // startup-text.keys key the list holds is in the start-up tier, and that tier is the head
-        // of the list, so no aligned cluster can split the start-up text across extra windows.
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/libc-so");
-        let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
-        let (head, late) = late_startup_keys(&read("hot-text.list"), &read("startup-text.keys"));
-        assert!(head > 0, "hot-text.list has no start-up tier at its head");
-        assert!(late.is_empty(), "start-up keys after list position {head} (rerun tools/hottext/regen.sh): {late:?}");
-    }
-
-    #[test]
-    fn merge_moves_startup_text_keys_to_the_head() {
-        // LAYOUT-TEXT-PIN-5, ruling #4417 (no spec clause: build tooling): merge.py --startup-head
+    fn order_moves_startup_text_keys_to_the_head() {
+        // LAYOUT-TEXT-PIN-5, ruling #4417 (no spec clause: build tooling): order.py --startup-head
         // gives the listed keys tier startup and puts the start-up tier first, each part in its
-        // merged order; without the option the trace order stands.
+        // traced order; without the option the trace order stands (LT-5: one trace, no old list).
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-        let tmp = root.join(format!("target/xtask-merge-head-test-{}", std::process::id()));
+        let tmp = root.join(format!("target/xtask-order-head-test-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(tmp.join("old"), "").unwrap();
         std::fs::write(tmp.join("new"), "_start1\tstartup\na\tstdio\nvf\tstrings\nb\tstrings\ngr\textra\n").unwrap();
         std::fs::write(tmp.join("skeys"), "# c\nvf\tstartup\tfast\ngr\tstartup\tfast,release\nnot_listed\tstartup\tfast\n").unwrap();
         let run = |head: bool| {
             let mut c = std::process::Command::new("python3");
-            c.arg("-I").arg(root.join("tools/hottext/merge.py")).arg(tmp.join("old")).arg(tmp.join("new")).arg("fast");
+            c.arg("-I").arg(root.join("tools/hottext/order.py")).arg(tmp.join("new")).arg("fast");
             if head {
                 c.arg("--startup-head").arg(tmp.join("skeys"));
             }
-            let o = c.output().expect("python3 runs tools/hottext/merge.py");
-            assert!(o.status.success(), "merge.py: {}", String::from_utf8_lossy(&o.stderr));
+            let o = c.output().expect("python3 runs tools/hottext/order.py");
+            assert!(o.status.success(), "order.py: {}", String::from_utf8_lossy(&o.stderr));
             String::from_utf8(o.stdout).unwrap()
         };
         let (plain, headed) = (run(false), run(true));
@@ -1277,49 +1219,15 @@ mod tests {
     }
 
     #[test]
-    fn regen_replace_drops_the_allow_list_lines_of_keys_it_drops() {
-        // LAYOUT-TRACE-HOST-CANONICAL-3 (no spec clause: build tooling): `regen.sh --replace` keeps
-        // only the keys a trace hit, so an ABSENT_LIST line whose key left the list is stale by
-        // `unmatched`'s rule and the next release build (a later `--both`) refused it.
-        // prune.py --absent drops exactly those lines (comments and listed keys stay, in order) and
-        // regen.sh runs it on the --replace path only, after it writes the list.
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-        let tmp = root.join(format!("target/xtask-absent-prune-test-{}", std::process::id()));
-        std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(tmp.join("list"), "# list\nkept\tstartup\tfast\nfast_only\tlocale\tfast\n").unwrap();
-        let absent = "# allow-list\nkept\trelease\tinlined in release\ngone\trelease\tinlined in release\n# tail\nfast_only\trelease\tinlined\n";
-        std::fs::write(tmp.join("absent"), absent).unwrap();
-        let o = std::process::Command::new("python3")
-            .arg("-I")
-            .arg(root.join("tools/hottext/prune.py"))
-            .arg("--absent")
-            .arg(tmp.join("list"))
-            .arg(tmp.join("absent"))
-            .output()
-            .expect("python3 runs tools/hottext/prune.py");
-        std::fs::remove_dir_all(&tmp).unwrap();
-        let (out, err) = (String::from_utf8(o.stdout).unwrap(), String::from_utf8_lossy(&o.stderr).into_owned());
-        assert!(o.status.success(), "prune.py --absent: {err}");
-        assert_eq!(out, "# allow-list\nkept\trelease\tinlined in release\n# tail\nfast_only\trelease\tinlined\n", "prune.py --absent kept a stale line or lost a live one");
-        assert!(err.contains("absent: dropped gone\trelease"), "prune.py --absent does not name the line it drops: {err}");
-        assert_eq!(parse_absent(&out).unwrap().len(), 2, "prune.py --absent output is not an allow-list");
-        let sh = std::fs::read_to_string(root.join("tools/hottext/regen.sh")).unwrap();
-        let written = sh.find("put_changed \"$work/list.merged\" \"$list\"").expect("regen.sh: no list write");
-        let guard = sh.find("if [ $replace = 1 ] && [ -f \"$absent\" ]; then").expect("regen.sh: no --replace allow-list prune");
-        let call = sh.find("\"$here/prune.py\" --absent \"$list\" \"$absent\"").expect("regen.sh: prune.py --absent not run");
-        assert!(written < guard && guard < call, "regen.sh prunes the allow-list before it writes the list, or outside --replace");
-    }
-
-    #[test]
     fn a_startup_label_brings_its_section_to_the_head() {
         // LAYOUT-TEXT-PIN-6, #4467 (no spec clause: build tooling, D-X.63): keys.py --aliases maps a
         // label inside a function section (an assembly entry label, an alias) to the section's key,
-        // leaving out the section's own name, data symbols and a name found in two sections; merge.py
+        // leaving out the section's own name, data symbols and a name found in two sections; order.py
         // --alias then brings the section of a start-up key traced at such a label to the head.
         // The symbol names are fictional on purpose: a csys label named here would be an unknown
         // consumer to `cargo xtask affected` and send every change of its .S file to the FULL tier.
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-        let tmp = root.join(format!("target/xtask-merge-alias-test-{}", std::process::id()));
+        let tmp = root.join(format!("target/xtask-order-alias-test-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
         let syms = "\nlibc.a(m.o):     file format elf64-x86-64\n\nSYMBOL TABLE:\n\
             0000000000000000 g     F .text.fixture_set\t0000000000000040 fixture_set\n\
@@ -1341,18 +1249,17 @@ mod tests {
         let aliases = String::from_utf8(o.stdout).unwrap();
         assert_eq!(aliases, "fixture_set_entry\tfixture_set\nmemset\tfixture_set\n");
         std::fs::write(tmp.join("alias"), &aliases).unwrap();
-        std::fs::write(tmp.join("old"), "").unwrap();
         std::fs::write(tmp.join("new"), "_start1\tstartup\nstrlen\tstrings\nfixture_set\tstrings\nb\tstrings\n").unwrap();
         std::fs::write(tmp.join("skeys"), "_start1\tstartup\tfast\nfixture_set_entry\tstartup\tfast\n").unwrap();
         let run = |alias: bool| {
             let mut c = std::process::Command::new("python3");
-            c.arg("-I").arg(root.join("tools/hottext/merge.py")).arg(tmp.join("old")).arg(tmp.join("new")).arg("fast");
+            c.arg("-I").arg(root.join("tools/hottext/order.py")).arg(tmp.join("new")).arg("fast");
             c.arg("--startup-head").arg(tmp.join("skeys"));
             if alias {
                 c.arg("--alias").arg(tmp.join("alias"));
             }
-            let o = c.output().expect("python3 runs tools/hottext/merge.py");
-            assert!(o.status.success(), "merge.py: {}", String::from_utf8_lossy(&o.stderr));
+            let o = c.output().expect("python3 runs tools/hottext/order.py");
+            assert!(o.status.success(), "order.py: {}", String::from_utf8_lossy(&o.stderr));
             String::from_utf8(o.stdout).unwrap()
         };
         let (plain, aliased) = (run(false), run(true));
@@ -1403,59 +1310,58 @@ mod tests {
     }
 
     #[test]
-    fn merge_names_every_key_it_drops() {
-        // LAYOUT-TEXT-PIN-9, ruling #4539 (no spec clause: build tooling): a key the old list held
-        // that this profile's trace missed and no other profile keeps is dropped only out loud
-        // (stderr and --dropped, which regen.sh refuses without --allow-drop); a key the other
-        // profile keeps is not dropped.
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-        let tmp = root.join(format!("target/xtask-merge-dropped-test-{}", std::process::id()));
-        std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(tmp.join("old"), "kept\ttool\tfast,release\ngone\ttool\tfast\nother\tlocale\trelease\n").unwrap();
-        let run = |new: &str| {
-            std::fs::write(tmp.join("new"), new).unwrap();
-            let o = std::process::Command::new("python3")
-                .arg("-I")
-                .arg(root.join("tools/hottext/merge.py"))
-                .arg(tmp.join("old"))
-                .arg(tmp.join("new"))
-                .arg("fast")
-                .arg("--dropped")
-                .arg(tmp.join("dropped"))
-                .output()
-                .expect("python3 runs tools/hottext/merge.py");
-            assert!(o.status.success(), "merge.py: {}", String::from_utf8_lossy(&o.stderr));
-            let dropped = std::fs::read_to_string(tmp.join("dropped")).unwrap();
-            (String::from_utf8(o.stdout).unwrap(), String::from_utf8(o.stderr).unwrap(), dropped)
-        };
-        let (short, short_err, short_dropped) = run("a\tstartup\n");
-        let (full, full_err, full_dropped) = run("a\tstartup\ngone\ttool\n");
-        std::fs::remove_dir_all(&tmp).unwrap();
-        assert_eq!(short, "kept\ttool\trelease\nother\tlocale\trelease\na\tstartup\tfast\n");
-        assert_eq!(short_dropped, "gone\ttool\tfast\n");
-        assert!(short_err.contains("DROPPED") && short_err.contains("gone"), "drop not reported: {short_err:?}");
-        assert_eq!(full, "kept\ttool\trelease\na\tstartup\tfast\ngone\ttool\tfast\nother\tlocale\trelease\n");
-        assert!(full_dropped.is_empty() && full_err.is_empty(), "nothing dropped, yet: {full_dropped:?} {full_err:?}");
-    }
-
-    #[test]
     fn regen_always_traces_the_bounded_tool_and_locale_modes() {
         // LAYOUT-TEXT-PIN-9, ruling #4539 (no spec clause: build tooling): regen.sh traces
         // page_faults.c's `locale` and `tool` modes (the programs hot_text_products.rs bounds) on
-        // every run, not only when they are passed as extra programs, and refuses a dropping list
-        // before it writes either file.
+        // every run, before the fork and extra modes, so their first touches keep the tiers the
+        // bounds count (LT-5: the trace of every build is the list; nothing else is merged in).
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let sh = std::fs::read_to_string(root.join("tools/hottext/regen.sh")).unwrap();
         let at = |s: &str| sh.lines().position(|l| l == s).unwrap_or_else(|| panic!("regen.sh: no top-level line {s:?}"));
-        let extra = at("for cmd in \"$@\"; do");
+        let later = at("stdin=/dev/null follow=child trace fork en_US.UTF-8 ./page_faults fork");
         for mode in ["locale", "tool"] {
             let l = at(&format!("stdin=/dev/null trace {mode} en_US.UTF-8 ./page_faults {mode}"));
-            assert!(l < extra, "regen.sh traces page_faults {mode} after the extra programs");
+            assert!(l < later, "regen.sh traces page_faults {mode} after the fork and extra modes");
         }
-        let refuse = sh.find("if [ $allow_drop = 0 ]; then").expect("regen.sh: no --allow-drop guard");
-        for w in ["put_changed \"$work/startup.merged\" \"$skeys\"", "put_changed \"$work/list.merged\" \"$list\""] {
-            assert!(sh.find(w).is_some_and(|p| p > refuse), "regen.sh writes before the drop guard: {w}");
+        assert!(later < at("traces_done"), "regen.sh orders the lists before the fork trace ran");
+    }
+
+    #[test]
+    fn retired_lists_refuse_a_committed_list() {
+        // LAYOUT-DELETE-LISTS, LT-5 (no spec clause: build tooling): `cargo xtask static` refuses a
+        // tracked start-up list, whatever its directory, so the committed lists cannot creep back;
+        // a file that only shares a prefix or suffix with one is not refused, and this tree has none.
+        for name in RETIRED {
+            let path = format!("crates/libc-so/{name}");
+            let errs = retired_lists(&[path.as_str(), "crates/libc-so/startup-state.list", "crates/libc-so/hot-text.clusters"]);
+            assert_eq!(errs.len(), 1, "{name}: {errs:?}");
+            assert!(errs[0].starts_with(&format!("{path}: a committed start-up list")), "{}", errs[0]);
         }
+        assert!(retired_lists(&["x/hot-text.list.bak", "x/my-hot-text.list", "hot-text.first-window"]).is_empty());
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let tracked = crate::labnames::tracked_with(root, true).expect("git ls-files");
+        assert!(tracked.iter().any(|p| p.ends_with("hot-text.clusters")), "the tracked-file list misses known files");
+        assert_eq!(retired_lists(&tracked), Vec::<String>::new());
+    }
+
+    #[test]
+    fn static_refuses_a_readded_committed_list() {
+        // LAYOUT-DELETE-LISTS, LT-5 (no spec clause: build tooling): end to end through git, as
+        // `cargo xtask static` runs it: a scratch repository that tracks a hand-written input passes;
+        // once a `hot-text.list` is added (staged is tracked) the check fails naming it.
+        let root = std::env::temp_dir().join(format!("xtask-retired-static-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("crates/libc-so")).unwrap();
+        let git = |args: &[&str]| assert!(std::process::Command::new("git").current_dir(&root).args(args).output().unwrap().status.success(), "git {args:?}");
+        git(&["init", "-q"]);
+        std::fs::write(root.join("crates/libc-so/hot-text.clusters"), "# hand-written\n").unwrap();
+        git(&["add", "crates/libc-so/hot-text.clusters"]);
+        assert_eq!(super::static_check(&root), Ok(()));
+        std::fs::write(root.join("crates/libc-so/hot-text.list"), "key\tstartup\tfast\n").unwrap();
+        git(&["add", "crates/libc-so/hot-text.list"]);
+        let e = super::static_check(&root).unwrap_err();
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(e.contains("crates/libc-so/hot-text.list: a committed start-up list"), "{e}");
     }
     // LAYOUT-FIRST-WINDOW: first-window keys follow the start-up tier; a stale line fails. No spec clause.
     #[test]
