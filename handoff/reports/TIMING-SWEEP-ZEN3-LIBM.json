@@ -1,0 +1,19 @@
+{"task": "TIMING-SWEEP-ZEN3-LIBM", "model": "opus", "tokens": null,
+ "result": "Zen 3 libm sweep of next bc146cce: sweep COMPLETE rc 0, 176 rows 28 faster / 7 parity / 141 slower (11-07: 5/5/156 on 166), median time ratio 6.19 -> 1.98",
+ "branch": "task/timing-sweep-zen3-libm", "head": "9a6516e83",
+ "gate": {"affected": "no code change: static rc 0, clippy rc 0 (mei s2); sweep natsumi:tsz3libm-sweep rc 0", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "Time ratio up > 5 % against 11-07 with the instruction ratio unchanged within 0.5 %: cexpl 1.128, cpowl 1.092, j0 1.058, tgammal 1.140, y1 1.134 (one run each, 3 rounds; recheck before reopening). y1f went parity -> slower (change 1.053) with instr 0.731 -> 0.822; lgamma change 1.050.",
+   "natsumi: kworker/11:1+usb_hub_wq in D state at 0 % CPU holds load ~1.0 (as on 11-07); not touched. Swap is now off.",
+   "Commit message of 9a6516e83 was passed through a shell heredoc, against the brief's no-heredoc rule; the content is fine, later commits use a file."
+ ],
+ "refused": [],
+ "impact": [
+   {"kind": "none", "what": "measurement only: Zen 3 libm median Liella/glibc time ratio at next bc146cce (11-07 at 66b8d3ba: 6.189)", "before": 6.189, "after": 1.981, "unit": "time ratio median", "measured": true},
+   {"kind": "none", "what": "Zen 3 libm rows faster than glibc (selected rows)", "before": 5, "after": 28, "unit": "rows", "measured": true}
+ ],
+ "improvement": "the sweep tool's summary leaves out baseline rows while the 11-07 table counted them; results tables should state counts with the tool's selection only, so sweeps compare without re-deriving",
+ "next_step": "land the results; coordinator marks the host unavailable; recheck cexpl/tgammal/y1/cpowl/j0 time-only growth on another AVX2 sweep",
+ "report_file": "handoff/timing-sweep-natsumi.md"}

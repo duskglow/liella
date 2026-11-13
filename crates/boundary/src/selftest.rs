@@ -721,6 +721,16 @@ pub fn exp_quick(x: f64) -> Option<f64> {
     crate::hot::exp_quick(x)
 }
 
+/// The `double` `exp` quick phase in a directed rounding direction (D-10.94) in the build
+/// [`set_math_fma`] chose, as the `exp` entry calls it under a word that is the default one but
+/// for its rounding field: `e^x` rounded in `mode`, or `None` when its test does not decide. The
+/// caller sets MXCSR's rounding field to `mode` around the call (the arithmetic runs in it); out
+/// of line so that no operation moves across the caller's MXCSR writes.
+#[inline(never)]
+pub fn exp_directed(x: f64, mode: liella_math::Rounding) -> Option<f64> {
+    crate::hot::exp_directed(core::hint::black_box(x), mode)
+}
+
 /// `exp`'s in-place tiers (D-10.51: the quick phase, tier 2 on a miss) in the build
 /// [`set_math_fma`] chose, as the `exp` entry calls them: `None` sends the entry to the accurate
 /// path. Lets a test see which tier answered, which the entry's result cannot show (every path

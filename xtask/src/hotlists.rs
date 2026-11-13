@@ -86,6 +86,105 @@ pub fn differing(a: &Path, b: &Path) -> Vec<&'static str> {
     GENERATED.iter().copied().filter(|g| fs::read(a.join(g)).ok() != fs::read(b.join(g)).ok()).collect()
 }
 
+/// LAYOUT-TRACE-AT-BUILD (LT-1, rulings #5190/#5191) and LAYOUT-TRACE-DEFAULT: the layout switch of `cargo xtask
+/// so`. Unset, empty or `1`: the build links the probes against the archive it built, traces them and groups from
+/// that trace ([`Layout::Traced`], the default of every product build since LAYOUT-TRACE-DEFAULT); `ungrouped`: the
+/// explicit opt-out for a builder without a tracer, an ungrouped product ([`Layout::Ungrouped`]); `0`: the committed
+/// lists ([`Layout::Committed`]), kept for the list tooling (regen, repair, bench comparisons) until LT-5 deletes
+/// those lists. A regen build ([`crate::hottext::REGEN_FLAG`]) reads the committed lists whatever the default.
+pub const TRACE_ENV: &str = "LIELLA_LAYOUT_TRACE";
+/// The marker `so` writes next to products it grouped from a trace of their own build (or left ungrouped): line 1
+/// the directory of the lists it used (`target/product/<profile>`), then `<list> <hash>` per list (so the layout
+/// verdict cache, which hashes the products directory, sees a list change). Every later reader of the generated
+/// lists (`layout-check`, the tests) reads that directory. A build from the committed lists removes it first.
+pub const MARKER: &str = ".hot-lists";
+
+/// Where the start-up layout of a `cargo xtask so` comes from ([`TRACE_ENV`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Layout {
+    /// The committed (or train-regenerated) lists: regen builds, and `0` (list tooling until LT-5).
+    Committed,
+    /// A trace of the probes linked against this build's un-grouped archive: the default.
+    Traced,
+    /// No grouping at all (no tracer on this builder; explicit).
+    Ungrouped,
+}
+
+impl Layout {
+    /// The layout `value` of [`TRACE_ENV`] selects for a product build; `regen`: the build is a regen build
+    /// ([`crate::hottext::REGEN_FLAG`]), which traces nothing itself and reads the committed lists (it is what
+    /// `tools/hottext/regen.sh` traces), so with it only an unset (or empty) switch or `0` is accepted.
+    pub fn parse(value: Option<&str>, regen: bool) -> Result<Layout, String> {
+        let layout = match value.unwrap_or("") {
+            "" if regen => return Ok(Layout::Committed),
+            "" | "1" => Layout::Traced,
+            "0" => Layout::Committed,
+            "ungrouped" => Layout::Ungrouped,
+            v => return Err(format!("{TRACE_ENV}={v:?}: want unset or 1 (trace at build, the default), ungrouped (no tracer: ungrouped product) or 0 (the committed lists: list tooling until LT-5)")),
+        };
+        if regen && layout != Layout::Committed {
+            return Err(format!("so: {TRACE_ENV}={} and {} together: a regen build reads the committed lists", value.unwrap_or(""), crate::hottext::REGEN_FLAG));
+        }
+        Ok(layout)
+    }
+
+    /// This process's layout ([`TRACE_ENV`]) for a product build (`regen`: see [`Layout::parse`]).
+    pub fn from_env(regen: bool) -> Result<Layout, String> {
+        Layout::parse(std::env::var(TRACE_ENV).ok().as_deref(), regen)
+    }
+}
+
+/// The lists directory a trace-at-build `so` run uses from its start ([`force_dir`]).
+static FORCED: OnceLock<PathBuf> = OnceLock::new();
+
+/// Make `dir` the directory of the generated lists for the rest of this process (a trace-at-build `so`, before any
+/// reader resolves them). Fails when a reader already resolved another directory or [`ENV`] is set.
+pub fn force_dir(root: &Path, dir: &Path) -> Result<(), String> {
+    if Mode::from_env().over.is_some() {
+        return Err(format!(
+            "{ENV} is set, but this build writes its own lists ({TRACE_ENV} unset or 1: trace at build, the default; or ungrouped): unset {ENV}, or set {TRACE_ENV}=0 to build from the lists it names"
+        ));
+    }
+    FORCED.set(dir.to_path_buf()).map_err(|_| "hot-lists: the lists directory was forced twice".to_string())?;
+    match self::dir(root) {
+        Ok(d) if d == dir => Ok(()),
+        Ok(d) => Err(format!("hot-lists: {} resolved before the trace-at-build directory {}", d.display(), dir.display())),
+        Err(e) => Err(e),
+    }
+}
+
+/// The lists directory named by the [`MARKER`] of the products in `products` (`None`: no marker).
+pub fn marked_dir(products: &Path) -> Option<PathBuf> {
+    let text = fs::read_to_string(products.join(MARKER)).ok()?;
+    text.lines().next().filter(|l| !l.is_empty()).map(PathBuf::from)
+}
+
+/// A checker of built products (`layout-check`) reads the lists the products in `products` were grouped from: when
+/// they carry a [`MARKER`], its directory is forced for this process. Only product checks call this: the static
+/// checks, regen and repair work on the committed lists whatever the last build was.
+pub fn follow_products(root: &Path, products: &Path) -> Result<(), String> {
+    match marked_dir(products) {
+        Some(d) if Mode::from_env().over.is_none() => {
+            println!("hot-lists: {}/{MARKER}: the products were grouped from the lists in {} ({TRACE_ENV})", products.display(), d.display());
+            force_dir(root, &d)
+        }
+        _ => Ok(()),
+    }
+}
+
+/// The text of the [`MARKER`] for lists in `dir`: the directory, then each [`GENERATED`] list's FNV-1a hash.
+pub fn marker_text(dir: &Path) -> String {
+    let mut out = format!("{}\n", dir.display());
+    for g in GENERATED {
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for &b in &fs::read(dir.join(g)).unwrap_or_default() {
+            h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+        }
+        out.push_str(&format!("{g} {h:016x}\n"));
+    }
+    out
+}
+
 /// What decides where the generated lists are read from, besides the tree: the [`ENV`] override directory and
 /// whether this is the train. [`resolve`] takes it explicitly so that its tests never depend on the environment
 /// they run in (the CI gate itself runs with `LIELLA_TRAIN=1`); only [`dir`] reads this process's.
@@ -146,7 +245,12 @@ pub fn dir(root: &Path) -> Result<PathBuf, String> {
     type Resolved = (PathBuf, Result<PathBuf, String>);
     static DIR: OnceLock<Resolved> = OnceLock::new();
     let once = || {
-        let r = resolve(root, &Mode::from_env());
+        // LAYOUT-TRACE-AT-BUILD: after [`ENV`], the directory a trace-at-build run (or [`follow_products`]) forced.
+        let mut mode = Mode::from_env();
+        if mode.over.is_none() {
+            mode.over = FORCED.get().cloned();
+        }
+        let r = resolve(root, &mode);
         if let Ok((_, Some(info))) = &r {
             println!("{info}");
         }
@@ -236,7 +340,7 @@ pub fn cmd(root: &Path, args: &[String]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{differing, dir, rel_in, resolve, tree_hash, Mode, GENERATED, OUT, STAMP, TRACKED};
+    use super::{differing, dir, marked_dir, marker_text, rel_in, resolve, tree_hash, Layout, Mode, GENERATED, MARKER, OUT, STAMP, TRACE_ENV, TRACKED};
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -335,5 +439,66 @@ mod tests {
             assert_eq!(dir(root).unwrap(), resolve(root, &Mode::from_env()).unwrap().0, "{}", root.display());
         }
         let _ = (fs::remove_dir_all(&a), fs::remove_dir_all(&b));
+    }
+
+    /// LAYOUT-TRACE-DEFAULT (no spec clause: build tooling, rulings #5190-#5194): a product build traces its own
+    /// layout unless told otherwise (unset, empty or `1`); `ungrouped` is the explicit opt-out and `0` the committed
+    /// lists; a regen build reads the committed lists and refuses an explicit trace or opt-out; any other value is
+    /// an error, never a silent default.
+    #[test]
+    fn layout_switch_defaults_to_the_trace_and_is_strict() {
+        assert_eq!(Layout::parse(None, false), Ok(Layout::Traced));
+        assert_eq!(Layout::parse(Some(""), false), Ok(Layout::Traced));
+        assert_eq!(Layout::parse(Some("1"), false), Ok(Layout::Traced));
+        assert_eq!(Layout::parse(Some("0"), false), Ok(Layout::Committed));
+        assert_eq!(Layout::parse(Some("ungrouped"), false), Ok(Layout::Ungrouped));
+        assert_eq!(Layout::parse(None, true), Ok(Layout::Committed));
+        assert_eq!(Layout::parse(Some(""), true), Ok(Layout::Committed));
+        assert_eq!(Layout::parse(Some("0"), true), Ok(Layout::Committed));
+        for explicit in ["1", "ungrouped"] {
+            assert!(Layout::parse(Some(explicit), true).unwrap_err().contains(crate::hottext::REGEN_FLAG), "{explicit}");
+        }
+        for bad in ["yes", "true", "2", "Ungrouped", " 1"] {
+            for regen in [false, true] {
+                assert!(Layout::parse(Some(bad), regen).unwrap_err().contains("LIELLA_LAYOUT_TRACE"), "{bad} {regen}");
+            }
+        }
+    }
+
+    /// LAYOUT-TRACE-DEFAULT (no spec clause: build tooling): the list tooling builds from the committed lists, so
+    /// every product build `tools/hottext/regen.sh` runs is a regen build (`crate::hottext::REGEN_FLAG`) or names
+    /// `LIELLA_LAYOUT_TRACE=0`; a plain `cargo xtask so` there would trace its own layout and check nothing of the
+    /// list it just rewrote.
+    #[test]
+    fn regen_builds_never_rely_on_the_default_layout() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let sh = fs::read_to_string(root.join("tools/hottext/regen.sh")).unwrap();
+        let builds: Vec<&str> = sh.lines().filter(|l| !l.trim_start().starts_with('#') && l.contains("cargo xtask so")).collect();
+        assert!(builds.len() >= 3, "regen.sh: found {} product builds, expected the --both, --build and rewritten-list builds", builds.len());
+        for l in builds {
+            assert!(l.contains(crate::hottext::REGEN_FLAG) || l.contains(&format!("{TRACE_ENV}=0 cargo xtask so")), "regen.sh builds with the default layout (trace at build): {l}");
+        }
+    }
+
+    /// LAYOUT-TRACE-AT-BUILD (no spec clause: build tooling): the products' marker names the lists directory on its
+    /// first line, and its text changes with any list's bytes (the layout verdict cache hashes the products
+    /// directory, so a list change must change a product file); no marker, no directory.
+    #[test]
+    fn marker_names_the_lists_and_hashes_them() {
+        let root = tree("marker");
+        let (lists, products) = (root.join("lists"), root.join("products"));
+        fs::create_dir_all(&lists).unwrap();
+        fs::create_dir_all(&products).unwrap();
+        assert_eq!(marked_dir(&products), None);
+        for g in GENERATED {
+            fs::write(lists.join(g), "# empty\n").unwrap();
+        }
+        let first = marker_text(&lists);
+        fs::write(products.join(MARKER), &first).unwrap();
+        assert_eq!(marked_dir(&products), Some(lists.clone()));
+        fs::write(lists.join("hot-text.list"), "# empty\nkey_a\tstartup\tfast\n").unwrap();
+        assert_ne!(marker_text(&lists), first, "a list change changes the marker");
+        assert_eq!(marker_text(&lists).lines().count(), 1 + GENERATED.len());
+        let _ = fs::remove_dir_all(&root);
     }
 }

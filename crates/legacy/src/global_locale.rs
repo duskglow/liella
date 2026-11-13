@@ -230,8 +230,12 @@ pub fn global(objs: &impl Objects) -> &'static Locale {
 struct Files<'a, M: Mapper> {
     m: &'a M,
     /// `m.locpath()`, read at the first need and kept for the selection (SETLOCALE-3: read
-    /// once per category before).
-    locpath: core::cell::OnceCell<Option<&'a [u8]>>,
+    /// once per category before). `None` until then. A plain `Cell`, not a `OnceCell`
+    /// (HOTTEXT-TIME-CLUSTER-STABLE-2): `OnceCell::get_or_init` runs its first fill in an
+    /// out-of-line cold generic with no hot-text key, which `setlocale(LC_ALL, "")` touches in cold
+    /// text, where its distance from other cold code (and so its page-fault count) followed the
+    /// codegen-unit partition of unrelated code.
+    locpath: core::cell::Cell<Option<Option<&'a [u8]>>>,
 }
 
 /// Record file slot `i`: the mapping, its identity, checked in `generation`. The caller holds
@@ -312,7 +316,12 @@ impl<M: Mapper> Source for Files<'_, M> {
     }
 
     fn locpath(&self) -> Option<&[u8]> {
-        *self.locpath.get_or_init(|| self.m.locpath())
+        if let Some(p) = self.locpath.get() {
+            return p;
+        }
+        let p = self.m.locpath();
+        self.locpath.set(Some(p));
+        p
     }
 
     fn charmap(&self, name: &[u8]) -> Option<&'static Charmap> {
@@ -473,7 +482,7 @@ pub fn codec<S: Sys, M: Mapper>(sys: &S, m: &M, name: &[u8]) -> Option<Codec> {
         return Some(c);
     }
     let _g = LOCK.lock(sys);
-    Files { m, locpath: core::cell::OnceCell::new() }.charmap(name).map(|c| Codec::Charmap(CharmapRef(c)))
+    Files { m, locpath: core::cell::Cell::new(None) }.charmap(name).map(|c| Codec::Charmap(CharmapRef(c)))
 }
 
 /// The name `setlocale(cat, "")` takes for `cat`: `LC_ALL`, then `LC_<cat>`, then `LANG`
@@ -496,7 +505,7 @@ pub enum Request<'a> {
 /// `base` with the categories in `cats` replaced by the locales `names` gives them (indexed
 /// like [`Cat::ALL`]). The caller holds [`LOCK`].
 fn replace<M: Mapper>(m: &M, base: Locale, cats: &[Cat], names: &[&[u8]; 12]) -> Option<Locale> {
-    let src = Files { m, locpath: core::cell::OnceCell::new() };
+    let src = Files { m, locpath: core::cell::Cell::new(None) };
     let mut l = base;
     // The alias and the archive search are shared by the categories of one name.
     let mut cache = locale::FindCache::default();
@@ -711,6 +720,19 @@ pub fn newlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cats: &[Cat], name: &[u8], b
         Some(all) if cats.len() == Cat::ALL.len() => all,
         _ => [name; 12],
     };
+    let l = replace(m, base, cats, &names).ok_or(Errno::ENOENT)?;
+    intern_locked(m, l)
+}
+
+/// `newlocale(mask, "", base)`: `base` with each category in `cats` taken from the locale the
+/// environment names for it ([`env_name`], as `setlocale(cat, "")` reads it). The new locale's
+/// handle, or `ENOENT` when a name does not resolve.
+pub fn newlocale_env<S: Sys, M: Mapper>(sys: &S, m: &M, cats: &[Cat], getenv: &dyn Fn(&[u8]) -> Option<&'static [u8]>, base: Locale) -> KResult<usize> {
+    let mut names: [&[u8]; 12] = [b"C"; 12];
+    for &c in cats {
+        *names.get_mut(c.index()).ok_or(Errno::EINVAL)? = env_name(c, getenv);
+    }
+    let _g = LOCK.lock(sys);
     let l = replace(m, base, cats, &names).ok_or(Errno::ENOENT)?;
     intern_locked(m, l)
 }

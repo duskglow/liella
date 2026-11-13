@@ -1,0 +1,23 @@
+{"task": "HOTTEXT-TIME-CLUSTER-STABLE", "model": "opus", "tokens": null,
+ "result": "Hypothesis refuted: the libm branches' extra mktime fault is an out-of-line, unkeyed TscGate::fresh (fast profile), not a lost cluster boundary; select's lock-free path is now #[inline(always)]; next+sincos-5 and next+pow-5 with the fix: mktime 0 at all 147 pads per profile, layout-check rc 0",
+ "branch": "task/hottext-time-cluster-stable", "head": "186431b91",
+ "gate": {"affected": "pending: kanon htcs-gate-2", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "Brief item 1 (fixed cluster boundaries + a check that every boundary is fixed) not done: boundaries were not the cause; a vanished boundary key fails the plain so (dead-key check, D-X.56) and cluster ranges come from list positions", "recommendation": "pin the internal boundary keys with the #5068 batches (counts per pin), no special boundary check"},
+  {"item": "The class (a 0-fault-path function outlined by a codegen change, with no key) stays open on other paths", "recommendation": "raise LT-1 (trace at build) over more per-path inline rules"}],
+ "informational": ["release profile of next+sincos-5 passed unfixed (all recheck code inlined); only the fast profile outlined fresh",
+  "rebind cluster changed on the libm merges (fast 17 -> 16 sections, 20654 -> 15406 B) with rebind still 0",
+  "plant zone-outlined is EQUIVALENT: Entry::zone also runs on the first localtime_r, so its page is touched before mktime (plants-2 SURVIVED)",
+  "jobrun refuses a reused label: chain.sh's restart under the same labels ran nothing (htcs-lint first run rc 1 = lab-names in the record, fixed)"],
+ "refused": [],
+ "impact": [
+  {"kind": "correctness", "what": "first mktime after localtime_r page fault on next+libm-cplx-sincos-5 / -pow-5, fast profile", "before": 1, "after": 0, "unit": "faults", "measured": true},
+  {"kind": "unblock", "what": "task/libm-cplx-sincos-5 and task/libm-cplx-pow-5 pass the three time tests in both profiles at every pad when merged with this branch", "before": null, "after": null, "unit": null, "measured": true},
+  {"kind": "perf", "what": "localtime_r_new_york release per call (time_zone.c)", "before": 388.4, "after": 388.4, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "mktime_new_york release per call (time_zone.c)", "before": 962.6, "after": 962.6, "unit": "instr/call", "measured": true},
+  {"kind": "coverage", "what": "plants (2 caught, 1 equivalent) and a percall spec with 4 time rows", "before": 0, "after": 4, "unit": "items", "measured": true}],
+ "improvement": "a perf page-fault diff (mode vs earlier mode, fault address -> nm symbol) names the culprit of a fault-bound red in one build; worth a ready-made tool next to measure.py",
+ "next_step": "coordinator: verify htcs-proof-next-2, htcs-gate-2, htcs-plants-3 on kanon; rule on the two items",
+ "report_file": "handoff/HOTTEXT-TIME-CLUSTER-STABLE.md",
+ "jobs": ["kanon:htcs-lint-2", "kanon:htcs-proof-next-2", "kanon:htcs-gate-2", "kanon:htcs-plants-3", "kanon:htcs-percall-2", "kanon:htcs-proof-sincos"],
+ "superseded": ["kanon:htcs-proof-pow (rc 1 from verdict.py's own crash reading the run lists; its results.jsonl re-checked with the fixed verdict.py: 0 breaks)"]}

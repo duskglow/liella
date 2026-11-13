@@ -1,0 +1,11 @@
+{"task": "LIBM-CPLX-POW-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: cpow/cpowf quick + middle tiers on the envelope path (tiers = route bit for bit in 4 modes); context checkpoint before the record, rate sweep, in-place entry and percall",
+ "branch": "task/libm-cplx-pow-2", "head": "0b8e2fd51",
+ "gate": {"affected": "running at hand-back (libm-cplx-pow-2-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["xtask static long-sweeps rejects an ignored test without a runner row; the decline-rate sweep was dropped until it has one.", "exp_log::log_dd and trig::atan_dd carry no stated error bound; the middle tier uses an a-priori estimate with a factor-2 margin, checked only against the route so far."],
+ "refused": [],
+ "jobs": ["libm-cplx-pow-2-lint4", "libm-cplx-pow-2-gate", "libm-cplx-pow-2-plants"],
+ "improvement": "A brief for an Effort:max libm story should carry the kernel contracts it needs (file:line, bound); reading them cost both runs most of their 180k context before any job ran.",
+ "next_step": "Read gate/plants; write the D-NEW record; re-add the decline-rate sweep with a long-sweeps row; in-place cplx2_fast; percall vs next and glibc.",
+ "report_file": "handoff/libm-cplx-pow.md"}

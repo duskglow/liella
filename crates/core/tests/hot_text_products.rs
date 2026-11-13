@@ -88,8 +88,16 @@ use liella_kernel::uapi::{ADDR_NO_RANDOMIZE, PERSONALITY_QUERY};
 /// LAYOUT-DATA-CLUSTERS-11 (`_nl_msg_cat_cntr` declared: after next's merge it was the first setlocale's
 /// only write on the last `.bss` page): Skylake-SP host, fast products, every run identical: startup only
 /// 11, setlocale + printf 50, tool 54. LOCALE_BOUND 52 -> 51.
-const TRUE_BOUND: u64 = 17;
-const LOCALE_BOUND: u64 = 51;
+/// LAYOUT-TRACE-DEFAULT (trace-at-build is the default: every build groups from a trace of itself, so a
+/// change that adds no start-up code no longer moves these counts; the bounds now sit at the highest
+/// measured count, no margin). Skylake-SP and Zen 1 hosts (next and next plus an unrelated libm change) and
+/// Haswell-EP and Broadwell-EP hosts (LAYOUT-TRACE-DEFAULT-3), both profiles, every run on every host
+/// identical (warm-up + 5, twice), fast / release: startup only 11 / 10,
+/// setlocale + printf 46 / 47, tool 50 / 49, fork child 5 / 5, localtime and localtime + mktime 17 / 18,
+/// float 3 / 3. TRUE_BOUND 17 -> 11, LOCALE_BOUND 51 -> 47, TOOL_BOUND 56 -> 50, FORK_BOUND 6 -> 5,
+/// LOCALTIME_BOUND and LOCALTIME_MKTIME_BOUND 20 -> 18, FLOAT_BOUND 5 -> 3.
+const TRUE_BOUND: u64 = 11;
+const LOCALE_BOUND: u64 = 47;
 /// "tool" mode: a coreutils-shaped program (setlocale, bindtextdomain, atexit, getenv, strtoimax,
 /// printf), see `init_coreutils_shaped_program_stays_within_its_page_fault_bound`.
 /// PERF-READDIR-ENTRY-4 (layout-only delta, owner rule): CI read tool 69 (bound 68) for the readdir
@@ -100,7 +108,8 @@ const LOCALE_BOUND: u64 = 51;
 /// list and adds no startup code; next already sits one under the bound, and the branch adds one fault in
 /// both bases. TOOL_BOUND 68 -> 71 (rule above: the highest count, 69, plus 2); LOCALE_BOUND stays 68
 /// (66 plus 2), TRUE_BOUND stays 23. STARTUP-FAULTS-RESTORE-5: 60 -> 58 (see TRUE_BOUND).
-const TOOL_BOUND: u64 = 56;
+/// LAYOUT-TRACE-DEFAULT: 56 -> 50 (see TRUE_BOUND).
+const TOOL_BOUND: u64 = 50;
 const RUNS: usize = 5;
 /// Every mode of `page_faults.c` whose first-call state is start-up state (the bounds below count each).
 const STARTUP_PROBE_MODES: [&str; 10] = ["true", "locale", "tool", "fork", "mktime", "localtime", "localtime_mktime", "float", "strings", "rebind"];
@@ -110,6 +119,49 @@ const STATE_DECLARED_MAX: u64 = 8192;
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// A generated start-up list (`hot-text.list`, `startup-data.keys`, ...) as the products were grouped from it: the
+/// directory the products' `target/liella/.hot-lists` marker names (`target/product/<profile>`, written by the
+/// build's own trace: the default since LAYOUT-TRACE-DEFAULT), or the committed copy in `crates/libc-so` for
+/// products built with `LIELLA_LAYOUT_TRACE=0`. The hand-written inputs (`hot-text.clusters`, `startup-state.list`) are always the committed ones.
+fn generated_list(name: &str) -> PathBuf {
+    match std::fs::read_to_string(root().join("target/liella/.hot-lists")) {
+        Ok(m) => PathBuf::from(m.lines().next().expect("target/liella/.hot-lists: empty marker")).join(name),
+        Err(_) => root().join("crates/libc-so").join(name),
+    }
+}
+
+/// LAYOUT-TRACE-DEFAULT (rulings #5190-#5194): a product build traces its own start-up layout by default, so the
+/// products under test carry the `target/liella/.hot-lists` marker, and every generated list it names is the one
+/// the build grouped from (its FNV-1a hash as the marker records it) and holds keys (an ungrouped product's lists
+/// are empty). Products from the committed lists (`LIELLA_LAYOUT_TRACE=0`, list tooling until LT-5) or the
+/// ungrouped opt-out are not what ships. No spec clause (layout of the products).
+#[test]
+fn init_products_are_grouped_from_a_trace_of_their_own_build() {
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let marker = std::fs::read_to_string(r.join("target/liella/.hot-lists")).unwrap_or_else(|e| {
+        panic!("TRACE-AT-BUILD: target/liella/.hot-lists: {e}: the products were grouped from the committed lists (LIELLA_LAYOUT_TRACE=0?); a product build traces its own layout by default")
+    });
+    let mut lines = marker.lines();
+    let dir = PathBuf::from(lines.next().expect("TRACE-AT-BUILD: empty marker"));
+    let mut named = 0;
+    for l in lines {
+        let (name, want) = l.split_once(' ').unwrap_or_else(|| panic!("TRACE-AT-BUILD: marker line {l:?}"));
+        let bytes = std::fs::read(dir.join(name)).unwrap_or_else(|e| panic!("TRACE-AT-BUILD: {}: {e}", dir.join(name).display()));
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for &b in &bytes {
+            h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+        }
+        assert_eq!(format!("{h:016x}"), want, "TRACE-AT-BUILD: {} changed after the build that grouped from it", dir.join(name).display());
+        let keys = String::from_utf8_lossy(&bytes).lines().filter(|k| !k.trim().is_empty() && !k.starts_with('#')).count();
+        if name == "hot-text.list" || name == "startup-text.keys" {
+            assert!(keys > 0, "TRACE-AT-BUILD: {} holds no key: an ungrouped product (LIELLA_LAYOUT_TRACE=ungrouped)", dir.join(name).display());
+        }
+        named += 1;
+    }
+    assert_eq!(named, 4, "TRACE-AT-BUILD: the marker names {named} lists, want the 4 generated ones");
 }
 
 fn build(out: &Path) {
@@ -289,7 +341,8 @@ fn init_first_mktime_after_localtime_r_takes_no_fault() {
 /// the same 64 KiB window: Zen 1 host role, every run identical, 18 (the mktime block back behind
 /// strftime's functions: 19; the rule-years table four times longer: 21). LOCALTIME_BOUND 22 -> 20
 /// (18 plus 2).
-const LOCALTIME_BOUND: u64 = 20;
+/// LAYOUT-TRACE-DEFAULT: 20 -> 18, the highest count of the four host classes and both profiles (see TRUE_BOUND).
+const LOCALTIME_BOUND: u64 = 18;
 
 /// The first `localtime_r` (zone load included) and the first `mktime` after it, counted
 /// together (PERF-ZONE-LOAD-FAULTS-2): a fault that moves from one call to its neighbour (the
@@ -300,7 +353,8 @@ const LOCALTIME_BOUND: u64 = 20;
 /// Bound = 20 plus 2, as for LOCALTIME_BOUND.
 /// PERF-ZONE-LOAD-FAULTS-3 (merge of next, see LOCALTIME_BOUND): Zen 1 host role, every run
 /// identical, 18. Bound 22 -> 20 (18 plus 2).
-const LOCALTIME_MKTIME_BOUND: u64 = 20;
+/// LAYOUT-TRACE-DEFAULT: 20 -> 18, the highest count of the four host classes and both profiles (see TRUE_BOUND).
+const LOCALTIME_MKTIME_BOUND: u64 = 18;
 
 #[test]
 fn init_first_localtime_r_and_mktime_stay_within_their_combined_page_fault_bound() {
@@ -342,7 +396,8 @@ fn init_first_localtime_r_stays_within_its_page_fault_bound() {
 /// Haswell-EP host role, after the change: 4 in every run (text and the first stack page); bound
 /// = that plus 2 for layout-only deltas, below the six stack faults alone of the inlined frame.
 /// STARTUP-FAULTS-RESTORE-4: fast 2, release 4 (Haswell-EP host, relay harness); FLOAT_BOUND 6 -> 5.
-const FLOAT_BOUND: u64 = 5;
+/// LAYOUT-TRACE-DEFAULT: 3 in both profiles on all four host classes (see TRUE_BOUND); FLOAT_BOUND 5 -> 3.
+const FLOAT_BOUND: u64 = 3;
 
 #[test]
 fn init_first_float_conversion_stays_within_its_page_fault_bound() {
@@ -392,7 +447,8 @@ fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
 /// LAYOUT-DATA-CLUSTERS-7 (D-X.70): 5 in both profiles at every `data` pad (Haswell-EP host, every run
 /// identical; next read 6 release and 7 fast) once the state the child reads joined the `.data1` cluster,
 /// whose pages start-up touches, so the bound is 6.
-const FORK_BOUND: u64 = 6;
+/// LAYOUT-TRACE-DEFAULT: 5 in both profiles on all four host classes (see TRUE_BOUND); FORK_BOUND 6 -> 5.
+const FORK_BOUND: u64 = 5;
 
 #[test]
 fn init_fork_child_stays_within_its_page_fault_bound() {
@@ -711,6 +767,63 @@ fn init_startup_state_statics_are_in_data1() {
     }
 }
 
+/// The kernel's fault-around window (64 KiB on the reference hosts): a static program's first text
+/// fault maps the 16 pages from the start of its executable segment.
+const FIRST_WINDOW: u64 = 0x10000;
+
+/// LAYOUT-FIRST-WINDOW (D-X pending record; #5026, #5096): the start-up group (the start file's
+/// `.text.startup*`, the start-up tier of `hot-text.list` and the keys of `hot-text.first-window`,
+/// which `cargo xtask so` links right after that tier) ends inside the first fault-around window of
+/// the probe, and `liella_sys_fstat` with it. When a 0x240-byte start-up growth moved fstat to
+/// 0x418040, one page past the window 0x408000..0x417fff, the release tool, locale, localtime and
+/// localtime_mktime probes each took one more text fault, inside their bounds' slack. Prints the
+/// margin. No spec clause (layout of the products).
+#[test]
+fn init_startup_group_ends_inside_the_first_fault_around_window() {
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = std::env::temp_dir().join(format!("liella-first-window-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let map = link_map(&dir, &r.join("target/liella/liella-crt1.o"));
+    let ph = Command::new("readelf").arg("-lW").arg(dir.join("page_faults")).output().expect("readelf -lW");
+    let _ = std::fs::remove_dir_all(&dir);
+    // `LOAD off vaddr paddr filesz memsz flags align`, flags as separate words (`R E`); the
+    // executable one starts the text mapping.
+    let seg = String::from_utf8_lossy(&ph.stdout)
+        .lines()
+        .map(|l| l.split_whitespace().collect::<Vec<_>>())
+        .find(|w| w.first() == Some(&"LOAD") && w.get(6..).is_some_and(|f| f.contains(&"E") || f.contains(&"RE")))
+        .and_then(|w| u64::from_str_radix(w[2].trim_start_matches("0x"), 16).ok())
+        .expect("no executable LOAD segment in the probe");
+    let (start, end) = (seg & !0xfff, (seg & !0xfff) + FIRST_WINDOW);
+    // The list the products were grouped from (LAYOUT-TRACE-AT-BUILD: a trace-mode build's own list,
+    // whose start-up tier differs from the committed one); the first-window keys stay hand-kept.
+    let list = std::fs::read_to_string(generated_list("hot-text.list")).expect("hot-text.list");
+    let startup = list.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).take_while(|l| l.split('\t').nth(1) == Some("startup")).count();
+    let first = std::fs::read_to_string(r.join("crates/libc-so/hot-text.first-window")).expect("hot-text.first-window");
+    let group = startup + first.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).count();
+    // Link positions 0..group are the group (`.text.sorted.h<5 digits>.<f>`; a cluster moved to the
+    // end has 8 digits and sorts after it).
+    let position = |n: &str| n.strip_prefix(".text.sorted.h").and_then(|r| r.split_once('.')).filter(|(d, _)| d.len() == 5).and_then(|(d, _)| d.parse::<usize>().ok());
+    let inputs = text_inputs(&map);
+    let group_end = inputs.iter().filter(|(n, _, s, _)| *s > 0 && (n.starts_with(".text.startup") || position(n).is_some_and(|p| p < group))).map(|(_, a, s, _)| a + s).max().expect("no start-up group in the link map");
+    let fstat = inputs.iter().find(|(n, _, s, _)| *s > 0 && n.starts_with(".text.sorted.h") && n.ends_with(".liella_sys_fstat")).map(|(_, a, s, _)| (*a, a + s));
+    // Bytes left in the window; negative when the group ends past it.
+    let margin = i128::from(end) - i128::from(group_end);
+    eprintln!("first window {start:#x}..{end:#x}: start-up group ({group} list keys) ends {group_end:#x}, margin {margin} bytes; liella_sys_fstat {fstat:x?}");
+    const PROBES: &str = "the tool, locale, localtime and localtime_mktime probes each take one more text fault";
+    let mut bad = Vec::new();
+    if group_end > end {
+        bad.push(format!("FIRST-WINDOW margin: the start-up group ends {group_end:#x}, {} bytes past the first fault-around window {start:#x}..{end:#x}: {PROBES}; shrink the start-up text or move rarely-run functions out of the group, never raise this window", -margin));
+    }
+    match fstat {
+        None => bad.push("FIRST-WINDOW liella_sys_fstat: not in the hot group of the probe (key renamed? update crates/libc-so/hot-text.first-window)".to_string()),
+        Some((a, e)) if e > end => bad.push(format!("FIRST-WINDOW liella_sys_fstat: {a:#x}..{e:#x} ends past the first fault-around window {start:#x}..{end:#x}: {PROBES} (#5026); keep it in crates/libc-so/hot-text.first-window")),
+        Some(_) => {}
+    }
+    assert!(bad.is_empty(), "{bad:#?}");
+}
+
 /// The input sections of the `.text` output section of a GNU ld map, in address order:
 /// (name, address, size, file). A long name sits alone on its line, the rest on the next.
 fn text_inputs(map: &str) -> Vec<(String, u64, u64, String)> {
@@ -773,7 +886,7 @@ fn init_no_library_text_precedes_the_hot_group() {
 /// The 0-fault clusters of `crates/libc-so/hot-text.clusters`: (name, first, last list position).
 fn clusters() -> Vec<(String, usize, usize)> {
     let dir = root().join("crates/libc-so");
-    let list = std::fs::read_to_string(dir.join("hot-text.list")).expect("hot-text.list");
+    let list = std::fs::read_to_string(generated_list("hot-text.list")).expect("hot-text.list");
     let mut pos = std::collections::BTreeMap::new();
     for (i, l) in list.lines().filter(|l| !l.trim().is_empty() && !l.starts_with('#')).enumerate() {
         pos.entry(l.split('\t').next().unwrap_or("").trim().to_string()).or_insert(i);
@@ -961,7 +1074,7 @@ fn unhashed_key(name: &str) -> String {
 /// and `.bss` puts it. One left in `.data`/`.bss` is named. No spec clause (layout of the products).
 #[test]
 fn init_written_startup_objects_are_in_the_data1_cluster() {
-    let keys: std::collections::BTreeSet<String> = std::fs::read_to_string(root().join("crates/libc-so/startup-data.keys"))
+    let keys: std::collections::BTreeSet<String> = std::fs::read_to_string(generated_list("startup-data.keys"))
         .expect("startup-data.keys")
         .lines()
         .filter(|l| !l.starts_with('#'))

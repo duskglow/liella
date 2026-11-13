@@ -70,6 +70,7 @@ _RNvNtC15liella_boundary7process4ARGV	rw	fast
 _RNvNtC15liella_boundary7process4ARGV.0	rw	release
 _RNvNtC15liella_boundary7process9AUXV_ADDR	rw	fast
 _RNvNtC15liella_boundary7process9AUXV_ADDR.0	rw	release
+_RNvNtC15liella_boundary7runtime10EARLY_DONE.0	rw	release
 _RNvNtC15liella_boundary8dispatch13FOLD_RESOLVED	rw	fast
 _RNvNtC15liella_boundary8dispatch13FOLD_RESOLVED.0	rw	release
 _RNvNtC15liella_boundary8dispatch14FOLD_RESOLVING	rw	fast,release

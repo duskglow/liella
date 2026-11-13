@@ -1,92 +1,63 @@
-# LIBM-F32-REST(-4): one-pass inverse trig; lgammaf profiled; merged with next (handoff, one page)
+# LIBM-F32-REST: f32 inverse trig one-pass (landed), lgammaf edge path (LIBM-F32-REST-NEXT, -2, -3); handoff, one page
 
-State: branch `task/libm-f32-rest-5` (run 5, role shiki:~/w/sh2; continues -4, -3, -2, base origin/next). Run 1
-moved asinf, acosf, atanf, atan2f to the one-pass `float` form (D-10.82; code, proofs and per-call spec as below). Run 2
-(LIBM-F32-REST-2) changed no product code: it settled run 1's two plant survivors and profiled lgammaf. Run 3
-(LIBM-F32-REST-3, merge only) resolved CI's merge conflict; see the last section.
+State: branch `task/libm-f32-rest-next-3` (= `task/libm-f32-rest-next-2` + merge of origin/next `d1b3a596c` +
+handoff commits); role keke:~/w/n1. Product code: lgammaf's edge path (D-10.87, `crates/math/src/fast32/gamma.rs`),
+unchanged since `722d7775a` apart from the merge. Runs 1-5 (LIBM-F32-REST..-5, landed) moved asinf, acosf, atanf,
+atan2f to the one-pass `float` form (D-10.82).
 
-## Run 1 (LIBM-F32-REST), unchanged
-- `crates/math/src/fast32/inv_trig.rs`: `atan_red_any` (direction-independent table index), `onepass_abs`,
-  `onepass_finish` (margin 64), `asin_/acos_/atan_/atan2_onepass_any`; bound ≤ 21u in every direction (doc comments).
-- `crates/boundary/src/mathret.rs` `elem32_onepass2`; `hot/f32_invtrig.rs` (asinf/acosf pass `sqrtsd`); `s10_math.tsv`
-  rows + regenerated `s10_math_gen.rs`; tests in `crates/boundary/tests/s10_math_symbols.rs` (sampled 16-MXCSR in the
-  gate; ignored exhaustive sweeps and the 10^9-pair atan2f job); `validation/percall/math_f32_invtrig.c`.
-- Verified on mei (coordinator 11-10): `f32rest-exh` rc 0 (3 sweeps 2^32 × 4 modes, 0 mismatches; atan2f 10^9 pairs),
-  `f32rest-gate` rc 0, `f32rest-percall-2` rc 0; plants 5 CAUGHT, 2 SURVIVED (the two below).
+## -3: unheld after LAYOUT-STARTUP-STATE-LOCALE-4 landed; merged next, re-gated
+- Inherited head `b93f19510`: clippy + static rc 0 (keke `libm-f32-rest-next-3-lint0`).
+- Merge of origin/next: one conflict, `crates/math/src/fast32.rs` `eval`: kept the branch's
+  `Fast::Lgamma => return eval_lgamma(x, mode).map(|r| r.0)` and took next's `bessel_eval` arms (J0/J1/Y0/Y1).
+  Merged head clippy + static rc 0 (`-lint1`).
+- Gate `libm-f32-rest-next-3-gate` (`affected --run --base origin/next`, keke) and plants
+  `libm-f32-rest-next-3-plants` (handoff/LIBM-F32-REST-NEXT-plants.txt, /dev/shm/claude/LIBM-F32-REST-NEXT-3/plants-1):
+  both rc 0 on the merged head `84025d548` (later commits touch only handoff/ and validation/percall/erff.c). Gate:
+  `affected: ok`, peak 1.4G, oom_kill 0; `liella::hot_text_products` was selected (the suite holding -2's red
+  `init_data_clusters_hold_at_every_text_phase`) and `test -p liella` passed, so the layout red is gone with the
+  layout lane's fix; one SKIPPED line, liella-rt matched no test. Plants: 4 CAUGHT, 0 SURVIVED, 1 EQUIVALENT
+  (edge-lowpart, reason in the file), 0 WARN-RC-ONLY / WARN-NO-MSG (only the WARN-DEV-SHM note for /dev/shm).
+- lgammaf evidence from -1 still holds (same product code): exhaustive 2^32 x 4 modes rc 0, lgammaf_zero 1049 instr
+  vs about 500k before (glibc 543), cbench lgammaf 315.7 (glibc 277.3; was mean 2257). D-10.87.
 
-## Run 2: the two survivors (handoff/LIBM-F32-REST-2-plants.txt, job `f32rest2-plants1` on kanon)
-- `red-lowpart` (the fit's u^7 term dropped): moves results by ≤ |AT7|·(1/64)^7 ≈ 2^-44.8 ≈ 300 double ulp, above
-  the margin 64, so only operands within ~300 ulp(double) of a `float` boundary change; the sampled gate test never
-  meets one. Not dead code. The plant now runs the atanf exhaustive sweep (every third operand, 4 directions).
-- `asin-partial-write`: run 1's mutant `f64::from(x).abs()` compiled to `pand %xmm0,%xmm1; cvtss2sd %xmm1,%xmm1`
-  (disassembly of the mutant product): the conversion's destination was written two instructions earlier, which is
-  not D-10.67/D-10.68's hazard, so `cargo xtask partial-write` passing it was correct; the checker needs no change.
-  The new mutant converts the signed operand (`f64::from(x)`, sign removed afterwards by `0.0 - a`), which stays live
-  for the envelope, so the conversion merges into a register the export has not written: the hazard the plant names.
+## Profile of erff, erfcf, hypotf (-3; Zen 1, instructions per call, keke `libm-f32-rest-next-3-prof2`)
+Per-call spec `validation/percall/erff.c` (bench rows [-5, 5] plus one case per kernel branch); hypotf from
+`validation/percall/hypotf.c`. `wl_percall --base none`; traces by `wl_trace --list` (call 11).
+| case | glibc | Liella | ratio | Liella split of one call (trace) |
+|---|---:|---:|---:|---|
+| erff ([-5,5]) | 139.2 | 155.9 | 1.12 | |
+| erff_small (\|x\| < 1) | 59.5 | 125.0 | 2.10 | 115: envelope `mret::elem` 45 + MXCSR read 3 + entry 2 = 50; kernel+round+stats 65 |
+| erff_big (1..4) | 160.9 | 180.0 | 1.12 | 170: envelope 50; kernel 120 |
+| erfcf ([-5,5]) | 143.0 | 163.8 | 1.15 | (self-check MISMATCH on erfcf(0x1.b12e88p+0): glibc 0x1.11c964p-6, Liella 0x1.11c966p-6; exact 0x1.11c9655...p-6 (pinned for the double row in crates/boundary/tests/erf_quick.rs), so Liella's is the correctly rounded one) |
+| erfcf_small | 62.5 | 125.0 | 2.00 | 115: envelope 50; kernel 65 |
+| erfcf_pos (1..9) | 167.6 | 187.0 | 1.12 | 177: envelope 50; kernel 127 |
+| erfcf_neg (-4..-1) | 164.4 | 182.0 | 1.11 | 172: envelope 50; kernel 122 |
+| hypotf | 37.0 | 50.0 | 1.35 | 39: out-of-line `liella_machine_mxcsr_get` 3 + `liella_machine_sqrtsd` 2 + body 34 |
+Timing (results/timing-sweep-1110-table.md, Ivy Bridge): erff 1.66x, erfcf 1.80x, hypotf 1.72x glibc in time against
+1.28 / 1.33 / 1.37 by instructions: the time gap is larger than the instruction gap, as expected from the MXCSR
+store/load (and, for erff/erfcf, the envelope's exit) on every call.
+**Verdict: the profile names the entry, not the kernels.** erff/erfcf still go through the full `mret::elem` envelope
+(50 of 115 instructions on the |x| < 1 path, more than glibc's whole call); hypotf reads MXCSR through an out-of-line
+call before its (already one-pass-shaped) `sqrtsd` body. Changing the polynomials would not reach the gap.
 
-## lgammaf profile (job `f32rest2-lgprobe`, scratch probe, instructions:u per call per operand)
-cbench_libm's lgammaf row has 256 fixed operands in [-10, 10]. Liella mean 2257.2 instr/call, glibc 274.1. ONE
-operand, x = -3.14382577 (bits c0493471, next to lnΓ's zero near -3.1435), costs 499 513 instructions (the 384-bit
-path); every other operand ≤ 354.4. Without it Liella's mean is ≈ 307 (1.12x). The time ratio 9.18x is this one
-mp call, not latency: the 1110 table's instr column for lgammaf is 7.765 (the "1.04"/1.001 in the brief is the
-change column). Cause: `special::lgamma` sends a `float` that `fast32::lgamma_core` refuses (|y| < 2^-8 beside the
-negative zeros, |x| < 2^-20) straight to `lgamma_accurate`; the `double` tier (`fast_gamma`) is used for `double` only.
+## Design for the follow-up (not started here: budget)
+1. `erf_onepass_any` / `erfc_onepass_any` in `crates/math/src/fast32/erf.rs`, exported through
+   `mret::elem32_onepass` (s10_math.tsv row, `cargo xtask math-gen`): operand from bits for normal finite x (zero,
+   subnormal, inf, NaN refused before any FP op), the existing `erf_small` / `erfc_big` (its `exp_z` is already proved
+   in every direction in exp_onepass's proof, |z| < 2^13.95 here), ±ERF_ONE / ERFC_TWO saturation, erfc refused from
+   9.1875 (0x4113_0000; subnormal results), margin test + `cvtsd2ss`. Bounds redone with 2^-52 per operation
+   (estimate: erf ≤ ~101u -> delta 256; erfc ≤ ~636u (erfc_big's exp part 2^-43.69) -> delta 1024). Proof: add both
+   to the ONEPASS table in crates/boundary/tests/s10_math_symbols.rs (entries-match test + two 2^32 x 4-direction
+   sweeps). Expected: erff_small about 125 -> ~45 (glibc 59.5), bench rows about -60 each.
+2. hypotf: the same contract holds for its body (squares of normal floats are exact normal doubles; a refused sum
+   or root inexact implies an inexact result), so it can drop the MXCSR read: refuse NaN/inf and subnormal operands
+   on the bits (umax/umin of |bits|), keep the range and midpoint tests, `sqrtsd` inline from `hot` (as asinf), entry
+   `elem32_onepass2`. Prove with the 10^9-pair job plus the hypotf sweep already in s10_math_symbols.
+3. Book IVB + N100 timing for erff/erfcf/hypotf after 1-2 (the timing gap is the target, ≤ 1.3x IVB).
 
-## Run 3 (LIBM-F32-REST-3): merge with next only (coordinator scope 11-10)
-- CI stopped on a conflict in `crates/math/src/fast32.rs`: LIBM-F128-TRIG-INT widened the `trig` re-export
-  (`cos/sin/tan_nearest_widen`) on the line beside this branch's `inv_trig` re-export of the one-pass kernels.
-  Merge `9db84d304` keeps both lines; nothing else changed. `s10_math.tsv` merged cleanly (next moved sinf/cosf/tanf
-  to `crate::hot`, this branch moved asinf/acosf/atanf/atan2f: disjoint rows), and `cargo xtask math-gen` on the merged
-  tree reproduces the merged `s10_math_gen.rs` byte for byte (job `libm-f32-rest-3-lint`: MATHGEN, clippy, static ok).
-- On the merged head `9b3103cdf` (shiki:~/w/sh1): `libm-f32-rest-3-gate` = `cargo xtask so`, `cargo xtask static`
-  (partial-write: 790 exports walked, 0 findings) and `affected --run --base origin/next`: rc 0, 4085 passed /
-  0 failed, conformance 20/20, peak 12G, oom_kill 0 (2 SKIPPED lines: tool or capability absent, not this change).
-  `libm-f32-rest-3-plants` (handoff/LIBM-F32-REST-3-plants.txt = run 1's five caught plants + run 2's two): rc 0, 7 CAUGHT, 0 SURVIVED,
-  0 WARN (asin-partial-write is caught by `cargo xtask partial-write`'s finding, which names no test).
-- No exhaustive job rerun: the merge changed no line of the one-pass kernels or their exports (only the `pub use`
-  line), and next's trig change is next's own (proved on its own branch).
-
-## Run 4 (LIBM-F32-REST-4): merge with next after LAYOUT-TEXT-PIN-11 (coordinator scope 11-10)
-- Branch `task/libm-f32-rest-4`, role keke:~/w/n1. CI red on run 3's head was liella::hot_text_products
-  (coreutils-shaped 60 > 58, startup-only 18 > 17): start-up layout jitter from libm text growth, which
-  LAYOUT-TEXT-PIN fixes. Inherited head `2e8af38fb`: clippy + static ok (job `libm-f32-rest-4-lint0`).
-- Merged origin/next `c0b379b7e` (has LAYOUT-TEXT-PIN-11) cleanly as `8c3abce43`; no product code changed.
-  `libm-f32-rest-4-hottext` (`cargo xtask so` + `cargo test -p liella --test hot_text_products`): 21 passed,
-  0 failed; coreutils-shaped tool 54 faults (bound 58). No section moved, no bound touched.
-- Head `cdd3d267f` (plants file handoff/LIBM-F32-REST-4-plants.txt = run 3's seven plants): gate
-  `libm-f32-rest-4-gate` (so, clippy, static, affected --run --base origin/next): rc 0, 4165 passed / 0 failed,
-  conformance 20/20, peak 11G, oom_kill 0 (2 SKIPPED lines: tool or capability absent). Plants
-  `libm-f32-rest-4-plants`: rc 0, 7 CAUGHT, 0 SURVIVED, 0 WARN (WARN-DEV-SHM only: copy under /dev/shm).
-  The f32 inverse-trig work is verified on that head.
-- Next moved during the run (`e167f4952`, `sincos_nearest_widen` added to the same `pub use trig` line): merge
-  `de0e27553` keeps both (this branch's inv_trig line, next's trig line). Final-head jobs, detached on keke and named
-  for the dispatcher: `libm-f32-rest-4-gate2` (math-gen reproduces s10_math_gen.rs byte for byte, so, clippy, static,
-  affected --run --base origin/next, hot_text_products) and `libm-f32-rest-4-plants2` (same seven plants).
-
-## Run 5 (LIBM-F32-REST-5): merge with next only (coordinator scope 11-10)
-- Branch `task/libm-f32-rest-5`, role shiki:~/w/sh2. CI stopped on run 4's head `04f3cfd95` with a conflict in
-  `crates/boundary/src/posix/s10_math.tsv`. Inherited head: clippy + static ok (job `libm-f32-rest-5-lint0`).
-- Conflict: next folded binary128 asin/acos into the long double rows (`asin lq` / `acos lq` through
-  `math::wide::asin_sqrt` / `acos_sqrt`); this branch had split the base's `fq` rows into `f` (one-pass) and `q`.
-  Merge `edec3a13a` keeps this story's `f` rows and next's `lq` rows; the branch's `q` rows are dropped (next's `lq`
-  covers binary128). `cargo xtask math-gen` on the merged tree reproduces the auto-merged `s10_math_gen.rs` byte for
-  byte (job `libm-f32-rest-5-mathgen`, sha256 963fd130...).
-- Final-head jobs on shiki: `libm-f32-rest-5-gate` (math-gen, so, clippy, static, affected --run --base
-  origin/next, hot_text_products) and `libm-f32-rest-5-plants` (handoff/LIBM-F32-REST-4-plants.txt, the seven
-  plants, unchanged), both on merge head `edec3a13a`. Gate rc 0: math-gen hash unchanged, 4192 passed / 0 failed
-  (1163 ignored), conformance 21/21, hot_text_products 22/22, peak 14G (page cache), oom_kill 0. Plants rc 0: 7 CAUGHT,
-  0 SURVIVED, 0 WARN (results in handoff/LIBM-F32-REST-5-plants.txt; asin-partial-write is caught by the
-  partial-write finding, which names no test). No exhaustive rerun: the merge changed no line of the one-pass kernels.
-
-## Next step (a new story the coordinator queues after this lands; not this branch)
-1. lgammaf: in `lgamma_core`, replace the near-zero `None` (and gamma_core's |x| < 2^-20 refusal) by a `#[cold]`
-   call to `fast_gamma::lgamma_kernel(xd)` when `fast_gamma::domain(xd, false)`: y (double-double) with absolute
-   bound eps (tables 2^-75 relative, D 2^-99); return (RN(y.hi + y.lo), ceil(eps/ulp + 1/2) + 1) as the margin in ulp
-   of y, so `eval`'s existing rounding test and status logic apply. Float operands beside the zeros have |y| ≳ 2^-26,
-   so the margin is a few ulp. Zeros below -16 have no float in their |y| < 2^-8 window except the poles. Prove the
-   margin in the doc comment, re-run `lgammaf_fast_path_agrees_exhaustively` (≈ 600 s; its near-zero tally should go
-   to ~0), plant the cold call, count with a per-call spec using the bench's 256 operands. Expected ≈ 310 vs 274.
-2. Booked timing (Ivy Bridge: nico or kotori, the less busy; N100) of asinf, acosf, atanf, atan2f, Liella vs glibc
-   (instruction mix changed: `sqrtsd`); target ≤ 1.3x IVB. 3. erff/erfcf/hypotf one-pass.
+## Open / other next steps
+- asinf/acosf division-free: LIBM-ASINF-NODIV (#4924), not this story.
+- Optional: lgammaf x < -42 (non-pole) and the rounding-test refusals in 2^-8 ≤ |y| < 1 still take the 384-bit path (#4918).
 Not to redo: integer kernels for f32 (DESIGN 3.5 B); a partial-write conversion (D-10.67); the round-to-nearest
-index `s·32 + 1.5·2^52` in a one-pass kernel (use `atan_red_any`). Plan rows: D-10.63, D-10.67, D-10.68, D-10.72, D-10.82.
+index `s·32 + 1.5·2^52` in a one-pass kernel (use `atan_red_any`); the .data1 attribution (-2; fixed by the layout
+lane). Plan rows: D-10.13, D-10.63, D-10.67, D-10.82, D-10.87, D-10.95.

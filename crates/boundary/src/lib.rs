@@ -99,6 +99,7 @@ mod bootstrap;
 mod arch;
 #[cfg(feature = "ld")]
 pub mod ld;
+pub mod dlerr;
 pub mod export;
 pub mod data;
 pub mod caller_alloc;

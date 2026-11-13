@@ -1006,6 +1006,51 @@ pub fn elem_fast<const HW: u8, A: Denorm + Pin, R: CVal<C = R> + Denorm>(
     elem_fast_cold::<HW, A, R>(x, saved, f)
 }
 
+/// [`elem_fast`] for a function whose quick phase is also proved in the directed rounding
+/// directions (D-10.94; `double` exp): under a caller's word that is the default one but for its
+/// rounding field, `dir` runs in place in the caller's direction, on the MXCSR value read once on
+/// entry, under the same contract as `fast` (it answers only where its arithmetic raises exactly
+/// inexact); a refusal, and every other word, takes the switched path as before.
+#[inline(always)]
+pub fn elem_fast_dir<const HW: u8, A: Denorm + Pin, R: CVal<C = R> + Denorm>(
+    x: A,
+    fast: impl FnOnce(A) -> Option<R>,
+    dir: impl FnOnce(A, Rounding) -> Option<R>,
+    f: impl FnOnce(A, Rounding) -> (R, Status),
+) -> R {
+    let (saved, in_place) = peek();
+    if !in_place {
+        return elem_directed(x, saved, dir, f);
+    }
+    // As in `elem_fast`: the barrier keeps the arithmetic behind the mode branch.
+    let x = x.pin();
+    if let Some(v) = fast(x) {
+        return v;
+    }
+    elem_fast_cold::<HW, A, R>(x, saved, f)
+}
+
+/// [`elem_fast_dir`] under a word that is not the default one: the directed quick phase in
+/// place when only the rounding field differs (out of line and cold, so the round-to-nearest
+/// entry keeps its size), else, and on a refusal, [`elem_switched`] on the same `saved`.
+#[cold]
+#[inline(never)]
+fn elem_directed<A: Denorm + Pin, R: CVal<C = R> + Denorm>(
+    x: A,
+    saved: u32,
+    dir: impl FnOnce(A, Rounding) -> Option<R>,
+    f: impl FnOnce(A, Rounding) -> (R, Status),
+) -> R {
+    if fpu::is_default_but_rounding(saved) {
+        // The barrier keeps the arithmetic behind the word test (traps may be unmasked otherwise).
+        let x = x.pin();
+        if let Some(v) = dir(x, fpu::rounding_of(saved)) {
+            return v;
+        }
+    }
+    elem_switched(x, saved, f)
+}
+
 /// [`elem_fast`]'s fallback in the default mode, out of line and cold (register 16.5 #4) so the
 /// fast path keeps nothing in callee-saved registers for it: the accurate path in place against
 /// the MXCSR value read on entry.

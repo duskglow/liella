@@ -1,0 +1,69 @@
+{
+ "task": "LAYOUT-TRACE-AT-BUILD-4",
+ "model": "opus",
+ "tokens": null,
+ "result": "merged origin/next twice (hottext.rs group(): layout handling kept with LAYOUT-FIRST-WINDOW; regen.sh trace(): coverage record kept with LAYOUT-TRACE-HOST-CANONICAL's environment); next's first-window margin test reads the products' list; the --replace allow-list prune is skipped on the trace-at-build path and so fails a trace that writes crates/libc-so; trace-mode so green in both profiles",
+ "branch": "task/layout-trace-at-build-4",
+ "head": "9237acb84",
+ "gate": {
+  "affected": "ltab4-gate2 (FULL by escalation) running at hand-back; on the first merge's head 7635ff45e ltab4-gate was green: 32 suites, 11714 passed / 0 failed, conformance 132/0",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "affected --run --base origin/next escalates to the FULL gate for any xtask/src/*.rs change (xtask: its commands are part of the gate); both gates ran FULL (~77 min each on keke)",
+  "next moved during this run's first gate (LAYOUT-TRACE-HOST-CANONICAL landed): handback-check's merge-with-next note caught the second conflict"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "unblock",
+   "what": "LAYOUT-TRACE-AT-BUILD (LT-1) mergeable with next again; enables LT-2, LT-3 (plan/layout-rethink.md)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  },
+  {
+   "kind": "correctness",
+   "what": "init_startup_group_ends_inside_the_first_fault_around_window on trace-mode products: counted the committed list's start-up tier (95) instead of the product's (91), reported margin -804 B; the real group ends 0x41798c, inside the 0x408000..0x418000 window (fast, link map of the first merge's head)",
+   "before": -804,
+   "after": 1652,
+   "unit": "bytes margin (fast, trace mode)",
+   "measured": true
+  },
+  {
+   "kind": "correctness",
+   "what": "a trace-mode so no longer rewrites the committed crates/libc-so/hot-text.absent (next's --replace prune); any write into crates/libc-so during the trace is put back and fails the build by name",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  },
+  {
+   "kind": "tooling",
+   "what": "opt-in LIELLA_LAYOUT_TRACE=1 on the final head: fast 103/510/155 and release 104/455/156 startup/hot/probe keys traced, hot_text_products 24 passed in both profiles",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "plants on the final head (trace mode, fast): 4 inherited (rename plant retargeted to link_positions) plus ltab-prune-committed-absent",
+   "before": 4,
+   "after": 5,
+   "unit": "plants",
+   "measured": true
+  }
+ ],
+ "jobs": [
+  "ltab4-so3",
+  "ltab4-plants3",
+  "ltab4-gate2"
+ ],
+ "improvement": "a test that reads crates/libc-so/hot-text.list directly passes on next and fails only for trace-mode products; a static check (hot_text_products.rs reads lists only through generated_list) would catch the next one before a merge",
+ "next_step": "land; then LT-2 (clusters by probe phase), LT-3",
+ "report_file": "handoff/LAYOUT-TRACE-AT-BUILD.md"
+}

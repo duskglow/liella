@@ -1,0 +1,35 @@
+{
+ "task": "LIBM-F32-REST-NEXT-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: LAYOUT-JITTER. gate4's red attributed: origin/next passes init_data_clusters_hold_at_every_text_phase (tool 54 at all pads), the branch fails (55 at 9 pads) because the single LTO object emits the same 153 .data1 start-up objects (same sizes) in another order, so padding moves them across a page; the branch changes no start-up code. Booked IVB/N100 timing of asinf/acosf/atanf/atan2f/lgammaf recorded (asinf 2.9-3.0x, acosf 2.3-2.5x, atanf 1.3-1.5x, atan2f 0.8-0.9x, lgammaf 1.3-1.7x glibc). erff/erfcf/hypotf not started.",
+ "branch": "task/libm-f32-rest-next-2",
+ "head": "ff3f96ffc",
+ "gate": {
+  "affected": "not rerun; gate4 (same product code) 1 failed: hot_text_products init_data_clusters_hold_at_every_text_phase, attributed to .data1 member order (layout jitter); exh4, plants4, percall4, bench4 rc 0",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "layout lane: .data1 member order follows LLVM's emission order in the one fat-LTO object, so any code change can repack start-up state across a page", "recommendation": "order .data1 members deterministically when move_startup_state renames them (declared-list order, or alignment then name); hold this branch until then"},
+  {"item": "asinf/acosf are 2.3-3.0x glibc in time on IVB and N100 while 1.2-1.35x by instructions (sqrt then divide on every operand)", "recommendation": "new story: asinf/acosf without the division (polynomial in a for |a| <= 1/2, half-angle form above, one root; Cody & Waite ch. 10) and atanf's 1/a, verdict by booked timing"}
+ ],
+ "informational": [
+  "bench4 (Zen 1, unbooked): lgammaf 315.7 instr/call vs glibc 277.3 (was mean 2257)",
+  "IVB timing spread is wide (up to 1.6x between runs); N100 tight",
+  "erff/erfcf/hypotf one-pass not started: profile their time first, since the timing shows the one-pass form alone does not decide the time"
+ ],
+ "refused": [],
+ "improvement": "a cheap per-symbol .data1 diff (objdump -t, llvm suffixes dropped, address order) would let the layout tests print which start-up objects moved pages instead of only the fault count",
+ "next_step": "hold for the .data1 ordering fix, then re-gate (affected --base origin/next); separately cut an asinf/acosf division-free story; then erff/erfcf/hypotf",
+ "report_file": "handoff/LIBM-F32-REST.md",
+ "jobs": [
+  "kanon:libm-f32-rest-next-2-lint2",
+  "nico:libm-f32-rest-next-2-ivb",
+  "nozomi:libm-f32-rest-next-2-n100",
+  "shiki:libm-f32-rest-next-exh4",
+  "shiki:libm-f32-rest-next-plants4",
+  "shiki:libm-f32-rest-next-percall4",
+  "shiki:libm-f32-rest-next-bench4"
+ ]
+}
