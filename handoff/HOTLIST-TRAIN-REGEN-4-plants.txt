@@ -15,3 +15,11 @@ override-ignored | xtask/src/hotlists.rs | lit:    if let Some(d) = &mode.over {
 hand-written-from-copy | xtask/src/hotlists.rs | lit:        Some(name) if GENERATED.contains(&name) => Ok(lists()?.join(name)), ==>         Some(name) => Ok(lists()?.join(name)), | cargo test -p xtask --bin xtask hotlists:: | msg:branch_reads_the_fresh_copy_with_an_info_line.*(FAILED|panicked)|panicked.*branch_reads_the_fresh_copy
 # cache-shared: the process-wide cache answers every root with the first root's directory.
 cache-shared | xtask/src/hotlists.rs | lit:    if first == root { r.clone() } else { once() } ==>     if first == root || root.is_absolute() { r.clone() } else { once() } | cargo test -p xtask --bin xtask hotlists:: | msg:the_cached_directory_belongs_to_its_root.*(FAILED|panicked)|panicked.*the_cached_directory_belongs
+# cargo xtask plants results (7 plants: 7 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# train-stale-passes: CAUGHT, caught by xtask hotlists::tests::train_fails_on_a_stale_tracked_list
+# train-from-process: CAUGHT, caught by xtask hotlists::tests::branch_reads_the_fresh_copy_with_an_info_line
+# branch-stale-fails: CAUGHT, caught by xtask hotlists::tests::branch_reads_the_fresh_copy_with_an_info_line
+# other-tree-read: CAUGHT, caught by xtask hotlists::tests::a_regeneration_of_another_tree_is_not_read
+# override-ignored: CAUGHT, caught by xtask hotlists::tests::a_regeneration_of_another_tree_is_not_read
+# hand-written-from-copy: CAUGHT, caught by xtask hotlists::tests::branch_reads_the_fresh_copy_with_an_info_line
+# cache-shared: CAUGHT, caught by xtask hotlists::tests::the_cached_directory_belongs_to_its_root
