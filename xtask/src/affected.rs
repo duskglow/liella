@@ -3228,15 +3228,24 @@ fn conf_tail(what: &str, path: &Path) -> String {
 /// signal, missing stderr text) and the tails of its stdout and stderr in `build`. A program that did not build (or
 /// whose helper did not) shows its build log instead: its stdout and stderr files there are an earlier run's. Programs
 /// that passed print nothing; a failed step that names no program shows the end of its own output.
+/// A dynamic-link program (CONF-DYN-HELPERS) runs twice: its lines name the run, `<name> (reference): ...` or
+/// `<name> (Liella): ...`, and its FAIL line `FAIL <name> on Liella (stderr: conformance/build/<file>)` names the
+/// run's own stderr file; the report prefixes each end with its run and tails that run's files.
 fn conformance_failures(build: &Path, own: &str) -> String {
     let mut failed: Vec<(&str, &str)> = Vec::new();
-    let mut details: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    let mut details: BTreeMap<&str, Vec<String>> = BTreeMap::new();
     for l in own.lines() {
         let Some(r) = l.strip_prefix("conformance: ") else { continue };
         if let Some(f) = r.strip_prefix("FAIL ") {
             let (name, why) = f.split_once(' ').unwrap_or((f, ""));
-            failed.push((name, why.trim().trim_start_matches('(').trim_end_matches(')')));
+            let why = why.trim();
+            let why = why.strip_prefix('(').map_or(why, |w| w.strip_suffix(')').unwrap_or(w));
+            failed.push((name, why));
         } else if let Some((name, d)) = r.split_once(": ") {
+            let (name, d) = match name.split_once(" (").and_then(|(n, run)| Some((n, run.strip_suffix(')')?))) {
+                Some((n, run @ ("reference" | "Liella"))) => (n, format!("{run}: {}", describe_status(d))),
+                _ => (name, describe_status(d)),
+            };
             if !name.is_empty() && !name.contains(' ') {
                 details.entry(name).or_default().push(d);
             }
@@ -3252,11 +3261,14 @@ fn conformance_failures(build: &Path, own: &str) -> String {
         return out;
     }
     for (name, why) in failed {
-        let how: Vec<String> = details.get(name).into_iter().flatten().map(|d| describe_status(d)).collect();
+        let how: Vec<String> = details.get(name).into_iter().flatten().cloned().collect();
         out.push_str(&format!("conformance FAILED: {name}: {}\n", if how.is_empty() { why.to_string() } else { how.join("; ") }));
-        if why.starts_with("stderr:") {
-            out.push_str(&conf_tail("stdout", &build.join(format!("{name}.log.stdout"))));
-            out.push_str(&conf_tail("stderr", &build.join(format!("{name}.log.stderr"))));
+        // The run's stderr file, as run.sh names it (`<name>.log.stderr`, or `<name>.log.<run>.stderr` for one run of a
+        // dynamic-link program); its stdout sits beside it.
+        let stderr = why.split_once("stderr: conformance/build/").map(|(_, f)| f.split(')').next().unwrap_or(f));
+        if let Some(file) = stderr.and_then(|f| f.strip_suffix(".stderr")).filter(|f| !f.is_empty() && !f.contains('/')) {
+            out.push_str(&conf_tail("stdout", &build.join(format!("{file}.stdout"))));
+            out.push_str(&conf_tail("stderr", &build.join(format!("{file}.stderr"))));
         } else if build.join(format!("{name}.log")).exists() && (why.contains("does not build") || why.contains("helper")) {
             out.push_str(&conf_tail("build log", &build.join(format!("{name}.log"))));
         }
@@ -4160,6 +4172,11 @@ for n in "$@"; do
   nobuild) echo STALE-STDOUT > $b/nobuild.log.stdout; echo STALE-STDERR > $b/nobuild.log.stderr
        echo "x.c:1: error: boom" > $b/nobuild.log
        echo "conformance: FAIL nobuild (does not build; see conformance/build/nobuild.log)"; fail=$((fail + 1)) ;;
+  dyn) echo STALE-DYN-OUT > $b/dyn.log.stdout; echo STALE-DYN-ERR > $b/dyn.log.stderr
+       echo "dyn-ref-out" > $b/dyn.log.ref.stdout; echo "dyn-liella-out" > $b/dyn.log.liella.stdout
+       echo "dyn-liella-err" > $b/dyn.log.liella.stderr
+       echo "conformance: dyn (Liella): status 139, expected 0"; echo "conformance: dyn (Liella): stderr lacks: dyn text"
+       echo "conformance: FAIL dyn on Liella (stderr: conformance/build/dyn.log.liella.stderr)"; fail=$((fail + 1)) ;;
   esac
 done
 echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
@@ -4198,6 +4215,23 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
         let _ = fs::remove_dir_all(&root);
     }
 
+    // Trace: no spec clause (test-harness reporting, D-X.27, CONF-DYN-HELPERS): a dynamic-link program failing on Liella
+    // reports Liella's end with the run named and the tails of Liella's own stdout and stderr, not the reference's run
+    // or the static-mode files of an earlier build.
+    #[test]
+    fn a_failed_dynamic_link_conformance_program_reports_the_failing_run() {
+        let root = fake_conformance_root("dyn");
+        let log = root.join("target").join("affected.log");
+        let (ok, report) = run_conformance(&root, &log, &["good", "dyn"]);
+        assert!(!ok, "{report}");
+        let want = "conformance FAILED: dyn: Liella: killed by signal 11 SIGSEGV (status 139), expected 0; Liella: stderr lacks: dyn text\n  stdout (1 lines):\n    | dyn-liella-out\n  stderr (1 lines):\n    | dyn-liella-err\n";
+        assert!(report.contains(want), "missing {want:?} in:\n{report}");
+        for not in ["STALE-", "dyn-ref-out", "good"] {
+            assert!(!report.contains(not), "unexpected {not:?} in:\n{report}");
+        }
+        let _ = fs::remove_dir_all(&root);
+    }
+
     // Trace: no spec clause (test-harness reporting, D-X.27): a failed step naming no program still shows how it ended.
     #[test]
     fn a_conformance_step_failing_without_a_program_shows_its_end() {
@@ -4215,10 +4249,18 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
         for want in [
             r#"log="$here/build/$name.log""#,
             r#"2>"$log.stderr" >"$log.stdout""#,
-            r#"echo "conformance: $name: status $rc, expected $want_exit""#,
-            r#"echo "conformance: $name: stderr lacks: $text""#,
+            r#"echo "conformance: $1: status $rc, expected $want_exit""#,
+            r#"echo "conformance: $1: stderr lacks: $text""#,
+            r#"verdict "$name" "$log.stderr""#,
             r#"echo "conformance: FAIL $name (stderr: conformance/build/$name.log.stderr)""#,
             r#"echo "conformance: FAIL $name (does not build; see conformance/build/$name.log)""#,
+            r#"run_dyn "$exe" "$hdir" ref"#,
+            r#"verdict "$name (reference)" "$log.ref.stderr""#,
+            r#"echo "conformance: FAIL $name on the reference (stderr: conformance/build/$name.log.ref.stderr)""#,
+            r#"run_dyn "$exe-liella" "$ldir" liella"#,
+            r#"verdict "$name (Liella)" "$log.liella.stderr""#,
+            r#"echo "conformance: FAIL $name on Liella (stderr: conformance/build/$name.log.liella.stderr)""#,
+            r#"2>"$log.$3.stderr" >"$log.$3.stdout""#,
         ] {
             assert!(run.contains(want), "conformance/run.sh no longer has {want:?}: update conformance_failures");
         }
