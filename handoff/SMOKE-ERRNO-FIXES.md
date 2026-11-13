@@ -24,11 +24,11 @@ readdir_removed: reference `NULL errno 0`, Liella `NULL errno 2`. setlocale_errn
 Liella `errno 0`. scandir with a filter that removes the directory: reference n=5 errno 0, Liella -1 ENOENT;
 readdir with errno preset 1234: reference leaves 1234; readdir_r returns 0.
 
-## Jobs (final head a5e3b8f57)
-smoke-errno-fixes-gate (clippy + static + affected --run --base origin/next), smoke-errno-fixes-plants2
+## Jobs (code head 0e5e0872c)
+smoke-errno-fixes-gate2 (clippy + static + affected --run --base origin/next), smoke-errno-fixes-plants3
 (3 plants, handoff/SMOKE-ERRNO-FIXES-plants.txt). Superseded: smoke-errno-fixes-check (static red: fs-order
-on read_dir in the new test filter, records `amends` type; both fixed in a5e3b8f57), smoke-errno-fixes-plants
-(killed: started on the older head).
+on read_dir in the new test filter, records `amends` type), smoke-errno-fixes-gate (fs-order: scandir call
+without an FS-ORDER note, fixed in 0e5e0872c), smoke-errno-fixes-plants and -plants2 (killed, older heads).
 
 ## Open
 * RULING NEEDED: clause s13_2_f_0's text still lists "ENOENT (the directory was removed)" as a readdir error;
