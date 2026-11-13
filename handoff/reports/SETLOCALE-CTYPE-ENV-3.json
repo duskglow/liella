@@ -1,0 +1,26 @@
+{
+  "task": "SETLOCALE-CTYPE-ENV-3",
+  "model": "opus",
+  "tokens": null,
+  "result": "hot-text lists regenerated for the setlocale(cat, \"\") path in both profiles: start-up fault bounds green again (init_short_programs, init_coreutils_shaped); run 2's per-call gains kept (LC_ALL \"\" LANG only 7180 -> 4296)",
+  "branch": "task/setlocale-ctype-env-3",
+  "head": "9f20a6bdd",
+  "gate": {"affected": "pending: setlocale-ctype-env-3-gate (escalated to FULL by hot-text.list); hot_text_products init_ 22 passed; plants 5/5 CAUGHT", "peak": null},
+  "accepted_first_attempt": null,
+  "rulings": [],
+  "informational": [
+    "regen.sh --both refused to drop iconv Conv::to_words (fast): it is now inlined into every caller (libc.a has no call relocation to it), an inlining shift from legacy-crate changes; dropped with --allow-drop",
+    "new hot-text.unpinned lines for setlocale_env's closure, setlocale_env_kept and CText::read_at, and find_named's candidates closure restored; textdomain's line moved to tier tool (the regen moved the key)",
+    "one empty no-op heredoc and one git show origin/next:<file> (printed nothing) used in this run against the rules"
+  ],
+  "refused": [],
+  "impact": [
+    {"kind": "faults", "what": "start-up minor faults, setlocale+printf and coreutils-shaped programs: back within bounds 51 / 56 (run 2: 55 / 58)", "before": 55, "after": null, "unit": "faults", "measured": false},
+    {"kind": "perf", "what": "setlocale(LC_ALL, \"\") repeated, LANG only, release per call (run 2's measurement; this run changed layout lists only)", "before": 7180, "after": 4296, "unit": "instr/call", "measured": false},
+    {"kind": "perf", "what": "setlocale(LC_CTYPE, \"\") repeated, release per call (base 19c0ea167 -> head, run 2's measurement)", "before": 8257.0, "after": 515.1, "unit": "instr/call", "measured": false}
+  ],
+  "improvement": "regen.sh --both could print, for each key it refuses to drop, whether the section still has call relocations (inlined vs gone); that check took 3 calls by hand",
+  "next_step": "a cost bound in setlocale_env_repeat; then a cheaper environment walk for the LANG-only LC_ALL \"\" row (no memo, ruling #5298)",
+  "report_file": "handoff/SETLOCALE-CTYPE-ENV.md",
+  "jobs": ["setlocale-ctype-env-3-gate", "setlocale-ctype-env-3-plants", "setlocale-ctype-env-3-faults"]
+}
