@@ -329,7 +329,7 @@ pub fn cmd(root: &Path, args: &[String]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{differing, dir, rel_in, resolve, tree_hash, Mode, GENERATED, OUT, STAMP, TRACKED};
+    use super::{differing, dir, marked_dir, marker_text, rel_in, resolve, tree_hash, Layout, Mode, GENERATED, MARKER, OUT, STAMP, TRACKED};
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -428,5 +428,41 @@ mod tests {
             assert_eq!(dir(root).unwrap(), resolve(root, &Mode::from_env()).unwrap().0, "{}", root.display());
         }
         let _ = (fs::remove_dir_all(&a), fs::remove_dir_all(&b));
+    }
+
+    /// LAYOUT-TRACE-AT-BUILD (no spec clause: build tooling, ruling #5191 opt-in): the switch is off unless set to
+    /// exactly `1` (trace) or `ungrouped` (the explicit opt-out); any other value is an error, never a silent default.
+    #[test]
+    fn layout_switch_is_opt_in_and_strict() {
+        assert_eq!(Layout::parse(None), Ok(Layout::Committed));
+        assert_eq!(Layout::parse(Some("")), Ok(Layout::Committed));
+        assert_eq!(Layout::parse(Some("0")), Ok(Layout::Committed));
+        assert_eq!(Layout::parse(Some("1")), Ok(Layout::Traced));
+        assert_eq!(Layout::parse(Some("ungrouped")), Ok(Layout::Ungrouped));
+        for bad in ["yes", "true", "2", "Ungrouped"] {
+            assert!(Layout::parse(Some(bad)).unwrap_err().contains("LIELLA_LAYOUT_TRACE"), "{bad}");
+        }
+    }
+
+    /// LAYOUT-TRACE-AT-BUILD (no spec clause: build tooling): the products' marker names the lists directory on its
+    /// first line, and its text changes with any list's bytes (the layout verdict cache hashes the products
+    /// directory, so a list change must change a product file); no marker, no directory.
+    #[test]
+    fn marker_names_the_lists_and_hashes_them() {
+        let root = tree("marker");
+        let (lists, products) = (root.join("lists"), root.join("products"));
+        fs::create_dir_all(&lists).unwrap();
+        fs::create_dir_all(&products).unwrap();
+        assert_eq!(marked_dir(&products), None);
+        for g in GENERATED {
+            fs::write(lists.join(g), "# empty\n").unwrap();
+        }
+        let first = marker_text(&lists);
+        fs::write(products.join(MARKER), &first).unwrap();
+        assert_eq!(marked_dir(&products), Some(lists.clone()));
+        fs::write(lists.join("hot-text.list"), "# empty\nkey_a\tstartup\tfast\n").unwrap();
+        assert_ne!(marker_text(&lists), first, "a list change changes the marker");
+        assert_eq!(marker_text(&lists).lines().count(), 1 + GENERATED.len());
+        let _ = fs::remove_dir_all(&root);
     }
 }
