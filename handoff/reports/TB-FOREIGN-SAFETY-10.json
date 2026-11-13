@@ -15,4 +15,5 @@
  "improvement": "The affected tool escalates every hot-lists-lane branch to FULL, so these stories cannot run a direct-tier gate; a 'lists-only' tier (the layout tests + so) would give them a cheap developer gate.",
  "next_step": "Held for trace-at-build (LAYOUT-RETHINK LT-1/LT-4): then merge next, drop the hand each_block key, re-measure locale (<= 51), gate, land.",
  "report_file": "handoff/TB-FOREIGN-SAFETY.md",
- "jobs": ["tb-foreign-safety-10-lint-0", "tb-foreign-safety-10-prep-next", "tb-foreign-safety-10-faults-1", "tb-foreign-safety-10-merge-tests", "tb-foreign-safety-10-clippy-2"]}
+ "evidence": ["tb-foreign-safety-10-merge-tests (rc 1 on the final code head: the locale fault bound, 52 > 51, the reason this run is INCOMPLETE; every other selected test passed)"],
+ "jobs": ["tb-foreign-safety-10-lint-0", "tb-foreign-safety-10-prep-next", "tb-foreign-safety-10-faults-1", "tb-foreign-safety-10-clippy-2"]}
