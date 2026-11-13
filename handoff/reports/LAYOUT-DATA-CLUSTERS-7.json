@@ -1,0 +1,12 @@
+{"task": "LAYOUT-DATA-CLUSTERS-7", "model": "opus", "tokens": null,
+ "result": "release fork child 8 at the data 0x3000 pad removed: the fork child's ~50 read statics declared in startup-state.list; fork child 5 in both profiles at every data pad (inherited 7/8 release, 7 fast; next 6 release, 7 fast); FORK_BOUND 7 -> 6; D-X.70 filed (ruling #4694)",
+ "branch": "task/layout-data-clusters-7", "head": "1fa4b9a2b",
+ "gate": {"affected": "pending at hand-back (ldc7-gate on shiki); hot_text_products 22/22 release and fast in ldc7-check-1", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["FORK_BOUND 6 was measured (5) on the Haswell-EP host only; -6 saw fork 7 fast on the Skylake-SP host before this fix", "-6 open items 2 (fold the two list tests) and 4 (regen.sh header) not done: brief scoped this run to the fork case and the record"],
+ "refused": [],
+ "improvement": "a ready-made 'map faults of one probe at every pad, head vs next' tool (my map.sh) would save each layout story ~8 calls; also I used two heredocs (rule says none) - the commit -F msgfile pattern should be the only one shown in examples",
+ "next_step": "land if ldc7-gate and ldc7-plants are rc 0; else fix the failing direct test",
+ "report_file": "handoff/LAYOUT-DATA-CLUSTERS-7.md",
+ "jobs": ["ldc7-gate", "ldc7-plants", "ldc7-check-1", "ldc7-lint-final"]}

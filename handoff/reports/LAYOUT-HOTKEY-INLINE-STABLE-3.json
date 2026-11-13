@@ -1,0 +1,15 @@
+{"task": "LAYOUT-HOTKEY-INLINE-STABLE-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE checkpoint: check extended to every tier (tier column, 369-line ratchet), locale::builtin/nscache::real_secs/iconv::load pinned, dummy libm growth now kills no key in any tier (fast+release); #5026 root-caused (liella_sys_fstat pushed past the first text fault-around window by 0x240 B of start-up growth), not fixed",
+ "branch": "task/layout-hotkey-inline-stable-3", "head": null,
+ "gate": {"affected": "lhis3-gate started detached at hand-back, not waited (checkpoint)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "241 plain locale/tool/extra/stdio functions enter hot-text.unpinned with 'boundary cost not measured yet'", "recommendation": "accept as the ratchet's start; pin in batches later, each with counts"},
+  {"item": "decision record pending (records/pending/LAYOUT-HOTKEY-INLINE-STABLE-3-1.toml, D-X)", "recommendation": "assign the D-X id"}
+ ],
+ "informational": ["#5026 is text, not data: release tool probe +1 = page 0x418000 (liella_sys_fstat), first fault-around window is VMA start 0x408000 + 64 KiB; fast unchanged"],
+ "refused": [],
+ "jobs": ["lhis3-lint1", "lhis3-lint2", "lhis3-probe-headdummy", "lhis3-gate"],
+ "improvement": "sync_role BUSY matches any job whose command line names the role path; diagnostic jobs that only read the role at start should copy it to RAM first (or the tool could ignore jobs whose cwd is elsewhere)",
+ "next_step": "fix #5026 (keep liella_sys_fstat and the start-up keys inside VMA start + 64 KiB in release, with a test), counts for the 3 new pins, then gate + plants",
+ "report_file": "handoff/LAYOUT-HOTKEY-INLINE-STABLE.md"}

@@ -176,7 +176,7 @@ fn double_erf_erfc_fast_tier_matches_the_accurate_path() {
     // Clauses: s10_3_c_0 (D-10.13).
     // Where the fast tier settles, its result and status (flags and errno) are the 384-bit
     // path's, in every mode. `LIELLA_ERF_SWEEP` operands per function and mode (default 2000;
-    // the accuracy job runs 10^7).
+    // `cargo xtask long-sweeps` runs 10^5).
     let n: u32 = std::env::var("LIELLA_ERF_SWEEP").ok().and_then(|s| s.parse().ok()).unwrap_or(2000);
     for (name, fast, _, accurate) in FUNCS {
         let mut rng = Rng(0x3c6e_f372_fe94_f82b ^ name.len() as u64);

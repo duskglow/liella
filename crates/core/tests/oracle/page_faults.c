@@ -220,9 +220,16 @@ int main(int argc, char **argv, char **envp) {
         fflush(stdout);
         char b[64];
         const char *volatile s = "a line of text: compared";
+        /* #4677: the pointers live in this program's own .data; read them before f0, so the window
+         * counts libc's string calls only, not the first touch of the probe's own data page. */
+        size_t (*len)(const char *) = len_fn;
+        int (*ncmp)(const char *, const char *, size_t) = ncmp_fn;
+        void *(*mchr)(const void *, int, size_t) = mchr_fn;
+        int (*mcmp)(const void *, const void *, size_t) = mcmp_fn;
+        char *(*scpy)(char *, const char *) = scpy_fn;
         long f0 = minflt();
-        long n = (long)len_fn(s) + ncmp_fn(s, "a line", 6) + (mchr_fn(s, ':', 20) != NULL) + mcmp_fn(s, "a l", 3);
-        n += scpy_fn(b, s) == b;
+        long n = (long)len(s) + ncmp(s, "a line", 6) + (mchr(s, ':', 20) != NULL) + mcmp(s, "a l", 3);
+        n += scpy(b, s) == b;
         long f1 = minflt();
         fprintf(stderr, "minflt %ld\n", n == 26 ? f1 - f0 : -1);
         return 0;

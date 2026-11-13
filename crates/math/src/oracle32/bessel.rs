@@ -19,7 +19,7 @@ use std::sync::OnceLock;
 /// Where the series hands over to Hankel's form.
 const SWITCH: f64 = 24.0;
 /// The fast path's range (`fast32::bessel`'s `BES_MIN`, `BES_MAX`).
-const LO: f64 = 9.536_743_164_062_5e-7; // 2^-20
+const LO: f64 = 1.401_298_464_324_817e-45; // 2^-149: the series serves the tiny band too (D-10.106)
 const HI: f64 = 524_288.0; // 2^19
 /// A series stops at the first term below this fraction of the terms' magnitude sum.
 const TINY: f64 = 7.703_719_777_548_943e-34; // 2^-110

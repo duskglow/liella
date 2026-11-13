@@ -82,6 +82,8 @@ impl Registry {
     }
 
     /// Add an entry; `false` without memory (spec §1.2 failure clause 1).
+    // LAYOUT-HOTKEY-INLINE-STABLE: a fixed boundary for its start-up/fork hot-text key (off the hot paths: the call is free).
+    #[inline(never)]
     pub fn register<S: Sys, P: Pages>(&self, sys: &S, pages: &P, e: Entry) -> bool {
         let _g = self.lock.lock(sys);
         let i = self.len.load(Relaxed);
@@ -163,6 +165,8 @@ pub fn invoke(e: &Entry, status: i32, call: &mut impl CCall) {
 }
 
 /// Run every entry, most recent first, including entries registered meanwhile.
+// LAYOUT-HOTKEY-INLINE-STABLE: a fixed boundary for its start-up/fork hot-text key (off the hot paths: the call is free).
+#[inline(never)]
 pub fn run_all<S: Sys, P: Pages>(r: &Registry, sys: &S, pages: &P, status: i32, call: &mut impl CCall) {
     while let Some(e) = r.pop(sys, pages) {
         invoke(&e, status, call);

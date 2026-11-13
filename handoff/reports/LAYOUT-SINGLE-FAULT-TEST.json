@@ -1,0 +1,12 @@
+{"task": "LAYOUT-SINGLE-FAULT-TEST", "model": "opus", "tokens": null,
+ "result": "start-up data access check names every declarable library object outside .data1/.lbss by object (8 KiB limit, shared C/asm sections by symbol, start object, every probe mode); liella_machine_aio_used declared; ldc11-msg-cat-cntr now CAUGHT by name",
+ "branch": "task/layout-single-fault-test", "head": null,
+ "gate": {"affected": "pending (layout-single-fault-test-gate, direct tier, --base origin/next)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Brief premise out of date: the check already traced locale/tool (#4915); ldc11-msg-cat-cntr survived because its plant ran only the count test", "Pending record filed under series D-X, not the brief's D-10 (D-10 is libm)", "plants-1: 3 CAUGHT, 1 WARN-NO-MSG (lsft-heap-over-4k: object named in .lbss.<symbol>, regex expected .bss.); plants-2 reruns with the fixed regex", "Counts on mei, fast: true 11, locale 49, tool 52, fork 5 (bounds 17/51/56/6), not compared with next on the same host", "percall/counts: not applicable (test and 1-byte layout change, no function row)"],
+ "refused": [],
+ "jobs": ["layout-single-fault-test-lint2", "layout-single-fault-test-gate", "layout-single-fault-test-plants2"],
+ "improvement": "A plant judged EQUIVALENT by a count test should name the by-object check in its cmd first; LDC-11's survivor was caught by an existing test it never ran",
+ "next_step": "none; coordinator collects the gate and plants2 jobs",
+ "report_file": "handoff/LAYOUT-SINGLE-FAULT-TEST.md"}

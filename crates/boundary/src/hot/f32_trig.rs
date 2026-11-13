@@ -18,6 +18,12 @@ pub(crate) fn cosf_nearest(x: f32) -> Option<f32> {
     liella_math::fast32::cos_nearest_widen(x, widen)
 }
 
+/// [`sinf_nearest`] for sincos: both results from one reduction (LIBM-SINCOS-SHARED, D-10.89).
+#[inline(always)]
+pub(crate) fn sincosf_nearest(x: f32) -> Option<(f32, f32)> {
+    liella_math::fast32::sincos_nearest_widen(x, widen)
+}
+
 /// [`sinf_nearest`] for tan.
 #[inline(always)]
 pub(crate) fn tanf_nearest(x: f32) -> Option<f32> {

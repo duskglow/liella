@@ -1,0 +1,13 @@
+# TEST-LONG-SWEEPS-BOUNDARY plants: `cargo xtask plants handoff/TEST-LONG-SWEEPS-BOUNDARY-plants.txt --dir <new RAM dir> --timeout 600`
+boundary-row-dropped | xtask/src/longsweeps.rs | lit:    it("crates/boundary/tests/exp_quick.rs", "exp_quick", "exp_quick_accuracy_job" ==>     // it("crates/boundary/tests/exp_quick.rs", "exp_quick", "exp_quick_accuracy_job" | cargo test -p xtask --bin xtask longsweeps:: | msg:exp_quick.rs: the #\[ignore\]d test `exp_quick_accuracy_job` is named by no runner
+env-scale-unset | xtask/src/longsweeps.rs | lit:        .env(&[("LIELLA_INVHYP_N", "1000000")]).secs(16), ==>         .secs(16), | cargo test -p xtask --bin xtask longsweeps:: | msg:reads its size from LIELLA_INVHYP_N, which its runner row does not set
+helpers-not-followed | xtask/src/longsweeps.rs | lit:            grew |= mine.len() != before; ==>             let _ = before; | cargo test -p xtask --bin xtask longsweeps:: | msg:scaled_tests_follow_helpers.*(FAILED|panicked)|panicked.*longsweeps.rs:[0-9]+
+call-boundary-ignored | xtask/src/longsweeps.rs | lit:.any(|(at, _)| !body[..at] ==> .any(|(at, _)| at < usize::MAX || !body[..at] | cargo test -p xtask --bin xtask longsweeps:: | msg:scaled_tests_follow_helpers.*(FAILED|panicked)|panicked.*longsweeps.rs:[0-9]+
+any-env-read-is-a-size | xtask/src/longsweeps.rs | lit:|| !line.contains("parse") { ==> { | cargo test -p xtask --bin xtask longsweeps:: | msg:the environment-scaled test `[a-z0-9_]+` is named by no runner
+# cargo xtask plants results, job tlsb-plants3 on head 390fa3e91 (5 plants: 5 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# boundary-row-dropped: CAUGHT, caught by xtask longsweeps::tests::the_tables_match_the_tree
+# env-scale-unset: CAUGHT, caught by xtask longsweeps::tests::the_tables_match_the_tree
+# helpers-not-followed: CAUGHT, caught by xtask longsweeps::tests::scaled_tests_follow_helpers
+# call-boundary-ignored: CAUGHT, caught by xtask longsweeps::tests::scaled_tests_follow_helpers
+# any-env-read-is-a-size: CAUGHT, caught by xtask longsweeps::tests::scaled_tests_follow_helpers
+# (tlsb-plants2, head cbb4174b3: helpers-not-followed SURVIVED; the sample test was fixed in 390fa3e91.)

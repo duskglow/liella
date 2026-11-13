@@ -74,6 +74,8 @@ const E1C_LZCNT: u32 = 5;
 
 impl Features {
     /// Read the CPU.
+    // LAYOUT-HOTKEY-INLINE-STABLE: release already inlines it; always inlined, its code stays in the keyed caller in both profiles.
+    #[inline(always)]
     pub fn detect(m: &impl Machine) -> Features {
         // At most five queries (startup cost); leaves past the reported maximum are not read,
         // as real parts answer them with another leaf's data.

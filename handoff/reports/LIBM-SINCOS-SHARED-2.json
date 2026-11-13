@@ -1,0 +1,13 @@
+{"task": "LIBM-SINCOS-SHARED-2", "model": "opus", "tokens": null,
+ "result": "origin/next merged (binary128 sincos conflict resolved through D-10.91's shared pair); hot_text_products green on the merged head in both passes (21/21 each); sincos* share one reduction (sincosf 251->115, sincosl 1146->697 instr/call)",
+ "branch": "task/libm-sincos-shared-2", "head": null,
+ "gate": {"affected": "libm-sincos-shared-2-gate (affected --base origin/next, keke): see jobs.tsv; hot_text_products 42 passed / 0 failed", "peak": null},
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["CI red at f2db67c28 was the start-up fault bounds of hot_text_products; after merging next (LAYOUT-DATA-CLUSTERS-4C landed) they pass unchanged, no bound touched",
+                   "plants WARN-DEV-SHM: the plants copy is under /dev/shm on keke; none of the plant commands mount /dev or /dev/shm"],
+ "refused": [],
+ "jobs": ["libm-sincos-shared-2-gate", "libm-sincos-shared-2-plants", "libm-sincos-shared-2-hottext", "libm-sincos-shared-2-clippy2", "libm-sincos-shared-2-static2"],
+ "improvement": "each plant rebuilds the full products (~8 min) even when the plant command is a cargo test that does not link them; a per-plant 'needs products' flag would cut a 5-plant libm run from ~45 to ~10 min",
+ "next_step": "optional: booked Ivy Bridge/N100 timing of the sin/cos/sincos rows; sincosf 2x glibc by instructions is the f32 tier itself",
+ "report_file": "handoff/LIBM-SINCOS-SHARED.md"}

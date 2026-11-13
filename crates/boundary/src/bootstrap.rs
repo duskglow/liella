@@ -1,5 +1,5 @@
 //! The self-relocator's memory side (phase 14 DL-4, design §1, ruling R14-1, D-27.10): the
-//! program headers, dynamic array, relocation tables and writable segment of the running image
+//! program headers, dynamic array, relocation tables and writable segments of the running image
 //! become slices (category *slice*), and `liella_ld::boot` decides everything. First user: the
 //! static-PIE start of `libc.a` (`runtime::start`); `ld.so` reuses it from DL-5.
 //!
@@ -7,18 +7,20 @@
 //! (no `&'static` with addresses, no trait objects, no panics), and every call is a direct one.
 
 use liella_ld::arch::Native;
-use liella_ld::boot::{self, BootError, Segment};
+use liella_ld::boot::{self, BootError, Memory, Writer};
 
 use crate::conv;
 use crate::ffi;
 
-/// What pass 2 needs: the bias, the writable segment and the two RELA tables (run-time addresses).
+/// What pass 2 needs: the bias, the program headers (for the writable segments) and the two RELA
+/// tables (run-time addresses).
 #[derive(Clone, Copy)]
 #[cfg_attr(not(feature = "runtime"), allow(dead_code))]
 pub(crate) struct Relocated {
     /// Load address minus link address.
     pub bias: usize,
-    writable: (u64, u64),
+    headers: &'static [u64],
+    phnum: usize,
     rela: (usize, usize),
     jmprel: (usize, usize),
 }
@@ -38,16 +40,21 @@ fn table((addr, len): (usize, usize)) -> &'static [u8] {
     unsafe { conv::bytes_at(addr, len) }
 }
 
-/// The writable segment as a mutable byte view, for one relocation step.
-fn segment(bias: usize, (vaddr, memsz): (u64, u64)) -> Segment<'static> {
-    let (addr, len) = at(bias, (vaddr, memsz));
-    // UNSAFE(slice): the image's own writable PT_LOAD segment.
-    #[allow(unsafe_code)]
-    // SAFETY: the kernel mapped the segment readable and writable for `memsz` bytes at
-    // `bias + vaddr` (⚑ KERN, execve), and during relocation the thread holds no reference into
-    // it: the view lives for one relocation step and nothing else runs meanwhile.
-    let bytes = unsafe { conv::bytes_at_mut(addr, len) };
-    Segment { bytes, vaddr }
+/// The mapped image's writable segments, loaded `.0` bytes from their link-time addresses: each
+/// view is made for one store, for the segment `boot::Writer` found the target in (D-27.25).
+struct Mapped(usize);
+
+impl Memory for Mapped {
+    fn segment(&mut self, vaddr: u64, memsz: u64) -> &mut [u8] {
+        let (addr, len) = at(self.0, (vaddr, memsz));
+        // UNSAFE(slice): one of the image's own writable PT_LOAD segments.
+        #[allow(unsafe_code)]
+        // SAFETY: `boot::Writer` asks only for a writable `PT_LOAD` of the image's headers, which
+        // the kernel (⚑ KERN, execve) or `ld.so`'s mapper mapped readable and writable for `memsz`
+        // bytes at `bias + vaddr`; the view lives for one store, the thread holds no other
+        // reference into the segment meanwhile, and nothing else runs.
+        unsafe { conv::bytes_at_mut(addr, len) }
+    }
 }
 
 /// The run-time address of the executable's ELF header when the executable is a static PIE
@@ -80,12 +87,11 @@ pub(crate) fn relocate_self(phdr: usize, phnum: usize, ehdr: usize) -> Result<Re
     // bytes in the mapped image; the array is only read, and dropped before the segment view
     // below is made.
     let words = unsafe { conv::words_at(dynamic, usize::try_from(img.dynamic.1).unwrap_or(0) / 8) };
-    let t = boot::tables(words, img.writable)?;
+    let t = boot::tables(words, &img)?;
     let (rela, jmprel, relr) = (at(bias, t.rela), at(bias, t.jmprel), at(bias, t.relr));
     let (ra, ja, rr) = (table(rela), table(jmprel), table(relr));
-    let mut seg = segment(bias, img.writable);
-    boot::relocate::<Native>(ra, ja, rr, &mut seg, u64::try_from(bias).unwrap_or(0))?;
-    Ok(Relocated { bias, writable: img.writable, rela, jmprel })
+    boot::relocate::<Native, _>(ra, ja, rr, &mut Writer::new(img, Mapped(bias)), u64::try_from(bias).unwrap_or(0))?;
+    Ok(Relocated { bias, headers, phnum, rela, jmprel })
 }
 
 /// `ld.so`'s pass 1 (DL-5): its own ELF header (run-time address `ehdr` of `__ehdr_start`, taken
@@ -109,16 +115,18 @@ pub(crate) fn relocate_image(ehdr: usize) -> Result<Relocated, BootError> {
 /// after pass 1 and after the CPU paths are chosen, before the RELRO segment is protected.
 #[cfg_attr(not(feature = "runtime"), allow(dead_code))]
 pub(crate) fn irelative(r: &Relocated) -> Result<(), BootError> {
+    // The writer holds no view between stores: each is made after its resolver returns.
+    let mut writer = Writer::new(boot::image(r.headers, r.phnum)?, Mapped(r.bias));
     for (addr, len) in [r.rela, r.jmprel] {
         // UNSAFE(slice): a relocation table of the image (as in `relocate_self`).
         #[allow(unsafe_code)]
-        // SAFETY: checked by `boot::tables` in pass 1; outside the writable segment.
+        // SAFETY: checked by `boot::tables` in pass 1; outside every writable segment.
         let table = unsafe { conv::bytes_at(addr, len) };
         for (offset, addend) in boot::irelative::<Native>(table) {
             let resolver = usize::try_from(addend).unwrap_or(0).wrapping_add(r.bias);
             let value = ffi::liella_machine_call0(resolver);
             // The view is made after the resolver returns: the resolver may use the segment.
-            segment(r.bias, r.writable).store(offset, u64::from_ne_bytes(value.to_ne_bytes()))?;
+            writer.store(offset, u64::from_ne_bytes(value.to_ne_bytes()))?;
         }
     }
     Ok(())

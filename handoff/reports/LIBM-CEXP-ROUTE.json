@@ -1,0 +1,12 @@
+{"task": "LIBM-CEXP-ROUTE", "model": "opus", "tokens": null,
+ "result": "cbench_libm's one route-bound cexp operand is not a hard case (real part 2^-70.26 from a midpoint vs the quick bound 2^-66.34); a 2^-99 middle tier (wide_dd exp x Dd Taylor sin/cos, proved) now decides such parts before the 384-bit route",
+ "branch": "task/libm-cexp-route", "head": "see git: last commit of the branch (this file's commit)",
+ "gate": {"affected": "keke libm-cexp-route-gate (direct tier, --base origin/next): running at hand-back", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Booked Ivy Bridge timing not run (context budget); the common path's instruction mix is unchanged (one never-taken branch to the cold middle tier), so the periodic timing sweep can cover it", "check3 (complex_fast tests, workspace clippy -D warnings, xtask static, records check) green on the code head; plants2 4/4 CAUGHT, no WARN lines"],
+ "refused": [],
+ "improvement": "A decline-distance print in the bench-box test settled 'hard case or not' in one job; tier stories should print each decline's distance vs bound by default",
+ "next_step": "Read gate/sweep/hottext/percall/counts on keke (chain.sh); expect cexp_bench ~846 -> ~400 instructions; then cexp typical toward 300 per handoff/libm-cplx-exp-tier.md",
+ "report_file": "handoff/libm-cexp-route.md",
+ "jobs": ["libm-cexp-route-check3", "libm-cexp-route-plants2", "libm-cexp-route-gate", "libm-cexp-route-sweep", "libm-cexp-route-hottext", "libm-cexp-route-percall", "libm-cexp-route-counts"]}

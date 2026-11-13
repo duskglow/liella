@@ -173,13 +173,33 @@ fn initial_thread<const PIE: bool>(aux: &Auxv<'_>) -> (start::Program, Option<bo
 /// and their target words lie in `.got` inside RELRO), and nothing after it writes there.
 /// A dynamically linked program's segments are its loader's (phase 14). The range comes from
 /// the one header pass `initial_thread` made (STATIC-RELRO-2: no second walk of the headers or
-/// the auxiliary vector on the start-up path).
+/// the auxiliary vector on the start-up path). A `PT_GNU_RELRO` that spans two writable
+/// segments with an unmapped page between them makes that one call fail (D-27.25): only then
+/// does `relro_by_segment` walk the headers again, so the usual start carries nothing more
+/// than the test of the call's result (the fallback takes no argument: nothing is kept live
+/// across the call for it).
 #[inline(always)]
 fn protect_relro(range: Option<(usize, usize)>) {
     if let Some((addr, len)) = range {
-        // A failure (not seen in practice) leaves the segment writable: the program still runs.
-        let _ = raw::mprotect(addr, len, i32::try_from(PROT_READ).unwrap_or(1));
+        if raw::mprotect(addr, len, i32::try_from(PROT_READ).unwrap_or(1)).is_err() {
+            relro_by_segment();
+        }
     }
+}
+
+/// `PT_GNU_RELRO` made read-only segment by segment (D-27.25), after the single `mprotect` of
+/// the whole range failed: the executable's headers from `AT_PHDR`/`AT_PHNUM` of the saved
+/// auxiliary vector (`process::auxval`), at its bias (`EXE_BIAS`: set by a static PIE's start, 0
+/// for a fixed-address program).
+#[cold]
+#[inline(never)]
+fn relro_by_segment() {
+    let get = |k: u64| process::auxval(k).and_then(|v| usize::try_from(v).ok()).unwrap_or(0);
+    let (phdr, phnum) = (get(AT_PHDR), get(AT_PHNUM));
+    let words = conv::program_headers(phdr, phnum.saturating_mul(start::PHDR_WORDS));
+    let prot = i32::try_from(PROT_READ).unwrap_or(1);
+    // A failure of a piece (not seen in practice) leaves it writable: the program still runs.
+    let _ = start::relro_pieces(words, phnum, process::EXE_BIAS.load(Relaxed), start::PAGE, |a, l| raw::mprotect(a, l, prot));
 }
 
 /// Secure mode: drop the unsafe variables from the initial environment array, in place.
@@ -215,6 +235,8 @@ const R_X86_64_IRELATIVE: usize = 37;
 /// go through `bootstrap::irelative` instead), so the offsets and resolver addresses are absolute. Runs after the CPU paths are chosen (a resolver
 /// may call the library), before any constructor, and before the program's RELRO is protected
 /// (the target words lie in `.got`, which RELRO covers).
+// LAYOUT-HOTKEY-INLINE-STABLE: release already inlines it; always inlined, its code stays in the keyed caller in both profiles.
+#[inline(always)]
 fn apply_irelative() {
     let (start, end) = (ffi::liella_link_rela_iplt_start(), ffi::liella_link_rela_iplt_end());
     // `Elf64_Rela`: r_offset, r_info, r_addend.
@@ -255,6 +277,8 @@ fn run_array(start: usize, end: usize, argc: c_int, argv: usize, envp: usize) {
 
 /// A static program's destructors, registered at startup as one exit entry: `.fini_array`
 /// in reverse, then `_fini`.
+// LAYOUT-HOTKEY-INLINE-STABLE: a fixed boundary for its start-up/fork hot-text key (off the hot paths: the call is free).
+#[inline(never)]
 extern "C" fn run_fini() {
     let (start, end) = (ffi::liella_link_fini_start(), ffi::liella_link_fini_end());
     let n = end.saturating_sub(start) / 8;
@@ -329,6 +353,9 @@ pub fn early_init(info: usize) {
     let aux = Auxv::from_words(unsafe { conv::words_at(info.auxv, auxv_words) });
     crate::sys::set_sysinfo_ehdr(aux.get(AT_SYSINFO_EHDR).and_then(|v| usize::try_from(v).ok()).unwrap_or(0));
     publish(info.argv, info.argc, info.envp, info.stack_end);
+    // The loader registered the initial thread's rseq area (it honoured `glibc.pthread.rseq`):
+    // threads this library creates register theirs at the same offset (D-27.26).
+    crate::thread::set_loader_rseq(info.rseq_size != 0);
     // The tunables without diagnostics (`ld.so` read the string already).
     let secure = aux.get(AT_SECURE).is_some_and(|v| v != 0);
     // Secure mode's standard descriptors, before any constructor can open a file in their place
@@ -418,6 +445,8 @@ fn start_under_liella_ld(main: Option<Main>, argc: c_int, argv_addr: usize, init
 
 /// `__libc_start_main(main, argc, argv, init, fini, rtld_fini, stack_end)`; with `PIE`, the
 /// static-PIE start `liella-rcrt1.o` calls (`liella_start_main_static_pie`, D-27.10).
+// LAYOUT-HOTKEY-INLINE-STABLE: a fixed boundary for its start-up/fork hot-text key (off the hot paths: the call is free).
+#[inline(never)]
 pub fn start<const PIE: bool>(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Option<Fn0>, fini: Option<Fn0>, rtld_fini: Option<Fn0>, stack_end: *mut c_void) -> ! {
     // 1. The initial thread: a static program has no thread pointer yet.
     // ARCH(x86_64): static-or-dynamic test through ARCH_GET_FS; aarch64 reads TPIDR_EL0 (A-4)

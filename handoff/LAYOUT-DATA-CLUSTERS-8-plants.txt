@@ -1,0 +1,5 @@
+# LAYOUT-DATA-CLUSTERS-8 plants (cargo xtask plants; docs/plants.md). Fast products (the gate's profile).
+# time_compat's HEAD dropped from the declared list: the release first localtime_r pays one fault for it again
+# (release 17 -> 18). The fast products read 19 with or without it, and LOCALTIME_BOUND (20) is the larger
+# profile's count plus 1, so no gate test sees this release-only level; the probes in the handoff measure it.
+ldc8-time-compat | crates/libc-so/startup-state.list | perl:s/\nliella_legacy::time_compat::HEAD\n/\n/ | equivalent:release-only level (localtime 17 vs 19); the fast gate profile reads 19 either way and LOCALTIME_BOUND (20) is the larger profile's count plus 1

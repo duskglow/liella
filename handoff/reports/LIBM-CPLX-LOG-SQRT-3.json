@@ -1,0 +1,26 @@
+{
+ "task": "LIBM-CPLX-LOG-SQRT-3",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: origin/next merged (invtrig conflict resolved via shared atan2_reduce), codemap regenerated, bench rows _axis/_near1 added, route-entry count done (csqrt 0/256 routed: hypothesis refuted; cexp 1/256; every exact-zero part routes); merged products fail the hot-text key check, so gate and plants are red",
+ "branch": "task/libm-cplx-log-sqrt-3",
+ "head": null,
+ "gate": {
+  "affected": "red: 3178 passed / 857 failed (6 product suites: products missing, cargo xtask so fails hot-text check on the merged tree)",
+  "peak": "12G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "merged tree: rustc now inlines Features::detect<CSysImpl<false>> and an intl catalog closure, so 2 hot-text keys match no section; regen in both profiles then breaks the release start-up text budget (5 windows > 4)", "recommendation": "make the startup key build-stable (#[inline(never)] on Features::detect) if the layout owner agrees, rather than regen + a raised budget"}
+ ],
+ "informational": [
+  "origin/next alone builds its products clean (libm-cplx-log-sqrt-3-nextso rc 0); the pre-merge branch gated green; the combination breaks the fast-profile hot-text check",
+  "hot-text keys of generic instantiations are not stable against unrelated boundary code: a libm story trips a start-up layout contract",
+  "cexp/clog/csqrt and float variants send every exact-zero-part operand to the 384-bit route (256/256 on the _axis rows); clog _near1 routes 10/256"
+ ],
+ "refused": [],
+ "improvement": "the merge-conflict CI step could build the products (cargo xtask so) on the merged tree before cutting the continuation, so a hot-text key break is known up front instead of found after a gate and plants run",
+ "next_step": "make the merged products build (hot-text keys, handoff step 0), then gate + plants (handoff/LIBM-CPLX-LOG-SQRT-3-plants.txt); then LIBM-CPLX-AXES",
+ "report_file": "handoff/libm-cplx-log-sqrt.md",
+ "jobs": ["libm-cplx-log-sqrt-3-check"]
+}

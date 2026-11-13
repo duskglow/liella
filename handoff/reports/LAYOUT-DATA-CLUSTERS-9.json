@@ -1,0 +1,9 @@
+{"task": "LAYOUT-DATA-CLUSTERS-9", "model": "opus", "tokens": null,
+ "result": "locale/tool +1 named (first setlocale's read+write faults on the last .bss page start-up no longer touches) and removed: global_locale counters, query statics and process::SECURE declared; fast locale 51 / tool 55 (next 52 / 55); LOCALE_BOUND 52, TOOL_BOUND 56; plants file fixed",
+ "branch": "task/layout-data-clusters-9", "head": "ede0eef1e",
+ "gate": {"affected": "ldc9-gate (see jobs.tsv on mei)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["release products not measured in this run (-8: release = fast for locale and tool)"], "refused": [],
+ "improvement": "trace the locale and tool modes with isolated 64 KiB sections (as the true-mode access test does) so one pass names every static instead of one per map",
+ "next_step": "measure release locale/tool; fold the two .data1 list tests into one list-driven test",
+ "report_file": "handoff/LAYOUT-DATA-CLUSTERS-9.md",
+ "jobs": ["mei:ldc9-gate", "mei:ldc9-plants", "mei:ldc9-lint"]}
