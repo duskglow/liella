@@ -1331,7 +1331,10 @@ mod tests {
         // LAYOUT-DELETE-LISTS, LT-5 (no spec clause: build tooling): `cargo xtask static` refuses a
         // tracked start-up list, whatever its directory, so the committed lists cannot creep back;
         // a file that only shares a prefix or suffix with one is not refused, and this tree has none.
-        for name in RETIRED {
+        // The six names spelled out: a name dropped from RETIRED must fail here, not shrink the loop.
+        let six = ["hot-text.list", "startup-text.keys", "probe-text.keys", "startup-data.keys", "hot-text.absent", "hot-text.unpinned"];
+        assert_eq!(RETIRED.len(), six.len());
+        for name in six {
             let path = format!("crates/libc-so/{name}");
             let errs = retired_lists(&[path.as_str(), "crates/libc-so/startup-state.list", "crates/libc-so/hot-text.clusters"]);
             assert_eq!(errs.len(), 1, "{name}: {errs:?}");
