@@ -287,14 +287,15 @@ fn liella_nonshared() -> PathBuf {
 }
 
 /// The link map `map` (ld's `-Map`) loads Liella's `nonshared` archive and no host C library file
-/// (`libc.so.6`, `libc.so`, `libc_nonshared.a`, `libc.a` outside Liella's product directory).
-fn assert_liella_libc_only(map: &str, nonshared: &std::path::Path, what: &str) {
+/// (`libc.so.6`, `libc.so`, `libc_nonshared.a`, `libc.a` outside Liella's product directory and
+/// the test's own `scratch` directory, which holds its `libc.so` script).
+fn assert_liella_libc_only(map: &str, nonshared: &std::path::Path, scratch: &std::path::Path, what: &str) {
     let ours = nonshared.parent().expect("product directory");
     let loads: Vec<&str> = map.lines().filter_map(|l| l.strip_prefix("LOAD ")).map(str::trim).collect();
     assert!(loads.iter().any(|p| std::path::Path::new(p) == nonshared), "{what}: Liella's {} is not on the link line: {loads:?}", nonshared.display());
     let host: Vec<&&str> = loads
         .iter()
-        .filter(|p| matches!(p.rsplit('/').next(), Some("libc.so.6" | "libc.so" | "libc_nonshared.a" | "libc.a")) && !std::path::Path::new(p).starts_with(ours))
+        .filter(|p| matches!(p.rsplit('/').next(), Some("libc.so.6" | "libc.so" | "libc_nonshared.a" | "libc.a")) && !std::path::Path::new(p).starts_with(ours) && !std::path::Path::new(p).starts_with(scratch))
         .collect();
     assert!(host.is_empty(), "{what}: a host C library file is on the link line: {host:?}");
 }
@@ -398,7 +399,7 @@ pub(crate) fn nonshared_two_way() {
             .output()
             .expect("cc");
         assert!(o.status.success(), "the link against Liella's libc.so failed ({out}): {}", String::from_utf8_lossy(&o.stderr));
-        assert_liella_libc_only(&std::fs::read_to_string(&map).expect("link map"), &nonshared, out);
+        assert_liella_libc_only(&std::fs::read_to_string(&map).expect("link map"), &nonshared, &dir, out);
         let needs = needed_versions(&dir.join(out));
         assert!(!needs.is_empty() && needs.iter().all(|v| v.starts_with("GLIBC_")), "{out} references a version the reference does not export (two-way compatibility): {needs:?}");
         dir.join(out)
@@ -462,7 +463,7 @@ pub(crate) fn conformance_dynamic(names: &[&str]) {
         let map = dir.join(format!("{name}.map"));
         let cc = std::process::Command::new("cc").args(["-std=c17", "-O1", "-nodefaultlibs"]).arg(format!("-Wl,--dynamic-linker={}", ld.display())).arg(format!("-Wl,-Map={}", map.display())).arg(&src).arg(&libc).arg("-lgcc").arg("-o").arg(&exe).output().expect("cc");
         assert!(cc.status.success(), "{name} against Liella's libc.so.6: {}", String::from_utf8_lossy(&cc.stderr));
-        assert_liella_libc_only(&std::fs::read_to_string(&map).expect("link map"), &nonshared, name);
+        assert_liella_libc_only(&std::fs::read_to_string(&map).expect("link map"), &nonshared, &dir, name);
         let o = run(&exe);
         assert_eq!(o.status.code(), Some(want), "{name} dynamic on Liella: {:?} {}", o.status, String::from_utf8_lossy(&o.stderr));
     }
