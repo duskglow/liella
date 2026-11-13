@@ -48,7 +48,7 @@ probe_text.sh); xtask/src/so.rs untouched.
    If the lists should land, commit the regenerated lists from tree2 (they are generated: copy, never edit).
 3. Plants: all five must be CAUGHT; list any WARN line.
 4. Open: the release one-profile regen path from a fast-only list (item 4 above): regen.sh `--build` with release
-   could pass `--hottext-regen` contract relief, or the docs should say "use --both"; RULING NEEDED if it matters.
+   could get layout-contract relief like its dead-key relief, or the docs should say "use --both"; RULING NEEDED if it matters.
 
 Things not to redo: namespaces for data (nscache private table); `files`-only nsswitch or empty /usr/share/locale (other
 paths); detecting syscall stops from gdb's printed output or from the pc.

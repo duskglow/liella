@@ -3,7 +3,7 @@
  "branch": "task/layout-trace-host-canonical-2", "head": null,
  "gate": {"affected": "lthc2-gate started on final head, not read", "peak": null},
  "accepted_first_attempt": null,
- "rulings": [{"item": "regen.sh one-profile release step after a fast --replace fails its own product build (STARTUP-TEXT-WINDOWS, STARTUP-DATA-WINDOWS) before tracing", "recommendation": "document --both as the both-profile path (or give release --build the same contract relief as --hottext-regen); proof uses --both"}],
+ "rulings": [{"item": "regen.sh one-profile release step after a fast --replace fails its own product build (STARTUP-TEXT-WINDOWS, STARTUP-DATA-WINDOWS) before tracing", "recommendation": "document --both as the both-profile path (or give the release --build step layout-contract relief like regen's dead-key relief); proof uses --both"}],
  "informational": ["intermediate head e30dd53: fast regen --replace --build on Skylake-SP and Haswell-EP: four lists identical, libc.a 412c17ffe4abfda5, libc.so.6 f55cc779eb7a8c84 on both", "trace cost: fast regen with two builds 492 s (Skylake-SP), 895 s (Haswell-EP, loaded)"],
  "refused": [],
  "impact": [{"kind": "correctness", "what": "hot-text trace of p_cold under data redirection ran to its end (was cut at the first cancellable open)", "before": 407, "after": 482, "unit": "names traced", "measured": true},
