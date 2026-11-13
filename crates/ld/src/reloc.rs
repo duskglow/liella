@@ -518,6 +518,33 @@ impl<const N: usize, const B: usize> Default for UniqueTable<N, B> {
     }
 }
 
+impl<const N: usize, const B: usize> UniqueTable<N, B> {
+    /// Entries recorded so far: a mark that [`UniqueTable::truncate`] rolls back to.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.n
+    }
+
+    /// Whether nothing is recorded.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.n == 0
+    }
+
+    /// Forget the entries recorded after mark `n` (a failed `dlopen` leaves no trace, plan §3).
+    pub fn truncate(&mut self, n: usize) {
+        if n < self.n {
+            self.used = self.keys.get(n).map_or(0, |k| k.0);
+            self.n = n;
+        }
+    }
+
+    /// The defining objects of the entries recorded after mark `from` (each is pinned: design §5).
+    pub fn owners(&self, from: usize) -> impl Iterator<Item = usize> + '_ {
+        self.found.get(from..self.n).unwrap_or(&[]).iter().filter_map(|f| f.map(|f| f.obj))
+    }
+}
+
 impl<const N: usize, const B: usize> UniqueRegistry for UniqueTable<N, B> {
     fn find(&self, name: &[u8], version: &[u8]) -> Option<Found> {
         let key = |&(at, nl, vl): &(usize, usize, usize)| {

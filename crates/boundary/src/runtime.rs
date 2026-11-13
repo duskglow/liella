@@ -358,6 +358,8 @@ pub fn early_init(info: usize) {
     crate::thread::set_loader_rseq(info.rseq_size != 0);
     // The loader's `dlopen` entry (DL-16a): `dlopen` calls it; without one it fails with a text.
     crate::posix::s27_dynlink::LOADER_DLOPEN.store(info.dlopen, Release);
+    // Its `dlsym`/`dlvsym` entry (DL-16b), likewise.
+    crate::posix::s27_dynlink::LOADER_DLSYM.store(info.dlsym, Release);
     // The tunables without diagnostics (`ld.so` read the string already).
     let secure = aux.get(AT_SECURE).is_some_and(|v| v != 0);
     // Secure mode's standard descriptors, before any constructor can open a file in their place
