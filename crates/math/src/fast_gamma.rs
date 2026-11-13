@@ -227,16 +227,18 @@ pub fn lgamma_tiny(x: f64) -> Option<(Dd, f64, i32)> {
     Some((y, le + E96 * dd::abs(ln.hi) + E110, if x < 0.0 { -1 } else { 1 }))
 }
 
-/// `tgamma x` for `2^-1022 <= |x| < 2^-60` as `(y, eps, m)` for [`fast64::settle`]:
+/// `tgamma x` for `0 < |x| < 2^-60` (subnormals included) as `(y, eps, m)` for [`fast64::settle`]:
 /// `Γ(x) = 1/x − γ + R`, `|R| <= 0.99|x| + |x|² < 2^-59.9` (DLMF 5.7.1). With `s = 2^512` when
 /// `|x| < 2^-512` (else 1; exact scaling), `q = RN(1/(x·s))`, `|q| <= 2^510`, and the residual
 /// `r = 1 − q·x·s` is exact (`two_prod`, then two exact subtractions: `r` is representable, the
 /// classical division residual). So `Γ(x)/s = q + r/(x·s) − γ/s + R/s`: `lo = RN(r/(xs) − γ.hi/s)`
 /// is within `2^-52·(|r/(xs)| + |lo|)`, and `γ.lo + R < 2^-56` (over `s`). Directed results with
 /// `r = 0` (`x` a power of two) are decided by `lo`'s sign only while it clears `settle`'s slack.
+/// A subnormal `x` scales exactly too (`x·2^512 >= 2^-562`, normal), and `q <= 2^562`; then
+/// `m` reaches 1074 (`|Γ(x)| >= 2^1022`), which [`tgamma_band`] rounds or takes as an overflow.
 pub fn tgamma_tiny(x: f64) -> Option<(Dd, f64, i32)> {
     let a = dd::abs(x);
-    if !(f64::MIN_POSITIVE..TINY).contains(&a) {
+    if !(a > 0.0 && a < TINY) {
         return None;
     }
     let (xs, s, k) = if a < SC_LO { (x * SC_UP, SC_LO, 512) } else { (x, 1.0, 0) };
@@ -296,8 +298,14 @@ pub fn lgamma_band(x: f64, mode: Rounding) -> Option<((f64, Status), i32)> {
     fast64::settle(y, eps, 0, mode).map(|r| (r, sign))
 }
 
-/// `tgamma` for `2^-1022 <= |x| < 2^-60`, correctly rounded, or `None`.
+/// `tgamma` for `0 < |x| < 2^-60`, correctly rounded, or `None`. `y.hi` lies in `[1, 2)` and
+/// `|y.lo| <= 2^-53`, so `m >= 1024` means `|Γ(x)| >= 2^1024·(1 − 2^-54)`, beyond `DBL_MAX` in
+/// every mode, except `|y.hi| = 1` at `m = 1024` (`x = ±2^-1024`), just under `2^1024`, where the
+/// directed roundings toward zero give `DBL_MAX` without an overflow: the accurate path decides it.
 pub fn tgamma_band(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     let (y, eps, m) = tgamma_tiny(x)?;
+    if m >= 1024 {
+        return (m > 1024 || dd::abs(y.hi) > 1.0).then(|| crate::elem::overflow::<f64>(x < 0.0, mode));
+    }
     fast64::settle(y, eps, m, mode)
 }

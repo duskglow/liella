@@ -347,7 +347,7 @@ pub fn tgamma<F: Float>(x: F, mode: Rounding) -> (F, Status) {
                 return r;
             }
         } else if let Some((v, st)) = fast_gamma::tgamma_band(xf, mode) {
-            // 2^-1022 <= |x| < 2^-60 (D-10.105).
+            // 0 < |x| < 2^-60 (D-10.105).
             return (F::from_bits(u128::from(v.to_bits())), st);
         }
     }
