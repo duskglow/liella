@@ -223,6 +223,8 @@ int main(int argc, char **argv) {
     if (!failed_with(dlvsym(v, "b", "VER_1"), at("libv.so"), "b, version VER_1")) return fail(42, "dlvsym of a base definition by a version", "");
     if (!failed_with(dlvsym(v, "b", "libv.so"), at("libv.so"), "b, version libv.so")) return fail(43, "the base node's name is no version", "");
     if (call(h1_default("fn_A3")) != 3) return fail(44, "RTLD_DEFAULT from a start-time object", dlerror());
+    /* libG5 (global, opened above) defines who too: the program's own comes first. */
+    if (call(dlsym(RTLD_DEFAULT, "who")) != 0) return fail(45, "RTLD_DEFAULT from the program: the program first", dlerror());
     return 0;
 }
 "#;
