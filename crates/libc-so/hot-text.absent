@@ -27,6 +27,4 @@ _RINvNtC13liella_legacy12stdio_compat9with_listNtNtC15liella_boundary5stdio4Glue
 _RNvXs3_NtC15liella_boundary3sysINtNtC15liella_boundary3sys8CSysImplKb0_ENtNtC13liella_kernel3sys3Sys13clock_gettimeC15liella_boundary	release	no trace; matches only in the fast archive (the release profile inlines or drops it)
 _RNvNtC15liella_boundary6locale14publish_global	fast	no section in this profile's archive with D-X.58's gated locale and thread-block reads (TB-FOREIGN-SAFETY-8): inlined into its callers
 _RNvNtC15liella_boundary5iconv7convert	fast	no section in this profile's archive with D-X.58's gated locale and thread-block reads (TB-FOREIGN-SAFETY-8): inlined into its callers
-_RNvNtC15liella_boundary5iconv4load	fast	no section in this profile's archive with D-X.58's gated locale and thread-block reads (TB-FOREIGN-SAFETY-8): inlined into its callers
-_RINvNtC13liella_legacy7nscache9real_secsINtNtC15liella_boundary3sys8CSysImplKb0_EEC15liella_boundary	fast	no section in this profile's archive with D-X.58's gated locale and thread-block reads (TB-FOREIGN-SAFETY-8): inlined into its callers
 _RNvMNtC15liella_boundary5regexNtNtC15liella_boundary5regex13ThreadScratch5table	release	no section in this profile's archive with D-X.58's gated locale and thread-block reads (TB-FOREIGN-SAFETY-8): inlined into its callers
