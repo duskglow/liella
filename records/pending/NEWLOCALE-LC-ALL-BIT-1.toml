@@ -1,0 +1,12 @@
+id = "D-NEW"
+series = "D-7"
+section = "s07"
+spec = "§7.3"
+ann = "ABI"
+status = "active"
+story = "NEWLOCALE-LC-ALL-BIT"
+date = "2026-11-13"
+tests = ["crates/core/tests/s07_locale_clauses.rs::s7_3_c_1", "crates/core/tests/s07_locale_clauses.rs::s7_3_f_0", "crates/core/tests/locale_products.rs::newlocale_masks_equal_the_reference", "crates/boundary/tests/s07_locale_symbols.rs::cxx_locales_through_the_lc_all_bit"]
+body = '''
+**`newlocale`: the mask `1 << LC_ALL` alone is every category; `""` takes each category from the environment; a NULL name is `EINVAL`** (spec gap in §7.3, settled by black-box probe: spec/behaviour/newlocale-mask.md). The C++ library asks for `newlocale(1 << LC_ALL, name, 0)` when it starts iostreams and makes `std::locale` objects, so refusing that mask stopped every C++ program that uses iostreams. Liella's mask check (`crates/boundary/src/locale.rs`, `categories`) reads the mask `1 << LC_ALL` (bit 6, which names no category) as `LC_ALL_MASK`; bit 6 with any other bit, and bits 13 and up, stay `EINVAL`, as the probe shows. The name `""` loads each asked category from the locale `setlocale(cat, "")` would choose (`LC_ALL`, then `LC_<cat>`, then `LANG`, empty values ignored, else `"C"`: `global_locale::newlocale_env`), so a mixed environment gives a mixed object; before, `""` was looked up as a locale name and failed with `ENOENT`. A NULL name is `EINVAL` (it was `EFAULT`). The one difference the probe shows is kept: where a load into a base (or from the environment) fails, Liella sets `ENOENT` (s7_3_f_0) where the reference was seen to leave `errno` 0; both return `(locale_t)0` (recorded in the oracle test; ruling asked in the story's hand-back). Proof: the probe as a differential test (`newlocale_mask.c`, five environments), clause rows, and a C++ program (iostreams, `std::locale("C")`, `std::locale("")`, imbued output) that passes statically and, linked to `libc.so.6` with libstdc++ static, dynamically, as it does on the reference.
+'''
