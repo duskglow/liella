@@ -159,18 +159,42 @@ NOT_SYSCALL = (1 << 64) - 1  # %orig_rax at a stop that is not a system call's (
 CATCH = "catch syscall open stat lstat access unlink openat newfstatat unlinkat faccessat statx faccessat2"
 
 
+# Host files a traced program may read besides the redirected ones: the residual inputs canon_host.sh
+# prints digests of (message catalogs and locale.alias, zone files), the kernel's own files, and the
+# program's scratch files. Any other path a probe opens, stats or unlinks (absent ones included: a
+# host that has one runs another path) is host state the list would follow: the trace fails.
+HOST_OK = (b"/usr/share/locale/", b"/usr/share/locale-langpack/", b"/usr/share/zoneinfo/", b"/proc/", b"/sys/", b"/dev/null", b"/dev/urandom", b"/tmp/", run_dir.encode() + b"/")
+host_reads = set()
+
+
+def read_path(addr):
+    """The NUL-terminated path at addr, read a page at a time (never past the page it ends in)."""
+    inf, p = gdb.selected_inferior(), b""
+    while len(p) < 4096:
+        n = 4096 - (addr + len(p)) % 4096
+        part = bytes(inf.read_memory(addr + len(p), n))
+        if b"\0" in part:
+            return p + part.split(b"\0", 1)[0]
+        p += part
+    return p
+
+
 def redirect_path():
     """At a path system call's entry stop: point its path at the tree's file when redirected."""
     r = PATH_ARG.get(reg("orig_rax"))
     if r is None:
         return
     inf = gdb.selected_inferior()
-    p = bytes(inf.read_memory(reg(r), 256)).split(b"\0", 1)[0]
-    if p in redirect:
-        new = redirect[p]
-        at = (reg("rsp") - 4096 - len(new)) & ~15  # below the red zone, in the mapped stack
-        inf.write_memory(at, new)
-        gdb.execute("set $%s = %d" % (r, at))
+    p = read_path(reg(r))
+    if p not in redirect:
+        full = p if p.startswith(b"/") else b"/" + p  # cwd is /
+        if not full.startswith(HOST_OK):
+            host_reads.add(full.decode(errors="replace"))
+        return
+    new = redirect[p]
+    at = (reg("rsp") - 4096 - len(new)) & ~15  # below the red zone, in the mapped stack
+    inf.write_memory(at, new)
+    gdb.execute("set $%s = %d" % (r, at))
 
 
 def run_one(cls):
@@ -252,6 +276,16 @@ def merge(runs):
 
 runs = [run_one(c) for c in classes]
 shutil.rmtree(stage, ignore_errors=True)
+if host_reads:
+    fail("the program read host files the tree does not supply (canon_host.sh): %s" % " ".join(sorted(host_reads)))
+# The virtual CPU reached the program: a class with AVX2 and one without never run the same code
+# (start-up reads XCR0 only when CPUID shows OSXSAVE and AVX). Equal runs mean the program saw one CPU,
+# the host's, and the list would follow it.
+if virtual:
+    for a in classes:
+        for b in classes:
+            if CLASSES[a][1] & L7B_V3 and not CLASSES[b][1] & L7B_V3 and runs[classes.index(a)] == runs[classes.index(b)]:
+                fail("classes %s and %s ran the same functions: the program did not see the virtual CPU" % (a, b))
 with open(out_path, "w") as f:
     for addr in merge(runs):
         for n in names.get(addr, []):
