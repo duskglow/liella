@@ -1981,7 +1981,9 @@ mod tests {
         // traces of the run have started, so a runner that runs them one at a time fails here
         // (iteration budget, a hang guard only). The tagged file names every trace in start order,
         // each trace writes its own names file with its own environment, a failed trace fails the
-        // wait, and put_changed leaves a file whose bytes did not change untouched.
+        // wait, and put_changed leaves a file whose bytes did not change untouched. The fake prints
+        // the program's environment as trace_gdb.py builds it (LAYOUT-TRACE-HOST-CANONICAL: exactly
+        // the HOT_TEXT_ENV_<NAME> variables, sorted), so the caller's own LANG must not reach it.
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let runner = root.join("tools/hottext/runner.sh");
         let tmp = root.join(format!("target/xtask-runner-test-{}", std::process::id()));
@@ -2000,7 +2002,8 @@ while [ "$(ls BARRIER | wc -l)" -lt COUNT ]; do
     sleep 0.01
 done
 if [ "$1" = fail ]; then exit 3; fi
-printf '%s\n' "$@" "LANG=$LANG" > "$HOT_TEXT_OUT"
+printf '%s\n' "$@" > "$HOT_TEXT_OUT"
+env | sed -n 's/^HOT_TEXT_ENV_//p' | LC_ALL=C sort >> "$HOT_TEXT_OUT"
 "#
             .replace("BARRIER", &barrier.to_string_lossy())
             .replace("COUNT", &progs.len().to_string());
@@ -2022,6 +2025,8 @@ traces_wait
                 .arg(runner.parent().unwrap())
                 .args(progs)
                 .env("HOTTEXT_GDB", format!("bash {}", fake_path.display()))
+                .env("LANG", "caller-lang")
+                .env("TZ", "caller-tz")
                 .env("HOTTEXT_JOBS", progs.len().to_string())
                 .output()
                 .expect("bash runs tools/hottext/runner.sh");
