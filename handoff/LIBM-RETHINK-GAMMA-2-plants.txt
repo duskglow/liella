@@ -1,0 +1,9 @@
+# LIBM-RETHINK-GAMMA-2: plants on the f64 gamma band forms (D-10.105) and settle's binade-1023 step.
+stirling-c2-sign | crates/math/src/fast_gamma.rs | lit:0xbf66_c16c_16c1_6c17 ==> 0x3f66_c16c_16c1_6c17 | cargo test -p liella-math --release --test gamma_bands | msg:lgamma\([0-9.e+]+\) in [A-Za-z]+:
+euler-sign-tgamma-tiny | crates/math/src/fast_gamma.rs | lit:let lo = rx - EULER.hi * s; ==> let lo = rx + EULER.hi * s; | cargo test -p liella-math --release --test gamma_bands | msg:tgamma\(-?[0-9.e-]+\) in (Up|Down|Zero|Nearest):
+scaled-binade-off | crates/math/src/fast_gamma.rs | lit:eps * sc, e + 512)) ==> eps * sc, e + 511)) | cargo test -p liella-math --release --test gamma_bands | msg:lgamma\([0-9.e+]+\) in [A-Za-z]+:
+subnormal-scale-off | crates/math/src/fast_gamma.rs | lit:(x * SC_UP, SC_LO, 512) ==> (x * SC_UP, SC_LO, 511) | cargo test -p liella-math --release --test gamma_bands | msg:tgamma\(-?[0-9.e-]+\) in [A-Za-z]+:
+edge-1024-not-excluded | crates/math/src/fast_gamma.rs | lit:(m > 1024 || dd::abs(y.hi) > 1.0) ==> (m >= 1024 || dd::abs(y.hi) > 1.0) | cargo test -p liella-math --release --test gamma_bands | msg:tgamma\(-?5\.56[0-9e-]+\) in (Down|Zero|Up):
+settle-1023-overflow-missed | crates/math/src/fast64.rs | lit:if m == 1023 && dd::abs(v) >= 2.0 { ==> if m == 1023 && dd::abs(v) > 2.0 { | cargo test -p liella-math --release --test gamma_bands | msg:lgamma\([0-9.e+]+\) in (Up|Nearest|Zero|Down):
+settle-1023-refused | crates/math/src/fast64.rs | lit:if m > 1023 { ==> if m > 1022 { | cargo test -p liella-math --release --test gamma_bands | msg:tgamma edge -?[0-9.e-]+ in [A-Za-z]+ left to the accurate path
+stirling-margin-halved | crates/math/src/fast_gamma.rs | lit:+ E70, 0)) ==> + E70 * 0.5, 0)) | cargo test -p liella-math --release --test gamma_bands | equivalent:the bound is conservative (the truncated series < 2^-80 and the double part of S < 2^-72 against 2^-70), so a halved margin still holds and only refuses fewer operands
