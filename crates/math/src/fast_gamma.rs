@@ -207,8 +207,9 @@ const E110: f64 = f64::from_bits(0x3910_0000_0000_0000);
 const E70: f64 = f64::from_bits(0x3b90_0000_0000_0000);
 const SC_LO: f64 = f64::from_bits(0x1ff0_0000_0000_0000);
 const SC_UP: f64 = f64::from_bits(0x5ff0_0000_0000_0000);
-/// Stirling's band ends: `y < 2^1022` below `X_BIG`; `lnΓ(x) > DBL_MAX` from `X_OVER` (≥ 2.56e305).
+/// Stirling's band end (2^1012): `y < 2^1022` below it.
 pub const X_BIG: f64 = f64::from_bits(0x7f30_0000_0000_0000);
+/// 2^1015: from here `lnΓ(x) > DBL_MAX` (the threshold is about 2.56e305 < 2^1015).
 pub const X_OVER: f64 = f64::from_bits(0x7f60_0000_0000_0000);
 
 /// `lgamma x` for `0 < |x| < 2^-60` as `(y, eps, sign)`: `lnΓ(x) = −ln|x| − γx + R`,
