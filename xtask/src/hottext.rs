@@ -537,6 +537,79 @@ fn positions(entries: &[Entry]) -> BTreeMap<String, usize> {
     keys
 }
 
+/// LAYOUT-FIRST-WINDOW (D-X, pending record): hand-kept keys, next to the list, that the link places
+/// right after the start-up tier, in this file's order: `<key> TAB <reason>`, `#` comments. The
+/// kernel maps a file's text in 64 KiB fault-around windows; the first fault of a static program
+/// maps the 16 pages from the start of its text segment, and the start-up tier fills most of them.
+/// A function every short program with stdio or a zone load runs, but the `true` probe does not
+/// (so it is not start-up tier), sat behind keys no fault-bounded probe runs (`puts`), and a
+/// 0x240-byte start-up growth moved it one page past that window (one more fault in four release
+/// probes, #5026). Listed here, it follows the start-up tier whatever the generated order.
+pub const FIRST_WINDOW_LIST: &str = "hot-text.first-window";
+
+/// The keys of [`FIRST_WINDOW_LIST`] in file order. Every line needs a reason. Errors name the line.
+fn parse_first_window(text: &str) -> Result<Vec<String>, String> {
+    let mut out: Vec<String> = Vec::new();
+    for (n, l) in text.lines().enumerate() {
+        if l.trim().is_empty() || l.starts_with('#') {
+            continue;
+        }
+        let Some((k, _)) = l.split_once('\t').filter(|(k, r)| !k.is_empty() && !r.trim().is_empty()) else {
+            return Err(format!("{FIRST_WINDOW_LIST} line {}: {l:?}: want <key>\\t<reason>", n + 1));
+        };
+        if out.iter().any(|o| o == k) {
+            return Err(format!("{FIRST_WINDOW_LIST} line {}: {k} is listed twice", n + 1));
+        }
+        out.push(k.to_string());
+    }
+    Ok(out)
+}
+
+/// The link position of each key (as [`positions`]) with the keys `first` moved, in their order,
+/// right after the start-up tier (the list's leading `startup` entries). A key must be in the list,
+/// outside the start-up tier (a line that a regen made redundant is stale) and outside every
+/// cluster of `clusters` (list positions: a moved key would split its cluster's range).
+fn link_positions(entries: &[Entry], first: &[String], clusters: &[Cluster]) -> Result<BTreeMap<String, usize>, String> {
+    let list = positions(entries);
+    let head = entries.iter().take_while(|e| e.tier == "startup").count();
+    for k in first {
+        let Some(&p) = list.get(k) else {
+            return Err(format!("{FIRST_WINDOW_LIST}: {k} is not in hot-text.list (renamed or dropped by a regen? update the line)"));
+        };
+        if p < head {
+            return Err(format!("{FIRST_WINDOW_LIST}: {k} is in the start-up tier now (position {p}); remove its line"));
+        }
+        if let Some(c) = clusters.iter().find(|c| (c.first..=c.last).contains(&p)) {
+            return Err(format!("{FIRST_WINDOW_LIST}: {k} (position {p}) lies inside cluster {} ({}..={}); a cluster's keys stay together", c.name, c.first, c.last));
+        }
+    }
+    let moved: BTreeSet<&str> = first.iter().map(String::as_str).collect();
+    let order = entries[..head].iter().map(|e| e.key.as_str()).chain(first.iter().map(String::as_str)).chain(entries[head..].iter().map(|e| e.key.as_str()).filter(|k| !moved.contains(k)));
+    let mut keys = BTreeMap::new();
+    for (i, k) in order.enumerate() {
+        keys.entry(k.to_string()).or_insert(i);
+    }
+    Ok(keys)
+}
+
+/// [`link_positions`] for `entries`, with the hand-written [`FIRST_WINDOW_LIST`] in `inputs`
+/// (none: the list's own positions) and the clusters of `clusters_text` ([`CLUSTER_LIST`]).
+/// `inputs` is the hand-written input directory (hotlists' TRACKED), never the directory of a
+/// train-owned list copy.
+fn first_window_positions(inputs: &Path, entries: &[Entry], clusters_text: Option<&str>) -> Result<BTreeMap<String, usize>, String> {
+    let path = inputs.join(FIRST_WINDOW_LIST);
+    let first = match fs::read_to_string(&path) {
+        Ok(t) => parse_first_window(&t)?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
+    let clusters = match clusters_text {
+        Some(t) => parse_clusters(t, &positions(entries))?,
+        None => Vec::new(),
+    };
+    link_positions(entries, &first, &clusters)
+}
+
 /// The lines of [`ABSENT_LIST`]: (key, profile) pairs. Every line needs a reason; `#` comments
 /// and blank lines are skipped. Errors name the line.
 fn parse_absent(text: &str) -> Result<BTreeSet<(String, String)>, String> {
@@ -1089,7 +1162,17 @@ fn is_startup_names(section: &str) -> bool {
 pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, profile: Option<&str>) -> Result<(usize, usize), String> {
     let text = fs::read_to_string(list).map_err(|e| format!("{}: {e}", list.display()))?;
     let entries = parse_list(&text)?;
-    let keys = positions(&entries);
+    let clusters_path = inputs.join(CLUSTER_LIST);
+    let clusters_text = fs::read_to_string(&clusters_path).map_err(|e| format!("{}: {e}", clusters_path.display()));
+    // LAYOUT-FIRST-WINDOW: link positions, the first-window keys right after the start-up tier.
+    let keys = match first_window_positions(inputs, &entries, clusters_text.as_deref().ok()) {
+        Ok(k) => k,
+        Err(e) if REGEN.load(Ordering::Relaxed) => {
+            println!("so: {REGEN_FLAG}: {FIRST_WINDOW_LIST} NOT applied for this regen build: {e}");
+            positions(&entries)
+        }
+        Err(e) => return Err(e),
+    };
     let mut matched = BTreeSet::new();
     let _ = fs::remove_dir_all(work);
     fs::create_dir_all(work).map_err(|e| e.to_string())?;
@@ -1101,10 +1184,9 @@ pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, 
     }
     crate::so::run(Command::new(ar).current_dir(work).arg("x").arg(&archive))?;
     let objcopy = std::env::var("OBJCOPY").unwrap_or_else(|_| "objcopy".into());
-    let clusters_path = inputs.join(CLUSTER_LIST);
-    let clusters = match fs::read_to_string(&clusters_path) {
-        Ok(t) => parse_clusters(&t, &keys).and_then(|c| Ok((c, clusters_at_end(&t)?))),
-        Err(e) => Err(format!("{}: {e}", clusters_path.display())),
+    let clusters = match &clusters_text {
+        Ok(t) => parse_clusters(t, &keys).and_then(|c| Ok((c, clusters_at_end(t)?))),
+        Err(e) => Err(e.clone()),
     };
     // A regen build must not be blocked by a cluster key the old list lacks (D-X.56).
     let (clusters, at_end) = match clusters {
@@ -1465,12 +1547,18 @@ pub fn static_check(root: &Path) -> Result<(), String> {
     let entries = parse_list(&fs::read_to_string(&list).map_err(|e| format!("{}: {e}", list.display()))?)?;
     let unpinned = parse_unpinned(&fs::read_to_string(root.join(UNPINNED_LIST)).map_err(|e| format!("{UNPINNED_LIST}: {e}"))?)?;
     errs.extend(check_pinned(root, &entries, &unpinned));
+    // LAYOUT-FIRST-WINDOW: a stale or misplaced first-window line fails here, before any build.
+    let inputs = root.join(crate::hotlists::TRACKED);
+    let clusters_text = fs::read_to_string(inputs.join(CLUSTER_LIST)).ok();
+    if let Err(e) = first_window_positions(&inputs, &entries, clusters_text.as_deref()) {
+        errs.push(e);
+    }
     if errs.is_empty() { Ok(()) } else { Err(errs.join("\n")) }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ar_members, before_group, check_lists, check_renames, cluster_align, head_alignments, cluster_bytes, cluster_section, clusters_at_end, dead_key_verdict, DeadKeys, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, parse_unpinned, check_pinned, fn_site, Site, positions, regen_mode, rename_for, repair_lists, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
+    use super::{ar_members, before_group, check_lists, check_renames, cluster_align, head_alignments, cluster_bytes, cluster_section, clusters_at_end, dead_key_verdict, DeadKeys, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, parse_unpinned, check_pinned, fn_site, Site, positions, link_positions, parse_first_window, regen_mode, rename_for, repair_lists, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
     use std::collections::{BTreeMap, BTreeSet};
     use std::sync::atomic::Ordering;
 
@@ -2094,6 +2182,21 @@ mod tests {
         for w in ["put_changed \"$work/startup.merged\" \"$skeys\"", "put_changed \"$work/list.merged\" \"$list\""] {
             assert!(sh.find(w).is_some_and(|p| p > refuse), "regen.sh writes before the drop guard: {w}");
         }
+    }
+    // LAYOUT-FIRST-WINDOW: first-window keys follow the start-up tier; a stale line fails. No spec clause.
+    #[test]
+    fn first_window_keys_follow_the_startup_tier() {
+        let e = parse_list("a\tstartup\tfast\nb\tstartup\tfast\nputs\tstdio\tfast\nfstat\tstdio\tfast\nc\textra\t-\n").unwrap();
+        let first = parse_first_window("# c\nfstat\tevery stdio program\n").unwrap();
+        let k = link_positions(&e, &first, &[]).unwrap();
+        assert_eq!([k["a"], k["b"], k["fstat"], k["puts"], k["c"]], [0, 1, 2, 3, 4]);
+        assert_eq!(link_positions(&e, &[], &[]).unwrap(), positions(&e));
+        assert!(link_positions(&e, &["b".into()], &[]).unwrap_err().contains("start-up tier"));
+        assert!(link_positions(&e, &["gone".into()], &[]).unwrap_err().contains("not in hot-text.list"));
+        let c = [Cluster { name: "s".into(), first: 2, last: 3 }];
+        assert!(link_positions(&e, &first, &c).unwrap_err().contains("inside cluster s"));
+        assert!(parse_first_window("fstat\n").is_err());
+        assert!(parse_first_window("f\tr\nf\tr\n").unwrap_err().contains("twice"));
     }
 
     #[test]
