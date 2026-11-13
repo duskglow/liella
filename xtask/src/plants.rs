@@ -711,6 +711,7 @@ pub fn run(cfg: &Config) -> Outcome {
                 log = so_log;
             }
         }
+        let build_timed_out = products && matches!(built, Ok(TIMED_OUT));
         let rc = if matches!(built, Ok(0)) { run_logged(&copy, &sh(&p.cmd), &log, cfg.timeout) } else { built };
         // Restore by writing (a fresh mtime) before anything else can go wrong.
         if let Err(e) = write_fresh(&file, &original) {
@@ -726,7 +727,6 @@ pub fn run(cfg: &Config) -> Outcome {
                 continue;
             }
         };
-        let build_timed_out = products && matches!(built, Ok(TIMED_OUT));
         let (verdict, detail) = match (&p.expect, rc) {
             _ if build_timed_out => (Verdict::BuildTimeout, format!("the products build timed out after {} s (prepare timeout); the mutant was not tested", cfg.prepare_timeout)),
             (Expect::Equivalent(why), 0) => (Verdict::Equivalent, why.clone()),
