@@ -191,9 +191,17 @@ fn sym_err() {
 }
 #[test]
 fn sym___errno_location() {
-    // The products' errno is the thread block's word at 0x80 (rt::tls); a C program checks
-    // `&errno == __errno_location()` (conformance s01_startup).
-    assert_eq!(s::__errno_location() as usize, liella_boundary::tb::tp() + 0x80);
+    // D-X.58/D-X.60: in a process the runtime started, errno is the thread block's word at
+    // 0x80 (rt::tls), which a C program checks (`&errno == __errno_location()`, conformance
+    // s01_startup). This test process was started by another C library, whose block owns 0x80:
+    // the location is the thread's registry word, outside the block, the same on every call.
+    assert_eq!(liella_rt::tls::ERRNO_OFFSET, 0x80);
+    assert!(!liella_boundary::selftest::runtime_started(), "a test process is not started by the runtime");
+    let e = s::__errno_location() as usize;
+    assert_eq!(e, liella_boundary::selftest::foreign_errno_word() as usize);
+    let tp = liella_boundary::tb::tp();
+    assert!(!(tp..tp + liella_rt::tls::BLOCK_SIZE).contains(&e), "errno inside another library's block");
+    assert_eq!(s::__errno_location() as usize, e);
     conformance(&["s01_startup"]);
 }
 

@@ -194,11 +194,37 @@ fn assigned() -> impl Iterator<Item = i32> {
 
 #[test]
 fn s2_1_c_0() {
-    // errno is the thread block's word at 0x80 (rt::tls); `errno` in C is
-    // (*__errno_location()): conformance s01_startup checks both from C.
+    // errno is (*__errno_location()), one word per thread (D-X.58/D-X.60). In a process the
+    // runtime started it is the thread block's word at 0x80 (rt::tls): conformance s01_startup
+    // checks that case from C (`&errno == __errno_location()` at tp + 0x80). This test process
+    // was started by another C library, whose block owns 0x80: the location is the thread's
+    // registry word, outside the block, and stays the same across calls.
     assert_eq!(liella_rt::tls::ERRNO_OFFSET, 0x80);
-    assert_eq!(x::__errno_location() as usize, liella_boundary::tb::tp() + 0x80);
+    assert!(!liella_boundary::selftest::runtime_started(), "a test process is not started by the runtime");
+    let e = x::__errno_location() as usize;
+    assert_eq!(e, liella_boundary::selftest::foreign_errno_word() as usize);
+    let tp = liella_boundary::tb::tp();
+    assert!(!(tp..tp + liella_rt::tls::BLOCK_SIZE).contains(&e), "errno inside another library's block");
+    assert_eq!(x::__errno_location() as usize, e);
     conformance(&["s01_startup"]);
+    // The started case: a static program on the products, errno at tp + 0x80 in two threads.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    assert!(root.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = root.join("target/test-oracles");
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("errno_owned_liella");
+    let st = std::process::Command::new("cc")
+        .args(["-std=gnu17", "-O1", "-static", "-nostdlib", "-fno-builtin"])
+        .arg(root.join("target/liella/liella-crt1.o"))
+        .arg(root.join("crates/core/tests/oracle/errno_owned.c"))
+        .arg(root.join("target/liella/libc.a"))
+        .args(["-lgcc", "-o"])
+        .arg(&exe)
+        .status()
+        .unwrap();
+    assert!(st.success(), "errno_owned.c does not link against the products");
+    let o = std::process::Command::new(&exe).env_clear().output().unwrap();
+    assert_eq!(o.status.code(), Some(0), "errno in a started process is not tp + 0x80 (1: initial thread, 2: created thread, 3: no thread)");
 }
 
 #[test]

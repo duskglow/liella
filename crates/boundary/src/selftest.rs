@@ -169,6 +169,19 @@ pub fn heap_cache_word() -> (bool, usize) {
     (crate::thread::heap_cache_slot().is_some(), crate::thread::foreign_heap_cache())
 }
 
+/// Whether the runtime started this process (D-X.58): true in a program linked against the
+/// products, false in a test process, whose start-up another C library ran.
+pub fn runtime_started() -> bool {
+    crate::thread::owned()
+}
+
+/// The calling thread's `errno` word in a process the runtime did not start (D-X.60): its
+/// registry word, which `__errno_location` gives there (0x80 of the block is the other
+/// library's).
+pub fn foreign_errno_word() -> *mut core::ffi::c_int {
+    crate::thread::foreign_errno()
+}
+
 /// Undo [`forbid_threads`]: thread creation works again. With it a test makes thread creation
 /// fail for a while (as a resource limit would) without any load.
 pub fn allow_threads() {
