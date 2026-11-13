@@ -2221,10 +2221,11 @@ pub fn select_only(repo: &Repo, list: &str) -> Result<Selection, String> {
 }
 
 fn classify_path(repo: &Repo, f: &str, sel: &mut Selection) {
-    // A LINK-HELPERS helper source: the programs that link it are found by directive, not by name
-    // (every conformance program is the safe selection).
-    if f.starts_with("conformance/c/helpers/") && f.ends_with(".c") {
-        sel.all_conf(repo, &format!("{f}: a dynamic-link helper source (every conformance program)"));
+    // A dynamic-link helper source or a file its HELPER-FLAGS name (a version script): the programs
+    // that use it are found by directive, not by name (every conformance program is the safe
+    // selection).
+    if f.starts_with("conformance/c/helpers/") {
+        sel.all_conf(repo, &format!("{f}: a dynamic-link helper file (every conformance program)"));
         return;
     }
     if let Some(name) = f.strip_prefix("conformance/c/") {
