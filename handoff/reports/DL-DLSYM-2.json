@@ -23,7 +23,7 @@
  "informational": [
   "s27_dlopen_failures became passing through the merge of origin/next; its PENDING-LIELLA mark was removed here",
   "pin_unique is observable only through dlclose (DL-17): no test or plant reaches it yet",
-  "no instruction-count row covers dlsym; no start-up code changed, so no percall job"
+  "no instruction-count row covers dlsym, so no percall job; diagnostic jobs (evidence, not JOBS): dl-dlsym-2-hot (the layout test alone on the branch, rc 101) and dl-dlsym-2-next-hot (same test on origin/next 1700e1798, rc 0)"
  ],
  "refused": [],
  "impact": [
