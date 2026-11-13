@@ -50,7 +50,10 @@ liella_boundary::heap::RESERVE_LOCK
 liella_boundary::thread::HEAD
 liella_boundary::thread::LIST
 liella_boundary::thread::LIVE
-liella_boundary::thread::OWNED
+# Whether the runtime started the process (D-X.58): the Rust byte and the assembly byte (machine/points.S, its own
+# section; the cancellation points and machine/tp.S read it), both written by `init_initial`.
+liella_boundary::thread::OWNED_HERE
+symbol liella_machine_owned
 liella_boundary::thread::LOCK_ALONE
 liella_boundary::thread::RSEQ_OWNED
 liella_boundary::thread::FORBIDDEN

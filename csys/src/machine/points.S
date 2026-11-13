@@ -228,6 +228,7 @@ liella_machine_aio_used:
  * process, so every thread block that runs library code is one it made; clear in a process another
  * C library or loader started, whose blocks' words at 0x9c-0x187 are not Liella's: the entries
  * above then never read %fs:0xa0 and take the Rust path. */
+	.section .data.liella_machine_owned,"aw",@progbits
 	.globl liella_machine_owned
 	.hidden liella_machine_owned
 	.type liella_machine_owned, @object
