@@ -1,0 +1,50 @@
+{
+ "task": "DL-DLOPEN-CONCURRENT-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: LAYOUT-JITTER (#4347) again: no code change; re-gated the DL-16c head on a second host class: 7714 passed, 2 failed, the start-up layout test only (tool 54 at cold 0xf000, 53 at nine pads; 53 at all ten on base 68e72ab32); plants 7/7 CAUGHT; clippy and static clean",
+ "branch": "task/dl-dlopen-concurrent-2",
+ "head": "208348886",
+ "gate": {
+  "affected": "7714 passed / 2 failed on 208348886 (dl-dlopen-concurrent-2-gate, Haswell: both hot_text_products init_data_clusters_hold_at_every_text_phase, fast and interposed, tool 53 at nine pads and 54 at cold 0xf000, the numbers run 1 measured on mei); clippy and static clean (dl-dlopen-concurrent-2-lint)",
+  "peak": "14G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "LAYOUT-JITTER (#4347, amended 11-13): the hold lasts until trace-at-build is the default (LT-1 + LT-4); LT-1 is on next opt-in only, and this brief allows no merge",
+   "recommendation": "hold; after the default switch, cut a continuation whose brief allows `git merge origin/next`, re-gate the direct tier and land unchanged"
+  },
+  {
+   "item": "R14-6 differences row (carried from run 1): dl_iterate_phdr callbacks run without the loader lock",
+   "recommendation": "add the row now with no compat option"
+  },
+  {
+   "item": "pending decision records/pending/DL-DLOPEN-CONCURRENT-1.toml (D-NEW, series D-27, carried from run 1)",
+   "recommendation": "assign the next D-27 id"
+  }
+ ],
+ "informational": [
+  "the jitter is the same on the Haswell role as on the Zen 1 role (same pad, same counts): a layout effect of the build, not of the host",
+  "page_faults.c tool mode (the counted path) calls none of the changed code"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "none",
+   "what": "re-verification of run 1's branch on a second host class; no code change in this run (run 1's impact entries stand)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": true
+  }
+ ],
+ "improvement": "a continuation cut for a #4347 hold could say whether the default switch has landed and allow the merge; this run could only re-measure the same deterministic numbers",
+ "next_step": "after trace-at-build becomes the default: merge origin/next (brief must allow it), re-gate the direct tier, land",
+ "report_file": "handoff/DL-DLOPEN-CONCURRENT.md",
+ "jobs": [
+  "dl-dlopen-concurrent-2-gate",
+  "dl-dlopen-concurrent-2-plants",
+  "dl-dlopen-concurrent-2-lint"
+ ]
+}

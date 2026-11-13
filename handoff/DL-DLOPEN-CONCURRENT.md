@@ -1,6 +1,18 @@
 # DL-DLOPEN-CONCURRENT (DL-16c): lock-free loader readers, safe against dlopen
 
-**State.** Branch `task/dl-dlopen-concurrent` (cut from origin/next 68e72ab32). Code commit 2d72f7cc2, test
+**State (DL-DLOPEN-CONCURRENT-2, 2026-11-13).** Branch `task/dl-dlopen-concurrent-2` = the branch below plus
+this page and `handoff/reports/DL-DLOPEN-CONCURRENT-2.json`; no code change (code head still 599c1d728, base
+origin/next 68e72ab32). Role shiki:~/w/sh1 (Haswell). Still **INCOMPLETE: LAYOUT-JITTER (#4347)**: LT-1
+(trace-at-build) is on next but opt-in; #4347 (amended 11-13) holds until LT-1 + LT-4 make it the default, and
+this brief allows no merge. Run 2: clippy + static clean on the inherited head (`dl-dlopen-concurrent-2-lint`);
+gate `dl-dlopen-concurrent-2-gate`: 7714 passed, 2 failed, the same test with the same numbers as on mei (tool 53
+at nine pads, 54 at `cold 0xf000`; true/fork equal), peak 14G, so the effect is the layout, not the host;
+plants `dl-dlopen-concurrent-2-plants`: 7/7 CAUGHT by message, 0 WARN. `page_faults.c`'s `tool` mode (the
+counted path) calls none of the changed code (no dl_iterate_phdr/_dl_find_object, single-threaded fork path
+untouched, early_init is the dynamic start only). Next step: after the trace-at-build default switch lands,
+merge origin/next (a brief must allow it), re-gate the direct tier, land.
+
+**State (run 1).** Branch `task/dl-dlopen-concurrent` (cut from origin/next 68e72ab32). Code commit 2d72f7cc2, test
 hang-guard fix 599c1d728 (final code head); this page and the report json follow it. Role mei:~/w/s1.
 **INCOMPLETE: LAYOUT-JITTER (ruling #4347).** Gate `dl-dlopen-concurrent-gate` (2d72f7cc2): 7714 passed, 2 failed,
 both `hot_text_products init_data_clusters_hold_at_every_text_phase` (fast and interposed): tool faults 53 at nine
@@ -55,7 +67,9 @@ The probe, the table/epoch design, the fork design (STATE, not CALL, in prepare:
 constructor runs).
 
 ## Next step
-Land. Then DL-17 (epochs in `read_section`, sorted address index) and DL-16b's corpus additions.
+When trace-at-build is the default on next (LT-1 + LT-4): merge origin/next into this branch (the continuation's
+brief must allow that merge), re-gate the direct tier on the assigned role, land. Then DL-17 (epochs in
+`read_section`, sorted address index) and DL-16b's corpus additions.
 
 ## Plan rows to read
 plan/ph14/dl-16-dlopen.md §3, §4, §8; D-27.1, D-27.30, D-27.37; dynlink.md P-7, P-8, P-9, `== phdr`, readers.
