@@ -959,8 +959,9 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
     // (ruling #4923); the declared statics' own sections survive the join.
     crate::coldbss::move_startup_state(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, root, &product.join("state-work"))?;
     crate::coldbss::move_cold_bss(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("coldbss-work"))?;
-    // LAYOUT-TRACE-AT-BUILD (LT-1): `layout` is the committed lists except in `run_so_as` under the switch (a
-    // measurement, repair or regen build keeps the committed lists).
+    // LAYOUT-TRACE-AT-BUILD (LT-1), LAYOUT-TRACE-DEFAULT: `layout` is the trace of this build in `run_so_as` (the
+    // default; `ungrouped` or `0` when the switch says so); a measurement, repair or regen build keeps the committed
+    // lists.
     // A regen build keeps the archive as the grouping receives it: `cargo xtask hottext-recheck` reruns
     // the grouping alone on it with the rewritten list (HOTLIST-REGEN-CHEAP). A trace-at-build run links its
     // probes against a product finished from it, ungrouped.
@@ -1007,8 +1008,7 @@ fn trace_layout(root: &Path, product: &Path, profile: Profile) -> Result<(), Str
             Err(e) => format!("{tracer}: {e}"),
         };
         return Err(format!(
-            "so: {}=1: no usable tracer ({why}); trace-at-build needs gdb with Python on this builder. Install it, or build an ungrouped product (correct, more start-up faults) with {}=ungrouped",
-            crate::hotlists::TRACE_ENV,
+            "so: trace-at-build (the default): no usable tracer ({why}); trace-at-build needs gdb with Python on this builder. Install it, or build an ungrouped product (correct, more start-up faults) with {}=ungrouped",
             crate::hotlists::TRACE_ENV
         ));
     }
@@ -1025,7 +1025,7 @@ fn trace_layout(root: &Path, product: &Path, profile: Profile) -> Result<(), Str
     let log = lists.join("trace.log");
     let logf = fs::File::create(&log).map_err(|e| format!("{}: {e}", log.display()))?;
     let errf = logf.try_clone().map_err(|e| e.to_string())?;
-    println!("so: {}=1: tracing the probes linked against this build (log {})", crate::hotlists::TRACE_ENV, log.display());
+    println!("so: trace-at-build: tracing the probes linked against this build (log {})", log.display());
     let before = tracked_files(root)?;
     let st = Command::new("bash")
         .arg(root.join("tools/hottext/regen.sh"))
@@ -1043,8 +1043,7 @@ fn trace_layout(root: &Path, product: &Path, profile: Profile) -> Result<(), Str
     let changed = restore_tracked(root, &before)?;
     if !changed.is_empty() {
         return Err(format!(
-            "so: {}=1: tools/hottext/regen.sh changed {} in {} during the trace (restored); a trace-at-build run writes only {}",
-            crate::hotlists::TRACE_ENV,
+            "so: trace-at-build: tools/hottext/regen.sh changed {} in {} during the trace (restored); a trace-at-build run writes only {}",
             changed.join(", "),
             crate::hotlists::TRACKED,
             lists.display()
@@ -1053,7 +1052,7 @@ fn trace_layout(root: &Path, product: &Path, profile: Profile) -> Result<(), Str
     if !st.success() {
         let text = fs::read_to_string(&log).unwrap_or_default();
         let tail: Vec<&str> = text.lines().rev().take(8).collect::<Vec<_>>().into_iter().rev().collect();
-        return Err(format!("so: {}=1: tracing failed ({st}); last lines of {}:\n{}", crate::hotlists::TRACE_ENV, log.display(), tail.join("\n")));
+        return Err(format!("so: trace-at-build: tracing failed ({st}); last lines of {}:\n{}", log.display(), tail.join("\n")));
     }
     for l in fs::read_to_string(&log).unwrap_or_default().lines().filter(|l| l.starts_with("hot-text:") || l.starts_with("startup-text:") || l.starts_with("probe-text:")) {
         println!("so: trace-at-build: {l}");
@@ -1215,11 +1214,18 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     let _ = fs::remove_file(release.join(".profile"));
     // LAYOUT-TRACE-AT-BUILD: a set built now names its lists only if this run traced (or skipped) the layout.
     let _ = fs::remove_file(release.join(crate::hotlists::MARKER));
-    let layout = Layout::from_env()?;
-    if layout != Layout::Committed && crate::hottext::regen_on() {
-        return Err(format!("so: {} and {} together: a regen build reads the committed lists", crate::hotlists::TRACE_ENV, crate::hottext::REGEN_FLAG));
-    }
+    // LAYOUT-TRACE-DEFAULT: every product build traces its own layout unless the switch says otherwise.
+    let regen = crate::hottext::regen_on();
+    let layout = Layout::from_env(regen)?;
     println!("so: profile {}", profile.name());
+    match layout {
+        Layout::Committed if !regen => println!(
+            "so: {}=0: grouping from the committed lists (list tooling until LT-5; a product build traces its own layout by default)",
+            crate::hotlists::TRACE_ENV
+        ),
+        Layout::Traced => println!("so: trace-at-build (the default; {}=ungrouped opts out): the start-up layout comes from a trace of this build", crate::hotlists::TRACE_ENV),
+        _ => {}
+    }
 
     // 1. The archive, with its definitions made overridable (D-X.14).
     let (archive, weak, copies) = build_archive_locked(root, &product, &release.join("libc.a"), None, profile, layout)?;

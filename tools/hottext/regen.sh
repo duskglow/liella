@@ -22,7 +22,8 @@
 #   HOTTEXT-REGEN-UNBLOCK: --build (needs <tree> = this script's tree) builds the products itself, in the
 #   profile LIELLA_FULL_PROFILE selects, with `cargo xtask so --hottext-regen`: the dead-key check is
 #   reported, not enforced, so a stale key no longer blocks its own repair. After rewriting the list it
-#   rebuilds with plain `cargo xtask so`, which must pass the check. Nothing else may pass that flag
+#   rebuilds with `LIELLA_LAYOUT_TRACE=0 cargo xtask so` (the committed lists; a plain `so` traces its own
+#   layout since LAYOUT-TRACE-DEFAULT), which must pass the check. Nothing else may pass that flag
 #   (`cargo xtask static`). --build is one profile; both profiles: `regen.sh . --both` (ruling #5241). A
 #   release `--build` after a fast `--replace` fails in its own product build: the fast-only lists hold no
 #   release keys, so the release layout contracts (STARTUP-TEXT-WINDOWS, STARTUP-DATA-WINDOWS) refuse the
@@ -35,7 +36,7 @@
 #   the one-profile path builds them), and `cargo xtask hottext-recheck` reruns only the grouping and its
 #   dead-key check. A list is rewritten only when its bytes change (runner.sh put_changed).
 #   --products <dir>: trace the products in <dir> (default <tree>/target/liella).
-#   --all-modes (LAYOUT-TRACE-AT-BUILD, `cargo xtask so` under LIELLA_LAYOUT_TRACE=1 with --replace): also trace the
+#   --all-modes (LAYOUT-TRACE-AT-BUILD, every trace-at-build `cargo xtask so`, with --replace): also trace the
 #   page_faults modes fork, strings, float, mktime and rebind, so every mode the bounds count is in the trace set.
 #   LAYOUT-TRACE-AT-BUILD-2: it then checks that set against the modes of page_faults.c (the modes
 #   hot_text_products.rs measures) and fails, naming each one, when a mode was not traced.
@@ -319,5 +320,6 @@ STARTUP_DATA_PRODUCTS=$P bash "$here/startup_data.sh" "$T" $pr
 if [ $build = 1 ]; then
     # The rewritten list must pass the dead-key check in this profile (merge.py drops the keys this
     # trace no longer hits from this profile).
-    (cd "$T" && cargo xtask so) || { echo "regen: the rewritten list still fails cargo xtask so ($profile)" >&2; exit 1; }
+    # LAYOUT-TRACE-DEFAULT: a plain build traces its own layout; this one checks the rewritten committed list (=0).
+    (cd "$T" && LIELLA_LAYOUT_TRACE=0 cargo xtask so) || { echo "regen: the rewritten list still fails cargo xtask so ($profile)" >&2; exit 1; }
 fi
