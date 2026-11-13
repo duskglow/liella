@@ -22,7 +22,8 @@
 #   HOTTEXT-REGEN-UNBLOCK: --build (needs <tree> = this script's tree) builds the products itself, in the
 #   profile LIELLA_FULL_PROFILE selects, with `cargo xtask so --hottext-regen`: the dead-key check is
 #   reported, not enforced, so a stale key no longer blocks its own repair. After rewriting the list it
-#   rebuilds with plain `cargo xtask so`, which must pass the check. Nothing else may pass that flag
+#   rebuilds with `LIELLA_LAYOUT_TRACE=0 cargo xtask so` (the committed lists; a plain `so` traces its own
+#   layout since LAYOUT-TRACE-DEFAULT), which must pass the check. Nothing else may pass that flag
 #   (`cargo xtask static`). --build is one profile; both profiles: `regen.sh . --both` (ruling #5241). A
 #   release `--build` after a fast `--replace` fails in its own product build: the fast-only lists hold no
 #   release keys, so the release layout contracts (STARTUP-TEXT-WINDOWS, STARTUP-DATA-WINDOWS) refuse the
@@ -35,6 +36,10 @@
 #   the one-profile path builds them), and `cargo xtask hottext-recheck` reruns only the grouping and its
 #   dead-key check. A list is rewritten only when its bytes change (runner.sh put_changed).
 #   --products <dir>: trace the products in <dir> (default <tree>/target/liella).
+#   --all-modes (LAYOUT-TRACE-AT-BUILD, every trace-at-build `cargo xtask so`, with --replace): also trace the
+#   page_faults modes fork, strings, float, mktime and rebind, so every mode the bounds count is in the trace set.
+#   LAYOUT-TRACE-AT-BUILD-2: it then checks that set against the modes of page_faults.c (the modes
+#   hot_text_products.rs measures) and fails, naming each one, when a mode was not traced.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 T=$(cd "$1" && pwd); shift
@@ -46,12 +51,14 @@ list=$L/hot-text.list
 replace=0
 build=0
 allow_drop=0
+all_modes=0
 both=0
 P=$T/target/liella
 phase=all
 pdir=
 while [ $# -gt 0 ]; do
     case $1 in --replace) replace=1; shift;; --build) build=1; shift;; --allow-drop) allow_drop=1; shift;; --both) both=1; shift;;
+        --all-modes) all_modes=1; shift;;
         --products) P=$(cd "$2" && pwd); shift 2;; --trace-only) phase=trace; pdir=$2; shift 2;; --merge-only) phase=merge; pdir=$2; shift 2;;
         *) break;; esac
 done
@@ -121,9 +128,11 @@ tier_of() { # <probe> -> its tier (HOTTEXT-STARTUP-COMPLETE)
     esac
 }
 : > "$work/tagged"
+: > "$work/traced"
 trace() { # <tier> <LANG> <program> <args...>; tz=<zone> sets the program's TZ
     # LAYOUT-TRACE-HOST-CANONICAL: LANG (and TZ when given) is the program's whole environment (runner.sh).
     local tier=$1 lang=$2; shift 2
+    printf '%s\n' "$*" >> "$work/traced"  # the trace set, for the --all-modes coverage check
     # shellcheck disable=SC2046
     trace_tagged "$tier" LANG="$lang" $([ -n "${tz:-}" ] && echo "TZ=$tz") HOT_TEXT_STDIN="${stdin:-$work/in.txt}" HOT_TEXT_FOLLOW_FORK="${follow:-}" -- "$@"
 }
@@ -185,6 +194,13 @@ if [ -f p_cat.c ]; then trace stdio en_US.UTF-8 ./p_cat; checks="$checks p_cat:$
 # The bound test runs these modes with LANG=en_US.UTF-8 and stdin /dev/null.
 stdin=/dev/null trace locale en_US.UTF-8 ./page_faults locale
 stdin=/dev/null trace tool en_US.UTF-8 ./page_faults tool
+if [ $all_modes = 1 ]; then
+    # LAYOUT-TRACE-AT-BUILD (LT-1): every other mode the bounds of hot_text_products.rs count, so a list traced
+    # from nothing (--replace) holds what they run. After `tool`: the first touches above keep their order and
+    # these add only what no earlier probe ran (tier fork for the child, extra for the rest).
+    stdin=/dev/null follow=child trace fork en_US.UTF-8 ./page_faults fork
+    for m in strings float mktime rebind; do stdin=/dev/null trace extra en_US.UTF-8 ./page_faults "$m"; done
+fi
 for cmd in "$@"; do
     # shellcheck disable=SC2086
     trace tool en_US.UTF-8 $cmd
@@ -197,6 +213,30 @@ run_traced "$work/startup.names" "$work/gdb.startup.log" LANG=C HOT_TEXT_STDIN="
 probe_text_trace() { local rc=0; bash "$here/probe_text.sh" "$T" --products "$P" --trace-only "$work/probe" > "$work/probe.log" 2>&1 || rc=$?; echo $rc > "$work/probe.log.rc"; }
 probe_text_trace &
 traces_done
+if [ $all_modes = 1 ]; then
+    # LAYOUT-TRACE-AT-BUILD-2: the trace set covers every mode hot_text_products.rs measures, which is every
+    # mode of page_faults.c (its init_startup_data_accesses_are_in_the_data1_cluster checks that, parsing the
+    # source the same way; `true` is the default mode, selected by no strcmp): a mode with no trace above
+    # (trace ./page_faults <mode>), no start-up trace (true) and no probe_text.sh trace fails here by name,
+    # whatever its fault count happens to read on this build.
+    pmodes=$(grep -oE 'strcmp\(argv\[1\], "[A-Za-z0-9_]+"' "$T/crates/core/tests/oracle/page_faults.c" |
+             sed -E 's/.*"([A-Za-z0-9_]+)"$/\1/' | grep -vx relay | sort -u || true)
+    if [ "$(printf '%s\n' "$pmodes" | grep -c .)" -lt 3 ]; then
+        echo "regen: --all-modes: found only '$pmodes' as page_faults.c modes (strcmp(argv[1], \"<mode>\")): the parse no longer matches the source" >&2
+        exit 1
+    fi
+    untraced=
+    for m in true $pmodes; do
+        if [ "$m" = true ]; then [ -s "$work/startup.names" ] && continue
+        else grep -qxF "./page_faults $m" "$work/traced" && continue; [ -s "$work/probe/names.$m" ] && continue; fi
+        untraced="$untraced $m"
+    done
+    if [ -n "$untraced" ]; then
+        echo "regen: --all-modes: the trace set misses page_faults mode(s):$untraced (hot_text_products.rs measures every mode of page_faults.c; trace each one here or in probe_text.sh)" >&2
+        exit 1
+    fi
+    echo "regen: --all-modes: every page_faults mode traced: true $(printf '%s ' "$pmodes" | tr '\n' ' ')"
+fi
 fi  # trace phase
 [ $phase = trace ] && exit 0
 python3 "$here/keys.py" --tagged "startup=$work/startup.names" > "$work/startup.keys"
@@ -260,6 +300,10 @@ echo "hot-text: $(wc -l < "$work/new.keys") keys traced ($profile), $(grep -vc '
 # they go with their keys (named on stderr). Only --replace: a merge (the train's `--both --allow-drop`
 # included) leaves the hand-written allow-list alone, and its recheck names any line left stale.
 absent=$here/../../crates/libc-so/hot-text.absent
+# LAYOUT-TRACE-AT-BUILD: --all-modes (`cargo xtask so` under LIELLA_LAYOUT_TRACE) replaces a list under
+# target/, not the committed one, and its grouping ignores the allow-list (Layout::Traced): a build never
+# rewrites the committed allow-list.
+if [ $all_modes = 1 ]; then absent=; fi
 if [ $replace = 1 ] && [ -f "$absent" ]; then
     python3 "$here/prune.py" --absent "$list" "$absent" > "$work/absent.pruned"
     put_changed "$work/absent.pruned" "$absent"
@@ -276,5 +320,6 @@ STARTUP_DATA_PRODUCTS=$P bash "$here/startup_data.sh" "$T" $pr
 if [ $build = 1 ]; then
     # The rewritten list must pass the dead-key check in this profile (merge.py drops the keys this
     # trace no longer hits from this profile).
-    (cd "$T" && cargo xtask so) || { echo "regen: the rewritten list still fails cargo xtask so ($profile)" >&2; exit 1; }
+    # LAYOUT-TRACE-DEFAULT: a plain build traces its own layout; this one checks the rewritten committed list (=0).
+    (cd "$T" && LIELLA_LAYOUT_TRACE=0 cargo xtask so) || { echo "regen: the rewritten list still fails cargo xtask so ($profile)" >&2; exit 1; }
 fi

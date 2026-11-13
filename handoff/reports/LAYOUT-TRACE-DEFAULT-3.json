@@ -1,0 +1,32 @@
+{
+ "task": "LAYOUT-TRACE-DEFAULT-3",
+ "model": "opus",
+ "tokens": null,
+ "result": "shiki (Haswell-EP) and kanon (Broadwell-EP) read the same start-up fault and window table as mei and keke in both profiles; the four-host highest equals the branch bounds, all at or below next's, so no bound changes; table recorded in the handoff and the pending record",
+ "branch": "task/layout-trace-default-3",
+ "head": "c071677a5",
+ "gate": {
+  "affected": "layout-trace-default-3-gate (cargo xtask affected --run, escalated to FULL by the xtask change): rc 0, 11745 passed / 0 failed (32 suites), conformance 132 passed / 0 failed",
+  "peak": "16G (page cache included), oom_kill=0"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "Four-host table (fast / release), identical on Skylake-SP, Zen 1, Haswell-EP, Broadwell-EP: true 11/10, locale 46/47, tool 50/49, fork 5/5, localtime 17/18, localtime+mktime 17/18, float 3/3, text windows 2/2, ro windows 1/1, rw pages 11/14; every run identical",
+  "Release libc.a byte-identical between shiki and kanon at the final head; fast hot-text.list held the extra-tier key Catalogs::identity in the shiki build and not in the kanon build of the same tree (the effect run 2 noted; fault table unchanged)",
+  "The bounds still sit at the measured counts with no margin, now on all four gate host classes"
+ ],
+ "refused": [],
+ "impact": [
+  {"kind": "none", "what": "measurement only: four-host confirmation of the start-up bounds; no code or bound change in run 3", "before": null, "after": null, "unit": null, "measured": true}
+ ],
+ "improvement": "a proof script that measures and goes on (records each rc) would have served runs 2 and 3 alike; proof.sh stopped at the first red, which would hide the count a host-finding needs",
+ "next_step": "land; then LT-5 (delete the committed lists, dead-key and pin checks, the hot-lists lane and the train regen step)",
+ "report_file": "handoff/LAYOUT-TRACE-DEFAULT.md",
+ "jobs": [
+  "layout-trace-default-3-gate",
+  "layout-trace-default-3-lint1",
+  "layout-trace-default-3-shiki-proof2",
+  "kanon:layout-trace-default-3-kanon-proof2"
+ ]
+}

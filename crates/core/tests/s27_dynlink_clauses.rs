@@ -62,8 +62,8 @@ clause!(s27_1_g_0, "27.1", "Guarantees", r##"Symbol resolution follows ELF rules
 /// `s27_dlopen_failures`: the failure corpus (a missing file, files that are not loadable
 /// objects, the wrong ELF class, a missing dependency, an undefined symbol under RTLD_NOW, a
 /// missing version, bad modes, RTLD_NOLOAD),
-/// each a NULL handle with the reference's dlerror text. Static TLS exhaustion is not covered
-/// (no spec clause test yet). Checked on the reference and on Liella's loader (DL-16a).
+/// each a NULL handle with the reference's dlerror text. Static TLS exhaustion is checked by
+/// `s27_dlopen_tls_surplus` (s27_3_c_0). Checked on the reference and on Liella's loader (DL-16a).
 #[test]
 fn s27_1_f_0() {
     let out = conformance(&["s27_dlopen_failures"]);
@@ -71,7 +71,20 @@ fn s27_1_f_0() {
     assert!(out.lines().any(|l| l == "conformance: 1 passed, 0 failed"), "s27_dlopen_failures did not pass on both:\n{out}");
 }
 clause!(s27_2_c_0, "27.2", "Contract", r##"Libraries named in `LD_AUDIT` (or `DT_AUDIT`) receive callbacks from the dynamic linker for library search, object load and unload, symbol binding (they can redirect bindings), and PLT entry and exit."##);
-clause!(s27_3_c_0, "27.3", "Contract", r##"Return the address of a TLS variable, given a module ID and an offset, for the calling thread. The block is allocated on first access for modules loaded by `dlopen`."##);
+/// §27.3 Contract: Return the address of a TLS variable, given a module ID and an offset, for the calling thread. The block is allocated on first access for modules loaded by `dlopen`.
+///
+/// `s27_dlopen_tls_surplus`: objects with `PT_TLS` opened by `dlopen` (global-dynamic,
+/// local-dynamic, initial-exec and TLS-descriptor accesses), from the main thread, a thread
+/// created before the `dlopen`, one created after it and 32 created while it runs: each sees the
+/// initial image, zeros past it, the alignment and a block of its own. Also the static TLS
+/// exhaustion text (s27_1_f_0) and 80 failed opens that each give their TLS place back. Liella
+/// places such blocks in the static surplus at `dlopen` (DL-16d); dynamic blocks are DL-19's.
+/// Checked on the reference and on Liella's loader.
+#[test]
+fn s27_3_c_0() {
+    let out = conformance(&["s27_dlopen_tls_surplus"]);
+    assert!(out.lines().any(|l| l == "conformance: 1 passed, 0 failed"), "s27_dlopen_tls_surplus did not pass on both:\n{out}");
+}
 clause!(s27_3_f_0, "27.3", "Failure", r##"None. Allocation failure aborts the process. ⚑ ARB: there is no error channel for a lazy allocation."##);
 clause!(s27_4_c_0, "27.4", "Contract", r##"`_r_debug` and `_dl_debug_state` implement the debugger rendezvous. The debugger sets a breakpoint on `_dl_debug_state` and walks the `r_debug.r_map` list after each change. Since 2.35 `r_version` is 2, which adds a linked list of namespaces."##);
 clause!(s27_5_c_0, "27.5", "Contract", r##"Report CPU features as detected by the dynamic linker (CPUID plus OS support via XCR0, masked by `glibc.cpu.hwcaps` tunables): "present" means the CPU supports the feature, and "active" means it is also usable."##);
