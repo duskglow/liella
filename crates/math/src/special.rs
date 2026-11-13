@@ -302,6 +302,9 @@ pub fn lgamma<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
             if let Some(((v, st), sign)) = r {
                 return ((F::from_bits(u128::from(v.to_bits())), st), sign);
             }
+        } else if let Some(((v, st), sign)) = fast_gamma::lgamma_band(xf, mode) {
+            // |x| < 2^-60 and x >= 16 (D-10.105).
+            return ((F::from_bits(u128::from(v.to_bits())), st), sign);
         }
     }
     lgamma_accurate(x, mode)
@@ -343,6 +346,9 @@ pub fn tgamma<F: Float>(x: F, mode: Rounding) -> (F, Status) {
             if let Some(r) = from_fast("tgamma", fast_gamma::tgamma(xf, mode)) {
                 return r;
             }
+        } else if let Some((v, st)) = fast_gamma::tgamma_band(xf, mode) {
+            // 2^-1022 <= |x| < 2^-60 (D-10.105).
+            return (F::from_bits(u128::from(v.to_bits())), st);
         }
     }
     tgamma_accurate(x, mode)
