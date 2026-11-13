@@ -64,7 +64,9 @@ Rewriting the tier from the regen, and dropping the column, were both considered
 - hut-gate (mei): left no jobs.tsv row and an empty log; superseded by the gate below.
 - Gate: job hottext-unpinned-tier-2-gate, `cargo xtask affected --run --base origin/next` (the tool escalates to FULL:
   xtask and a product linker input changed). Plants: job hottext-unpinned-tier-2-plants, same plants file as the
-  first run. Results in handoff/reports/HOTTEXT-UNPINNED-TIER-2.json and the hand-back.
+  first run: 2/2 CAUGHT, no WARN lines (handoff/HOTTEXT-UNPINNED-TIER-2-plants.txt). The gate was still running
+  (FULL) at hand-back: on keke `~/bin/jobwait hottext-unpinned-tier-2-gate`, then
+  `~/bin/test-summary ~/logs/hottext-unpinned-tier-2-gate.log`. Report: handoff/reports/HOTTEXT-UNPINNED-TIER-2.json.
 
 ## Next step
 None for this story: land it once the gate and plants are green. The key-set coupling goes with LT-5 (#5205).
