@@ -75,7 +75,10 @@ int main(int argc, char **argv)
     CHECK(g && failed_with(dlsym(g, "handles_no_such_symbol"), prog, "handles_no_such_symbol"));
     CHECK(k && failed_with(dlsym(k, "handles_no_such_symbol"), h2, "handles_no_such_symbol"));
     CHECK(failed_with(dlvsym(RTLD_DEFAULT, "printf", "GLIBC_9.99"), prog, "printf, version GLIBC_9.99"));
-    CHECK(k && failed_with(dlvsym(k, "f", "NOVER_1"), h2, "f, version NOVER_1"));
+    /* Helper 1 has a version table (it needs the C library) but no version NOVER_1. */
+    void *k1 = dlopen(h1, RTLD_NOW);
+    CHECK(k1 != NULL);
+    CHECK(k1 && failed_with(dlvsym(k1, "f", "NOVER_1"), h1, "f, version NOVER_1"));
 
     return fails;
 }

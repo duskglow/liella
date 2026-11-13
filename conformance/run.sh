@@ -82,7 +82,7 @@ dynlibc=""
 # (0x6ffffdf8, which loaders ignore), so an object linked against OUT names it by OUT's path.
 bypath() {
     off=$(readelf -Wd "$1" | sed -n 's/^Dynamic section at offset \(0x[0-9a-f]*\) .*/\1/p')
-    idx=$(readelf -Wd "$1" | awk '$1 ~ /^0x/ { if ($2 == "(SONAME)") { print n; exit } n++ }')
+    idx=$(readelf -Wd "$1" | awk '$1 ~ /^0x/ { if ($2 == "(SONAME)") { print n + 0; exit } n++ }')
     [ -n "$off" ] && [ -n "$idx" ] && cp "$1" "$2" &&
         printf '\370\375\377\157\000\000\000\000' | dd of="$2" bs=1 seek=$((off + 16 * idx)) conv=notrunc 2>/dev/null &&
         ! readelf -Wd "$2" | grep -qF '(SONAME)'

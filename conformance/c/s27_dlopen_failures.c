@@ -98,7 +98,8 @@ int main(void)
     snprintf(dir, sizeof dir, "%s/s27_dlopen_failures.XXXXXX", tmp && *tmp ? tmp : "/tmp");
     if (mkdtemp(dir) == NULL)
         return 101;
-    const char *c = at(hdir, "libdlf_c.so");
+    char c[4096];
+    snprintf(c, sizeof c, "%s/libdlf_c.so", hdir);
     size_t self_n;
     unsigned char *self = slurp("/proc/self/exe", &self_n);
     int pie = self != NULL && self_n > 17 && self[16] == 3; /* this program's e_type: ET_DYN */
