@@ -759,7 +759,7 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
         d.affinity_len.store(len, Relaxed);
     }
     // The two words the C layer pops in the new thread: the entry and its argument.
-    conv::store_words(sp, &[entry_addr(), daddr]);
+    conv::store_words(sp, [entry_addr(), daddr]);
 
     me.multiple_threads.store(1, Relaxed);
     SINGLE_THREADED.store(0, Release);
