@@ -905,7 +905,7 @@ fn thread_walk(l: &mut Loader) -> usize {
     if l.thread_walk == 0 {
         let req = Request::new(start::private::THREAD_WALK, Want::Version(start::private::NODE));
         let n = START_N.load(Acquire).min(l.n);
-        let found = l.objs_upto(n).iter().zip(l.syms_upto(n)).find_map(|(o, s)| s.lookup(&req).ok().flatten().map(|d| o.bias.wrapping_add(d.st.value)));
+        let found = l.objs_upto(n).iter().zip(syms_of(&l.syms, n)).find_map(|(o, s)| s.lookup(&req).ok().flatten().map(|d| o.bias.wrapping_add(d.st.value)));
         l.thread_walk = found.and_then(|a| usize::try_from(a).ok()).unwrap_or(0);
     }
     l.thread_walk
