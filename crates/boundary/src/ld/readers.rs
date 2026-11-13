@@ -193,8 +193,9 @@ pub(super) fn count_unmapped(n: usize) {
     SUBS.fetch_add(n, Release);
 }
 
-/// The TLS module ID and the calling thread's block of the object, when it has a `PT_TLS` segment
-/// placed at start (DL-15's records; `dlopen`'d modules are DL-16d's): `(0, 0)` otherwise.
+/// The TLS module ID and the calling thread's block of the object, when it has a `PT_TLS` segment:
+/// DL-15's records of the start-time modules, which DL-16d's `dlopen` extends with each new module
+/// before [`publish`] lists its object; `(0, 0)` otherwise.
 fn tls_of(e: &Entry) -> (u64, usize) {
     let Some((_, vaddr, _)) = headers(e.phdr, e.phnum).find(|h| h.0 == PT_TLS) else { return (0, 0) };
     let image = u64::try_from(e.bias).unwrap_or(0).wrapping_add(vaddr);

@@ -62,7 +62,8 @@ fn build(d: &Path, out: &str, src: &str, flags: &[&str]) -> PathBuf {
 /// resolver records whether `dl_iterate_phdr` lists the object already, the constructor whether it
 /// does then and what `_dl_find_object` says. KIND 2 (`libca`): the constructor corpus. KIND 3
 /// (`libslow`): a constructor that waits on a pipe the program names. KIND 4 (`libplain*`): a
-/// constructor that counts. KIND 5 (`libthrough`): calls back the program (the C++ case).
+/// constructor that counts. KIND 5 (`libthrough`): calls back the program (the C++ case). KIND 6
+/// (`libtls`): a `PT_TLS` object whose constructor records the caller's address of its variable.
 const LIB: &str = r#"#define _GNU_SOURCE
 #include <dlfcn.h>
 #include <link.h>
@@ -112,6 +113,10 @@ extern void (*through_fn)(void (*)(void));
 extern int through_calls;
 void through(void (*f)(void)) { through_calls++; f(); __asm__ volatile("" ::: "memory"); through_calls++; }
 __attribute__((constructor)) static void c(void) { through_fn = through; }
+#elif KIND == 6
+extern void *tls_addr;
+__thread int tls_v = 6;
+__attribute__((constructor)) static void c(void) { tls_addr = &tls_v; }
 #endif
 "#;
 
@@ -126,6 +131,7 @@ const PROG: &str = r#"#define _GNU_SOURCE
 #include <sys/wait.h>
 #include <unistd.h>
 int resolver_saw[16], ctor_saw[16], ctor_log[64], n_log, slow_in, slow_out;
+void *tls_addr;
 char dir[4096];
 #define FAIL(n, ...) do { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); return n; } while (0)
 static const char *at(const char *f) { static char b[4][4200]; static int i; i = (i + 1) % 4; snprintf(b[i], sizeof b[i], "%s/%s", dir, f); return b[i]; }
@@ -145,6 +151,13 @@ static int opening_cb(struct dl_phdr_info *i, size_t s, void *d) {
     return 0;
 }
 static int in_main(void) { return 1; }
+struct tls_seen { size_t modid; void *data; };
+static int tls_cb(struct dl_phdr_info *i, size_t s, void *d) {
+    struct tls_seen *t = d; (void)s;
+    if (!strstr(i->dlpi_name, "/libtls.so")) return 0;
+    t->modid = i->dlpi_tls_modid; t->data = i->dlpi_tls_data;
+    return 1;
+}
 
 static int readers(void) {
     struct walk w = walk();
@@ -177,6 +190,11 @@ static int readers(void) {
     if (!dlopen(at("libca.so"), RTLD_NOW)) FAIL(23, "dlopen libca: %s", dlerror());
     static const int want[] = { 20, 21, 23, 24, 41, 25, 26, 27, 29 };
     if (n_log != 9 || memcmp(ctor_log, want, sizeof want) != 0) { for (int k = 0; k < n_log; k++) fprintf(stderr, " %d", ctor_log[k]); FAIL(24, " <- constructor corpus log (want 20 21 23 24 41 25 26 27 29)"); }
+    /* A dlopen'd object with PT_TLS is listed with its module ID and this thread's block, the
+       one its own code reaches (the module is given to every thread before publication). */
+    if (!dlopen(at("libtls.so"), RTLD_NOW) || !tls_addr) FAIL(25, "dlopen libtls: %s", dlerror());
+    struct tls_seen t = { 0, 0 };
+    if (dl_iterate_phdr(tls_cb, &t) != 1 || t.modid == 0 || t.data != tls_addr || *(int *)t.data != 6) FAIL(26, "libtls listed with module %zu block %p, its variable at %p", t.modid, t.data, tls_addr);
     return 0;
 }
 
@@ -283,6 +301,7 @@ fn corpus(d: &Path, ld: &Path, libc: &Path, crt1: &Path) -> PathBuf {
         kinds.push((format!("libplain{k}.so"), format!("-DKIND=4 -DK={k}")));
     }
     kinds.push(("libthrough.so".into(), "-DKIND=5".into()));
+    kinds.push(("libtls.so".into(), "-DKIND=6".into()));
     for (out, defs) in &kinds {
         let mut flags: Vec<&str> = shared.to_vec();
         flags.extend(defs.split(' '));
@@ -312,7 +331,8 @@ fn run(d: &Path, ld: &Path, prog: &Path, mode: &str) {
 /// (its IFUNC resolver does not see it listed) and before its constructors (they do, and
 /// `_dl_find_object` finds it with its link map); a callback may call `dlopen` and the running walk
 /// visits the new object; constructors call malloc, stdio, `dlopen` (P-7) and start and join a
-/// thread that reads.
+/// thread that reads; a `dlopen`'d `PT_TLS` object is listed with its module ID and the calling
+/// thread's block (`dlpi_tls_modid`, `dlpi_tls_data`, DL-16d).
 #[test]
 fn s27_1_c_8_readers_see_published_objects_only() {
     let Some((d, ld, libc, crt1)) = setup("readers") else { return };
