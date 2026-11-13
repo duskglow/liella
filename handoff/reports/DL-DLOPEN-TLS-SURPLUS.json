@@ -1,0 +1,13 @@
+{"task": "DL-DLOPEN-TLS-SURPLUS", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: context checkpoint; design settled, ld.so table/dtv/slow-path/surplus allocator written (uncompiled WIP), libc walk + dlopen wiring + tests remain",
+ "branch": "task/dl-dlopen-tls-surplus", "head": null,
+ "gate": {"affected": "not run", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [{"item": "DL-16b (dlsym) is not on next, so dlsym of STT_TLS in dlopen'd modules cannot be wired in DL-16d", "recommendation": "DL-16b calls ld.so's table lookup (tls_slow's) for STT_TLS definitions; tests reach helper code through a program-exported register function"},
+                   {"item": "DL-15 calls the loader's tls_init outside libc's thread-list lock, before list_insert (the plan section 5 point 1 race)", "recommendation": "move the TLS fill inside the insert's LIST critical section (design in the handoff)"}],
+ "refused": [],
+ "impact": [{"kind": "none", "what": "WIP only, nothing lands from this run", "before": null, "after": null, "unit": null, "measured": false}],
+ "improvement": "The story needs more context than ~150k: DL-15's code (ld.rs, thread.rs, dlopen.rs) must be read whole; a brief that names the exact functions (fill_static, create_inner, load_set) would save a third of it.",
+ "next_step": "Follow 'Next steps (exact)' in handoff/DL-DLOPEN-TLS-SURPLUS.md: clippy, libc walk export, load_set wiring, tests, plants, counts.",
+ "report_file": "handoff/DL-DLOPEN-TLS-SURPLUS.md",
+ "jobs": []}

@@ -80,6 +80,38 @@ fn tls_layout_variant_ii_offsets_alignment_and_surplus() {
     assert_eq!(tls::layout::<Native>(&mods, &mut [None; 2], Native::TCB_SIZE, 0), Err(tls::TlsError::Args));
 }
 
+/// no spec clause (plan/ph14/dl-16-dlopen.md §5, R14-4; DL-16d): places in the static surplus for
+/// `dlopen`ed modules. First fit nearest the thread pointer; each block keeps its alignment and
+/// `p_vaddr` remainder; a gap an alignment left is used by a later block; blocks never overlap and
+/// stay inside the surplus; an alignment above the thread pointer's (or not a power of two), a
+/// block larger than its image's file part allows, and an exhausted table are refused; `rollback`
+/// gives back the places made after its mark.
+#[test]
+fn tls_surplus_first_fit_alignment_gap_reuse_and_rollback() {
+    let m = |memsz, align, vaddr| Module { vaddr, filesz: 0, memsz, align };
+    let (lo, hi, tpa) = (100u64, 1100u64, 64u64);
+    let mut s = tls::Surplus::<8>::default();
+    let put = |s: &mut tls::Surplus<8>, md: Module| s.place::<Native>(lo, hi, tpa, &md);
+    assert!(s.is_empty());
+    assert_eq!(put(&mut s, m(10, 1, 0)), Some(-110), "at the surplus's start");
+    // Remainder 8 modulo 64: TP - d == 8 (mod 64) for the nearest d >= 110 + 8, d = 120.
+    assert_eq!(put(&mut s, m(8, 64, 0x1008)), Some(-120), "alignment and p_vaddr remainder");
+    assert_eq!(put(&mut s, m(2, 2, 0)), Some(-112), "the gap [110, 112) the alignment left");
+    assert_eq!(put(&mut s, m(8, 128, 0)), None, "an alignment above the thread pointer's");
+    assert_eq!(put(&mut s, m(8, 24, 0)), None, "an alignment that is not a power of two");
+    assert_eq!(put(&mut s, Module { vaddr: 0, filesz: 9, memsz: 8, align: 1 }), None, "p_filesz > p_memsz");
+    let mark = s.len();
+    assert_eq!(mark, 3);
+    assert_eq!(put(&mut s, m(980, 1, 0)), Some(-1100), "up to the surplus's end");
+    assert_eq!(put(&mut s, m(1, 1, 0)), None, "no byte left");
+    s.rollback(mark);
+    assert_eq!(s.len(), 3);
+    assert_eq!(put(&mut s, m(500, 1, 0)), Some(-620), "a place taken back is used again");
+    let mut two = tls::Surplus::<2>::default();
+    assert!(two.place::<Native>(lo, hi, tpa, &m(1, 1, 0)).is_some() && two.place::<Native>(lo, hi, tpa, &m(1, 1, 0)).is_some());
+    assert_eq!(two.place::<Native>(lo, hi, tpa, &m(1, 1, 0)), None, "every place taken");
+}
+
 /// no spec clause (x86-64 psABI §4.4.1): `TPOFF64` is S + A + the block's (negative) offset from TP,
 /// `DTPOFF64` is S + A, `DTPMOD64` the module ID; `TLSDESC` has no single field: its descriptor
 /// (DL-15; Oliva, "Thread-Local Storage Descriptors for IA32 and AMD64/EM64T") is the function, then

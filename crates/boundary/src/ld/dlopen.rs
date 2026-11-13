@@ -36,7 +36,8 @@ use liella_ld::dlopen::{self as dl, Mode, Refusal};
 use liella_ld::elf::{pt, Elf};
 use liella_ld::reloc::{self, Obj, Objects, RelocError, VersionError};
 use liella_ld::search::{self, Ctx, PathBuf, Scope};
-use liella_ld::symbols::Object;
+use liella_ld::symbols::{Object, Request, Want};
+use liella_ld::tls::{self as ltls, Module, Placed};
 use liella_ld::{init, map, start};
 
 /// Objects the process can hold, the start-time ones included; one more is refused with a text.
@@ -113,6 +114,12 @@ struct Loader {
     syms: [MaybeUninit<Object<'static>>; CAP],
     deps: [u16; DEPS],
     names: [u8; NAMES],
+    /// The static surplus's places for `dlopen`ed modules (DL-16d) and their count when the
+    /// current `load_set` began ([`unwind`] takes back the later ones).
+    surplus: ltls::Surplus<{ ltls::MODULES_MAX }>,
+    tls_mark: usize,
+    /// `__liella_thread_walk`'s address once looked up (0: not yet).
+    thread_walk: usize,
 }
 
 /// The loader's address (0: not made yet).
@@ -313,7 +320,10 @@ fn adopt_start(l: &mut Loader) -> bool {
             let (head, view) = image_view(&prog, at(w[2]), b"", &mut views);
             let Ok(elf) = Elf::from_image::<Native>(head, view) else { return false };
             let Ok(Some(dynm)) = elf.dynamic() else { return false };
-            let mut o = Obj { elf, dynm, bias: w[2], name: b"", tls: None };
+            // Its static block, so a `dlopen`ed object's TLS relocation against one of its
+            // symbols finds the place (DL-16d).
+            let tls = elf.find(pt::TLS).and_then(|ph| super::initial_place(w[2].wrapping_add(ph.vaddr)));
+            let mut o = Obj { elf, dynm, bias: w[2], name: b"", tls };
             o.name = if k == 0 { b"" } else { soname(&o).unwrap_or(b"") };
             o
         };
@@ -700,6 +710,49 @@ fn unwind(l: &mut Loader, base: usize, k: usize, names_top: usize, deps_top: usi
     }
     l.names_top = names_top;
     l.deps_top = deps_top;
+    l.surplus.rollback(l.tls_mark);
+}
+
+/// Give each new object (`base..k`) with `PT_TLS` a module ID and a place in the static surplus
+/// (DL-16d, plan/ph14/dl-16-dlopen.md §5), recorded in its `Obj` for relocation and in `new` for
+/// [`super::publish_tls`]; `new.len` stays 0 for a set without TLS. Nothing is written to any
+/// thread yet. A block that has no place fails with `<path>: cannot allocate memory in static TLS
+/// block` (dynamic blocks are DL-19's), as does a C library without the thread walk.
+fn place_tls(l: &mut Loader, base: usize, k: usize, new: &mut super::NewTls) -> Result<(), Fail> {
+    let (lo, hi, tp_align) = super::surplus();
+    for i in base..k {
+        let Some(mut o) = l.objs_upto(k).get(i).copied() else { continue };
+        let Some(ph) = o.elf.find(pt::TLS) else { continue };
+        let m = Module::of(&ph);
+        let refused = |l: &Loader| fail_parts(&[l_path_static(l, i), b": ", Refusal::StaticTls.text()]);
+        if !ltls::image_in_load(&o.elf, &m) {
+            return Err(fail_parts(&[l_path_static(l, i), b": ", Refusal::Malformed.text()]));
+        }
+        if thread_walk(l) == 0 {
+            return Err(refused(l));
+        }
+        let (Some(id), Some(slot)) = (super::module_id(new.len), new.mods.get_mut(new.len)) else { return Err(refused(l)) };
+        let Some(off) = l.surplus.place::<Native>(lo, hi, tp_align, &m) else { return Err(refused(l)) };
+        *slot = [o.bias.wrapping_add(m.vaddr), m.filesz, m.memsz, id, u64::from_ne_bytes(off.to_ne_bytes())];
+        new.len = new.len.wrapping_add(1);
+        o.tls = Some(Placed { module: id, tp_offset: off });
+        if let Some(s) = l.objs.get_mut(i) {
+            *s = MaybeUninit::new(o);
+        }
+    }
+    Ok(())
+}
+
+/// The C library's `__liella_thread_walk` (a start object's, at `LIELLA_PRIVATE`), looked up once
+/// by the first `dlopen` that loads TLS; 0 when no start object has it.
+fn thread_walk(l: &mut Loader) -> usize {
+    if l.thread_walk == 0 {
+        let req = Request::new(start::private::THREAD_WALK, Want::Version(start::private::NODE));
+        let n = START_N.load(Acquire).min(l.n);
+        let found = l.objs_upto(n).iter().zip(l.syms_upto(n)).find_map(|(o, s)| s.lookup(&req).ok().flatten().map(|d| o.bias.wrapping_add(d.st.value)));
+        l.thread_walk = found.and_then(|a| usize::try_from(a).ok()).unwrap_or(0);
+    }
+    l.thread_walk
 }
 
 /// The text of a failed attempt that found `f` for `name`.
@@ -724,7 +777,8 @@ fn load_set(l: &mut Loader, given: &'static [u8], m: Mode, caller: usize) -> Res
     let page = START_PAGE.load(Relaxed);
     let base = l.n;
     let (names_top, deps_top) = (l.names_top, l.deps_top);
-    let who = (0..base).find(|&i| (l.nodes[i].lo..l.nodes[i].hi).contains(&caller)).unwrap_or(0);
+    l.tls_mark = l.surplus.len();
+    let who =(0..base).find(|&i| (l.nodes[i].lo..l.nodes[i].hi).contains(&caller)).unwrap_or(0);
     let env = Env::read();
     let chain = [scope_of(l, who), scope_of(l, 0)];
     let chain = if who == 0 { &chain[..1] } else { &chain[..] };
@@ -800,6 +854,12 @@ fn load_set(l: &mut Loader, given: &'static [u8], m: Mode, caller: usize) -> Res
         unwind(l, base, k, names_top, deps_top);
         return Err(t);
     }
+    // Static TLS places before relocation (its TPOFF / DTPMOD values need them, DL-16d).
+    let mut new_tls = super::NewTls::NONE;
+    if let Err(t) = place_tls(l, base, k, &mut new_tls) {
+        unwind(l, base, k, names_top, deps_top);
+        return Err(t);
+    }
     let mut local = [0u16; CAP];
     let llen = local_scope(l, base, &mut local);
     let mut scope = [0usize; CAP];
@@ -838,6 +898,11 @@ fn load_set(l: &mut Loader, given: &'static [u8], m: Mode, caller: usize) -> Res
         let t = fail_parts(&[l_path_static(l, base + i), b": cannot apply additional memory protection after relocation"]);
         unwind(l, base, k, names_top, deps_top);
         return Err(t);
+    }
+    // Every thread gets the new modules' blocks, and later threads the table, before any code
+    // can reach them (DL-16d; nothing below fails).
+    if new_tls.len > 0 {
+        super::publish_tls(l.thread_walk, &mut new_tls);
     }
     // Publication: one Release store links the whole new set (plan §4).
     for i in base..k {
