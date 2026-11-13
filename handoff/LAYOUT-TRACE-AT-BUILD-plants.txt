@@ -1,5 +1,9 @@
 # LAYOUT-TRACE-AT-BUILD (LT-1) plants: each builds the products with the trace-at-build switch and runs the
 # fault bounds and layout contracts (hot_text_products; `so` itself runs layout-check's contracts).
-ltab-drop-locale-probe | tools/hottext/regen.sh | lit:stdin=/dev/null trace locale en_US.UTF-8 ./page_faults locale ==> : | env LIELLA_LAYOUT_TRACE=1 cargo xtask so && cargo test -p liella --test hot_text_products | msg:setlocale \+ printf program: [0-9]+ page faults >|STARTUP-[A-Z]+-WINDOWS|CLUSTER-WINDOW
-ltab-drop-tool-probe | tools/hottext/regen.sh | lit:stdin=/dev/null trace tool en_US.UTF-8 ./page_faults tool ==> : | env LIELLA_LAYOUT_TRACE=1 cargo xtask so && cargo test -p liella --test hot_text_products | msg:coreutils-shaped program: [0-9]+ page faults >|STARTUP-[A-Z]+-WINDOWS|CLUSTER-WINDOW
+# LAYOUT-TRACE-AT-BUILD-2: the two dropped-probe plants are caught by regen.sh's --all-modes coverage check (the
+# trace set against page_faults.c's modes), by name, not by a fault count; ltab-drop-probe-text-mode covers the
+# check's probe_text.sh path (localtime, localtime_mktime are traced there, not in regen.sh).
+ltab-drop-locale-probe | tools/hottext/regen.sh | lit:stdin=/dev/null trace locale en_US.UTF-8 ./page_faults locale ==> : | env LIELLA_LAYOUT_TRACE=1 cargo xtask so && cargo test -p liella --test hot_text_products | msg:the trace set misses page_faults mode\(s\): locale \(
+ltab-drop-tool-probe | tools/hottext/regen.sh | lit:stdin=/dev/null trace tool en_US.UTF-8 ./page_faults tool ==> : | env LIELLA_LAYOUT_TRACE=1 cargo xtask so && cargo test -p liella --test hot_text_products | msg:the trace set misses page_faults mode\(s\): tool \(
+ltab-drop-probe-text-mode | tools/hottext/probe_text.sh | lit:MODES="localtime localtime_mktime" ==> MODES="localtime" | env LIELLA_LAYOUT_TRACE=1 cargo xtask so && cargo test -p liella --test hot_text_products | msg:the trace set misses page_faults mode\(s\): localtime_mktime \(
 ltab-rename-skips-first | xtask/src/hottext.rs | lit:        keys.entry(e.key.clone()).or_insert(i); ==>         if i > 0 { keys.entry(e.key.clone()).or_insert(i); } | env LIELLA_LAYOUT_TRACE=1 cargo xtask so && cargo test -p liella --test hot_text_products | msg:STARTUP-TEXT-WINDOWS|TEXT-PREFIX|outside the hot text|program: [0-9]+ page faults >

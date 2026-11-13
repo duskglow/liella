@@ -33,6 +33,8 @@
 #   --products <dir>: trace the products in <dir> (default <tree>/target/liella).
 #   --all-modes (LAYOUT-TRACE-AT-BUILD, `cargo xtask so` under LIELLA_LAYOUT_TRACE=1 with --replace): also trace the
 #   page_faults modes fork, strings, float, mktime and rebind, so every mode the bounds count is in the trace set.
+#   LAYOUT-TRACE-AT-BUILD-2: it then checks that set against the modes of page_faults.c (the modes
+#   hot_text_products.rs measures) and fails, naming each one, when a mode was not traced.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 T=$(cd "$1" && pwd); shift
@@ -118,8 +120,10 @@ tier_of() { # <probe> -> its tier (HOTTEXT-STARTUP-COMPLETE)
     esac
 }
 : > "$work/tagged"
+: > "$work/traced"
 trace() { # <tier> <LANG> <program> <args...>
     local tier=$1 lang=$2; shift 2
+    printf '%s\n' "$*" >> "$work/traced"  # the trace set, for the --all-modes coverage check
     trace_tagged "$tier" LANG="$lang" LC_ALL= HOT_TEXT_STDIN="${stdin:-$work/in.txt}" HOT_TEXT_FOLLOW_FORK="${follow:-}" -- "$@"
 }
 checks=
@@ -199,6 +203,30 @@ run_traced "$work/startup.names" "$work/gdb.startup.log" LANG=C LC_ALL= HOT_TEXT
 probe_text_trace() { local rc=0; bash "$here/probe_text.sh" "$T" --products "$P" --trace-only "$work/probe" > "$work/probe.log" 2>&1 || rc=$?; echo $rc > "$work/probe.log.rc"; }
 probe_text_trace &
 traces_done
+if [ $all_modes = 1 ]; then
+    # LAYOUT-TRACE-AT-BUILD-2: the trace set covers every mode hot_text_products.rs measures, which is every
+    # mode of page_faults.c (its init_startup_data_accesses_are_in_the_data1_cluster checks that, parsing the
+    # source the same way; `true` is the default mode, selected by no strcmp): a mode with no trace above
+    # (trace ./page_faults <mode>), no start-up trace (true) and no probe_text.sh trace fails here by name,
+    # whatever its fault count happens to read on this build.
+    pmodes=$(grep -oE 'strcmp\(argv\[1\], "[A-Za-z0-9_]+"' "$T/crates/core/tests/oracle/page_faults.c" |
+             sed -E 's/.*"([A-Za-z0-9_]+)"$/\1/' | grep -vx relay | sort -u || true)
+    if [ "$(printf '%s\n' "$pmodes" | grep -c .)" -lt 3 ]; then
+        echo "regen: --all-modes: found only '$pmodes' as page_faults.c modes (strcmp(argv[1], \"<mode>\")): the parse no longer matches the source" >&2
+        exit 1
+    fi
+    untraced=
+    for m in true $pmodes; do
+        if [ "$m" = true ]; then [ -s "$work/startup.names" ] && continue
+        else grep -qxF "./page_faults $m" "$work/traced" && continue; [ -s "$work/probe/names.$m" ] && continue; fi
+        untraced="$untraced $m"
+    done
+    if [ -n "$untraced" ]; then
+        echo "regen: --all-modes: the trace set misses page_faults mode(s):$untraced (hot_text_products.rs measures every mode of page_faults.c; trace each one here or in probe_text.sh)" >&2
+        exit 1
+    fi
+    echo "regen: --all-modes: every page_faults mode traced: true $(printf '%s ' "$pmodes" | tr '\n' ' ')"
+fi
 fi  # trace phase
 [ $phase = trace ] && exit 0
 python3 "$here/keys.py" --tagged "startup=$work/startup.names" > "$work/startup.keys"
