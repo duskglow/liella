@@ -698,6 +698,13 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
         }
     };
     let tp = base + lay.tp;
+    // The TLS block: the image, then zeros (fresh or cleared memory). The loader's area (address
+    // 0) is filled under the thread-list lock below.
+    if let Some(t) = img {
+        if t.addr != 0 {
+            conv::copy_mapped(t.addr, base + lay.tls, t.filesz);
+        }
+    }
     let me = tb::current();
     let b = tb::fresh(tp);
     b.tcb.store(tp, Relaxed);
@@ -761,19 +768,17 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
     LOCK_ALONE.store(false, Release);
     {
         let _g = LIST.lock(&CSys);
-        // The TLS block: the image, then zeros (fresh or cleared memory). The loader's area
-        // (address 0): its `tls_init` writes every module's block, the dtv and the block's dtv word
-        // (a reused mapping held an earlier thread's bytes there; no store above touches that
-        // word). Under the list lock, with the listing: a `dlopen` that adds a module walks the
-        // list under this lock (`__liella_thread_walk`), so this thread either reads the loader's
-        // table after that walk or is listed for it, and gets the module's block exactly once
-        // (DL-16d, plan/ph14/dl-16-dlopen.md §5 point 1).
-        if let Some(t) = img {
-            if t.addr == 0 {
-                let _ = ffi::liella_machine_call3(LOADER_INIT.load(Acquire), i64::from_ne_bytes(tp.to_ne_bytes()), 0, 0);
-            } else {
-                conv::copy_mapped(t.addr, base + lay.tls, t.filesz);
-            }
+        // The loader's area (its hook is set exactly when the image address is 0, at start-up):
+        // its `tls_init` writes every module's block, the dtv and the block's dtv word (a reused
+        // mapping held an earlier thread's bytes there; no store above touches that word). Under
+        // the list lock, with the listing: a `dlopen` that adds a module walks the list under this
+        // lock (`__liella_thread_walk`), so this thread either reads the loader's table after that
+        // walk or is listed for it, and gets the module's block exactly once (DL-16d,
+        // plan/ph14/dl-16-dlopen.md §5 point 1). The hook word, not the image kept live from the
+        // top: the static path pays one compare here and nothing else.
+        let init = LOADER_INIT.load(Acquire);
+        if init != 0 {
+            let _ = ffi::liella_machine_call3(init, i64::from_ne_bytes(tp.to_ne_bytes()), 0, 0);
         }
         link_locked(d);
     }
