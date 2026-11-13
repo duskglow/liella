@@ -133,7 +133,15 @@ tests directly. The CI FULL gate stays the exhaustive run.
   maintainers' merge train regenerates them (D-X.55). To see a view with your records in it, run
   `cargo xtask records-gen` and read it under `target/records-views/<same path>`; the tracked
   views stay untouched, so there is nothing to restore (`crates/math/KERNELS.md` and
-  `cargo xtask kernel-index` work the same way; only the train writes in place, D-X.59). A decision that replaces an earlier one is
+  `cargo xtask kernel-index` work the same way; only the train writes in place, D-X.59). The generated start-up
+  lists `crates/libc-so/hot-text.list`, `startup-text.keys`, `probe-text.keys` and `startup-data.keys` are
+  train-owned too (HOTLIST-TRAIN-REGEN): never commit them. When your change moves start-up code, run
+  `cargo xtask hot-lists` (about 5 min, both profiles, needs gdb): it writes fresh lists to
+  `target/hot-lists/`, and while their stamp matches your tree the build, the layout check and the tests read
+  them (`so` prints a `hot-lists:` info line naming the lists that differ). Any later source change makes the
+  stamp stale and the tracked lists are read again, so rerun it. The hand-written inputs next to them
+  (`hot-text.clusters`, `hot-text.absent`, `hot-text.unpinned`, `startup-state.list`) are still edited and
+  committed on your branch. A decision that replaces an earlier one is
   a new record with `supersedes = ["D-..."]`, a partial change uses `amends`; edit an existing
   record only to correct it or add a test reference. Find a decision with
   `grep -rn "D-12.18" records/` (or in the generated tables). Local details you can decide

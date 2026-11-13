@@ -1,0 +1,11 @@
+{"task": "LIBM-ERF-TINY-F64", "model": "opus", "tokens": null,
+ "result": "f64 erf |x| < 2^-55 answered in place (integer path + one-FMA path), proof tool and four-mode flag test; checkpoint with gate/plants/percall running",
+ "branch": "task/libm-erf-tiny-f64", "head": null,
+ "gate": {"affected": "running (libm-erf-tiny-f64-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "pending decision record records/pending/LIBM-ERF-TINY-F64-1.toml needs an id", "recommendation": "assign the next D-10 id"}],
+ "informational": ["erf(M0*2^-1074), M0 = 0xe2dfc48da77b5: result 2^-1022 with underflow (tiny at 53 bits); the reference raises the same (probe)", "libm_erf_tiny.c has no f64 erf typical row; one should be added to confirm no typical-row regression"],
+ "refused": [],
+ "improvement": "the continued-fraction lattice enumeration makes 'is c*x ever near a breakpoint' a 0.05 s exact check; worth a shared tool for other multiply-by-constant bands",
+ "next_step": "jobwait gate/plants/percall on keke, add an f64 erf typical percall row and SSE2 counts, then hand back COMPLETE",
+ "report_file": "handoff/LIBM-ERF-TINY-F64.md",
+ "jobs": ["libm-erf-tiny-f64-gate", "libm-erf-tiny-f64-plants", "libm-erf-tiny-f64-percall"]}

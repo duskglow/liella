@@ -4,6 +4,7 @@
  *   erff_sub     erff(x), |x| <= 1.04e-38 (subnormal x whose erf is subnormal too)
  *   erf_sub      erf(x), x subnormal (random 52-bit fractions, both signs)
  *   erf_tiny     erf(x), 2^-1022 <= |x| < 2^-28 (random bit patterns: the normal binades just above)
+ *   erf_typ      erf(x) on [-3, 3] (LIBM-ERF-TINY-F64-2: the typical row the tiny band must not slow down)
  *   erff_typ / erfcf_typ   erff on [-3, 3], erfcf on [-3, 9] (the bench rows' ranges)
  * 64 operands cycled through a volatile table so no call is folded; the sum goes to pc_sink. The self-check prints
  * 4 significant digits: a last-bit difference between two correct roundings is not a different answer. */
@@ -43,6 +44,10 @@ static void fill_f32_range(float lo, float hi) {
     for (int i = 0; i < 64; i++) fx[i] = lo + (hi - lo) * (float)(next() >> 40) / 16777216.0f;
 }
 
+static void fill_f64_range(double lo, double hi) {
+    for (int i = 0; i < 64; i++) dx[i] = lo + (hi - lo) * (double)(next() >> 11) / 9007199254740992.0;
+}
+
 #define F32(CASE_NAME, NAME, FILL) \
 CASE(CASE_NAME, 100000, 1) { \
     FILL; float acc = 0; \
@@ -64,5 +69,6 @@ F32(erfcf_tiny, erfcf, fill_f32_bits(0x28d82edfu))
 F32(erff_sub, erff, fill_f32_bits(0x00713fe2u))
 F64(erf_sub, erf, fill_f64_bits(1, (1ull << 52) - 1))
 F64(erf_tiny, erf, fill_f64_bits(1ull << 52, (994ull << 52)))
+F64(erf_typ, erf, fill_f64_range(-3.0, 3.0))
 F32(erff_typ, erff, fill_f32_range(-3.0f, 3.0f))
 F32(erfcf_typ, erfcf, fill_f32_range(-3.0f, 9.0f))

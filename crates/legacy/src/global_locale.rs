@@ -581,9 +581,32 @@ fn query_record(handle: usize, cat: Option<Cat>, slot: usize) {
     }
 }
 
+/// `a == b` for two locale names, compared here eight bytes at a time rather than through a
+/// library call: names are short, and the call made the fast path of [`setlocale`] save and
+/// restore six registers and keep a frame, so its miss could not jump straight to
+/// [`setlocale_locked`] (SETLOCALE-C-ROWS).
+#[inline(always)]
+fn same_name(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let word = |c: &[u8]| <[u8; 8]>::try_from(c).ok().map(u64::from_ne_bytes);
+    let (mut a8, mut b8) = (a.chunks_exact(8), b.chunks_exact(8));
+    for (x, y) in a8.by_ref().zip(b8.by_ref()) {
+        if word(x) != word(y) {
+            return false;
+        }
+    }
+    a8.remainder().iter().zip(b8.remainder()).all(|(x, y)| x == y)
+}
+
 /// `setlocale(cat, …)` (`cat` `None` is `LC_ALL`). Returns the category's name or the
 /// composite name (`'static`, followed by a NUL), or `None` if a name is unknown, in which
 /// case nothing changes. A query is answered from the query cache when it can be.
+///
+/// Only the lock-free answers are here; the rest is [`setlocale_locked`], kept out of line so
+/// that a call answered here does not set up that function's frame (several kilobytes of stack
+/// buffers, six saved registers): SETLOCALE-C-ROWS.
 pub fn setlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: Request<'_>) -> Option<&'static [u8]> {
     match req {
         Request::Query => {
@@ -598,17 +621,27 @@ pub fn setlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: Reque
         // instructions, partly memmove whose count follows stack alignment).
         Request::Name(n) => {
             // The name as given first: "C" and every file name match there at no extra cost.
-            if let Some(s) = query_cached(m, cat).filter(|&s| s == n || s == locale::reported(n)) {
+            if let Some(s) = query_cached(m, cat).filter(|&s| same_name(s, n) || same_name(s, locale::reported(n))) {
                 return Some(s);
             }
         }
         Request::Environment(_) => {}
     }
+    setlocale_locked(sys, m, cat, &req)
+}
+
+/// [`setlocale`] when the query cache did not answer, under [`LOCK`]; also called directly for a
+/// [`Request::Environment`], which the cache never answers. A caller that calls this itself puts
+/// its stack buffers right below its own frame, where they were when this was part of
+/// `setlocale`: `setlocale(cat, "")` copies whole locales there and its memmove count follows
+/// their alignment (+6 to +8 per call when reached through [`setlocale`]; SETLOCALE-C-ROWS).
+#[inline(never)]
+pub fn setlocale_locked<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: &Request<'_>) -> Option<&'static [u8]> {
     let _g = LOCK.lock(sys);
     let current = *global(m);
     let one = [cat.unwrap_or(Cat::Ctype)];
     let cats: &[Cat] = if cat.is_some() { &one } else { &Cat::ALL };
-    let next = match req {
+    let next = match *req {
         Request::Query => current,
         Request::Name(n) => {
             let names = match (cat, name::parse_composite(n)) {
