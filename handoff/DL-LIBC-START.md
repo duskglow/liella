@@ -1,11 +1,11 @@
 # DL-LIBC-START: the dynamic path of `__libc_start_main` (phase 14 DL-14)
 
-**State:** branch `task/dl-libc-start-6` (DL-LIBC-START-6, on -5's head d45e62e70; merge base with next 07a4db6ac).
-Role mei:~/w/s1. Report: handoff/DL-LIBC-START-6-report.md; json handoff/reports/DL-LIBC-START-6.json.
-Plants: handoff/DL-LIBC-START-6-plants.txt (the four new plants plus -5's three).
+**State:** branch `task/dl-libc-start-8` (DL-LIBC-START-8: -7's head merged with next b31418181, code head
+8c95bc90c). Role kanon:~/w/kn1. Report: handoff/DL-LIBC-START-8-report.md; json handoff/reports/DL-LIBC-START-8.json.
+Plants: handoff/DL-LIBC-START-8-plants.txt (3 on the merge sites + -7's 3). Earlier: -6/-7 reports and plants.
 
 **Decisions in force:** D-27.24, D-27.22, D-27.20 (ld.so exports; R14-12 (a) placement), D-27.19, D-27.11 (amended
-by records/pending/DL-LIBC-START-6-1.toml, id to be assigned), D-27.17, D-10.5, D-X.22. Plan rows:
+by D-27.27), D-27.17, D-27.26 (DL-LIBC-EARLY: rseq, loader exports), D-10.5 (amended by D-10.100), D-X.10, D-X.22. Plan rows:
 plan/06-phases/17-phase-14-dynamic-linking.md DL-14; plan/ph14/design.md §14; R14-12 in plan/ph14/open-questions.md.
 
 ## Done
@@ -21,13 +21,20 @@ plan/06-phases/17-phase-14-dynamic-linking.md DL-14; plan/ph14/design.md §14; R
   needed one, binding an unversioned definition earlier in the scope. New `Want::Reference` (from `reference_want`)
   accepts the exact version, else a base definition; `Want::Version` (dlvsym, start-up handshake) is unchanged.
 
+- -7: native_dynamic has its own expected output (static list minus the static-only `kernel types` step, D-X.10).
+- -8: merged next (DL-LIBC-EARLY-6, STRTO-FENV-FLAGS-3): `StartInfo` carries both the program's init hooks and
+  `rseq_size`; ld.so defines `__libc_stack_end` once (mangled under feature `runtime`) and stores it with the rseq
+  objects; hot lists regenerated per profile, three dead keys dropped, five new unpinned generic keys kept out
+  (details and RULING in the -8 report).
+
 ## Do not redo
--4's host probes; the -3 hot-text regen and coldbss merge; -5's cause hunt for the link/oracle failures; -6's two
-binding probes (sources in the -6 report).
+-4's host probes; -5's cause hunt for the link/oracle failures; -6's two binding probes; -8's merge and regen (the
+hot-text.list is next's minus three dead keys; do not re-add the five generic keys without pinning them by count).
 
 ## Next step
-1. If the gate/plants/counts named in the -6 report are red, fix that first.
-2. Coordinator: assign the id of records/pending/DL-LIBC-START-6-1.toml (amends D-27.11), and the D-10.5 amends
-   record (its body still says the dynamic `__fpu_control` run waits for Liella's ld; it now runs and passes).
-3. RULING #4807 (Liella's own `libc_nonshared.a` + installed `libc.so` script): a product story once ruled.
+1. If dl-libc-start-8-gate (FULL) or dl-libc-start-8-plants on kanon is red, fix that first (failing suite only).
+2. Land. Then RULING (-8 report): regen.sh vs the check_pinned static check.
+3. DL-LIBC-NONSHARED (#4807, accepted) ships Liella's own libc_nonshared.a + libc.so script.
 4. s23_timefmt check 75 fails on the reference: a stdio/time story finds whether the program or the spec is wrong.
+5. DL-14 threads: a test that a dynamic program's new thread registers rseq at the loader's offset (covers
+   `StartInfo.rseq_size`).
