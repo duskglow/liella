@@ -84,6 +84,8 @@ case $mode in
         exec "$cc" -shared -nostartfiles -nodefaultlibs "-Wl,--sysroot=$sysroot" -L"$lib" \
             -x none "$begin" "$@" -x none $cxxlibs -lc -lgcc "$end" ;;
     static)
-        exec "$cc" -static -nostdlib "-Wl,--sysroot=$sysroot" -L"$lib" \
+        # --eh-frame-hdr: the unwinder finds a static program's frame tables through its
+        # PT_GNU_EH_FRAME header (as the conformance suite's static C++ programs link).
+        exec "$cc" -static -nostdlib "-Wl,--sysroot=$sysroot" -Wl,--eh-frame-hdr -L"$lib" \
             -x none "$lib/crt1.o" "$begin" "$@" -x none $cxxlibs -Wl,--start-group -lc -lgcc -lgcc_eh -Wl,--end-group "$end" ;;
 esac
