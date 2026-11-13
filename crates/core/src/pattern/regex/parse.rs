@@ -88,7 +88,7 @@ fn at(nodes: &[Item], id: u32) -> Item {
     usize::try_from(id).ok().and_then(|i| nodes.get(i)).copied().unwrap_or(EMPTY)
 }
 
-fn kids_of<'k>(kids: &'k [u32], start: u32, len: u32) -> &'k [u32] {
+fn kids_of(kids: &[u32], start: u32, len: u32) -> &[u32] {
     let s = usize::try_from(start).unwrap_or(usize::MAX);
     let e = s.saturating_add(usize::try_from(len).unwrap_or(0));
     kids.get(s..e).unwrap_or(&[])
@@ -171,15 +171,6 @@ impl<T: Copy, const N: usize> Stack<T, N> {
             self.inline.get(i).copied()
         } else {
             self.heap.get(i - N).copied()
-        }
-    }
-
-    pub(crate) fn last_mut(&mut self) -> Option<&mut T> {
-        let i = self.len.checked_sub(1)?;
-        if i < N {
-            self.inline.get_mut(i)
-        } else {
-            self.heap.get_mut(i - N)
         }
     }
 
@@ -809,8 +800,8 @@ impl<'a> Parser<'a> {
         let mut node = atom;
         let mut last_dup = false;
         loop {
-            let at = self.i;
-            let (t, j) = self.token_at(at)?;
+            let pos = self.i;
+            let (t, j) = self.token_at(pos)?;
             if !Self::is_dup(t) {
                 return Ok(node);
             }
@@ -832,8 +823,8 @@ impl<'a> Parser<'a> {
                     Some((lo, hi)) => self.rep(node, lo, hi)?,
                     None => {
                         // RE_INVALID_INTERVAL_ORD: the brace is an ordinary character.
-                        self.i = at;
-                        self.lit_brace = Some(at);
+                        self.i = pos;
+                        self.lit_brace = Some(pos);
                         return Ok(node);
                     }
                 },
