@@ -1371,6 +1371,17 @@ pub(crate) fn wc(c: i32) -> u32 {
 
 impl liella_legacy::mb_compat::ReadAt<u8> for CText {
     fn read_at(&mut self, addr: usize, limit: usize) -> Option<&[u8]> {
+        // One byte (`environ::getenv_many`'s first-byte test, once per environment entry): read it
+        // directly, the byte `strz_n` would read first, instead of a `strnlen` call (~20
+        // instructions per entry; SETLOCALE-CTYPE-ENV-2).
+        if limit == 1 && addr != 0 {
+            // UNSAFE(slice): see `ctext`.
+            #[allow(unsafe_code)]
+            // SAFETY: the constructor's contract (read-only here): `addr` is a string, so its
+            // first byte (its NUL when it is empty) is readable.
+            let b = unsafe { core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(addr), 1) };
+            return b.get(..usize::from(b.first() != Some(&0)));
+        }
         // UNSAFE(slice): see `ctext`.
         #[allow(unsafe_code)]
         // SAFETY: the constructor's contract (read-only here).
