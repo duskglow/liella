@@ -249,8 +249,19 @@ pub fn carg<F: Real>(x: F, y: F, mode: Rounding) -> (F, Status) {
     ziv(|| n::carg(x, y, mode), || w::carg(x, y, mode), || wx::carg(x, y, mode), || wy::carg(x, y, mode))
 }
 
-/// `cpow(x + iy, c + id)`.
+/// `cpow(x + iy, c + id)`: the quick and middle tiers of `float` and `double`
+/// ([`crate::complex_fast::pow`]) when they prove both parts, else the 384-bit route.
 pub fn cpow<F: Real>(x: F, y: F, c: F, d: F, mode: Rounding) -> Res<F> {
+    if let Some(r) = crate::complex_fast::pow::cpow_any(x, y, c, d, mode) {
+        return r;
+    }
+    cpow_route(x, y, c, d, mode)
+}
+
+/// `cpow` by the 384-bit route and its ladder alone (the tiers' fallback, and their reference in
+/// the tests); not part of the ABI.
+#[doc(hidden)]
+pub fn cpow_route<F: Real>(x: F, y: F, c: F, d: F, mode: Rounding) -> Res<F> {
     ziv(|| n::cpow(x, y, c, d, mode), || w::cpow(x, y, c, d, mode), || wx::cpow(x, y, c, d, mode), || wy::cpow(x, y, c, d, mode))
 }
 
