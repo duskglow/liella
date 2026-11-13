@@ -47,9 +47,12 @@ Things not to redo:
 
 ## Next step (exact)
 
-1. Read `lthc-canon3-mei` (`ssh mei ~/bin/jobwait lthc-canon3-mei`; output `~/work/LAYOUT-TRACE-HOST-CANONICAL/disc3/`):
-   rc 0, no FAILED; compare its names files with run canon2 (namespace) and with next's host trace: expected
-   differences = class candidates only (`fill_sse2`, `move_sse2`, `fill_erms`, ...), the nscache region path back.
+1. `lthc-canon3-mei` (redirect variant, output `mei:~/work/LAYOUT-TRACE-HOST-CANONICAL/disc3/`) is RED inside:
+   `regen: p_cold: library functions named in the source never ran: bindtextdomain close dgettext rmdir strcmp
+   unlink write` (regen trace-only rc 1; the job's own rc 0 is disc2.sh's). p_nss (names.10) got its shared-region
+   path back (`map_region` 1). Diagnose p_cold first (`disc3/canon/gdb.<n>.log`; suspects: a redirected stat/open
+   the probe expects to fail or to see the host's metadata, or the scratch write at rsp-4096). Then compare with
+   next's host trace: expected differences = class candidates only (`fill_sse2`, `move_sse2`, `fill_erms`, ...).
 2. Residual host state seen in code, not handled: the nscache region `/dev/shm/liella-nscache-<euid>` (create vs
    attach; `~/bin/gate` gives a private /dev/shm): decide (recommend: the tracer redirects that path too, to a fresh
    per-run file, so p_nss always traces create-then-attach), kernel (vDSO, auxv), `vm.mmap_min_addr`.

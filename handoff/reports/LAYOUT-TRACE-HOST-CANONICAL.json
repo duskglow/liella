@@ -1,15 +1,61 @@
-{"task": "LAYOUT-TRACE-HOST-CANONICAL", "model": "opus", "tokens": null,
- "result": "WIP at context checkpoint: tracer gives byte-identical trace files on Zen 1, Skylake-SP, Haswell-EP (17/17, was 8/17) via a virtual CPU per class and fixed env; data redirection step untested; regen --build proof, plants, gate not run",
- "branch": "task/layout-trace-host-canonical", "head": "1037ce403",
- "gate": {"affected": "not run", "peak": null}, "accepted_first_attempt": null,
- "rulings": [{"item": "Trace cost: four CPU-class runs per probe (fast set 126-479 s vs about 60 s)", "recommendation": "accept until LT-3's ptrace tracer; classes are the only host-independent way to group every candidate"},
-             {"item": "Residual host inputs the tree cannot carry: localedef/en_US source, /usr/share/locale (alias, catalogs), zone files, kernel, nscache /dev/shm region state", "recommendation": "redirect the nscache region path per run (next step); keep the rest as printed digests"}],
- "informational": ["Today's cross-host trace differences are CPU class only (ERMS: fill_erms on Intel, not Zen 1); the locale archive, zone file and nsswitch.conf are byte-identical on the three hosts",
-                   "A user namespace cannot be used to substitute data: nscache.rs keeps a private table there, changing the traced path"],
+{
+ "task": "LAYOUT-TRACE-HOST-CANONICAL",
+ "model": "opus",
+ "tokens": null,
+ "result": "WIP at context checkpoint: tracer gives byte-identical trace files on Zen 1, Skylake-SP, Haswell-EP (17/17, was 8/17) via a virtual CPU per class and fixed env; the data-redirection step breaks p_cold (red inside lthc-canon3-mei); regen --build proof, plants, gate not run",
+ "branch": "task/layout-trace-host-canonical",
+ "head": "699fb8ad1",
+ "gate": {
+  "affected": "not run",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "Trace cost: four CPU-class runs per probe (fast set 126-479 s vs about 60 s)",
+   "recommendation": "accept until LT-3's ptrace tracer; classes are the only host-independent way to group every candidate"
+  },
+  {
+   "item": "Residual host inputs the tree cannot carry: localedef/en_US source, /usr/share/locale (alias, catalogs), zone files, kernel, nscache /dev/shm region state",
+   "recommendation": "redirect the nscache region path per run (next step); keep the rest as printed digests"
+  }
+ ],
+ "informational": [
+  "Today's cross-host trace differences are CPU class only (ERMS: fill_erms on Intel, not Zen 1); the locale archive, zone file and nsswitch.conf are byte-identical on the three hosts",
+  "A user namespace cannot be used to substitute data: nscache.rs keeps a private table there, changing the traced path",
+  "lthc-canon3-mei: regen trace-only rc 1 (p_cold stops early under the path redirection); job rc 0 is the wrapper script"
+ ],
  "refused": [],
- "impact": [{"kind": "tooling", "what": "hot-text trace files byte-identical across Zen 1 / Skylake-SP / Haswell-EP (same products)", "before": 8, "after": 17, "unit": "of 17 trace files", "measured": true},
-            {"kind": "cost", "what": "fast-profile trace time (four class runs)", "before": 60, "after": 126, "unit": "s (mei)", "measured": true}],
+ "impact": [
+  {
+   "kind": "tooling",
+   "what": "hot-text trace files byte-identical across Zen 1 / Skylake-SP / Haswell-EP (same products)",
+   "before": 8,
+   "after": 17,
+   "unit": "of 17 trace files",
+   "measured": true
+  },
+  {
+   "kind": "cost",
+   "what": "fast-profile trace time (four class runs)",
+   "before": 60,
+   "after": 126,
+   "unit": "s (mei)",
+   "measured": true
+  }
+ ],
  "improvement": "A cross-host trace diff of one set of products (copy products, trace-only) finds host inputs in minutes without any build; worth a tool",
  "next_step": "Read lthc-canon3-mei (redirect variant), handle the nscache /dev/shm region, then the 3-host regen --build proof both profiles, plants, record, gate",
  "report_file": "handoff/LAYOUT-TRACE-HOST-CANONICAL.md",
- "jobs": ["keke:lthc-so-fast-1", "keke:lthc-disc-keke", "mei:lthc-disc-mei", "shiki:lthc-disc-shiki", "keke:lthc-canon1-keke", "mei:lthc-canon1-mei", "shiki:lthc-canon1-shiki", "mei:lthc-canon2-mei", "mei:lthc-canon3-mei"]}
+ "jobs": [
+  "keke:lthc-so-fast-1",
+  "keke:lthc-disc-keke",
+  "mei:lthc-disc-mei",
+  "shiki:lthc-disc-shiki",
+  "keke:lthc-canon1-keke",
+  "mei:lthc-canon1-mei",
+  "shiki:lthc-canon1-shiki",
+  "mei:lthc-canon2-mei",
+  "mei:lthc-canon3-mei"
+ ]
+}
