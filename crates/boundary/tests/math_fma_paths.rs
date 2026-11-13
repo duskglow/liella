@@ -252,6 +252,75 @@ fn erf_and_erfc_fma_build_matches_baseline_and_raises_inexact_alone() {
     assert!(selftest::set_math_fma(true));
 }
 
+// s10_3_c_0 (D-10.13), s10_0_g_0: erf for |x| < 2^-55 (LIBM-ERF-TINY-F64: c·x rounded by one FMA
+// or by integer arithmetic, tools/proofs/erf_tiny_f64.py) in both builds and all four modes against
+// the 384-bit path: every binade of the band with random significands, each binade's ends, the
+// significands either side of 2^53/c (the integer path's switch) and the proof's hard significand
+// at every exponent, the subnormal edges and M0. Flags: inexact always; underflow exactly when the
+// result is below 2^-1022, or for M0 in round-to-nearest (its result 2^-1022 is tiny rounded to 53
+// bits; a black-box probe of the reference raises underflow there too).
+#[test]
+fn erf_tiny_band_rounds_correctly_with_its_flags_in_every_mode() {
+    use liella_boundary::posix::s10_math::{feclearexcept, fesetround, fetestexcept};
+    const FE_ALL: i32 = 0x3d;
+    const FE_UNDERFLOW: i32 = 0x10;
+    const FE_INEXACT: i32 = 0x20;
+    const MODES: [(i32, Rounding); 4] =
+        [(0, Rounding::Nearest), (0x800, Rounding::Up), (0x400, Rounding::Down), (0xc00, Rounding::Zero)];
+    const MANT: u64 = 0x000f_ffff_ffff_ffff;
+    const M0: u64 = 0x000e_2dfc_48da_77b5;
+    const HARD: u64 = 0x0018_430f_efa1_5cea;
+    const T: u64 = 0x001c_5bf8_91b4_ef6b;
+    let mut s = 0x243f_6a88_85a3_08d3u64;
+    let mut xs: Vec<f64> = Vec::new();
+    for e in 1..=967u64 {
+        xs.extend((0..16).map(|_| f64::from_bits(e << 52 | next(&mut s) >> 12)));
+        for m in [0, MANT, HARD & MANT, (T - 1) & MANT, T & MANT] {
+            xs.push(f64::from_bits(e << 52 | m));
+        }
+    }
+    for m in [1, 2, 3, 0x7f, M0 - 1, M0, M0 + 1, 1 << 51, (1 << 52) - 2, (1 << 52) - 1] {
+        xs.push(f64::from_bits(m));
+    }
+    xs.extend((0..3000).map(|_| f64::from_bits(1 + next(&mut s) % MANT)));
+    let neg: Vec<f64> = xs.iter().map(|x| -x).collect();
+    xs.extend(neg);
+    let want: Vec<[f64; 4]> =
+        xs.iter().map(|&x| MODES.map(|(_, r)| liella_math::special::erf_accurate::<f64>(x, r).0)).collect();
+    let mut builds = 0;
+    for fma in [true, false] {
+        if !selftest::set_math_fma(fma) {
+            eprintln!("SKIP FMA build: this CPU (or its OS) has no FMA");
+            continue;
+        }
+        builds += 1;
+        for (k, (round, mode)) in MODES.into_iter().enumerate() {
+            let mut got = Vec::with_capacity(xs.len());
+            assert_eq!(fesetround(round), 0);
+            for &x in &xs {
+                feclearexcept(FE_ALL);
+                let v = m::erf(x);
+                got.push((v, fetestexcept(FE_ALL)));
+            }
+            assert_eq!(fesetround(0), 0);
+            for (i, &x) in xs.iter().enumerate() {
+                let (v, raised) = got[i];
+                assert_eq!(v.to_bits(), want[i][k].to_bits(), "erf({x:e}) in {mode:?} (FMA build {fma}): {v:e}, 384-bit path {:e}", want[i][k]);
+                let tiny = v.abs() < f64::MIN_POSITIVE || (k == 0 && x.abs().to_bits() == M0);
+                let flags = FE_INEXACT | if tiny { FE_UNDERFLOW } else { 0 };
+                assert_eq!(raised, flags, "erf({x:e}) = {v:e} in {mode:?} (FMA build {fma}): flags {raised:#x}, expected {flags:#x}");
+            }
+        }
+    }
+    assert!(selftest::set_math_fma(true) || builds == 1);
+    // ±0 returns itself with no flag.
+    for z in [0.0f64, -0.0] {
+        feclearexcept(FE_ALL);
+        assert_eq!(m::erf(z).to_bits(), z.to_bits());
+        assert_eq!(fetestexcept(FE_ALL), 0, "erf({z:e}) raised a flag");
+    }
+}
+
 /// `count` signed values `±m·2^-e` (`e` below `emax`) scaled by `scale`, and `count` uniform in
 /// `[lo, hi)`.
 fn sample(s: &mut u64, count: usize, emax: u64, scale: f64, lo: f64, hi: f64) -> Vec<f64> {

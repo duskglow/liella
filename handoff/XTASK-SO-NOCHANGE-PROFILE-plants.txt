@@ -1,0 +1,11 @@
+# XTASK-SO-NOCHANGE-PROFILE plants: `cargo xtask plants handoff/XTASK-SO-NOCHANGE-PROFILE-plants.txt --dir <new RAM dir>`
+# Each plant brings back one way a product build ignores what the shared cargo target directory was last built with
+# (so a no-change `xtask so` rebuilds the shared crates again), or reads an archive cargo did not just build.
+# The interpreter (other flags) back in the libc build's target directory.
+ld-shares-libc-dir | xtask/src/so.rs | lit:subdir: "ld-pie", ==> subdir: "", | cargo test -p xtask --bin xtask -- so::tests::product_builds_sharing_a_target_directory_build_alike | msg:share the target directory .* but build with other flags or environment
+# libm built without the build tag the libc build sets (the crates that read it are rebuilt by each in turn).
+libm-without-tag | xtask/src/so.rs | lit:cmd.env("LIELLA_BUILD_TAG", tag); ==> if self.archive != "libm.a" { cmd.env("LIELLA_BUILD_TAG", tag); } | cargo test -p xtask --bin xtask -- so::tests::product_builds_sharing_a_target_directory_build_alike | msg:crates/libm-so/Cargo.toml: built without the build tag
+# The archive read from the shared directory, where an old interpreter archive may still lie.
+archive-from-shared-dir | xtask/src/so.rs | lit:self.target_dir(product).join(profile.name()).join(self.archive) ==> product.join(profile.name()).join(self.archive) | cargo test -p xtask --bin xtask -- so::tests::product_builds_sharing_a_target_directory_build_alike | msg:crates/ld-so/Cargo.toml: archive read from another directory than the one cargo built it in
+# cargo told to build in the shared directory while the archive is read from the build's own.
+cargo-in-shared-dir | xtask/src/so.rs | lit:.arg("--target-dir").arg(self.target_dir(product)); ==> .arg("--target-dir").arg(product); | cargo test -p xtask --bin xtask -- so::tests::product_builds_sharing_a_target_directory_build_alike | msg:crates/ld-so/Cargo.toml: built in another directory than its own
