@@ -1,53 +1,47 @@
 # LIBM-CPLX-SINCOS handoff: csinh/csin (double, float) quick tier, overflow step and middle tier
 
-State: branch task/libm-cplx-sincos-4 (= -3 + merge of origin/next 163707549.., merge f07917c35; one conflict in
-xtask/src/longsweeps.rs, resolved by keeping the csinh sweep line and next's new sweep entries). Role kanon:~/w/kn1.
+State: branch task/libm-cplx-sincos-5 = -4's head 722ba663c + 50bb860cf "Allow the catalog::textdomain hot-text key to be
+absent in the fast profile" + merge of origin/next 5e5ec2a57 (cb1918d3f, no conflicts) + e5dc20754 "Pin the csinh
+overflow step's threshold at 2^1024" (test only) + this handoff/report. Role kanon:~/w/kn1.
 Decisions in force: D-10.53 (tier structure), D-10.25 (FMA builds), D-10.99 (cexp's middle tier, reused).
-Pending: records/pending/LIBM-CPLX-SINCOS-2-1.toml (D-NEW, series D-10; body now covers run 4; the coordinator assigns).
+Pending: records/pending/LIBM-CPLX-SINCOS-2-1.toml (D-NEW, series D-10; body covers runs 2-4; the coordinator assigns).
 
-## Run 4
+## Run 5 (no new math work, per the brief): blocked on LAYOUT-JITTER (ruling #4347)
 
-* Step 0 (inherited head 463c61f7a): libm-cplx-sincos-4-check0 rc 0 (xtask clippy, static).
-* Product build still red after the merge, on ONE key: libm-cplx-sincos-4-check1 and -so1 (rc 1). `cargo xtask so`:
-  "hot-text.list: 1 key(s) match no function section of the fast-profile libc.a: `_RNvNtC15liella_boundary7catalog10textdomain`
-  (extra, no trace)". `cargo xtask hot-lists` (the train's regeneration) fails on the same key: regen.sh --allow-drop drops
-  only trace keys (it dropped one release key, global_locale::setlocale), an "extra" seed key stays, and the recheck
-  refuses ("the rewritten list fails the grouping check"; STAMP not written). So HOTLIST-TRAIN-REGEN-4 does not cover
-  this case; the seed-key split is HOTLIST-TRAIN-REGEN-3 (handoff/HOTLIST-TRAIN-REGEN-2.md). No workaround here
-  (coordinator #5111): no hot-text.absent line, no prune, no list edit from this branch.
-* Code (crates/math/src/complex_fast_sinh.rs, comment block "After a quick decline"): the envelope tier (`csinh`, `csin`;
-  the in-place `*_nearest` entries unchanged) answers a declined part by (1) the overflow value when every value within
-  its bound is >= 2^1024 (±inf or ±DBL_MAX by sign and mode; OVERFLOW|INEXACT, ERANGE only with an infinite part: the
-  route's report, found by the status assertions), else (2) the middle tier: `exp_dd(a)` and `exp_dd(-a)` (2^-100 each;
-  a second exp_dd instead of the designed reciprocal: no new proof, cold path), all-positive series below 2^-3, cexp's
-  `sin_or_cos` with the relative bound 2^-99·|T| + 2^-137 (derived in the comment, checked against 384-bit), eps =
-  A·(B + 2^-40)·2^-96, `middle_round`. Both are `#[cold] #[inline(never)]` (`rescue`).
-* Tests: the sweep and hard cases now compare the tier's status with the route's and accept an in-place decline;
-  new `csinh_tier_answers_overflowing_parts_as_the_route`, `csinh_middle_tier_bounds_and_answers` (factor and part
-  bounds against mp; forced middle answers equal the route in 4 modes).
-* libm-cplx-sincos-4-test3 (rc 0, head 8f725ca1f): xtask clippy, static, `complex_fast` lib tests 19 passed, sweep.
+* Step 0 (inherited head 722ba663c): libm-cplx-sincos-5-check0 rc 0 (xtask clippy, static).
+* Ruling #5183 applied in crates/libc-so/hot-text.absent: `_RNvNtC15liella_boundary7catalog10textdomain` may be
+  absent in both profiles. The file takes ONE profile per line (`parse_absent`, xtask/src/hottext.rs, accepts `fast`
+  or `release` only), so "fast,release" is two lines, each citing #5183. The key stays in hot-text.list and .unpinned.
+* libm-cplx-sincos-5-so2 rc 0 (merged head): `LIELLA_FULL_PROFILE=1 cargo xtask so` then `cargo xtask so`; the
+  12 layout contracts hold. The textdomain blocker is gone.
+* Gate libm-cplx-sincos-5-gate2 (final code head e5dc20754, `affected --run --base origin/next`): rc 1, 6492 passed,
+  3 failed, all in crates/core/tests/hot_text_products.rs (start-up page faults):
+  - init_first_localtime_r_and_mktime_stay_within_their_combined_page_fault_bound: 21 page faults > 20
+  - init_first_mktime_after_localtime_r_takes_no_fault: 1 page fault (want 0)
+  - init_zero_fault_calls_hold_at_every_text_phase: mktime 1 fault at every pre and cold pad (want 0)
+  Deterministic: rerun alone (libm-cplx-sincos-5-brfaults, rc 101) gives the same numbers.
+  On origin/next 5e5ec2a57 (the merged next, exported to a RAM copy on kanon and built with the fast profile:
+  libm-cplx-sincos-5-nextfaults, rc 0) all three PASS (<= 20, and 0 for mktime).
+  This branch touches no start-up code (cold csinh/csin code in liella-math, a test, the absent lines), so per
+  ruling #4347 nothing was chased: no regen, no section moves, no bound change. Since the build no longer has
+  catalog::textdomain as a function in the fast profile either, its caller's inlining changed with libm's growth.
+  That fits the "unrelated code growth moves the layout" class, but it was not measured.
+* Plants libm-cplx-sincos-5-plants2 (final code head): 16 CAUGHT, 0 SURVIVED, 0 WARN
+  (handoff/LIBM-CPLX-SINCOS-5-plants.txt = the -2 file + the -4 file, with results). Two changes against those files:
+  `sinh-q-cut` now matched two sites (the middle tier added `if a <= Q_MAX {` in `mid_hyp`), so it is anchored to
+  `let (q, eq) = if a <= Q_MAX {` in `hyp`, its original target. `ovf-threshold` (2^1024 -> 2^1023) SURVIVED the
+  first run (libm-cplx-sincos-5-plants): the random overflow test rarely sees a quick decline inside the top binade.
+  The new test `csinh_overflow_step_threshold_is_two_to_the_1024` calls `overflow` on both sides of 2^1024 and
+  catches it.
 
-## Decline rates: sweep 10^6 per regime, nearest answers (every answer in 4 modes equals the route, status too)
-
-| regime | before (run 2) | after (run 4) |
-|---|---|---|
-| 0 typical [-3,3]² | 999729 | 1000000 |
-| 1 series | 999676 | 1000000 |
-| 2 cancellation [1/8,1] | 999663 | 1000000 |
-| 3 large x [30,746] | 950661 | 1000000 |
-| 4 y near kπ/2 | 896581 | 1000000 |
-
-Same for csin. Target <= 2^-20 declines in every regime: met (0 of 10^6).
+## Decline rates (run 4, code unchanged since): 0 of 10^6 declines in every sweep regime, csinh and csin
 
 ## Next steps (in order)
 
-1. RULING NEEDED: the extra key catalog::textdomain blocks `xtask so` on this branch (above). Land the seed-key split
-   (HOTLIST-TRAIN-REGEN-3), or rule a hot-text.absent line here. Then rerun `cargo xtask hot-lists && cargo xtask so`.
-2. Gate (`cargo xtask affected --run`) once so builds; percall validation/percall/cplx_sin.c against next and glibc
-   (the in-place nearest path is unchanged; only cold code was added; not measured this run).
+1. When the layout fix lands (LAYOUT-TEXT-PIN / LAYOUT-DATA-CLUSTERS, or whatever the coordinator names), merge next
+   and rerun the gate. Nothing else is left for landing.
+2. Percall validation/percall/cplx_sin.c against next and glibc (only cold code was added in run 4; not measured yet).
 3. ccos/ccosh on the shared kernel (ccos(z) = ccosh(iz)); abs(t) < 2^-30 and >= 2^20 in the tier; FMA build.
 
-Do not redo: the quick-tier design and its bounds, the middle tier and overflow step, run 3's diagnosis.
-Plants: handoff/LIBM-CPLX-SINCOS-4-plants.txt (9 plants, written, NOT RUN): libm-cplx-sincos-4-plants3 (rc 2) stopped at
-its baseline `cargo xtask so` on the same hot-text key; the tool has no lib-only mode. Run it (and the -2 file) once
-`so` builds. Earlier tries: plants (a `|` in a replacement: refused), plants2 (records body newline). Records check: ok.
+Do not redo: the quick-tier design and its bounds, the middle tier and overflow step, run 3's diagnosis, the
+textdomain absent lines, the next-vs-branch fault measurement above.
