@@ -16,6 +16,9 @@
 //! 4. The start object from `csys/src/machine/entry.S`: `target/liella/liella-crt1.o`, and from the
 //!    same file the static-PIE start object `target/liella/liella-rcrt1.o` (D-27.10); the profiling
 //!    start object for `-pg` programs from `csys/start/gcrt1.S`: `target/liella/liella-gcrt1.o`.
+//!    Then the link-time archive `target/liella/libc_nonshared.a` from `csys/nonshared/` (each
+//!    member checked: it defines exactly its names, all hidden) and the installed `libc.so`
+//!    linker script naming it with libc.so.6 and the loader (D-27.28).
 //! 5. Placeholders (`placeholders.rs`, D-27.9): `libpthread.so.0`, `libdl.so.2`, `librt.so.1`, `libutil.so.1`,
 //!    `libanl.so.1`, `libc_malloc_debug.so.0` from versions.tsv, their empty archives, and an
 //!    empty `libresolv.a` (D-16.6: libresolv's symbols are in `libc.a`).
@@ -1143,6 +1146,8 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     let gcrt1 = tmp_name(&release.join("liella-gcrt1.o"));
     run(Command::new(&cc).arg("-c").arg(root.join("csys/start/gcrt1.S")).arg("-o").arg(&gcrt1))?;
     publish(&gcrt1, &release.join("liella-gcrt1.o"))?;
+    // The link-time archive and the installed `libc.so` script (D-27.28).
+    build_nonshared(root, &cc, &release)?;
 
     // 5. The placeholder libraries (D-27.9, design plan/ph14/design.md §16; spec §22 notes: since
     //    2.34 libpthread is in libc.so.6): libpthread.so.0, libdl.so.2, librt.so.1, libutil.so.1,
@@ -1410,6 +1415,82 @@ fn dynamic_names(path: &Path) -> Result<BTreeSet<String>, String> {
         return Err(format!("nm -D {} failed", path.display()));
     }
     Ok(String::from_utf8_lossy(&out.stdout).lines().filter_map(|l| l.split_whitespace().next()).map(|s| s.split('@').next().unwrap_or(s).to_string()).collect())
+}
+
+/// The members of `libc_nonshared.a` (D-27.28; the list is spec/behaviour/dynlink.md, "The
+/// link-time archive"): the source `csys/nonshared/<member>.c` and the names it defines, each
+/// hidden, so that it is linked into the calling module and stays local there.
+pub const NONSHARED_MEMBERS: &[(&str, &[&str])] = &[
+    ("atexit", &["atexit"]),
+    ("at_quick_exit", &["at_quick_exit"]),
+    ("pthread_atfork", &["__pthread_atfork", "pthread_atfork"]),
+    ("stack_chk_fail_local", &["__stack_chk_fail_local"]),
+];
+
+/// The installed `libc.so` (D-27.28): what `-lc` reads at link time. Bare file names, found on
+/// the library search path where the products are installed, never an absolute host path.
+pub const LIBC_SO_SCRIPT: &str = "/* GNU ld script: Liella's C library for the link editor. libc.so.6 is the\n   library; libc_nonshared.a holds the functions linked into the calling\n   module; the loader provides the symbols the ABI places in it. */\nOUTPUT_FORMAT(elf64-x86-64)\nGROUP ( libc.so.6 libc_nonshared.a AS_NEEDED ( ld-linux-x86-64.so.2 ) )\n";
+
+/// Errors of one `libc_nonshared.a` member, from its `readelf -sW` text: it must define exactly
+/// `want` (global or weak), each with hidden visibility.
+pub fn nonshared_member_errors(readelf: &str, want: &[&str]) -> Vec<String> {
+    let mut errors = Vec::new();
+    let mut seen = BTreeSet::new();
+    for line in readelf.lines() {
+        // Num: Value Size Type Bind Vis Ndx Name
+        let [num, _, _, _, bind, vis, ndx, name] = line.split_whitespace().collect::<Vec<_>>()[..] else { continue };
+        if !num.ends_with(':') || !matches!(bind, "GLOBAL" | "WEAK") || ndx == "UND" {
+            continue;
+        }
+        if vis != "HIDDEN" {
+            errors.push(format!("{name} has visibility {vis}, not HIDDEN"));
+        }
+        seen.insert(name.to_string());
+    }
+    let want: BTreeSet<String> = want.iter().map(|s| (*s).to_string()).collect();
+    if seen != want {
+        errors.push(format!("defines {seen:?}, expected {want:?}"));
+    }
+    errors
+}
+
+/// `libc_nonshared.a` from `csys/nonshared/` (each member checked) and the `libc.so` script,
+/// both in `release`.
+fn build_nonshared(root: &Path, cc: &str, release: &Path) -> Result<(), String> {
+    let ar = std::env::var("AR").unwrap_or_else(|_| "ar".into());
+    let work = root.join("target/product/nonshared");
+    let _ = fs::remove_dir_all(&work);
+    fs::create_dir_all(&work).map_err(|e| format!("{}: {e}", work.display()))?;
+    let work = work.canonicalize().map_err(|e| format!("{}: {e}", work.display()))?;
+    let mut objects = Vec::new();
+    for (member, names) in NONSHARED_MEMBERS {
+        let obj = work.join(format!("{member}.o"));
+        // Compiled from its own directory by relative name: no build path in the object (PRODUCT-PATH-REMAP).
+        run(Command::new(cc)
+            .current_dir(root.join("csys/nonshared"))
+            .args(["-c", "-std=c17", "-O2", "-fPIC", "-fno-stack-protector", "-ffreestanding", "-Wall", "-Werror"])
+            .arg(format!("{member}.c"))
+            .arg("-o")
+            .arg(&obj))?;
+        let out = Command::new("readelf").arg("-sW").arg(&obj).output().map_err(|e| format!("readelf: {e}"))?;
+        let errors = nonshared_member_errors(&String::from_utf8_lossy(&out.stdout), names);
+        if !out.status.success() || !errors.is_empty() {
+            return Err(format!("libc_nonshared.a member {member}.o: {}", errors.join("; ")));
+        }
+        objects.push(obj);
+    }
+    let archive = release.join("libc_nonshared.a");
+    let staged = tmp_name(&archive);
+    let _ = fs::remove_file(&staged);
+    run(Command::new(&ar).arg("rcsD").arg(&staged).args(&objects))?;
+    check_archive_elf(&staged)?;
+    publish(&staged, &archive)?;
+    let script = release.join("libc.so");
+    let staged = tmp_name(&script);
+    fs::write(&staged, LIBC_SO_SCRIPT).map_err(|e| format!("{}: {e}", staged.display()))?;
+    publish(&staged, &script)?;
+    println!("so: target/liella/libc_nonshared.a ({} members, all hidden) and the libc.so script", objects.len());
+    Ok(())
 }
 
 /// An empty `ar` archive at `dst`, written under a temporary name and renamed into place.
