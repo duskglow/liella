@@ -19,7 +19,8 @@
  "impact": [
   {"kind": "none", "what": "planning only: plan/layout-rethink.md and a pending D-X record; no behaviour change", "before": null, "after": null, "unit": null, "measured": true},
   {"kind": "unblock", "what": "LT-1..LT-6 (trace-at-build layout) once the owner rules", "before": null, "after": null, "unit": null, "measured": false}],
- "jobs": ["shiki:lr-proto1", "shiki:lr-proto2", "shiki:lr-proto3", "shiki:lr-static"],
+ "jobs": ["shiki:lr-proto1", "shiki:lr-proto2", "shiki:lr-proto3", "shiki:lr-static-3"],
+ "superseded": ["shiki:lr-static (rc 1: lab-names, host name in the plan; fixed in 22330b1fa)", "shiki:lr-static-2 (rc 0 on 1a82f06d5, before this report edit)"],
  "improvement": "The dead-key check guards the harmless failure and misses the costly one; judge layout by tracing the build itself, not by names carried across builds",
  "next_step": "Owner rules on plan/layout-rethink.md section 5; then brief LT-1 (and LT-4 first if cross-host identity is required)",
  "report_file": "handoff/LAYOUT-RETHINK.md"}
