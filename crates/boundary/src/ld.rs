@@ -566,12 +566,9 @@ fn init_block(dst: u64, [src, filesz, memsz]: [u64; 3], zero: bool) -> Option<()
     }
     // UNSAFE(slice): the module's block in a thread's static area.
     #[allow(unsafe_code)]
-    // SAFETY: the block's `p_memsz` >= `p_filesz` bytes lie at its offset below TP (`ltls::layout`
-    // for an initial module, `ltls::Surplus::place` inside the surplus for a `dlopen`ed one), in the
-    // area of a thread that is either not started yet (the initial one [`map_area`] mapped, or one
-    // the C library mapped with `StartInfo::tls_size` bytes below `tp`) or listed by the C library
-    // (its mapping lives while it is listed) and not using the block: a `dlopen`ed module's block
-    // is filled before the module is published, so no code of the thread reaches it yet.
+    // SAFETY: `p_memsz` bytes at the block's offset below TP (`ltls::layout` / `Surplus::place`) in a
+    // thread's area: one not started yet, or one listed (mapped while listed) whose code cannot reach
+    // a `dlopen`ed block before its module is published (see [`tls_visit`]).
     let block = unsafe { conv::bytes_at_mut(dst, len) };
     let (init, rest) = block.split_at_mut(filesz.min(len));
     if !init.is_empty() {
