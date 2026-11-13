@@ -1,7 +1,7 @@
 {"task": "DL-LIBC-START-10", "model": "opus", "tokens": null,
  "result": "merged origin/next (hot lists taken from next); fixed the mktime fault the merged build showed (TscGate::fresh out of line in cold text) with #[inline(always)]; hot_text_products fast 23/23, release 22/22 + bound equal to next",
  "branch": "task/dl-libc-start-10", "head": null,
- "gate": {"affected": "FULL gate dl-libc-start-10-gate running at hand-back", "peak": null},
+ "gate": {"affected": "FULL gate dl-libc-start-10-gate2 running at hand-back", "peak": null},
  "accepted_first_attempt": null,
  "rulings": [],
  "informational": ["release profile setlocale+printf bound: 53 > 51 on origin/next 5e5ec2a57 itself on the Zen 1 host (dl-libc-start-10-nextrel), same as this branch; fast products 51 (within bound)"],
@@ -11,7 +11,7 @@
   {"kind": "coverage", "what": "plants added", "before": 0, "after": 1, "unit": "plants (CAUGHT)", "measured": true},
   {"kind": "unblock", "what": "DL-LIBC-START chain (dynamic __libc_start_main, DL-14) mergeable with next again", "before": null, "after": null, "unit": null, "measured": false}
  ],
- "jobs": ["dl-libc-start-10-gate", "dl-libc-start-10-plants", "dl-libc-start-10-lint2", "dl-libc-start-10-fast3", "dl-libc-start-10-rel"],
+ "jobs": ["dl-libc-start-10-gate2", "dl-libc-start-10-plants", "dl-libc-start-10-lint2", "dl-libc-start-10-fast3", "dl-libc-start-10-rel"],
  "improvement": "a hot-path generic left to the inliner flips in and out of line with unrelated code; trace-at-build (LT-1..LT-5) or forcing inline on such small hot generics removes this class of merge red",
  "next_step": "land; if the FULL gate is red, fix the failing suite only",
  "report_file": "handoff/DL-LIBC-START-10-report.md"}

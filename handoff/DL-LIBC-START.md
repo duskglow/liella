@@ -42,7 +42,7 @@ plan/06-phases/17-phase-14-dynamic-linking.md DL-14; plan/ph14/design.md §14; R
 -10's merge and the mktime fault trace (cause above). Do not re-add the five generic #5171 keys.
 
 ## Next step
-1. If dl-libc-start-10-gate (keke) is red, fix that first (failing suite only).
+1. If dl-libc-start-10-gate2 (keke) is red, fix that first (failing suite only).
 2. Land. (Ruling #5171 resolved: merge.py skips refused keys, HOTLIST-TRAIN-REGEN-3.)
 3. DL-LIBC-NONSHARED (#4807, accepted) ships Liella's own libc_nonshared.a + libc.so script.
 4. s23_timefmt check 75 fails on the reference: a stdio/time story finds whether the program or the spec is wrong.

@@ -30,7 +30,7 @@ for the out-of-line copy no longer names a function.
 - dl-libc-start-10-rel: release `xtask so` + hot_text_products 22 passed (all but the bound test, run separately below).
 - dl-libc-start-10-lint2: clippy + static rc 0.
 - dl-libc-start-10-plants: 1 plant (`#[inline(always)]` removed), CAUGHT by the mktime test, 0 WARN.
-- dl-libc-start-10-gate: `cargo xtask affected --run --base origin/next` escalated to FULL (as in -9); left
+- dl-libc-start-10-gate2: `cargo xtask affected --run --base origin/next` escalated to FULL (as in -9); left
   running for the dispatcher on the final head.
 
 ## INFORMATIONAL
@@ -38,6 +38,6 @@ for the out-of-line copy no longer names a function.
   53 > 51 on this branch AND on origin/next 5e5ec2a57 itself (dl-libc-start-10-nextrel, rc 101, same count). Not this
   branch's change; the gate builds fast products (51, within bound). A layout story should look at next's release count.
 - Superseded: dl-libc-start-10-so2 (merged head, before the fix: release 53 as next; fast never ran), -fast, -fast2
-  (mktime 1 fault, the cause above), -pf (dash had no `exec -a`), the first -gate start (stopped, restarted on the
+  (mktime 1 fault, the cause above), -pf (dash had no `exec -a`), dl-libc-start-10-gate (stopped, restarted on the
   final head).
 - One local python heredoc was used to patch a scratch script (not in the tree): noted for the record.
