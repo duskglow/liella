@@ -245,8 +245,15 @@ fn s27_1_c_3_dlsym_scopes_handles_and_texts() {
         flags.extend_from_slice(extra);
         cc(&d, name, src, &flags);
     };
-    shared("libh1.so", LIB_H1, &[libc_s]);
-    shared("libh2.so", LIB_H2, &[]);
+    // The two start-time helpers carry no DT_SONAME and the program names them by path: the
+    // start-time loader opens DT_NEEDED entries by path only (no library search yet).
+    let start_lib = |name: &str, src: &str, extra: &[&str]| {
+        let mut flags = vec!["-nostdlib", "-fPIC", "-shared", "-Wl,--no-as-needed"];
+        flags.extend_from_slice(extra);
+        cc(&d, name, src, &flags)
+    };
+    let h1 = start_lib("libh1.so", LIB_H1, &[libc_s]);
+    let h2 = start_lib("libh2.so", LIB_H2, &[]);
     shared("libM5.so", LIB_M5, &[]);
     shared("libL5.so", LIB_L5, &["-l:libM5.so", libc_s]);
     shared("libG5.so", LIB_G5, &[libc_s]);
@@ -266,7 +273,7 @@ fn s27_1_c_3_dlsym_scopes_handles_and_texts() {
         &d,
         "prog",
         PROG,
-        &["-nostdlib", "-fPIE", "-pie", "-Wl,--export-dynamic", "-Wl,--no-as-needed", &interp, crt1.to_str().unwrap(), &ldir, &rpath, "-l:libh1.so", "-l:libh2.so", libc_s, ld.to_str().unwrap(), "-lgcc"],
+        &["-nostdlib", "-fPIE", "-pie", "-Wl,--export-dynamic", "-Wl,--no-as-needed", &interp, crt1.to_str().unwrap(), h1.to_str().unwrap(), h2.to_str().unwrap(), libc_s, ld.to_str().unwrap(), "-lgcc"],
     );
     for (how, mut cmd) in [("kernel-started", Command::new(&p)), ("ld.so PROGRAM", {
         let mut c = Command::new(&ld);

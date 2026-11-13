@@ -1,0 +1,13 @@
+id = "D-NEW"
+series = "D-27"
+section = "s26-29"
+spec = "§27"
+ann = "—"
+status = "active"
+story = "DL-DLSYM-2"
+date = "2026-11-13"
+amends = ["D-27.11"]
+tests = ["crates/ld/tests/symbols.rs::versions_bind_like_the_reference", "crates/ld/tests/dlsym.rs::s27_1_c_3_dlsym_scopes_handles_and_texts"]
+body = '''
+**A named version (`dlvsym`) never matches in an object without version tables (amends D-27.11; phase 14 DL-16b; spec/behaviour/dynlink.md, "`dlvsym` missing version ... also for an object without versions").** D-27.11 let every definition of an object without `versym` match every request. That stays for relocations: an unversioned reference, a lookup by name alone (`dlsym`) and a relocation's versioned reference still bind such a definition (the load-time version check refuses a program that needs a version from such an object, ruling #3655). A named-version request (`dlvsym`, and the unique table's lookup of a definition's own version) now matches only a definition of exactly that version, so in an object without `versym` (each definition reads as base, index 1) it matches nothing and the scope search goes on to the next object; when nothing matches, the call fails with `<object>: undefined symbol: <name>, version <v>`, as the probed reference does.
+'''

@@ -42,11 +42,12 @@ clause!(s27_1_c_2, "27.1", "Contract", r##"**`dlmopen(lmid, ...)`** loads into a
 /// §27.1 Contract: **`dlsym(handle, name)`** returns the address of a symbol. The special handles are `RTLD_DEFAULT` (global lookup order) and `RTLD_NEXT` (the next occurrence after the caller's object, for interposition). **`dlvsym`** requests a specific symbol version.
 ///
 /// `s27_dlsym_handles`: RTLD_DEFAULT and RTLD_NEXT through two helpers, dlvsym, and the dlerror
-/// texts of the failing lookups. Pending on Liella until DL-16b (DL-DLSYM).
+/// texts of the failing lookups. Passes under the reference and under Liella's ld.so (DL-16b,
+/// DL-DLSYM).
 #[test]
 fn s27_1_c_3() {
     let out = conformance(&["s27_dlsym_handles"]);
-    assert_pending(&out, "s27_dlsym_handles", "DL-16b");
+    assert!(!out.contains("conformance: PENDING s27_dlsym_handles"), "s27_dlsym_handles still pending:\n{out}");
 }
 clause!(s27_1_c_4, "27.1", "Contract", r##"**`dlclose`** decrements the reference count. At zero, it runs destructors and unmaps the object, unless the object is `NODELETE` or has unique symbols or TLS in use."##);
 clause!(s27_1_c_5, "27.1", "Contract", r##"**`dlerror()`** returns a Text describing the last failure on this thread, and clears it. It returns `NULL` if there was no error. ⚑ HIST: this is yet another error channel. `dlsym` returning `NULL` is ambiguous for symbols whose value is 0, so callers must check `dlerror`."##);
