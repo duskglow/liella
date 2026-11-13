@@ -1,12 +1,17 @@
-# HOTTEXT-TIME-CLUSTER-STABLE(-2): handoff
+# HOTTEXT-TIME-CLUSTER-STABLE(-2, -3): handoff
 
-State: branch `task/hottext-time-cluster-stable-2` (stacks on `task/hottext-time-cluster-stable`), from next
+State (run 3): branch `task/hottext-time-cluster-stable-3` = run 2's branch + merge of origin/next 2c917bce5 (merge
+commit a2700e8b3); head in handoff/reports/HOTTEXT-TIME-CLUSTER-STABLE-3.json. Build role kanon:~/w/kn1; run 3's
+scratch on kanon: `~/work/HOTTEXT-TIME-CLUSTER-STABLE-3/` (run 2's proof.sh, measure.py, summ.py, faultsym.py;
+chain.sh; m-pow, m-sincos = this head + libm-cplx-*-5).
+Run 2 state: branch `task/hottext-time-cluster-stable-2` (stacks on `task/hottext-time-cluster-stable`), from next
 bc146ccec; head in handoff/reports/HOTTEXT-TIME-CLUSTER-STABLE-2.json. Build role mei:~/w/s2. Scratch on mei:
 `~/work/HOTTEXT-TIME-CLUSTER-STABLE-2/` (measure.py = LAYOUT-STABILITY-RETHINK's with env filters MPROFILES,
 MREGIONS, MNOANCHOR, MNOLC; summ.py; faultsym.py = a mode's perf fault addresses -> nm symbol; mjob.sh, mrel.sh,
 proof.sh; next-src = an origin/next 7ab1f35a7 tree; m-pow, m-sincos = next + libm-cplx-*-5 + this branch).
-Decisions in force: pending records HOTTEXT-TIME-CLUSTER-STABLE-1 (inline(always) on select's lock-free path) and
-HOTTEXT-TIME-CLUSTER-STABLE-2-1 (LOCPATH cache in a Cell). Rulings #5255 (item 1 dropped), #5256 (LT-1 closes the class).
+Decisions in force: D-X.89 and D-X.90 (were pending HOTTEXT-TIME-CLUSTER-STABLE-1, inline(always) on select's
+lock-free path, and HOTTEXT-TIME-CLUSTER-STABLE-2-1, LOCPATH cache in a Cell). Rulings #5255 (item 1 dropped), #5256
+(LT-1 closes the class), #5272 (merge next, keep both functions always inlined).
 
 ## Run 1 (HOTTEXT-TIME-CLUSTER-STABLE)
 
@@ -48,7 +53,25 @@ zero-fault phases, data-phase and tool-bound tests pass in both profiles; mktime
 per profile; fast tool 54 unpadded, cold 54-55, pre 54-56 (= next alone: the -1 seen on the branch's own base does
 not show on next + libm, not investigated); release tool 56, cold 56-57.
 
+## Run 3 (HOTTEXT-TIME-CLUSTER-STABLE-3): merge next, re-gate (ruling #5272)
+
+CI's conflict was `crates/legacy/src/recheck.rs` only: next had put `#[inline(always)]` on `TscGate::fresh` too, with
+its own comment. Resolved by keeping the attribute and next's comment, plus one line naming this story's fast-profile
+case; `tsc_holds` stays `#[inline(always)]` (branch side, no conflict). No other change. All jobs on kanon
+(Broadwell-EP), head a2700e8b3:
+
+* `htcs3-lint0` (inherited head 90580ef28, step 0) and `htcs3-lint1` (merged head): clippy + static, rc 0.
+* `htcs3-gate`: direct tier, 9 suites, 10035 passed, 0 failed; conformance 21 passed; peak 15G, rc 0.
+* `htcs3-plants`: run 2's plants file re-run on the merged head: 3 CAUGHT, 0 SURVIVED, 2 EQUIVALENT, no WARN
+  (handoff/HOTTEXT-TIME-CLUSTER-STABLE-3-plants.txt).
+* `htcs3-proof-pow`, `htcs3-proof-sincos`: this head + libm-cplx-pow-5 / sincos-5 (both merged cleanly), both
+  profiles: the five tests (first mktime, lt+mktime bound, zero-fault phases, data phases, coreutils bound) pass;
+  mktime after localtime_r 0 faults at all 39 configurations (unpadded, 19 pre, 19 cold pads) per profile per tree.
+  Data-phase test's four cold pads: fast tool 54 x4, release 56 x4. Tool over all pads: fast 54-56 (pre 54-56, cold
+  pow 54-55, sincos 54-56 with 56 at cold 0x5000), release 54-57 (57 at cold 0xC000, as on next in run 2).
+  No layout-jitter red: the coordinator's INCOMPLETE: LAYOUT-JITTER case did not arise.
+
 ## Next step
 
 Coordinator: verify the JOBS in the report json; land; unhold LIBM-CPLX-POW-6 / SINCOS-6. The class stays open
-until LT-1 (ruling #5256). Plants: handoff/HOTTEXT-TIME-CLUSTER-STABLE-2-plants.txt.
+until LT-1 (ruling #5256). Plants: handoff/HOTTEXT-TIME-CLUSTER-STABLE-3-plants.txt.
