@@ -57,6 +57,8 @@ pub fn tsc_allow(oldest: u64, at: u64) -> u64 {
 /// Whether the state still holds `tsc` after the counter read `stamp` when `allow` ticks were left
 /// ([`tsc_allow`]) with no clock read. A stamp or counter of 0 (no counter), a counter that went
 /// backwards or wrapped, and a jump of `allow` or more all say no, and the caller reads the clock.
+/// Always inlined, as [`TscGate::fresh`] (HOTTEXT-TIME-CLUSTER-STABLE).
+#[inline(always)]
 pub fn tsc_holds(stamp: u64, allow: u64, tsc: u64) -> bool {
     stamp != 0 && tsc >= stamp && tsc.saturating_sub(stamp) < allow
 }
@@ -95,7 +97,8 @@ impl TscGate {
     /// Inlined into its caller in every build: left to the inliner, the time zone's instantiation was out
     /// of line in some builds and not others (the choice moved with unrelated code), and out of line it
     /// sat in cold text, so the first `mktime` after `localtime_r` took a page fault
-    /// (`init_first_mktime_after_localtime_r_takes_no_fault`). A generic, so no hot-text key can pin it.
+    /// (`init_first_mktime_after_localtime_r_takes_no_fault`). A generic, so no hot-text key can pin it
+    /// (HOTTEXT-TIME-CLUSTER-STABLE: the fast profile emitted one when unrelated libm code grew).
     #[inline(always)]
     pub fn fresh(&self, last: &LastCheck, tsc: u64, clock: impl FnOnce() -> u64) -> bool {
         let at = last.0.load(Relaxed);

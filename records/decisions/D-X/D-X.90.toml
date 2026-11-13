@@ -1,0 +1,9 @@
+id = "D-X.90"
+section = "x"
+status = "active"
+story = "HOTTEXT-TIME-CLUSTER-STABLE-2"
+date = "2026-11-13"
+tests = ["crates/core/tests/hot_text_products.rs::init_data_clusters_hold_at_every_text_phase", "crates/core/tests/hot_text_products.rs::init_coreutils_shaped_program_stays_within_its_page_fault_bound", "crates/boundary/tests/reload.rs::reloads_race_with_readers"]
+body = '''
+**The locale file source caches `LOCPATH` in a plain `Cell`, not a `core::cell::OnceCell`** (`global_locale::Files::locpath`, HOTTEXT-TIME-CLUSTER-STABLE-2; same read-once-per-selection behaviour, SETLOCALE-3). Why: `OnceCell::get_or_init` runs its first fill in an out-of-line `#[cold]` generic (`OnceCell<Option<&[u8]>>::try_init`) that has no hot-text key and cannot be pinned (core code), and the `tool` start-up probe (`setlocale(LC_ALL, "")`) runs it in cold text. Its place there follows the codegen-unit partition of unrelated code: on next (fast profile, Skylake-SP host) it sat about 1.4 MB from `setlocale_locked` (also cold), on HOTTEXT-TIME-CLUSTER-STABLE's branch (five functions `#[inline(always)]` in liella_legacy/liella_boundary) 53 KiB from it, so at some cold-text phases the two shared one 64 KiB fault-around window and the tool count read 53 at cold pad 0x8000 and 54 at the others (`init_data_clusters_hold_at_every_text_phase` red). With the `Cell` the fill is inlined into `Files::locpath` and the probe no longer touches that function. Measured on that host, fast profile, page_faults.c linked as the tests link it with a padded start file (19 pads per region): tool 54 -> 53 unpadded; cold pads 54-55 (next) -> 53-54, pre pads 54-56 -> 53-55; the test's four cold pads all 53. Release profile unchanged (tool 56 unpadded: that build already inlined the fill). TOOL_BOUND stays 56: the release count is 56. The class (a cold, unkeyed function on a fault-bounded path) stays open until LT-1 (trace at build) keys whatever the build executes.
+'''
