@@ -1,2 +1,4 @@
 # TB-FOREIGN-SAFETY-9 plants: the hand-placed hot-text key of each_block<publish_global closure> (ruling #4849).
 each-block-key-dropped | crates/libc-so/hot-text.list | perl:s/^_RINvNtC15liella_boundary6thread10each_block\S+\tlocale\tfast\n//m | cargo xtask so && cargo test -p liella --test hot_text_products init_short_programs_stay_within_their_page_fault_bounds | msg:setlocale \+ printf program: 5[2-9] page faults > 51
+# cargo xtask plants results (1 plants: 1 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# each-block-key-dropped: CAUGHT, caught by hot_text_products init_short_programs_stay_within_their_page_fault_bounds
