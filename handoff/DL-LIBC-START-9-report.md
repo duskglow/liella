@@ -27,6 +27,9 @@ Applied: the five refused keys (find_cached, attach_charmap, TscGate::fresh, var
 hot-text.list or hot-text.unpinned (-8 had already kept them out; checked by grep). No pinning here.
 
 ## INFORMATIONAL
+- At hand-back the branch conflicts with next in crates/libc-so/hot-text.list and hot-text.unpinned only (both sides
+  edited the hot lists; no merge was allowed in this brief). The hot-lists train regenerates them; otherwise a
+  continuation merges next and keeps -8's three dead keys dropped and ruling #5171's five keys out.
 - `runtime::PROGRAM_INIT` (24 bytes) is written by every start under Liella's ld.so; the start-up trace is of a
   static program, so it is not declared. Declare it once a dynamic start-up fault trace exists (handoff next step 6).
 - The local handoff edit used a python heredoc (scratch-side, not on a host); noted for the record.
