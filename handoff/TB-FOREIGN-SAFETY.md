@@ -1,7 +1,8 @@
 # TB-FOREIGN-SAFETY: Liella's thread-block words never trusted or written in a block Liella did not make
 
-State: branch `task/tb-foreign-safety-9` (run 9; continues -8 on its head 561c13e0b; origin/next 9042cc44f merged in
-100c3b9d6 by run 8). Code head da75b81fe (then handoff/report commits). Decision in force: **D-X.58**
+State: branch `task/tb-foreign-safety-10` (run 10; continues -9's head 6ac3a5bc7; origin/next a0c020ee9 merged in
+e5f4b3df2). Code head b8ba3a3f5 (then handoff/report commits). **HELD: INCOMPLETE: LAYOUT-JITTER-CLASS** (coordinator
+ruling 11-13: the story waits for trace-at-build, LAYOUT-RETHINK LT-1/LT-4). Decision in force: **D-X.58**
 (records/decisions/D-X/D-X.58.toml; rulings #4212, #4213, #4214, #4241, #4253, #4287, #4779, #4828, #4888, #4889).
 **Ruling #4779 is met on the Release build (#4889): +2 instructions per call on mb_cur_max, toupper, iswalpha and
 towupper against next's tip.**
@@ -13,6 +14,33 @@ process. Rust reads the crate-private mirror `thread::OWNED_HERE` through `threa
 (`*OWNED_HERE.as_ptr()`, unsafe category *process-flag*, owner ruling #4888), so the gate is one `cmpb`. In a process
 another C library started, `thread::words()` / `foreign_words()` give the thread's registry words. Gated sites: see
 -6's table (unchanged).
+
+## Run 10 (merge with next a0c020ee9 and measure; no product code change)
+- Step 0 on 6ac3a5bc7: clippy + static green (mei tb-foreign-safety-10-lint-0).
+- e5f4b3df2 merge: conflict in crates/boundary/src/ld.rs only. next (DL-TLS-THREADS) moved `__libc_stack_end`
+  below its new `thread_tls_init`/`thread_tls_release` hooks; kept `STARTED_HERE` (D-X.58), dropped the old
+  `__libc_stack_end` copy. The new hooks write only blocks Liella's own C library mapped and are reachable only
+  through the `StartInfo` this loader gives the program it started, so D-X.58's ownership condition holds for them
+  without another gate (this covers the "DL-13 hooks need the gate" follow-up below for these two hooks).
+- b8ba3a3f5: `xtask so` refused two stale fast lines of run 8 in hot-text.absent (iconv::load, nscache::real_secs:
+  out-of-line again after the merge); removed.
+- **Static red (needs a ruling, not fixed):** next's new pin check (hottext `check_pinned`) rejects run 9's hand-placed
+  key `thread::each_block<publish_global closure>` (locale tier): not `#[inline(never)]`. The fixes the check offers
+  are an inline attribute (coordinator 11-13: no inline hints) or a hot-text.unpinned line (a ratchet, #4997/#5024:
+  lines may only be removed). The two rulings conflict here; left red, RULING NEEDED in the report.
+- **Faults (Fast products, Skylake-SP host, mei ~/work/TB-FOREIGN-SAFETY-10/measure.sh = run 9's faultmap.py, branch
+  vs next a0c020ee9 built by wl_prep):** locale **52 vs 50 (bound 51)**, tool 55 vs 54 (bound 56), float 3 vs 4,
+  true 11, fork 5, localtime 18, localtime+mktime 18, mktime/strings/rebind 0: all equal otherwise. Locale text 10
+  pages vs 8: on both heads `setlocale_locked`, the `global_locale::Files` closures and `find_cached` lie in cold text
+  (outside the hot group); on next they share one cold page (0x68d), on the branch three (0x60c, 0x621, 0x681).
+  The run-9 `candidates` page is gone (it is in the hot group now). Layout jitter of cold text, not chased (ruling).
+- Merge proof (mei tb-foreign-safety-10-merge-tests, `affected --only`): ld tls/ldso_run/ldso_link 23/23,
+  boundary dl_tls_threads/tb_foreign_words/heap_threads 11/11, core hot_text_products 23/24 (the locale bound, 52).
+- No plants: no new product code (a merge resolution that drops a duplicate definition, and two list lines that
+  `xtask so` itself checks).
+- Jobs (mei, role s1): lint-0, prep-next, faults-1, merge-tests, clippy-2. Superseded: lint-1 (on e5f4b3df2: static
+  red on the pin check, still red), gate-1 (on e5f4b3df2: escalated to FULL by the list files, stopped at the stale
+  absent lines).
 
 ## Run 9 (fault bound: -8's gate-3 red, setlocale + printf 52 > 51)
 - Step 0 on 561c13e0b: clippy + static green (mei tb-foreign-safety-9-lint-0).
@@ -36,25 +64,13 @@ another C library started, `thread::words()` / `foreign_words()` give the thread
 - Jobs (mei, role s1): lint-0, so-1..so-4 (diagnosis builds), prep-next, repair-1 (on the dropped hint tree),
   lint-1, gate-1, plants-1 (the last three on da75b81fe).
 
-## Run 8
-- Step 0 on the inherited head 555a7ca52: clippy + static green (keke tb-foreign-safety-8-lint-0).
-- 100c3b9d6: merge origin/next. Conflicts: ld.rs (both sides kept), hot-text.list and startup-data.keys (next's
-  taken, hot-lists lane).
-- 23806b6fe: **process-flag**. `owned()` reads `OWNED_HERE` non-atomically; xtask/src/policy.rs knows the category,
-  permits it only in `src/thread.rs` and only with the body `*OWNED_HERE.as_ptr()`; docs/architecture.md S2 row; the
-  D-X.58 body records the category, the write-before-first-thread argument and #4779/#4889. Recorded in D-X.58 (this
-  story's own record, not landed yet) instead of a new D-NEW record.
-- e27ef6381: next's `startup-state.list` named `thread::OWNED` (gone on this branch): now `OWNED_HERE` and
-  `symbol liella_machine_owned` (both written at start-up), the asm byte in a section of its own.
-- 4d6206d76: `hot-text.absent` gets five keys this branch's code inlines in one profile (fast: locale publish_global,
-  iconv convert/load, nscache real_secs; release: regex ThreadScratch::table). next's hot-text.list untouched.
-- Jobs (keke, role n1): gate-3, plants-4, percall-3 (Fast), percall-rel-new3 + percall-rel-base2 (Release). Superseded:
-  gate-1/-2, plants-1/-2, percall-1/-2, percall-rel-new/-new2 (xtask so refused the merged lists, fixed above),
-  percall-rel-base (wl_percall refuses a dir that is neither git tree nor role dir), plants-3 (process-flag-elsewhere
-  WARN-NO-MSG: the planted read did not compile, so static stopped before the audit; plant fixed for plants-4).
-- Release per-call counts without tooling: `LIELLA_FULL_PROFILE=1 wl_percall.sh --rev <sha>-release --base none`
-  (products cached under `<sha>-release`, no Fast cache touched); next's tip counted from a scratch copy of the primed
-  `~/wl/src/9042cc44f...` with a minimal `.synced` marker (~/work/TB-FOREIGN-SAFETY-8/start2.sh on keke).
+## Run 8 (short)
+- 100c3b9d6 merge (ld.rs both kept; hot-text.list, startup-data.keys next's). 23806b6fe **process-flag** unsafe
+  category (`owned()` = `*OWNED_HERE.as_ptr()`, only in src/thread.rs; policy.rs, docs/architecture.md S2, D-X.58
+  body). e27ef6381 startup-state.list names `OWNED_HERE` and `symbol liella_machine_owned`. 4d6206d76 five
+  hot-text.absent lines (two removed in run 10). Jobs keke n1: gate-3, plants-4, percall-3, percall-rel-new3/base2.
+- Release per-call counts: `LIELLA_FULL_PROFILE=1 wl_percall.sh --rev <sha>-release --base none`; next counted from a
+  scratch copy of the primed source with a minimal `.synced` (~/work/TB-FOREIGN-SAFETY-8/start2.sh on keke).
 
 ## Counts (instructions:u per call, validation/percall/locale.c, keke, base = next 9042cc44f)
 | case | glibc | next Release | run 8 Release | delta | next Fast | run 8 Fast | delta |
@@ -72,12 +88,15 @@ Fast keeps +1 over Release (the GOT load of an exported symbol, -7's note). The 
 disassembly this run (the objdump grep found no symbol); the +2 counts are the evidence.
 
 ## Exact next step
-Land (locale fault count at its bound, 51; next 50). Returning to 50 needs the `candidates ... s3_0` page placed:
-teach the v0 key walker (keys.py and xtask/src/hottext.rs `key`, kept in step) closures nested in generic paths so
-that name gets a build-stable key, then list it after `find_named` in the locale tier (or trace-at-build, LT-1/LT-4).
+Held until trace-at-build is the default (LAYOUT-RETHINK LT-1/LT-4; coordinator ruling 11-13: no key-walker
+extension, no inline hints). Then: merge next, rebuild, and let the traced layout place the setlocale path; re-run
+measure.sh-style fault map (locale must be <= 51, the bound; next is at 50). The hand-placed `each_block`
+key of run 9 then goes (the trace places it), which also clears the static pin check (or apply the ruling on
+`hot-text.unpinned` if it must stay). Then the direct-tier gate (it escalates to FULL on list files) and land.
 Other follow-ups (not this story): mbrtowc/mbstowcs/wcrtomb read `owned()` several times per call (+6..+12): hoist one
-per entry if #4779 is extended to them. wl_prep's Release profile option (#4889 follow-up). DL-13's
-`__liella_tls_init`/`release` need the same gate and foreign-block test when they land (#4503, #4781).
+per entry if #4779 is extended to them. wl_prep's Release profile option (#4889 follow-up). Any later loader TLS
+hook reachable other than through this loader's `StartInfo` needs the D-X.58 gate and a foreign-block test (#4503,
+#4781); the two DL-TLS-THREADS hooks merged in run 10 are reachable only that way.
 
 ## Open (D-X.58 known limits)
 - A dead foreign thread's resolver state is not freed on entry reuse; TID reuse at the same thread pointer looks
