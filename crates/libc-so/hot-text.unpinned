@@ -1,7 +1,8 @@
 # Keys of hot-text.list (every tier) that may name a function without a fixed boundary
 # (LAYOUT-HOTKEY-INLINE-STABLE; `cargo xtask static`, xtask/src/hottext.rs `check_pinned`). Every other Rust key
-# must name a #[inline(never)] function. <v0 key> TAB <tier> TAB <reason>; the tier is the key's tier in
-# hot-text.list. A line whose key gained a fixed boundary, left the list or changed tier is an error. A ratchet
+# must name a #[inline(never)] function. <v0 key> TAB <tier> TAB <reason>; the tier is the key's tier when the
+# line was written, a note only: the train's regen may move a key to another tier, so it is not compared
+# (HOTTEXT-UNPINNED-TIER). A line whose key gained a fixed boundary or left the list is an error. A ratchet
 # (rulings #4997, #5024): lines may only be removed. These keys can still go dead when unrelated code moves
 # LLVM's inlining budget; the build's dead-key check and `cargo xtask hottext-repair` remain their guard.
 _RNvNtC15liella_boundary6locale13refresh_words	startup	a call boundary costs start-up instructions (+3 to +18 in fast, +18 to +45 in release with the other start-up marks: HOTTEXT-REGEN-UNBLOCK, handoff/hottext-regen-unblock.md)
