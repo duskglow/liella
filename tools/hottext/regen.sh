@@ -105,6 +105,9 @@ n=0
 # shellcheck source=tools/hottext/runner.sh
 . "$here/runner.sh"
 if [ $phase != merge ]; then
+# LAYOUT-TRACE-HOST-CANONICAL: every trace reads the tree's data files (canon_host.sh) and runs on a
+# virtual CPU per class (trace_gdb.py), so the list is a function of the tree, not of the build host.
+canon_prepare
 cp "$here"/probes/*.c "$work"/
 echo x > "$work/in.txt"
 tier_of() { # <probe> -> its tier (HOTTEXT-STARTUP-COMPLETE)
@@ -114,9 +117,11 @@ tier_of() { # <probe> -> its tier (HOTTEXT-STARTUP-COMPLETE)
     esac
 }
 : > "$work/tagged"
-trace() { # <tier> <LANG> <program> <args...>
+trace() { # <tier> <LANG> <program> <args...>; tz=<zone> sets the program's TZ
+    # LAYOUT-TRACE-HOST-CANONICAL: LANG (and TZ when given) is the program's whole environment (runner.sh).
     local tier=$1 lang=$2; shift 2
-    trace_tagged "$tier" LANG="$lang" LC_ALL= HOT_TEXT_STDIN="${stdin:-$work/in.txt}" HOT_TEXT_FOLLOW_FORK="${follow:-}" -- "$@"
+    # shellcheck disable=SC2046
+    trace_tagged "$tier" LANG="$lang" $([ -n "${tz:-}" ] && echo "TZ=$tz") HOT_TEXT_STDIN="${stdin:-$work/in.txt}" HOT_TEXT_FOLLOW_FORK="${follow:-}" -- "$@"
 }
 checks=
 traces_done() { # wait for every trace, fail on the first that failed, then run the deferred call checks
@@ -164,7 +169,7 @@ for p in $probes; do
         # (page_faults.c localtime, localtime_mktime, mktime) and cbench_opt's zone rows use, not the
         # host's: a UTC host traced no rule-string parse, no period cache and another crate's vector
         # growth, so those stayed out of the group and cost the first localtime_r two faults.
-        TZ=America/New_York trace "$(tier_of "$p")" en_US.UTF-8 "./$p"
+        tz=America/New_York trace "$(tier_of "$p")" en_US.UTF-8 "./$p"
         checks="$checks $p:$n"
     else
         trace "$(tier_of "$p")" en_US.UTF-8 "./$p"
@@ -183,7 +188,7 @@ done
 # STARTUP-TEXT-WINDOWS (D-X.49): the functions `page_faults true` runs (the probe whose start-up faults
 # crates/core/tests/hot_text_products.rs bounds, linked as that test links it), first-touch order, into
 # crates/libc-so/startup-text.keys; the layout check of layout/contracts.tsv counts their 64 KiB windows.
-run_traced "$work/startup.names" "$work/gdb.startup.log" LANG=C LC_ALL= HOT_TEXT_STDIN="$work/in.txt" HOT_TEXT_FOLLOW_FORK= -- ./page_faults true
+run_traced "$work/startup.names" "$work/gdb.startup.log" LANG=C HOT_TEXT_STDIN="$work/in.txt" HOT_TEXT_FOLLOW_FORK= -- ./page_faults true
 # D-X.62: the probe-text modes, traced with the others (probe_text.sh merges them below).
 probe_text_trace() { local rc=0; bash "$here/probe_text.sh" "$T" --products "$P" --trace-only "$work/probe" > "$work/probe.log" 2>&1 || rc=$?; echo $rc > "$work/probe.log.rc"; }
 probe_text_trace &
