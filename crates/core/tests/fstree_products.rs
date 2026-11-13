@@ -168,6 +168,34 @@ fn without(text: &str, list: &[(&str, &str, &str)], who: &str) -> Vec<String> {
     out
 }
 
+/// The probe's stat chain line (`... chains l0..l<N> resolve; first failure l<K> stat <ERRNO>`, with
+/// ` (retried: <answer>)` after an errno other than ELOOP) must name the first failure's chain index
+/// and errno, so a run whose chain stops early says why (FSTREE-STAT-ERRNO). Returns the line's fault.
+fn stat_chain_fault(who: &str, out: &str) -> Option<String> {
+    const HEAD: &str = "stat (the kernel's limit, for comparison): chains l0..l";
+    let Some(line) = out.lines().find(|l| l.starts_with(HEAD)) else {
+        return Some(format!("{who}: no stat chain line"));
+    };
+    let shape = || -> Option<(i32, i32, &str)> {
+        let (last, rest) = line[HEAD.len()..].split_once(" resolve; first failure l")?;
+        let (fail, rest) = rest.split_once(" stat ")?;
+        let errno = rest.split(' ').next()?;
+        let named = errno.starts_with('E') && errno.len() > 1 && errno[1..].bytes().all(|b| b.is_ascii_uppercase())
+            || errno.strip_prefix("errno").is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
+        named.then_some(())?;
+        Some((last.parse().ok()?, fail.parse().ok()?, errno))
+    };
+    match shape() {
+        None => Some(format!("{who}: the stat chain line does not name the first failure's index and errno: {line:?}")),
+        // ELOOP is the limit itself: never retried.
+        Some((last, fail, "ELOOP")) if fail == last + 1 && line.ends_with(" stat ELOOP") => None,
+        Some(_) => Some(format!(
+            "{who}: the stat chain stopped before the kernel's link limit (a fault in this run, not a difference; \
+             the errno and the retry's answer say which): {line:?}"
+        )),
+    }
+}
+
 #[test]
 fn fstree_equals_the_reference() {
     // Clauses: s13_1_c_1, s13_1_c_1_1, s13_1_c_1_2, s13_1_c_2, s13_1_c_3, s13_1_c_4, s13_1_c_5, s13_1_f_0,
@@ -211,6 +239,9 @@ fn fstree_equals_the_reference() {
         String::from_utf8_lossy(&o.stdout).into_owned()
     };
     let reference = run(&host, "fstree-host", None);
+    if let Some(f) = stat_chain_fault("the reference", &reference) {
+        panic!("{f}");
+    }
     let record = std::fs::read_to_string(r.join("spec/behaviour/fstree.glibc.txt")).unwrap();
     let fs_line = reference.lines().next().unwrap_or("");
     assert!(fs_line.starts_with("stat -f -c %T: "), "the output must start by naming the scratch file system: {fs_line:?}");
@@ -223,6 +254,9 @@ fn fstree_equals_the_reference() {
     for mode in ["on", "off"] {
         eprintln!("name-service cache {mode}");
         let got = run(&ours, &format!("fstree-liella-{mode}"), Some(mode));
+        if let Some(f) = stat_chain_fault("Liella", &got) {
+            panic!("{f}");
+        }
         let want = without(&neutral(&reference), &DROPPED, "the reference");
         let got = without(&neutral(&got), &ADDED, "Liella");
         let mut diffs = 0;
