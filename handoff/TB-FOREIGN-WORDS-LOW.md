@@ -1,51 +1,55 @@
 # TB-FOREIGN-WORDS-LOW: errno, TID, dtor, heap and node words (0x80-0x9b) in a block Liella did not make
 
-State: branch `task/tb-foreign-words-low-4` (stacks on -3 / TB-FOREIGN-SAFETY-6). HEAD: this handoff commit.
-Decisions in force: D-X.58, D-X.60 (records/decisions/D-X/D-X.60.toml), rulings #4835 (FOREIGN bit, OwnPages,
-errno in tp.S), #4849 (hand rename of the errno hot-text key), #4851 (selftest hook for SPARE), #4779 (<= +2 per
-access vs next), #4889 (judge on Release). Full report: handoff/TB-FOREIGN-WORDS-LOW-report.md.
+State: branch `task/tb-foreign-words-low-5` (stacks on -4, next merged in at 3dc8d485a). HEAD: this handoff commit
+(code head dedbe2223). Decisions in force: D-X.58, D-X.60 (records/decisions/D-X/D-X.60.toml), rulings #4835 (FOREIGN
+bit, OwnPages, errno in tp.S), #4849, #4851, #4779 (<= +2 per access vs next), #4889 (judge on Release), #5325
+(a branch that moves hot functions regenerates the start-up lists). Older report: handoff/TB-FOREIGN-WORDS-LOW-report.md.
 
-## What -4 did
-- **The five fast-profile hot-text keys (cause found).** They are not renames: no symbol of those functions is
-  left in the fast archive (nm/objdump of target/product/fast/libc.a), and none of their modules had an impl
-  inserted (#4893 does not apply). They are inlined into their callers, which this chain's owned() gating
-  (D-X.58/D-X.60) reshaped in the fast profile (thin LTO, 16 CGUs). Example: next's fast build keeps
-  `Sys::wait4` for CSysImpl<true> as its own section and also inlines it into `spawn::wait4`. On this branch
-  `spawn::wait4` has the `owned()` test before the 0xa0 descriptor load, and the generic has no copy left.
-  The callers (time_compat::select, spawn::wait4, catalog::textdomain, NsCache::attach) are hot-text keys, so
-  the code stays in the hot group. Fixed with the repo's tool, `cargo xtask hottext-repair --at 2ca200b6c`
-  (07c81c2b3): intl::bind, intl::textdomain and TscGate::fresh match nothing in either profile (dropped; they were
-  traced only in fast). Sys::wait4 (CSysImpl<true>) and the NsCache::attach closure still match in release, so
-  they are recorded in hot-text.absent for fast. errno_inline (34ec7567d) stays: it is not the cause.
-- **`c_malloc` / `hyp_quick` dead-code warnings:** they come from the product build (`so: profile fast`, no
-  selftest feature). The same code is on next, and the warnings appear in other stories' logs on keke
-  (argp-help-filter-keys-2). They are not this branch's; nothing changed.
-- **percall spec fix (fbf21301f):** the errno_location case took `&errno`, which the const declaration lets the
-  compiler hoist, so every variant counted 6.0 (loop only). It now calls through a volatile function pointer.
+## What -5 did (the three FULL-gate reds of -4)
+- **Merge of origin/next** (3dc8d485a): ld.rs kept both STARTED_HERE (D-X.58) and next's rseq exports; the
+  generated lists took next's copy and were then regenerated (below).
+- **Start-up state list** (75181c245): next's hand-written startup-state.list (D-X.64) named `thread::OWNED`, now an
+  alias of the assembly byte, so `cargo xtask so` stopped. It now names `thread::OWNED_HERE` and
+  `symbol liella_machine_owned`; that byte got a section of its own in machine/points.S (it shared the aio flag's).
+  The stale fast `hot-text.absent` line for `Sys::wait4` was removed.
+- **errno tests** (875c56a37): s2_1_c_0 and sym___errno_location assert the case they run in (test process: not
+  started by the runtime; `__errno_location` = the registry word, outside the block, stable). They use new selftest
+  hooks `runtime_started()` and `foreign_errno_word()`. s2_1_c_0 also links oracle/errno_owned.c statically against the
+  products and checks the started case: tp + 0x80 in the initial thread and in a created one. Conformance
+  s01_startup also runs on the host library, so it cannot check the offset.
+- **Heap fault** (646371012): a perf page-fault map of
+  heap_meta_faults (tools/hottext/faultmap.py) put the 10th fault on the text page of
+  `Heap::alloc_slow::<CSysImpl<false>, OwnPages>`. That second copy sat beside the KernelPages copy start-up runs,
+  and a new class's first allocation touched its page. The slow paths (alloc_slow, free_slow, resize_held) take
+  KernelPages again, and the fast paths keep OwnPages. 10 -> 9 (bound 9), with next's lists and with regenerated ones.
+- **Lists** (dedbe2223): `tools/hottext/regen.sh . --both --allow-drop`. The first regen (before the heap fix)
+  dropped iconv::codec_named (fast) plus locale::publish_global, regex ThreadScratch::table, `__errno_location` (now
+  the label of liella_machine_errno_location, which is listed) and nscache::passwd_from_files (release). The final
+  regen dropped nothing.
 
-## Results (keke:~/w/n1)
-- tb-foreign-words-low-4-lint0 (2ca200b6c): clippy, static green; fast `so` red on the 5 keys.
-- tb-foreign-words-low-4-repair: hottext-repair, both profiles built; 3 dropped, 2 recorded.
-- tb-foreign-words-low-4-lint1 (07c81c2b3): clippy, static, fast `so` GREEN.
-- percall2 / percall2-rel / percall2-relbase (instructions:u per call; the Release base is the merge-base
-  ca8aa835a exported with git archive and built with LIELLA_FULL_PROFILE=1 under its own --rev key):
+## Results (kanon:~/w/kn1)
+- lint0 (inherited 483a29c2a): clippy + static green.
+- m3/m4 (probe jobs): s2_1_c_0 and sym___errno_location pass. heap_meta_products is 10 without the fix and 9 with
+  it (both lists).
+- lint1 (dedbe2223) and lint2 (cebb4c756, code head): clippy (workspace, all targets, all features) GREEN; `cargo
+  xtask static` RED in `hottext` check_pinned. The regenerated lists add locale-tier keys on functions that are not
+  #[inline(never)], and the check names one per run: lint1 `locale::name::candidates` (pinned in cebb4c756), lint2
+  `text::builtin_charset` (crates/core/src/text.rs). hot-text.unpinned only shrinks (rulings #4997, #5024).
+- NOT RUN (budget): the FULL gate, plants (handoff/TB-FOREIGN-WORDS-LOW-5-plants.txt, 4 plants, written, never run),
+  and per-call counts (#4779). The fast paths did not change; the slow paths now carry the owned test (a few
+  instructions per slab refill, not counted).
 
-  | case | glibc | next Release | new Release | next Fast | new Fast |
-  |---|---|---|---|---|---|
-  | errno_location | 10.0 | 9.0 | 11.0 (+2) | 9.0 | 11.0 (+2) |
-  | malloc_free | 144.1 | 115.2 | 115.2 | 116.2 | 116.2 |
-  | calloc_free | 281.4 | 162.9 | 162.9 | 163.9 | 164.0 |
-
-  #4779 is met on Release (+2 on errno, +0 on malloc/calloc).
-- Plants: tb-foreign-words-low-4-plants 6 CAUGHT + tb-foreign-words-low-4-plants2 1 CAUGHT (errno-inline-registry,
-  whose pattern in -3's file did not compile; fixed) = 7/7 CAUGHT.
-- Gate: tb-foreign-words-low-4-gate (`affected --run --base origin/next --tier full`, head 07c81c2b3) was still
-  running at hand-back (153/6426 after 55 min): the dispatcher reads it.
-
-## Not done / next step
-1. If the gate or plants are red, fix the cause and rerun only the failing suite.
-2. The foreign-loader probe (D-22.10 harness) for errno: not started (an optional follow-up).
+## Next step
+1. List EVERY key check_pinned rejects in one pass (the new keys of dedbe2223's hot-text.list against next's: `git
+   diff 3dc8d485a dedbe2223 -- crates/libc-so/hot-text.list`, each Rust key's function checked for
+   #[inline(never)]), then pin them all in one commit (#[inline(never)] where a call is free, e.g. builtin_charset,
+   or #[inline(always)] into a keyed caller and drop the key). If the regen keeps adding unpinnable keys, that is
+   a RULING NEEDED for regen.sh (it should not emit keys static refuses).
+2. Then on kanon:~/w/kn1: ~/work/TB-FOREIGN-WORDS-LOW-5/lint.sh (clippy, static, release `so`, fast `so`), the
+   plants file through `cargo xtask plants` (RAM dir under /mnt/zram/claude/), and the FULL tier
+   (`cargo xtask affected --run --base origin/next --tier full`) as the brief asks.
+3. Optional: the foreign-loader probe (D-22.10 harness) for errno; not started.
 
 ## Not to redo
-The 0x80-0x9b audit table of -1, the registry words, the FOREIGN/OwnPages/asm design, the next/merge-base
-hot-text check, and the five-key analysis above (they are inlined, not renamed: the hot-text.absent lines are correct).
+-1's 0x80-0x9b audit table; the registry/FOREIGN/OwnPages/asm design; -4's five-key analysis; the fault map above
+(the slow-path copy, not metadata, held the extra fault).
