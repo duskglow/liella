@@ -185,6 +185,9 @@ pub const SWEEPS: &[Sweep] = &[
     it("crates/math/tests/complex_f128_products.rs", "complex_f128_products", "accuracy_suite_retry_count", Group::Count),
     // liella-boundary (TEST-LONG-SWEEPS-BOUNDARY, #4752)
     it("crates/boundary/tests/exp_quick.rs", "exp_quick", "exp_quick_accuracy_job", Group::Long).env(&[("EXP_QUICK_N", "100000000")]).secs(5),
+    // The directed-rounding quick phase of exp (LIBM-DIRECTED-INPLACE, D-10.94): 10^7 operands per distribution,
+    // direction and build.
+    it("crates/boundary/tests/exp_quick.rs", "exp_quick", "exp_directed_accuracy_job", Group::Long).env(&[("EXP_DIR_N", "10000000")]),
     it("crates/boundary/tests/trig_quick.rs", "trig_quick", "trig_quick_accuracy_job", Group::Long).env(&[("TRIG_QUICK_N", "100000000")]).secs(58),
     it("crates/boundary/tests/hyperb_quick.rs", "hyperb_quick", "hyperb_quick_both_builds_round_correctly", Group::Long)
         .env(&[("LIELLA_HYPERB_N", "1000000")]).secs(23),
