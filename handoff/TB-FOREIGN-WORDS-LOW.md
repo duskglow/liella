@@ -1,52 +1,51 @@
 # TB-FOREIGN-WORDS-LOW: errno, TID, dtor, heap and node words (0x80-0x9b) in a block Liella did not make
 
-State: branch `task/tb-foreign-words-low-3` (stacks on TB-FOREIGN-WORDS-LOW-2 / TB-FOREIGN-SAFETY-6). HEAD: this
-handoff commit. Decisions in force: D-X.58, D-X.60 (records/decisions/D-X/D-X.60.toml), rulings #4835 (FOREIGN bit,
-OwnPages, errno in tp.S), #4849 (hand rename of the errno hot-text key), #4851 (selftest hook for SPARE).
+State: branch `task/tb-foreign-words-low-4` (stacks on -3 / TB-FOREIGN-SAFETY-6). HEAD: this handoff commit.
+Decisions in force: D-X.58, D-X.60 (records/decisions/D-X/D-X.60.toml), rulings #4835 (FOREIGN bit, OwnPages,
+errno in tp.S), #4849 (hand rename of the errno hot-text key), #4851 (selftest hook for SPARE), #4779 (<= +2 per
+access vs next), #4889 (judge on Release). Full report: handoff/TB-FOREIGN-WORDS-LOW-report.md.
 
-## What -3 did
-- **Why the products build lost 7 hot-text keys (found, fixed).** origin/next 1ce5e4a39 and the merge-base ca8aa835a
-  both build clean (`cargo xtask so`, fast profile, keke ~/wl/products/<sha>), so none of them was next's jitter. Cause:
-  with `__errno_location` in assembly, the library's own errno stores (`crate::errno::set/get/set_raw`, through the
-  extern decl in caller_alloc.rs) became opaque calls; before, LTO resolved that decl to the Rust definition and
-  inlined it. The small CSysImpl generics that set errno (Sys::wait4, intl::bind, intl::textdomain, TscGate::fresh,
-  the NsCache::attach closure) then inlined into their callers. Fix (34ec7567d): in `runtime` builds `crate::errno`
-  uses `tb::errno_inline`, the tp.S test in Rust (OWNED_HERE, stored with liella_machine_owned in init_initial); C
-  callers keep the asm entry; test builds keep the host's. That restored all five.
-- `heap::Caller::new` (release profile only after the fix): `#[inline(never)]` (045eba8d4), as it is on next.
-- hot-text.list: `__errno_location` -> `liella_machine_errno_location` (hand rename, #4849; lists not regenerated).
-- #4837/#4851: `thread::NO_ROOM` + `selftest::starve_registry` (shadow_entry answers as with no chunk mapped),
-  `selftest::heap_cache_word`; test `spare_words_hold_no_heap_cache` (forked child, no allocation).
-- Plants file: + `spare-cache-shared` (thread.rs), + `errno-inline-registry` (tb.rs, conformance s00_errno).
+## What -4 did
+- **The five fast-profile hot-text keys (cause found).** They are not renames: no symbol of those functions is
+  left in the fast archive (nm/objdump of target/product/fast/libc.a), and none of their modules had an impl
+  inserted (#4893 does not apply). They are inlined into their callers, which this chain's owned() gating
+  (D-X.58/D-X.60) reshaped in the fast profile (thin LTO, 16 CGUs). Example: next's fast build keeps
+  `Sys::wait4` for CSysImpl<true> as its own section and also inlines it into `spawn::wait4`. On this branch
+  `spawn::wait4` has the `owned()` test before the 0xa0 descriptor load, and the generic has no copy left.
+  The callers (time_compat::select, spawn::wait4, catalog::textdomain, NsCache::attach) are hot-text keys, so
+  the code stays in the hot group. Fixed with the repo's tool, `cargo xtask hottext-repair --at 2ca200b6c`
+  (07c81c2b3): intl::bind, intl::textdomain and TscGate::fresh match nothing in either profile (dropped; they were
+  traced only in fast). Sys::wait4 (CSysImpl<true>) and the NsCache::attach closure still match in release, so
+  they are recorded in hot-text.absent for fast. errno_inline (34ec7567d) stays: it is not the cause.
+- **`c_malloc` / `hyp_quick` dead-code warnings:** they come from the product build (`so: profile fast`, no
+  selftest feature). The same code is on next, and the warnings appear in other stories' logs on keke
+  (argp-help-filter-keys-2). They are not this branch's; nothing changed.
+- **percall spec fix (fbf21301f):** the errno_location case took `&errno`, which the const declaration lets the
+  compiler hoist, so every variant counted 6.0 (loop only). It now calls through a volatile function pointer.
 
 ## Results (keke:~/w/n1)
-- tb-foreign-words-low-3-lint0 (inherited 455d48a6f): clippy + static rc 0; `xtask so` red, 7 keys (above).
-- tb-foreign-words-low-3-basebuild: next 1ce5e4a39 and merge-base ca8aa835a products BUILD-OK.
-- tb-foreign-words-low-3-lint1 (34ec7567d): clippy, static green; release build red on Caller::new only.
-- tb-foreign-words-low-3-lint2 (bb64bc056): same (the `#[inline(never)]` theory was wrong).
-- **Caller::new: real cause found and fixed (fb0a75d38).** v0 mangling numbers a module's impls in source order;
-  -2's `impl Pages for OwnPages` inserted before `impl Caller` renamed it Ms1_ -> Ms2_. The impl now goes last
-  in heap.rs; `#[inline(never)]` dropped. tb-foreign-words-low-3-lint3 (17a53373e): clippy, static, records
-  check, release `so` GREEN; fast `so` red. tb-foreign-words-low-3-plants2: rc 2, baseline (fast `so`) red.
-- **Still open: 5 keys absent in the FAST profile only** (TscGate::fresh, intl::bind, Sys::wait4 for
-  CSysImpl<true>, intl::textdomain, the NsCache::attach closure). lint0's list was fast-profile; lint1/2/3 built
-  release first, so release may never have lacked them. **NOT VERIFIED that the errno_inline change (34ec7567d)
-  does anything for them**: it does not restore them in fast. Fast is thin LTO, 16 CGUs: likely CGU partitioning
-  of these CSysImpl generics, moved by this branch's code (next and the merge-base match them in fast).
-- Gate, percall: not run on this head (the chain stops at the red products build).
+- tb-foreign-words-low-4-lint0 (2ca200b6c): clippy, static green; fast `so` red on the 5 keys.
+- tb-foreign-words-low-4-repair: hottext-repair, both profiles built; 3 dropped, 2 recorded.
+- tb-foreign-words-low-4-lint1 (07c81c2b3): clippy, static, fast `so` GREEN.
+- percall2 / percall2-rel / percall2-relbase (instructions:u per call; the Release base is the merge-base
+  ca8aa835a exported with git archive and built with LIELLA_FULL_PROFILE=1 under its own --rev key):
 
-## Not done (next run, in this order)
-1. Fast-profile keys: look for another mangling or placement shift like Caller's first (cheap): which of this
-   chain's edits sit in the modules or generic paths of those 5 (boundary sys.rs CSysImpl, legacy intl,
-   recheck, nscache); compare the fast build's symbol names for them (`nm` on ~/w/<role>/target/liella/libc.a
-   right after `cargo xtask so`, grep `5wait4`, `4intl4bind`) with the keys. If they exist under another name it
-   is a rename (fix in code, as with Caller); if inlined, decide errno_inline's fate (keep: it saves the Rust
-   errno paths a call per store, #4779; or revert) and raise RULING NEEDED for absent lines.
-2. Then gate (`cargo xtask affected --run --base origin/next`), plants (7 plants, all must be CAUGHT), percall
-   (`bash validation/wl_percall.sh --spec validation/percall/foreign_words.c .`; merge-base ca8aa835a primed and
-   built on keke).
-3. The foreign-loader probe (D-22.10 harness) for errno: not started.
+  | case | glibc | next Release | new Release | next Fast | new Fast |
+  |---|---|---|---|---|---|
+  | errno_location | 10.0 | 9.0 | 11.0 (+2) | 9.0 | 11.0 (+2) |
+  | malloc_free | 144.1 | 115.2 | 115.2 | 116.2 | 116.2 |
+  | calloc_free | 281.4 | 162.9 | 162.9 | 163.9 | 164.0 |
+
+  #4779 is met on Release (+2 on errno, +0 on malloc/calloc).
+- Plants: tb-foreign-words-low-4-plants 6 CAUGHT + tb-foreign-words-low-4-plants2 1 CAUGHT (errno-inline-registry,
+  whose pattern in -3's file did not compile; fixed) = 7/7 CAUGHT.
+- Gate: tb-foreign-words-low-4-gate (`affected --run --base origin/next --tier full`, head 07c81c2b3) was still
+  running at hand-back (153/6426 after 55 min): the dispatcher reads it.
+
+## Not done / next step
+1. If the gate or plants are red, fix the cause and rerun only the failing suite.
+2. The foreign-loader probe (D-22.10 harness) for errno: not started (an optional follow-up).
 
 ## Not to redo
-The 0x80-0x9b audit table of -1, the registry words, the FOREIGN/OwnPages/asm design, the next/merge-base hot-text
-check (both clean: this branch's own change caused the absent keys).
+The 0x80-0x9b audit table of -1, the registry words, the FOREIGN/OwnPages/asm design, the next/merge-base
+hot-text check, and the five-key analysis above (they are inlined, not renamed: the hot-text.absent lines are correct).

@@ -1,0 +1,24 @@
+{"task": "TB-FOREIGN-WORDS-LOW-4", "model": "opus", "tokens": null,
+ "result": "Fast-profile products build green: the 5 absent hot-text keys are inlined (not renamed), repaired with cargo xtask hottext-repair (3 dropped, 2 fast-absent lines); plants 7/7 CAUGHT; #4779 met on Release (errno +2, malloc/calloc +0); FULL gate pending",
+ "branch": "task/tb-foreign-words-low-4", "head": null,
+ "gate": {"affected": "pending: tb-foreign-words-low-4-gate (FULL tier, running at hand-back)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "c_malloc / hyp_quick dead-code warnings come from the product build and appear on next too (other stories' logs); not this branch's",
+   "the errno-inline-registry plant in -3's file did not compile (pattern missed the core::ptr:: prefix); fixed and CAUGHT",
+   "the percall errno_location case measured only the loop (const declaration hoisted &errno); now calls through a volatile pointer",
+   "wl_percall keys products by revision name only, not by profile: Release checks (#4889) need their own --rev key and a hand-made base tree"
+ ],
+ "refused": [],
+ "impact": [
+   {"kind": "tooling", "what": "fast-profile products build (cargo xtask so) green again: 5 hot-text keys repaired", "before": 5, "after": 0, "unit": "absent keys", "measured": true},
+   {"kind": "perf", "what": "errno_location per call, Release (vs next merge-base)", "before": 9.0, "after": 11.0, "unit": "instr/call", "measured": true},
+   {"kind": "perf", "what": "malloc_free per call, Release (vs next merge-base)", "before": 115.2, "after": 115.2, "unit": "instr/call", "measured": true},
+   {"kind": "perf", "what": "calloc_free per call, Release (vs next merge-base)", "before": 162.9, "after": 162.9, "unit": "instr/call", "measured": true},
+   {"kind": "coverage", "what": "plants caught (one plant fixed so it compiles)", "before": 6, "after": 7, "unit": "plants", "measured": true}
+ ],
+ "improvement": "wl_percall/wl_lock could take a --profile option so a Release-vs-next count (#4889) is one command instead of a hand-exported base tree under a renamed cache key",
+ "next_step": "dispatcher reads the FULL gate; optional follow-up: the D-22.10 foreign-loader probe for errno",
+ "report_file": "handoff/TB-FOREIGN-WORDS-LOW-report.md",
+ "jobs": ["tb-foreign-words-low-4-lint1", "tb-foreign-words-low-4-gate", "tb-foreign-words-low-4-plants", "tb-foreign-words-low-4-plants2", "tb-foreign-words-low-4-percall2", "tb-foreign-words-low-4-percall2-rel", "tb-foreign-words-low-4-percall2-relbase"]}
