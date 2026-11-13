@@ -7,3 +7,8 @@ ltab-drop-locale-probe | tools/hottext/regen.sh | lit:stdin=/dev/null trace loca
 ltab-drop-tool-probe | tools/hottext/regen.sh | lit:stdin=/dev/null trace tool en_US.UTF-8 ./page_faults tool ==> : | env LIELLA_LAYOUT_TRACE=1 cargo xtask so && cargo test -p liella --test hot_text_products | msg:the trace set misses page_faults mode\(s\): tool \(
 ltab-drop-probe-text-mode | tools/hottext/probe_text.sh | lit:MODES="localtime localtime_mktime" ==> MODES="localtime" | env LIELLA_LAYOUT_TRACE=1 cargo xtask so && cargo test -p liella --test hot_text_products | msg:the trace set misses page_faults mode\(s\): localtime_mktime \(
 ltab-rename-skips-first | xtask/src/hottext.rs | lit:        keys.entry(e.key.clone()).or_insert(i); ==>         if i > 0 { keys.entry(e.key.clone()).or_insert(i); } | env LIELLA_LAYOUT_TRACE=1 cargo xtask so && cargo test -p liella --test hot_text_products | msg:STARTUP-TEXT-WINDOWS|TEXT-PREFIX|outside the hot text|program: [0-9]+ page faults >
+# cargo xtask plants results (4 plants: 4 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# ltab-drop-locale-probe: CAUGHT, caught by no test the log names
+# ltab-drop-tool-probe: CAUGHT, caught by no test the log names
+# ltab-drop-probe-text-mode: CAUGHT, caught by no test the log names
+# ltab-rename-skips-first: CAUGHT, caught by no test the log names

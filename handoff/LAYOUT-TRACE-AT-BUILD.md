@@ -1,6 +1,7 @@
 # LAYOUT-TRACE-AT-BUILD (LT-1): `cargo xtask so` traces its own build, opt-in
 
-State: branch `task/layout-trace-at-build`, cut from origin/next (b888f8ff0). Plan: `plan/layout-rethink.md`
+State: branch `task/layout-trace-at-build-2` (LT-1 continuation, stacked on `task/layout-trace-at-build`), cut
+from origin/next (b888f8ff0). Plan: `plan/layout-rethink.md`
 section 4 (on `task/layout-rethink`), rulings #5190-#5194. Decision: `records/pending/LAYOUT-TRACE-AT-BUILD-1.toml`
 (series D-X, pending). Plants: `handoff/LAYOUT-TRACE-AT-BUILD-plants.txt`.
 
@@ -48,7 +49,31 @@ profiles. Cost with a warm cargo cache: fast `so` 233 s -> 262 / 247 s; release 
 Fast `tool`: the plan's 52 -> 53 (base b31418181) does not reproduce on today's next on the same host class (next
 54, trace 53), so the window phase was not diagnosed; the trace set now also holds every bound mode (`--all-modes`).
 
-## Jobs (shiki)
+## Trace-set coverage check (LAYOUT-TRACE-AT-BUILD-2)
+
+The first run's plants that dropped the `locale` or `tool` probe survived: a dropped probe could still pass the
+fault bounds by luck of placement. `regen.sh` now records every command `trace()` runs (`$work/traced`), and under
+`--all-modes` (what `so` passes) checks after the traces that every mode of `page_faults.c` was traced: the
+`strcmp(argv[1], "<mode>")` modes minus `relay`, parsed as `init_startup_data_accesses_are_in_the_data1_cluster`
+parses them (that test also checks they are all in `STARTUP_PROBE_MODES`, which the bounds measure), plus `true`
+(`startup.names`), with localtime / localtime_mktime counted from probe_text.sh's `probe/names.<mode>`. A missing
+one fails the trace and `so` with `regen: --all-modes: the trace set misses page_faults mode(s): <modes> (...)`;
+a parse that finds fewer than 3 modes fails too. The traced commands, their order and environment are unchanged
+(the record is a side file), so the lists are the first run's; not re-measured in this run.
+
+Plants (mei, ltab2-plants): ltab-drop-locale-probe, ltab-drop-tool-probe and the new ltab-drop-probe-text-mode
+CAUGHT by that message; ltab-rename-skips-first CAUGHT as before. The tool notes "caught by no test the log
+names" for the first three: they are caught by `so` itself, before the test runs, which is the intent.
+
+## Jobs, LAYOUT-TRACE-AT-BUILD-2 (mei, role s1)
+
+ltab2-lint0 (clippy + static on the inherited head: rc 0); ltab2-plants (4 plants, trace mode, fast: 4 CAUGHT,
+rc 0; baseline = trace-mode `so` with the check + hot_text_products green); ltab2-gate (clippy, static, affected
+--run --base origin/next, default mode: 32 suites, 11692 passed, 0 failed, conformance 130/0, rc 0);
+ltab2-release (release trace-mode `so`: `every page_faults mode traced: true float fork locale localtime
+localtime_mktime mktime rebind strings tool`, then hot_text_products 23 passed, rc 0).
+
+## Jobs, first run (shiki)
 
 ltab-fast (fast table, rc 0), ltab-lint-2 (clippy, static, xtask hotlists unit tests: rc 0), ltab-release
 (release table, rc 0; its next-release hot_text_products fails on next itself, see above), ltab-gate (affected
@@ -60,6 +85,7 @@ Logs and products: `~/work/LAYOUT-TRACE-AT-BUILD/{m1,m2,optout}` on shiki.
 
 * INFORMATIONAL: next (no switch) fails `init_short_programs_stay_within_their_page_fault_bounds` in the release
   profile on this host: setlocale + printf 53 > 51. With the switch it reads 50.
-* NOT VERIFIED at hand-back: ltab-gate, ltab-plants, ltab-optout were still queued (results in jobs.tsv).
-* Next step: when the three jobs are green, land; then LT-2 (clusters by probe phase), LT-3 (ptrace tracer),
-  LT-4 (host-canonical, before the default changes). Do not redo: the fast/release tables and determinism above.
+* First run's jobs: ltab-gate and ltab-optout rc 0; ltab-plants rc 1 (the two survivors, fixed above).
+* Next step: land; then LT-2 (clusters by probe phase), LT-3 (ptrace tracer), LT-4 (host-canonical, before the
+  default changes). A new `page_faults.c` mode now needs a trace in regen.sh (or probe_text.sh MODES) or the
+  trace-mode build fails by name. Do not redo: the fast/release tables, determinism, the coverage check.
