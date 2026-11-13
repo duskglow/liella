@@ -22,6 +22,7 @@ _RINvNtC4core3ptr9drop_glueNtNtC15liella_boundary5regex13ThreadScratchEC15liella
 _RNvNtC15liella_boundary7process6getenv	release	no trace; matches only in the fast archive (the release profile inlines or drops it)
 _RNvNtNtC6liella6locale4name5parse	release	no trace; matches only in the fast archive (the release profile inlines or drops it)
 _RNvNtNtC6liella7catalog8variants9normalize	release	no trace; matches only in the fast archive (the release profile inlines or drops it)
-_RNvNtC15liella_boundary7catalog10textdomain	release	no trace; matches only in the fast archive (the release profile inlines or drops it)
+_RNvNtC15liella_boundary7catalog10textdomain	fast	no trace; inlined away in the fast profile too once libm grew (ruling #5183); extra seed key, unmeasured
+_RNvNtC15liella_boundary7catalog10textdomain	release	no trace; inlined away in both profiles once libm grew (ruling #5183); extra seed key, unmeasured
 _RINvNtC13liella_legacy12stdio_compat9with_listNtNtC15liella_boundary5stdio4GlueuNCINvNtC13liella_legacy12stdio_compat6unlinkNtNtC15liella_boundary5stdio4GlueE0EC15liella_boundary	release	no trace; matches only in the fast archive (the release profile inlines or drops it)
 _RNvXs3_NtC15liella_boundary3sysINtNtC15liella_boundary3sys8CSysImplKb0_ENtNtC13liella_kernel3sys3Sys13clock_gettimeC15liella_boundary	release	no trace; matches only in the fast archive (the release profile inlines or drops it)
