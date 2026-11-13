@@ -12,7 +12,10 @@ CASE(calloc_free, 100000, 1) {
     for (long i = 0; i < n; i++) { void *volatile p = calloc(1, 40 + (i & 63)); free(p); }
     PC_CHECKING { char *volatile p = calloc(1, 40); pc_check("%d", p != NULL && p[39] == 0); free(p); }
 }
+/* Through a volatile pointer: `errno` alone lets the compiler take the address once per loop
+ * (the declaration is const), which measures the loop and not the call. */
 CASE(errno_location, 1000000, 1) {
-    for (long i = 0; i < n; i++) { int *volatile e = &errno; *e = (int)i; }
+    int *(*volatile loc)(void) = __errno_location;
+    for (long i = 0; i < n; i++) { int *e = loc(); *e = (int)i; }
     PC_CHECKING { errno = 7; pc_check("%d", errno); }
 }
