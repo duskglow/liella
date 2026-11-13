@@ -1155,9 +1155,11 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("--static") => static_check(root),
         Some(d) if d.starts_with('-') => Err(format!("layout-check: unknown option {d} (usage: layout-check [--static | <products dir>])")),
-        Some(d) => check_products(root, Path::new(d), marker_profile(Path::new(d)).as_deref()),
+        // LAYOUT-TRACE-AT-BUILD: products grouped from a trace of their own build are checked against those lists.
+        Some(d) => crate::hotlists::follow_products(root, Path::new(d)).and_then(|()| check_products(root, Path::new(d), marker_profile(Path::new(d)).as_deref())),
         None => {
             let d = root.join("target/liella");
+            crate::hotlists::follow_products(root, &d)?;
             check_products(root, &d, marker_profile(&d).as_deref())
         }
     }

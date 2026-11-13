@@ -22,6 +22,7 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use crate::hotlists::Layout;
 use crate::so::OWN_PREFIX;
 
 /// HOTTEXT-REGEN-UNBLOCK: `cargo xtask so --hottext-regen` builds the products with the dead-key
@@ -94,7 +95,7 @@ pub fn recheck_cmd(root: &Path, args: &[String]) -> Result<(), String> {
         }
         let copy = dir.join("hot-text.recheck.a");
         fs::copy(&saved, &copy).map_err(|e| format!("hottext-recheck: copy {}: {e}", saved.display()))?;
-        let r = group(&ar, &copy, &list, &inputs, &dir.join("recheck-work"), Some(p.name()));
+        let r = group(&ar, &copy, &list, &inputs, &dir.join("recheck-work"), Some(p.name()), Layout::Committed);
         let _ = fs::remove_file(&copy);
         let (hot, keys) = r.map_err(|e| format!("hottext-recheck: {}: {e}", p.name()))?;
         println!("hottext-recheck: {}: {hot} function sections grouped, {keys} keys, dead-key check done", p.name());
@@ -1159,19 +1160,37 @@ fn is_startup_names(section: &str) -> bool {
 /// ([`dead_key_verdict`]); a stale [`ABSENT_LIST`] line fails; prints the count of the allowed
 /// unmatched keys. Returns (hot sections in the result, keys in the list). `inputs`: the directory of the
 /// hand-written inputs ([`CLUSTER_LIST`], [`ABSENT_LIST`]); `list` may be a train-owned copy elsewhere (hotlists.rs).
-pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, profile: Option<&str>) -> Result<(usize, usize), String> {
-    let text = fs::read_to_string(list).map_err(|e| format!("{}: {e}", list.display()))?;
+/// `layout` (LAYOUT-TRACE-AT-BUILD): [`Layout::Traced`]: `list` is a trace of this archive's own build, so
+/// [`ABSENT_LIST`] (history of committed keys) does not apply and a cluster or [`FIRST_WINDOW_LIST`] key the
+/// trace lacks (or places elsewhere) is named as such; [`Layout::Ungrouped`]: `list` is not read, nothing is
+/// grouped, no first-window key moved and no cluster aligned (the start-up names
+/// section is still placed).
+pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, profile: Option<&str>, layout: Layout) -> Result<(usize, usize), String> {
+    let text = match layout {
+        Layout::Ungrouped => String::new(),
+        _ => fs::read_to_string(list).map_err(|e| format!("{}: {e}", list.display()))?,
+    };
     let entries = parse_list(&text)?;
     let clusters_path = inputs.join(CLUSTER_LIST);
     let clusters_text = fs::read_to_string(&clusters_path).map_err(|e| format!("{}: {e}", clusters_path.display()));
+    // LT-1: the hand-kept inputs name functions of the committed list; under Traced they are checked
+    // against this build's own trace instead (LT-2 removes the class).
+    let traced = |e: String| match layout {
+        Layout::Traced => format!("trace-at-build: {e}: this build's trace does not reach that function (inlined, renamed or no longer run) or places it elsewhere; {CLUSTER_LIST} and {FIRST_WINDOW_LIST} name internal functions until LT-2 (clusters by probe phase)"),
+        _ => e,
+    };
     // LAYOUT-FIRST-WINDOW: link positions, the first-window keys right after the start-up tier.
-    let keys = match first_window_positions(inputs, &entries, clusters_text.as_deref().ok()) {
-        Ok(k) => k,
-        Err(e) if REGEN.load(Ordering::Relaxed) => {
-            println!("so: {REGEN_FLAG}: {FIRST_WINDOW_LIST} NOT applied for this regen build: {e}");
-            positions(&entries)
-        }
-        Err(e) => return Err(e),
+    // Ungrouped: no list, so nothing is placed and no first-window key applies.
+    let keys = match layout {
+        Layout::Ungrouped => positions(&entries),
+        _ => match first_window_positions(inputs, &entries, clusters_text.as_deref().ok()) {
+            Ok(k) => k,
+            Err(e) if REGEN.load(Ordering::Relaxed) => {
+                println!("so: {REGEN_FLAG}: {FIRST_WINDOW_LIST} NOT applied for this regen build: {e}");
+                positions(&entries)
+            }
+            Err(e) => return Err(traced(e)),
+        },
     };
     let mut matched = BTreeSet::new();
     let _ = fs::remove_dir_all(work);
@@ -1184,9 +1203,10 @@ pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, 
     }
     crate::so::run(Command::new(ar).current_dir(work).arg("x").arg(&archive))?;
     let objcopy = std::env::var("OBJCOPY").unwrap_or_else(|_| "objcopy".into());
-    let clusters = match &clusters_text {
-        Ok(t) => parse_clusters(t, &keys).and_then(|c| Ok((c, clusters_at_end(t)?))),
-        Err(e) => Err(e.clone()),
+    let clusters = match (layout, &clusters_text) {
+        (Layout::Ungrouped, _) => Ok((Vec::new(), false)),
+        (_, Ok(t)) => parse_clusters(t, &keys).and_then(|c| Ok((c, clusters_at_end(t)?))).map_err(traced),
+        (_, Err(e)) => Err(e.clone()),
     };
     // A regen build must not be blocked by a cluster key the old list lacks (D-X.56).
     let (clusters, at_end) = match clusters {
@@ -1288,6 +1308,8 @@ pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, 
     }
     let absent_path = inputs.join(ABSENT_LIST);
     let absent = match fs::read_to_string(&absent_path) {
+        // A traced list holds only keys this archive's own build ran: nothing is absent by history.
+        Ok(_) if layout != Layout::Committed => BTreeSet::new(),
         Ok(t) => parse_absent(&t)?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => BTreeSet::new(),
         Err(e) => return Err(format!("{}: {e}", absent_path.display())),

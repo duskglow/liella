@@ -112,6 +112,17 @@ fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+/// A generated start-up list (`hot-text.list`, `startup-data.keys`, ...) as the products were grouped from it: the
+/// committed copy in `crates/libc-so`, or, for products built under `LIELLA_LAYOUT_TRACE` (LAYOUT-TRACE-AT-BUILD),
+/// the directory their `target/liella/.hot-lists` marker names (`target/product/<profile>`, written by the build's
+/// own trace). The hand-written inputs (`hot-text.clusters`, `startup-state.list`) are always the committed ones.
+fn generated_list(name: &str) -> PathBuf {
+    match std::fs::read_to_string(root().join("target/liella/.hot-lists")) {
+        Ok(m) => PathBuf::from(m.lines().next().expect("target/liella/.hot-lists: empty marker")).join(name),
+        Err(_) => root().join("crates/libc-so").join(name),
+    }
+}
+
 fn build(out: &Path) {
     build_with(out, &[]);
 }
@@ -740,7 +751,9 @@ fn init_startup_group_ends_inside_the_first_fault_around_window() {
         .and_then(|w| u64::from_str_radix(w[2].trim_start_matches("0x"), 16).ok())
         .expect("no executable LOAD segment in the probe");
     let (start, end) = (seg & !0xfff, (seg & !0xfff) + FIRST_WINDOW);
-    let list = std::fs::read_to_string(r.join("crates/libc-so/hot-text.list")).expect("hot-text.list");
+    // The list the products were grouped from (LAYOUT-TRACE-AT-BUILD: a trace-mode build's own list,
+    // whose start-up tier differs from the committed one); the first-window keys stay hand-kept.
+    let list = std::fs::read_to_string(generated_list("hot-text.list")).expect("hot-text.list");
     let startup = list.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).take_while(|l| l.split('\t').nth(1) == Some("startup")).count();
     let first = std::fs::read_to_string(r.join("crates/libc-so/hot-text.first-window")).expect("hot-text.first-window");
     let group = startup + first.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).count();
@@ -828,7 +841,7 @@ fn init_no_library_text_precedes_the_hot_group() {
 /// The 0-fault clusters of `crates/libc-so/hot-text.clusters`: (name, first, last list position).
 fn clusters() -> Vec<(String, usize, usize)> {
     let dir = root().join("crates/libc-so");
-    let list = std::fs::read_to_string(dir.join("hot-text.list")).expect("hot-text.list");
+    let list = std::fs::read_to_string(generated_list("hot-text.list")).expect("hot-text.list");
     let mut pos = std::collections::BTreeMap::new();
     for (i, l) in list.lines().filter(|l| !l.trim().is_empty() && !l.starts_with('#')).enumerate() {
         pos.entry(l.split('\t').next().unwrap_or("").trim().to_string()).or_insert(i);
@@ -1016,7 +1029,7 @@ fn unhashed_key(name: &str) -> String {
 /// and `.bss` puts it. One left in `.data`/`.bss` is named. No spec clause (layout of the products).
 #[test]
 fn init_written_startup_objects_are_in_the_data1_cluster() {
-    let keys: std::collections::BTreeSet<String> = std::fs::read_to_string(root().join("crates/libc-so/startup-data.keys"))
+    let keys: std::collections::BTreeSet<String> = std::fs::read_to_string(generated_list("startup-data.keys"))
         .expect("startup-data.keys")
         .lines()
         .filter(|l| !l.starts_with('#'))
