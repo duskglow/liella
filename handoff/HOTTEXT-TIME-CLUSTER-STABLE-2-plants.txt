@@ -1,0 +1,10 @@
+# HOTTEXT-TIME-CLUSTER-STABLE-2 plants. The first three are HOTTEXT-TIME-CLUSTER-STABLE's (each moves one function of
+# time_compat::select's lock-free path out of line), re-run on this head. The last two break the LOCPATH cache that
+# replaced the OnceCell in global_locale::Files::locpath: a cached read that answers "no LOCPATH" (a later category of
+# the same selection would search the default directory only), and a cache that is never filled (same answers, the
+# variable is read again per category: equivalent by design).
+fresh-outlined | crates/legacy/src/recheck.rs | perl:s/#\[inline\(always\)\]\n(    pub fn fresh\()/#[inline(never)]\n$1/ | cargo test -p liella --test hot_text_products -- init_first_mktime_after_localtime_r_takes_no_fault | msg:first mktime after localtime_r: [0-9]+ page faults
+zone-outlined | crates/legacy/src/time_compat.rs | perl:s/#\[inline\(always\)\]\n(    pub fn zone\(&self\))/#[inline(never)]\n$1/ | cargo test -p liella --test hot_text_products -- init_first_mktime_after_localtime_r_takes_no_fault | equivalent:Entry::zone also runs on localtime_r's first call (select's locked path), so an out-of-line copy is touched before mktime; HOTTEXT-TIME-CLUSTER-STABLE plants-2: SURVIVED, the test passed
+entry-at-outlined | crates/boundary/src/zone.rs | perl:s/#\[inline\(always\)\]\n(    fn entry_at\()/#[inline(never)]\n$1/ | cargo test -p liella --test hot_text_products -- init_first_mktime_after_localtime_r_takes_no_fault | msg:first mktime after localtime_r: [0-9]+ page faults
+locpath-cached-none | crates/legacy/src/global_locale.rs | perl:s/(if let Some\(p\) = self\.locpath\.get\(\) \{\n\s+return )p;/${1}None;/ | cargo test -p liella-boundary --test s07_locale_symbols --test reload | msg:test result: FAILED|panicked at
+locpath-never-cached | crates/legacy/src/global_locale.rs | perl:s/\n        self\.locpath\.set\(Some\(p\)\);// | cargo test -p liella-boundary --test s07_locale_symbols --test reload | equivalent:the cache only saves re-reading LOCPATH within one selection (SETLOCALE-3); without it every category reads the same value and selects the same files
