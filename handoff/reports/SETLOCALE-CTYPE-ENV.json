@@ -1,0 +1,21 @@
+{"task": "SETLOCALE-CTYPE-ENV", "model": "opus", "tokens": null,
+ "result": "repeated setlocale(LC_CTYPE, \"\") 8254.8 -> 587.1 instr/call (glibc 2551), LC_ALL \"\" 8804.6 -> 1093.0; C/POSIX/query rows also lower; LC_ALL-empty case open",
+ "branch": "task/setlocale-ctype-env", "head": "54089d888",
+ "gate": {"affected": "pending: mei setlocale-ctype-env-gate", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["test program with LC_ALL set but empty counts LC_ALL \"\" 9527/call (fast profile); LANG-only LC_ALL row 7180: cause not established, next step in handoff"],
+ "refused": [],
+ "impact": [
+  {"kind": "perf", "what": "setlocale_ctype_empty per call (release, Skylake-SP)", "before": 8254.8, "after": 587.1, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "setlocale_all_empty per call", "before": 8804.6, "after": 1093.0, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "setlocale_ctype_empty_lang per call", "before": 7067.2, "after": 919.0, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "setlocale_all_empty_lang per call", "before": 8466.2, "after": 7180.0, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "setlocale_ctype_c per call", "before": 147.3, "after": 124.3, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "setlocale_ctype_posix per call", "before": 160.3, "after": 137.3, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "setlocale_query per call", "before": 76.0, "after": 70.0, "unit": "instr/call", "measured": true},
+  {"kind": "coverage", "what": "setlocale_env_repeat test (14 environment-change checks), 2 plants, 3 percall rows", "before": null, "after": 1, "unit": "test", "measured": true}
+ ],
+ "improvement": "the brief assumed the reload was the cost; a 4-minute wl_trace showed the environment walk was 90% - profiling first saved a wrong design",
+ "next_step": "trace setlocale_all_empty_lang and an LC_ALL-empty case; then bound the test's cost",
+ "report_file": "handoff/SETLOCALE-CTYPE-ENV.md",
+ "jobs": ["mei:setlocale-ctype-env-gate", "mei:setlocale-ctype-env-plants", "mei:setlocale-ctype-env-lint", "mei:setlocale-ctype-env-percall-4"]}
