@@ -124,7 +124,11 @@ impl Pages for KernelPages {
 /// [`malloc_debug::FOREIGN`] until the runtime takes the process (`thread::init_initial`), so
 /// a path reached with the word clear runs in a process the runtime started, where 0x90 of the
 /// calling thread's block is Liella's, and the cache word is read with no further test (the
-/// heap fast paths pay nothing for the foreign case). Everything else is [`KernelPages`]'s.
+/// heap fast paths pay nothing for the foreign case). Everything else is [`KernelPages`]'s,
+/// including the heap's slow paths (`alloc_slow`, `free_slow`, `resize_held`) even with the word
+/// clear: one copy of each, the one start-up already runs. A second copy for this type put the
+/// first allocation of a new size class on a text page of its own (one more fault for 14 new
+/// classes, `heap_meta_products`); its test there saves nothing measurable.
 pub struct OwnPages;
 
 /// `len` bytes at a multiple of `align` without mapping `len + align` first (T14): the kernel
@@ -548,7 +552,7 @@ fn malloc_general(n: usize) -> *mut core::ffi::c_void {
     if let Some(b) = Heap::alloc_group(&OwnPages, n) {
         return core::ptr::with_exposed_provenance_mut(b.addr);
     }
-    crate::ret::null(HEAP.alloc_slow(&CSys, &OwnPages, n, ALIGN).map(|b| b.addr).ok_or(Errno::ENOMEM))
+    crate::ret::null(HEAP.alloc_slow(&CSys, &KernelPages, n, ALIGN).map(|b| b.addr).ok_or(Errno::ENOMEM))
 }
 
 /// `free`'s entry point (TARC-ALLOC): `free(NULL)` and the heap's fast path inline, the rest in
@@ -571,7 +575,7 @@ fn free_general(p: usize) {
     } else if Heap::free_seg(&OwnPages, p) {
         return;
     } else {
-        HEAP.free_slow(&CSys, &OwnPages, p)
+        HEAP.free_slow(&CSys, &KernelPages, p)
     };
     checked("free", r);
 }
@@ -617,7 +621,7 @@ pub(crate) fn c_realloc_fit(p: usize, n: usize) -> Fit {
 /// block comes only from [`c_realloc_fit`] with [`DEBUG`]'s word clear ([`OwnPages`]).
 #[inline(always)]
 pub(crate) fn c_realloc_held(p: usize, n: usize, h: Held) -> Result<KResult<usize>, Misuse> {
-    Ok(HEAP.resize_held(&CSys, &OwnPages, p, n, h, copy_blocks)?.map(|b| b.addr).ok_or(Errno::ENOMEM))
+    Ok(HEAP.resize_held(&CSys, &KernelPages, p, n, h, copy_blocks)?.map(|b| b.addr).ok_or(Errno::ENOMEM))
 }
 
 /// `reallocarray`.

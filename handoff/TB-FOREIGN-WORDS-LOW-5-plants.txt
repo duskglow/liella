@@ -4,3 +4,5 @@ errno-owned-offset | csys/src/machine/tp.S | perl:s/(liella_machine_errno_locati
 errno-owned-to-registry | csys/src/machine/tp.S | perl:s/(liella_machine_errno_location:.*?)je liella_errno_rest/$1jmp liella_errno_rest/s | cargo test -p liella --test s02_diagnostics_clauses s2_1_c_0 | msg:errno in a started process is not tp \+ 0x80
 # Test process (started by another C library): the thread's registry word, never 0x80 of the other library's block.
 errno-foreign-block | csys/src/machine/tp.S | perl:s/(liella_machine_errno_location:.*?)je liella_errno_rest/$1nop/s | cargo test -p liella-boundary --test s02_diagnostics_symbols sym___errno_location | msg:sym___errno_location.*(panicked|FAILED)|assertion `left == right` failed
+# The heap slow path shares the copy start-up runs (one text page fewer for 14 new size classes).
+slow-path-own-copy | crates/boundary/src/heap.rs | lit:HEAP.alloc_slow(&CSys, &KernelPages, n, ALIGN) ==> HEAP.alloc_slow(&CSys, &OwnPages, n, ALIGN) | cargo test -p liella --test heap_meta_products init_heap_metadata_of_new_size_classes_stays_dense | msg:14 new size classes took [0-9]+ page faults
