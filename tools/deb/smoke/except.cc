@@ -1,6 +1,6 @@
-// Smoke program for the reference packages: a C++ exception thrown through two frames and caught,
-// plus a std::string and iostream output.
-#include <iostream>
+// Smoke program for the reference packages: a C++ exception thrown through two frames and caught.
+// Output through printf: iostream is the separate smoke iostream.cc.
+#include <cstdio>
 #include <stdexcept>
 #include <string>
 
@@ -17,9 +17,9 @@ int main() {
     try {
         depth1(1);
     } catch (const std::runtime_error &e) {
-        std::cout << "except: caught: " << e.what() << std::endl;
+        std::printf("except: caught: %s\n", e.what());
         return 0;
     }
-    std::cout << "except: not thrown" << std::endl;
+    std::printf("except: not thrown\n");
     return 1;
 }

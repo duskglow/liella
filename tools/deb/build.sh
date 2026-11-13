@@ -136,7 +136,7 @@ done
 put_text 0644 "$dlib/libc.so" "/* GNU ld script: Liella's C library (liella6-dev). Paths are inside the sysroot
    /usr/lib/liella; link with --sysroot=/usr/lib/liella (liella-gcc does). */
 OUTPUT_FORMAT(elf64-x86-64)
-GROUP ( /usr/lib/$ma/libc.so.6 /usr/lib/$ma/libc_nonshared.a  AS_NEEDED ( /usr/lib64/ld-linux-x86-64.so.2 ) )"
+GROUP ( /lib/$ma/libc.so.6 /usr/lib/$ma/libc_nonshared.a  AS_NEEDED ( /lib64/ld-linux-x86-64.so.2 ) )"
 put_link libm.so.6 "$dlib/libm.so"
 put 0755 "$here/liella-gcc" "$dev/usr/bin/liella-gcc"
 put_link liella-gcc "$dev/usr/bin/liella-g++"
@@ -154,9 +154,9 @@ for p in liella6 liella6-dev; do
 done
 
 # Strip the shared objects as Debian does (debug sections, .comment, .note); the archives and
-# start files keep their symbols (the link needs them) but lose debug sections.
+# start files keep their symbols (the link needs them) but lose debug sections and .comment.
 find "$rt$sysroot" -type f -name '*.so*' -exec strip --strip-unneeded --remove-section=.comment --remove-section=.note {} +
-find "$dev$sysroot" -type f \( -name '*.a' -o -name '*.o' \) -exec strip --strip-debug --enable-deterministic-archives {} +
+find "$dev$sysroot" -type f \( -name '*.a' -o -name '*.o' \) -exec strip --strip-debug --remove-section=.comment --enable-deterministic-archives {} +
 
 # installed_size DIR: Debian's Installed-Size (KiB): each file's size rounded up, 1 per other entry.
 installed_size() {
