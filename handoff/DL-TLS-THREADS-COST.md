@@ -1,73 +1,64 @@
 # DL-TLS-THREADS-COST: take back the static pthread_create+join cost of DL-TLS-THREADS (fix forward of #5285)
 
-**State (2026-11-13):** branch `task/dl-tls-threads-cost`, stacked on `task/dl-tls-threads-2` (8e7f701ec; DL-TLS-THREADS
-not landed yet). Role kanon:~/w/kn1. Commits (all on top of the stack):
-- dd28e9ee5 cherry-pick of bbe7c0530 (loader area as the TLS image with address 0; `LOADER_INIT` / `LOADER_RELEASE`).
-- 00252bdcc `tls_init` called inside the image branch (address 0) before the thread block's stores; the cache-reuse
-  path clears from the TLS block again (no loader word read; the loader's surplus is now cleared on reuse too).
-- 9e717dae3 one `sigprocmask` per create: the call that blocks every signal returns the creator's mask (was a query
-  plus a change); restored after the clone only when blocking succeeded.
-- 395a8a34a pending record `records/pending/DL-TLS-THREADS-COST-1.toml` (D-NEW, series D-27).
+**State (2026-11-13, run -2):** branch `task/dl-tls-threads-cost-2` (continues `task/dl-tls-threads-cost`), role
+kanon:~/w/kn1 (Broadwell-EP Xeon, E5-2699 v4). The stack now has origin/next (e30374455, ruling #5326: brings
+LAYOUT-DEADKEY-WARN) and the base `task/dl-tls-threads-2` (38dade3c1) merged in. Commits of this run:
+- 9cf010f42 merge origin/next; 538b4bb5d merge origin/task/dl-tls-threads-2 (rename detection had moved this story's
+  pending record into records/decisions/D-27/; it stays at `records/pending/DL-TLS-THREADS-COST-1.toml`).
+- 0633d592d CONTRIBUTING: the hot lists are regenerated and committed by the branch whose change moves hot
+  functions (ruling #5325) while the train regen is paused (`ci_train_hot_lists=0`), until LT-5 deletes them.
+- 700dd7a7f count check in the tree: spec `validation/percall/thread_create.c`, script
+  `handoff/DL-TLS-THREADS-COST-countcheck.sh` (the plants file named home paths: `cargo xtask static`
+  private-paths red, the only red step 0 found; clippy was clean).
+- edcf064a3 `crates/libc-so/hot-text.list` regenerated (`tools/hottext/regen.sh . --both --allow-drop`; dropped:
+  the `name::candidates` closure the loader-area change folds away and `iconv::Conv::to_words`, neither hit by
+  any trace; the other three lists unchanged). Its message says "Skylake-SP"; the host is Broadwell-EP (correction).
+The code commits of run 1 are unchanged (dd28e9ee5 loader area as TLS image, 00252bdcc tls_init fold, 9e717dae3
+one sigprocmask per create; record D-NEW in records/pending/DL-TLS-THREADS-COST-1.toml, series D-27).
 
-## Measurements (wl_percall, static, instructions:u per call, sd 0, kanon; spec ~/work/DL-TLS-THREADS-COST/threads.c,
-a copy of DL-TLS-THREADS' thread_create_join case)
-| tree | thread_create_join | job |
-|---|---|---|
-| glibc (dynamic) | 2280.0 | all |
-| pre-DL-TLS-THREADS base cdafa3d1c | 35957.2 | dl-tls-threads-cost-percall |
-| DL-TLS-THREADS head 1f09927be | 35986.2 | dl-tls-threads-cost-percall-prev |
-| + bbe7c0530 (dd28e9ee5) | 35976.2 | dl-tls-threads-cost-percall |
-| + tls_init fold (00252bdcc) | 35960.2 | dl-tls-threads-cost-percall2 |
-| + one sigprocmask (9e717dae3, final code) | **35940.2** (-17.0 vs base, -46.0 vs DL-TLS-THREADS) | dl-tls-threads-cost-percall3 |
+## Why run 1's gate ended rc 124
+dl-tls-threads-cost-gate2 was stopped by run 1 itself after hot_text_products went red (CLUSTER-WINDOW with
+uncommitted `cargo xtask hot-lists` output). With the lists regenerated in place and committed, that test passes.
 
-The bbe7c0530 re-apply alone took back 10 of the 29; the remaining loader checks were the separate loader flag on
-create and the loader word in the reuse path (fold: -16) and the `tls_release` check on exit (+3, kept: the hook
-is the loader's interface, ruling #5286), offset by the merged mask call (-20).
-Dynamic row: NOT MEASURED. wl_percall links Liella statically only (no dynamic mode); the dynamic thread TLS
-behaviour is covered by `crates/boundary/tests/dl_tls_threads.rs` (in the gate job). On the dynamic path the reuse
-clear now also zeroes the loader's area (its size, once per reused mapping), and the mask merge saves one call.
+## Measurements (kanon)
+Per call (wl_percall, static, instructions:u, sd 0; job dl-tls-threads-cost-2-percall2, head edcf064a3):
+| case | glibc | origin/next e30374455 | this head |
+|---|---|---|---|
+| thread_create_join | 2280.0 | 35957.2 | **35940.2** (-17.0) |
 
-## Hot-text keys (coordinator note #5312)
-HOTLIST-TRAIN-REGEN (CONTRIBUTING.md): the lists `hot-text.list`, `startup-text.keys`, `probe-text.keys`,
-`startup-data.keys` are train-owned, never committed on a branch. So the lists were regenerated with
-`cargo xtask hot-lists` (= tools/hottext/regen.sh . --both, both profiles) into target/hot-lists on the role, not
-committed. On dd28e9ee5 (kanon, job dl-tls-threads-cost-hot): tracked lists, fast tool 53, release tool 56; fresh
-lists, fast tool 52, release tool 54; `hottext-recheck` dead-key check passed in both profiles. The fresh list
-replaces `locale::publish_global` (fast) with `thread::each_block<publish_global closure>`, drops the
-`name::candidates` closure, renames `global_locale::setlocale` to `setlocale_locked`, adds two catalog keys (fast).
-The gate job dl-tls-threads-cost-gate2 repeats this on the final head (log ~/logs/dl-tls-threads-cost-gate2.log,
-fault counts in ~/work/DL-TLS-THREADS-COST/faults-{fast,release}.log). Next's own counts on kanon were not measured.
+Start-up minor faults, `cargo test -p liella --test hot_text_products` (all 24 tests; job -regen2 for the branch,
+-nextfaults2 for an origin/next tree with its tracked lists, copied to ~/work/DL-TLS-THREADS-COST-2/next):
+| profile | tree | tool | setlocale+printf | startup | fork | tests |
+|---|---|---|---|---|---|---|
+| fast | next | 53 | 50 | 11 | 5 | 24 ok |
+| fast | branch | **51** | **48** | 11 | 5 | 24 ok |
+| release | next | 55 | 52 (bound 51) | 10 | 5 | 23 ok, 1 FAILED |
+| release | branch | **52** | **49** | 10 | 5 | 24 ok |
+origin/next's own release profile is over the setlocale+printf bound on this host with its tracked lists
+(INFORMATIONAL; logs ~/work/DL-TLS-THREADS-COST-2/faults-next-release.log).
 
 ## Jobs (kanon)
-dl-tls-threads-cost-hot (rc 0), -percall, -percall-prev, -percall2, -percall3 (rc 0); dl-tls-threads-cost-gate2
-(final code; clippy, static rc 0, hot_text_products red, stopped before `affected --run`) and
-dl-tls-threads-cost-plants (rc 2, baseline build refused: see below).
-Superseded: dl-tls-threads-cost-gate (static red on the first record: empty `amends`, host name; fixed in 395a8a34a).
+On head edcf064a3 (the later commits are handoff/report only):
+- dl-tls-threads-cost-2-gate rc 0: direct tier, `affected --run --base origin/next`: 32 suites ok, 11712 passed,
+  0 failed (hot_text_products among them); conformance 127 passed; peak 16G (cache), oom_kill 0.
+- dl-tls-threads-cost-2-plants rc 0: handoff/DL-TLS-THREADS-COST-plants.txt, 4 CAUGHT, 0 SURVIVED, 0 WARN.
+- dl-tls-threads-cost-2-percall2 rc 0 (table above).
+- dl-tls-threads-cost-2-regen2 rc 0 (regen + faults), dl-tls-threads-cost-2-nextfaults2 rc 0 (next's counts).
+- dl-tls-threads-cost-2-lint2 rc 0 (static on 700dd7a7f).
+Superseded: -lint (static private-paths red, fixed in 700dd7a7f; its clippy passed), -regen (regen refused to drop
+two keys, rerun with --allow-drop), -nextfaults (killed: its script was overwritten while it ran), -percall (base
+38dade3c1 not primed; rerun with next's sha).
 
-## Why this run is INCOMPLETE (budget checkpoint)
-- dl-tls-threads-cost-plants: rc 2, no plant ran. This stack is based where DL-TLS-THREADS was cut (63 commits
-  behind origin/next) and does NOT have LAYOUT-DEADKEY-WARN: a plain `cargo xtask so` in the plant copy (tracked
-  lists, no target/hot-lists) still FAILS on the two dead keys (`locale::publish_global`, the `name::candidates`
-  closure) that bbe7c0530 creates.
-- dl-tls-threads-cost-gate2 (stopped by me after the failures below; clippy and static rc 0 on the final code):
-  with the fresh lists from `cargo xtask hot-lists`, `hot_text_products` fails in BOTH profiles:
-  `init_zero_fault_clusters_sit_in_one_window` (CLUSTER-WINDOW: cluster `time` at 0x43bc40..0x48991b fast,
-  0x444180..0x489a4b release, straddles a 64 KiB window) and `init_zero_fault_calls_hold_at_every_text_phase`
-  (same cluster, pre 0x800). Not established whether the fresh list alone causes it (next with fresh lists not
-  run). Logs: kanon ~/work/DL-TLS-THREADS-COST/faults-{fast,release}.log. Tool faults with fresh lists on the final head: fast 51, release 52.
-- Next step: merge origin/next into this branch (brief allowance needed: it brings LAYOUT-DEADKEY-WARN), rerun
-  `cargo xtask hot-lists`, check CLUSTER-WINDOW on next with fresh lists vs this branch, then the gate and the
-  plants file (handoff/DL-TLS-THREADS-COST-plants.txt; countcheck.sh is in kanon ~/work/DL-TLS-THREADS-COST/,
-  copy it to the repo or the new host).
+## Open
+- Dynamic thread_create_join row: not measured (wl_percall links Liella statically only); the dynamic thread TLS
+  behaviour is covered by crates/boundary/tests/dl_tls_threads.rs.
+- The mask merge (9e717dae3) is outside the TLS code but on the same row; mask semantics unchanged.
 
-## Open / RULING NEEDED
-- The hot-text lists: the coordinator's note asks for regen.sh output committed; CONTRIBUTING (HOTLIST-TRAIN-REGEN)
-  forbids committing them. Recommend: the train regenerates them when this lands (as it does for every branch).
-- The mask merge is outside the story's TLS code but on the same row; it keeps the mask semantics (old mask =
-  creator's) and moves the block earlier (the list insertion before the clone now runs with signals blocked).
+## Not to redo
+The regen with --allow-drop (both keys verified untraced); next's fault counts above; the per-call row.
 
 ## Next step
-Land after DL-TLS-THREADS. Then DL-16d / DL-19 (they build on `StartInfo::tls_*`).
+Land after DL-TLS-THREADS (-2). Then DL-16d / DL-19 (they build on `StartInfo::tls_*`).
 
 ## Plan rows to read
-D-22.10, D-27.20, records/pending/DL-TLS-THREADS-1.toml, records/pending/DL-TLS-THREADS-COST-1.toml.
+D-22.10, D-27.20, D-27.36 (DL-TLS-THREADS), records/pending/DL-TLS-THREADS-COST-1.toml.
