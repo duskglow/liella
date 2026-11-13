@@ -2582,8 +2582,9 @@ once. Entries created or removed during the scan may or may not appear. `.` and 
 included (except on some special file systems).
 
 **Failure.** `readdir` returns `NULL` both at the end and on error. ⚑ HIST: the caller must
-zero `errno` to distinguish them (C0.1). Errors are `EBADF`, `EOVERFLOW` (an entry does not
-fit a 32-bit `ino_t`), and `ENOENT` (the directory was removed).
+zero `errno` to distinguish them (C0.1). Errors are `EBADF` and `EOVERFLOW` (an entry does not
+fit a 32-bit `ino_t`). Removal of the directory while it is open ends the stream: `NULL` with
+`errno` unchanged.
 
 **Kernel.** `openat(O_DIRECTORY)`, `getdents64`, `lseek`, `close`.
 
