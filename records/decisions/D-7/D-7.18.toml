@@ -1,0 +1,10 @@
+id = "D-7.18"
+section = "s07"
+spec = "§7.3"
+ann = "ABI"
+status = "active"
+story = "NEWLOCALE-ENOENT-ROW"
+date = "2026-11-13"
+body = '''
+**`newlocale` sets `ENOENT` when the locale data of a name is not available** (ruling #5424, 2026-11-13; clause `s7_3_f_0`; POSIX `newlocale`: `ENOENT` when the locale data is not available). When `newlocale` loads an unknown locale, whether named directly or through `""` with an environment that names one, and returns `NULL`, `errno` is `ENOENT`. The reference was seen returning `NULL` with `errno` left 0 in some of these rows (probe rows in `spec/behaviour/newlocale-mask.md` and `spec/behaviour/newlocale-mask.glibc.txt`, from NEWLOCALE-LC-ALL-BIT, D-7.17). Liella keeps `ENOENT` in every such row. The differences row is in `docs/differences-from-glibc.md`; the compat flag is `COMPAT-27` (pending id, registered only, not implemented).
+'''
