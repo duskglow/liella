@@ -94,12 +94,16 @@ fn tiny_operands_agree_with_the_accurate_path() {
     assert!(ft * 100 >= n * 99, "tgamma tiny: {ft} of {n} by the band form; missed {}", first_misses(&mt));
 }
 
-/// `x >= 16`: Stirling's form up to `2^1012`, the overflow from `X_OVER`, and the band edges.
+/// `x >= 16`: Stirling's form (scaled from `2^512`) through `lnΓ`'s overflow threshold, the
+/// overflow from `X_OVER`, and the band edges.
 #[test]
 fn large_operands_agree_with_the_accurate_path() {
     // Clauses: s10_3_c_0 (D-10.13, D-10.105).
-    let mut xs = spread(800, 4, 1012, 3);
+    let mut xs = spread(800, 4, 1015, 3);
+    // 2^512 (the scaled form's start) and its neighbours; lnΓ's overflow threshold near 2.5563e305.
+    let p512 = 2f64.powi(512);
     xs.extend([16.0, 16.5, 17.25, 31.999_999_999_999_996, 1e15 + 0.5, 2f64.powi(500), fast_gamma::X_OVER, f64::MAX, 3e305, 2.5e305]);
+    xs.extend([p512, f64::from_bits(p512.to_bits() - 1), f64::from_bits(p512.to_bits() + 1), 2f64.powi(1012), 2.556e305, 2.5563e305, 2.5564e305, 2.557e305]);
     let (fl, ml) = check_lgamma(&xs);
     let n = 4 * xs.len() as u64;
     assert!(fl * 100 >= n * 98, "lgamma large: {fl} of {n} by the band form; missed {}", first_misses(&ml));
