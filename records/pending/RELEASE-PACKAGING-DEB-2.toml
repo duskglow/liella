@@ -1,0 +1,11 @@
+id = "D-NEW"
+series = "D-X"
+section = "x"
+status = "active"
+amends = ["D-27.16"]
+story = "RELEASE-PACKAGING-DEB"
+date = "2026-11-13"
+tests = ["crates/ld/tests/search_cache.rs::search_pinned_sonames"]
+body = '''
+**The loader's library directory below its prefix is a build-time setting (RELEASE-PACKAGING-DEB; R14-3 (a); amends D-27.16).** `LIELLA_LIBDIR` (compile time, like `LIELLA_PREFIX`; default `lib`, so every build without it is unchanged) names the directory below the prefix that holds Liella's libraries: `search::own_lib` builds `<prefix>/<libdir>` and `<prefix>/<libdir>/<name>`, used for the pinned sonames, the default directory when the prefix is not `/`, and the trusted directory of threat model rule 5 (for prefix `/` the trusted and default directories stay `Arch::SYSTEM_DIRS`). The cache stays `<prefix>/etc/ld.so.cache`. Why: the reference packages (pending record RELEASE-PACKAGING-DEB-1) lay the sysroot out as Debian lays out `/`, so the libraries are in `<prefix>/usr/lib/x86_64-linux-gnu`, which `<prefix>/lib` cannot name; a compile-time constant keeps the secure-mode rule (no environment input decides where Liella's own libraries come from). Test: `search_pinned_sonames` checks the composition `<prefix>/<libdir>/libc.so.6`, `/lib/libc.so.6` for the default build, and that the directory is trusted; the packaged loader is checked in the chroot by `ld.so --list` resolving `libc.so.6` to `/usr/lib/liella/usr/lib/x86_64-linux-gnu/libc.so.6` (tools/deb/inside.sh).
+'''

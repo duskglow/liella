@@ -243,6 +243,12 @@ fn search_pinned_sonames() {
     }
     let mut dir = search::PathBuf::default();
     assert!(search::own_lib(b"", &mut dir) && search::trusted::<Native>(dir.as_bytes()), "<prefix>/<libdir> is trusted");
+    if PREFIX != "/" {
+        // Another prefix: the default directory is <prefix>/<libdir> alone.
+        let dir = String::from_utf8(dir.as_bytes().to_vec()).unwrap();
+        let got = candidates("libq.so.1", &[Scope::default()], &ctx(false, None, None));
+        assert_eq!(got, [format!("{dir}/libq.so.1")], "the default directory of a prefixed build is <prefix>/<libdir>");
+    }
     assert_eq!(candidates("libc.so.6", &[s], &ctx(true, Some(b"/env"), Some(&c))), std::slice::from_ref(&own));
     assert_eq!(candidates("libc.so.6", &[s], &ctx(false, Some(b"/env"), Some(&c))), ["/env/libc.so.6".to_string(), own]);
 }
