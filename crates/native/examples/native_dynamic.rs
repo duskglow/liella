@@ -1,11 +1,11 @@
 //! The dynamic path of the native Rust interface (D-X.10): a program linked against Liella's
 //! `libc.so.6`, reaching the stateful services only through the `LIELLA_NATIVE_1` symbols,
-//! with the stateless clean API compiled in. It runs the same steps as the static example.
+//! with the stateless clean API compiled in. It runs the static example's steps except
+//! `kernel types`: `liella-kernel` is re-exported with feature `static` only (D-X.10).
 //!
-//! `cargo xtask native` builds it (feature `dynamic`) and checks with `readelf` that it needs
-//! `libc.so.6` and references the native symbols at `LIELLA_NATIVE_1`. It is not run yet: that
-//! needs Liella's dynamic loader (phase 14), and the host's loader must never load Liella's
-//! `libc.so.6`.
+//! `cargo xtask native` builds it (feature `dynamic`), checks with `readelf` that it needs
+//! `libc.so.6` and references the native symbols at `LIELLA_NATIVE_1`, and runs it under
+//! Liella's `ld.so` (the host's loader must never load Liella's `libc.so.6`).
 
 #![no_std]
 #![no_main]

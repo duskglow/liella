@@ -365,7 +365,8 @@ pub(crate) fn table_words<const N: usize>(addr: usize) -> Option<&'static liella
 
 /// A selected time zone (D-23.6). Crate-private contract: `addr` is an address
 /// `liella_legacy::time_compat` recorded for an entry it leaked; such values are never freed or
-/// modified.
+/// modified. Always inlined, as `zone::Glue::entry_at` (HOTTEXT-TIME-CLUSTER-STABLE).
+#[inline(always)]
 pub(crate) fn zone_entry_at(addr: usize) -> &'static liella_legacy::time_compat::Entry {
     // UNSAFE(slice): the contract above.
     #[allow(unsafe_code)]

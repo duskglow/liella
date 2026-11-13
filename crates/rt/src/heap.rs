@@ -1189,6 +1189,8 @@ impl Heap {
 
     /// Park every cache but `keep` (`fork`'s child: only the calling thread survives, D-18.6).
     /// The child is single-threaded, so the caches of the vanished threads are idle.
+    // LAYOUT-HOTKEY-INLINE-STABLE: release already inlines it; always inlined, its code stays in the keyed caller in both profiles.
+    #[inline(always)]
     pub fn park_others<S: Sys, P: Pages>(&self, sys: &S, pages: &P) {
         let keep = Self::own_cache(pages).map_or(0, |c| c.id());
         for i in 0..self.ncaches.load(Acquire) {

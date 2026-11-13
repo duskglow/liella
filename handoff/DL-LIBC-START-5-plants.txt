@@ -1,0 +1,5 @@
+# DL-LIBC-START-5: ld.so defines and exports __libc_stack_end (R14-12), stored from the initial stack before
+# relocation; the dynamic conformance subset links through a libc.so script naming the loader AS_NEEDED.
+stack-end-not-stored | crates/boundary/src/ld.rs | lit:    __libc_stack_end.store(sp, Relaxed); ==>     __libc_stack_end.store(0, Relaxed); | cargo test -p liella-boundary --test s01_startup_symbols s1_1_c_0_dynamic_start_conformance | msg:s1_1_c_0_dynamic_start_conformance.*(FAILED|panicked)|dynamic on Liella
+fpu-control-dynamic-hook-dropped | crates/boundary/src/runtime.rs | perl:s/(fn start_under_liella_ld.*?)CSys\.set_x87_control\(cw\);/$1let _ = cw;/s | cargo test -p liella-boundary --test s10_math_symbols sym___fpu_control | msg:sym___fpu_control.*(FAILED|panicked)|dynamic on Liella
+stack-end-not-exported | xtask/src/so.rs | lit:const LD_EXPORTS: &[&str] = &["__libc_stack_end", "__tls_get_addr"]; ==> const LD_EXPORTS: &[&str] = &["__tls_get_addr"]; | cargo test -p liella-boundary --test s01_startup_symbols s1_1_c_0_dynamic_start_conformance | msg:s1_1_c_0_dynamic_start_conformance.*(FAILED|panicked)|against Liella's libc.so.6

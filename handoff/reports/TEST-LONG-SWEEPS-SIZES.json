@@ -1,0 +1,32 @@
+{
+ "task": "TEST-LONG-SWEEPS-SIZES",
+ "model": "opus",
+ "tokens": null,
+ "result": "fast_special/fast_bessel/fast_gamma sweeps are long-sweeps rows at 10^5 (#5061); measured 60/99/85 s, so weekly exhaustive under #5062; #5062/#5063 already done by BOUNDARY-2",
+ "branch": "task/test-long-sweeps-sizes",
+ "head": "c2858b1e9",
+ "gate": {
+  "affected": "not run (brief jobs: clippy, static, plants, row runs); lint rc 0, xtask longsweeps 7 passed, 3 rows ok, plants 2/2 CAUGHT",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "erf row 59.44 s at 10^5 rounds up to 60 s, just at the nightly limit; ~9*10^4 would fit nightly; recommend keeping 10^5 weekly",
+  "the weekly exhaustive group grows by 244 s; BOUNDARY-2's weekly-job slot-cap ruling still open"
+ ],
+ "refused": [],
+ "jobs": [
+  "tlss-lint2",
+  "tlss-rows1",
+  "tlss-plants2"
+ ],
+ "improvement": "the plants file was written before the row's final shape (secs line) and was refused once; write plants after the last code edit",
+ "next_step": "none for this story",
+ "report_file": "handoff/test-long-sweeps-sizes.md",
+ "superseded": [
+  "tlss-plants1 (refused by the plants tool: pattern matched no site; fixed in tlss-plants2)",
+  "tlss-lint1 (older head; rerun as tlss-lint2)",
+  "tlss-small1 (default-size timing, evidence only)"
+ ]
+}

@@ -20,8 +20,8 @@
 
 use crate::{conv, export, process, tb};
 use crate::sys::CSys;
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use liella_abi::ctypes::{c_int, c_uint, c_void};
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use liella_abi::ctypes::{c_char, c_int, c_uint, c_void};
 use liella_rt::cpu::{feature_leaves, FEATURE_LEAVES};
 use liella_abi::layout::{struct_dl_find_object, struct_dl_phdr_info};
 use liella_kernel::auxv::Auxv;
@@ -162,4 +162,46 @@ pub extern "C" fn __x86_get_cpuid_feature_leaf(index: c_uint) -> *const c_void {
     }
     let i = usize::try_from(index).unwrap_or(FEATURE_LEAVES).min(FEATURE_LEAVES);
     LEAVES.get(i).map_or(core::ptr::null(), |e| e.as_ptr().cast())
+}}
+
+/// The loader's `dlopen` entry (`StartInfo::dlopen`, stored by `runtime::early_init`): 0 in a
+/// program `ld.so` did not start (a static program; DL-16a, ruling #5005).
+pub static LOADER_DLOPEN: AtomicUsize = AtomicUsize::new(0);
+
+crate::internal_entry! {
+/// `dlopen(file, mode)` (§27.1, dlopen(3); phase 14 DL-16a): `csys/src/machine/dl.S` passes the
+/// caller's return address. In a program `ld.so` started, the loader's entry does the work
+/// (`crates/boundary/src/ld/dlopen.rs`). Elsewhere (a static program, ruling #5005: loading
+/// objects there is DL-16S) NULL with the text `<file>: shared objects cannot be loaded into a
+/// statically linked program`, never a crash.
+pub extern "C" fn liella_dl_open(file: *const c_char, mode: c_int, caller: usize) -> *mut c_void {
+    let f = LOADER_DLOPEN.load(Ordering::Acquire);
+    if f == 0 {
+        // UNSAFE(slice): the caller's NUL-terminated name (dlopen(3)), or NULL.
+        #[allow(unsafe_code)]
+        // SAFETY: a non-NULL `file` is a NUL-terminated string (the C contract); `strz` reads up to
+        // its NUL only.
+        let name = if file.is_null() { &[][..] } else { unsafe { crate::strz::strz(file.cast()) }.unwrap_or(&[]) };
+        crate::dlerr::set(&[name, b": shared objects cannot be loaded into a statically linked program"]);
+        return core::ptr::null_mut();
+    }
+    let w = |v: usize| i64::from_ne_bytes(u64::try_from(v).unwrap_or(0).to_ne_bytes());
+    let r = crate::ffi::liella_machine_call3(f, w(file.expose_provenance()), i64::from(mode), w(caller));
+    core::ptr::with_exposed_provenance_mut(usize::from_ne_bytes(r.to_ne_bytes()))
+}}
+
+export! { asm "GLIBC_2.34";
+/// `dlopen(file, mode)`: the symbol is `csys/src/machine/dl.S`'s (it captures the caller); this is
+/// its Rust twin for tests, with no caller (the program is the requester).
+pub extern "C" fn dlopen(file: *const c_char, mode: c_int) -> *mut c_void {
+    liella_dl_open(file, mode, 0)
+}}
+
+export! { "GLIBC_2.34";
+/// `dlerror()` (§27.1, dlerror(3)): the calling thread's pending text from its last failed `dl*`
+/// call, once (the next call returns NULL until another failure); NULL when none is pending. A
+/// successful call clears a pending text (#5127). The string stays valid until the thread's next
+/// failure or its exit (`crate::dlerr`).
+pub extern "C" fn dlerror() -> *mut c_char {
+    core::ptr::with_exposed_provenance_mut(crate::dlerr::take())
 }}

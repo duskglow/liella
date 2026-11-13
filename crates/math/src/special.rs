@@ -102,6 +102,7 @@ pub(crate) fn erf_erfc_mp(a: f64) -> (Mp, Mp) {
 /// needed falls with `a` (the tail's influence decays like `e^(−2a√(2n))`).
 fn erfc_cf(x: Mp) -> Mp {
     let a = x.to_f64();
+    // RANGE: a >= 10 (the contract): the quotient is in [0, 600].
     let depth = 40 + (60_000.0 / (a * a)) as u64;
     let mut tail = x;
     for n in (1..=depth).rev() {
@@ -247,6 +248,7 @@ fn lgamma_pos(xm: Mp) -> Mp {
         return stirling(xm);
     }
     // Γ(x) = Γ(x + n) / (x (x+1) ··· (x+n−1)) with x + n >= 40.
+    // RANGE: 0 < x < STIRLING_MIN here: the difference is below STIRLING_MIN.
     let n = (STIRLING_MIN - x) as i64 + 1;
     let mut prod = xm;
     for k in 1..n {
@@ -300,6 +302,9 @@ pub fn lgamma<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
             if let Some(((v, st), sign)) = r {
                 return ((F::from_bits(u128::from(v.to_bits())), st), sign);
             }
+        } else if let Some(((v, st), sign)) = (dd::abs(xf) < fast_gamma::TINY || xf >= fast_gamma::HI).then(|| fast_gamma::lgamma_band(xf, mode)).flatten() {
+            // |x| < 2^-60 and x >= 16 (D-10.105); NaN and x <= -16 skip the call.
+            return ((F::from_bits(u128::from(v.to_bits())), st), sign);
         }
     }
     lgamma_accurate(x, mode)
@@ -341,6 +346,9 @@ pub fn tgamma<F: Float>(x: F, mode: Rounding) -> (F, Status) {
             if let Some(r) = from_fast("tgamma", fast_gamma::tgamma(xf, mode)) {
                 return r;
             }
+        } else if let Some((v, st)) = (dd::abs(xf) < fast_gamma::TINY).then(|| fast_gamma::tgamma_band(xf, mode)).flatten() {
+            // 0 < |x| < 2^-60 (D-10.105); NaN and |x| >= 16 skip the call.
+            return (F::from_bits(u128::from(v.to_bits())), st);
         }
     }
     tgamma_accurate(x, mode)
@@ -601,6 +609,7 @@ fn round_bessel<F: Float>(v: Bounded<Mp>, bounded: bool, neg: bool, mode: Roundi
 /// (`mp::reduce_wide`) above.
 fn reduce(a: &Arg) -> (i64, Mp) {
     if a.v.exp <= 29 {
+        // RANGE: |a| < 2^29 here: |k| < 2^29.
         let k = (a.f * core::f64::consts::FRAC_2_PI + 0.5) as i64;
         (k, a.v.sub(mp::pi().ldexp(-1).mul(Mp::from_i64(k))))
     } else {
@@ -744,6 +753,7 @@ fn forward(n: u64, a: &Arg, f0: Mp, f1: Mp, limit: i64, mp_max: u64) -> Mp {
 /// `J_n(x)` for `n >= x >= 100` by Miller's backward recurrence from far above `n`,
 /// normalised by `J_0(x)` or `J_1(x)`, whichever is larger.
 fn miller(n: u64, a: &Arg, j0: Mp, j1: Mp, mp_max: u64) -> Mp {
+    // RANGE: 100 <= x <= n, an int order: 8·∛x < 2^14.
     let top = n + 64 + (8.0 * cbrt_est(a.f)) as u64;
     let use_j0 = j0.cmp_abs(j1).is_ge();
     if top <= mp_max {

@@ -66,7 +66,7 @@
 //! Every approximation is within `2^-94`; the rounding test assumes `2^-92`. Results lie in
 //! `[2^-36, 2^76]`, normal: the test's exponent check never refuses them.
 
-use super::{cos_poly, mul_wide, mulhi, mulhi64, reduce, round, sin_poly, MIN_D, SC};
+use super::{big_u64, cos_poly, mul_wide, mulhi, mulhi64, reduce, round, sin_poly, MIN_D, SC};
 use crate::float::{Float, Kind, Num};
 use crate::status::{Rounding, Status};
 
@@ -115,11 +115,17 @@ pub(crate) fn atan2<F: Float>(y: &Num, x: &Num, mode: Rounding) -> Option<(F, St
 /// `asin a` for `0 < |a| < 1` (other operands give `None`); `hw` is a `double` square root
 /// (step 2: [`soft_sqrt`] or the boundary's `sqrtsd`).
 pub(crate) fn asin<F: Float>(n: &Num, mode: Rounding, hw: impl Fn(f64) -> f64) -> Option<(F, Status)> {
+    if F::PREC == 113 {
+        return super::quad::arc::asin::<F>(n, mode, hw); // binary128: three limbs (D-10.97)
+    }
     finish::<F>(|| asin_approx(n, hw), mode)
 }
 
 /// `acos a` for `0 < |a| < 1` (other operands give `None`); `hw` as for [`asin`].
 pub(crate) fn acos<F: Float>(n: &Num, mode: Rounding, hw: impl Fn(f64) -> f64) -> Option<(F, Status)> {
+    if F::PREC == 113 {
+        return super::quad::arc::acos::<F>(n, mode, hw); // binary128: three limbs (D-10.97)
+    }
     finish::<F>(|| acos_approx(n, hw), mode)
 }
 
@@ -167,7 +173,7 @@ fn dbl(v: u64) -> f64 {
 /// Step 1: `(n/d)·2^126` for `n`, `d` in `[2^127, 2^128)`, in `(2^125, 2^127)`.
 fn div(n: u128, d: u128) -> u128 {
     let dh = (d >> 64) as u64;
-    let v = (TWO115 / dbl(dh >> 11)) as u64; // ≈ 2^126/dh, in (2^62, 2^63]
+    let v = big_u64(TWO115 / dbl(dh >> 11)); // ≈ 2^126/dh, in (2^62, 2^63]
     let q0 = mulhi64((n >> 64) as u64, v); // ≈ (n/d)·2^62
     let t = ((u128::from(q0) * u128::from(dh)) << 2).wrapping_add((u128::from(q0) * (d & super::M64)) >> 62);
     let e = n.wrapping_sub(t) as i128; // n − q0·d/2^62, |e| < 2^78
@@ -180,7 +186,7 @@ fn div(n: u128, d: u128) -> u128 {
 /// `v·2^52`, below `2^53`, scaled): `hw` for this crate's own callers. The crate cannot issue
 /// `sqrtsd` (no `unsafe`, no `f64::sqrt` in `core`); the boundary passes it in (D-10.75).
 pub(crate) fn soft_sqrt(v: f64) -> f64 {
-    let n = (v as u64 as u128) << 52; // below 2^106
+    let n = u128::from(big_u64(v)) << 52; // below 2^106
     dbl(n.isqrt() as u64) * TWO_M26
 }
 
@@ -192,21 +198,6 @@ fn root_seed(w: u128, hw: impl Fn(f64) -> f64) -> (u64, f64) {
     let r = hw(wd); // √w', in [2^26, 2^27]
     let s0 = big_u64(r * TWO37); // 2^64 − 1 when the root rounds to 2^27 (w just below 2^128)
     (s0, r * iw) // 2^90/r = 2^127/s0
-}
-
-/// `v as u64` for an integer-valued `v` in `[2^52, 2^64]` (`2^64` gives `2^64 − 1`, as `as` saturates),
-/// read from the bits: no SSE conversion. `as u64` of a value at or above `2^63` converts it
-/// signed first, which overflows and raises the invalid flag in MXCSR on every call; the
-/// envelope's exit drops that flag again with an MXCSR write, and on Ivy Bridge the next call's
-/// MXCSR read then stalls in microcode (LIBM-LD-ARC-RETHINK-2's attribution: ~58 microcode uops a
-/// call, successive asinl calls no longer overlapping). The root's seed `s0` and its reciprocal
-/// lie in `[2^63, 2^64]` on every call.
-#[inline(always)]
-fn big_u64(v: f64) -> u64 {
-    let b = v.to_bits();
-    let sh = ((b >> 52) as u32).wrapping_sub(1075); // v = m·2^sh, sh in [0, 12]
-    let m = (b & ((1 << 52) - 1)) | (1 << 52);
-    if sh >= 12 { u64::MAX } else { m << sh }
 }
 
 /// Step 2: `√w·2^64` for `w` in `[2^126, 2^128 − 2^60]` (no overflow of the result), and the
@@ -256,6 +247,7 @@ fn atan_le_in(y: Val, x: Val, ix: impl FnOnce() -> f64) -> Val {
     let k = x.e - y.e; // >= 0
     let mut j = 0;
     if k <= 8 {
+        // RANGE: y/x <= 1 + 2^-100 and ix ≈ 256/x.m: h in [0, 256], a signed conversion in range.
         let h = (dbl((y.m >> 75) as u64) * ix()) as usize; // ⌊256·y.m/x.m⌋ within one
         j = ((h >> k) + 1) >> 1;
     }
@@ -781,7 +773,7 @@ mod tests {
     /// The brief's sweep: 10^7 operands per function in the four modes, half of them in the
     /// function's hard region. `cargo test --release -p liella-math --lib arc -- --ignored`.
     #[test]
-    #[ignore = "5x10^7 operands against the 384-bit route: run in release as a job"]
+    #[ignore = "5x10^7 operands against the 384-bit route: cargo xtask long-sweeps runs it in release (nightly and release runs)"]
     fn arc_tier_agrees_with_the_wide_route_long() {
         const TOTAL: usize = 10_000_000;
         let threads = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);

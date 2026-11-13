@@ -276,6 +276,8 @@ fn mono_ns<S: Sys>(sys: &S) -> u64 {
     u64::try_from(t.sec).unwrap_or(0).saturating_mul(1_000_000_000).saturating_add(u64::try_from(t.nsec).unwrap_or(0)).max(1)
 }
 
+// LAYOUT-HOTKEY-INLINE-STABLE-3: a fixed boundary for its tool-tier hot-text key (a libm growth inlined it away, ruling #5024).
+#[inline(never)]
 fn real_secs<S: Sys>(sys: &S) -> u64 {
     u64::try_from(sys.clock_gettime(CLOCK_REALTIME).unwrap_or_default().sec).unwrap_or(0)
 }

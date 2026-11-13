@@ -35,4 +35,16 @@ unsafe extern "C" {
     /// `fini` (0 = none). Never returns.
     // ARCH(x86_64): x86-64 psABI process entry (%rsp, %rdx = fini); aarch64 has its own (A-4).
     pub(crate) safe fn liella_machine_ld_enter(sp: usize, entry: usize, fini: usize) -> !;
+    /// `csys/src/machine/tlsdesc.S`: the TLS descriptor function of a block in the static area
+    /// (DL-15, R14-8). Never called from Rust: its address goes in a descriptor's first word.
+    // ARCH(x86_64): the %rax-only descriptor convention (tlsdesc.S header); aarch64's is AAELF64's (A-12).
+    pub(crate) safe fn liella_machine_ld_tlsdesc_static();
+}
+
+/// The address the relocator stores in a TLS descriptor's function word for a block in the static
+/// area (DL-15, design §7): [`liella_machine_ld_tlsdesc_static`].
+#[allow(clippy::as_conversions)] // a function's address has no conversion other than `as`
+pub(crate) fn tlsdesc_static() -> u64 {
+    let f: extern "C" fn() = liella_machine_ld_tlsdesc_static;
+    u64::try_from((f as *const ()).expose_provenance()).unwrap_or(0)
 }

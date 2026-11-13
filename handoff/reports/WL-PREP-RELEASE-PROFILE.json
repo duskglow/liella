@@ -1,0 +1,11 @@
+{"task": "WL-PREP-RELEASE-PROFILE", "model": "opus", "tokens": null,
+ "result": "wl_prep/wl_percall build release products (LIELLA_FULL_PROFILE=1), cache keyed <sha>-release with a .profile check; all validation consumers follow; self-test + plants",
+ "branch": "task/wl-prep-release-profile", "head": "af29af18f4c387cfb71fef432ca1af1bf57f0a49",
+ "gate": {"affected": "371 passed / 0 failed", "peak": "1.3G"}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["mbrtowc_ascii/2byte per-call counts are identical fast vs release (42.0/56.0) at af29af18f; stdio rows drop (printf_short -80.1, fgets_line -3.7, fwrite_short -1.0); the GOT-read claim for mbrtowc is not verified", "primed bases cached only as fast products need their source again; first count per commit builds fat LTO"],
+ "refused": [],
+ "jobs": ["wl-prep-release-profile-gate2", "wl-prep-release-profile-plants2", "wl-prep-release-profile-count"],
+ "improvement": "wl_percall could print the products' .profile marker in its header so every count says which build it measured (now done: 'products profile:' line)",
+ "next_step": "land; the next workload gate builds release products for both commits",
+ "report_file": "handoff/WL-PREP-RELEASE-PROFILE-report.md"}

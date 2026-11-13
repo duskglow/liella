@@ -133,6 +133,18 @@ pub trait Arch {
         };
         Ok(Field { value, width: 8 })
     }
+
+    /// The two words of a TLS descriptor (`TlsDesc`; DL-15, design §7) for a block in the static
+    /// area: the descriptor function `resolver`, then its argument, the variable's offset from the
+    /// thread pointer (the `TpOff` arithmetic). A. Oliva, "Thread-Local Storage Descriptors for IA32
+    /// and AMD64/EM64T" (2005): word 0 the function, word 1 its argument.
+    ///
+    /// # Errors
+    ///
+    /// As [`Arch::apply_tls`] for `TpOff`.
+    fn tls_descriptor(resolver: u64, o: TlsOperands) -> Result<[u64; 2], ApplyError> {
+        Ok([resolver, Self::apply_tls(RelocKind::TpOff, o)?.value])
+    }
 }
 
 /// The TLS variants of Drepper's "ELF Handling For Thread-Local Storage" §3.4.

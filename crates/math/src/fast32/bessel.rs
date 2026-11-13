@@ -155,6 +155,7 @@ pub(super) fn bessel_core(f: usize, x: f32) -> Option<(f64, f64)> {
             }
         }
     } else if ax < BES_HANKEL {
+        // RANGE: 2 <= ax < BES_HANKEL here: a small nonnegative index.
         let i = ((ax - 2.0) * 0.5) as usize;
         let t = ax - (3 + 2 * i) as f64; // exact: ax is a `float` ≥ 2 (on the 2^-22 grid), |t| ≤ 1
         let c: &[u64] = match f {
@@ -170,6 +171,93 @@ pub(super) fn bessel_core(f: usize, x: f32) -> Option<(f64, f64)> {
     Some((sign * y, e))
 }
 
+/// The start of the tiny band, 2^-20, as `float` bits of |x|.
+const BES_TINY_BITS: u32 = 0x3580_0000;
+/// γ - ln 2 and γ - ln 2 - 1/2 (Y0 and Y1 below 2^-20).
+const BES_C0: f64 = -0.115_931_515_658_412_45;
+const BES_C1: f64 = -0.615_931_515_658_412_4;
+/// Y1's overflow threshold on w = 2/(πx): 2^128·(1 + 2^-43). At or past it |Y1| > w·(1 - 2^-34)
+/// exceeds FLT_MAX + ulp/2 = 2^128·(1 - 2^-25); the few w just below it go to the accurate path.
+const BES_Y1_OVF: f64 = 3.402_823_669_209_694_5e38;
+
+/// j0f, j1f, y0f, y1f: the tiny band 0 < |x| < 2^-20 (LIBM-RETHINK-BESSEL, D-10.106), else
+/// [`bessel_core`] and [`bessel_finish`]. Below 2^-20 the leading series terms decide (DLMF
+/// 10.2.2, 10.8.1-2; L = ln(x/2) + γ): J0 = 1 - x²/4 + O(x⁴), J1 = (x/2)(1 - x²/8 + O(x⁴)),
+/// Y0 = (2/π)(L(1 - x²/4) + x²/4) + O(x⁴L), Y1 = -2/(πx) + (x/π)(L - 1/2) + O(x³L). J0 and J1
+/// are answered from their bracket alone (no rounding test: 1 - 2^-42 < J0 < 1, |x|/2·(1 - 2^-43)
+/// < |J1| < |x|/2), Y0 and Y1 with a relative bound through the usual test.
+#[inline(always)]
+pub(super) fn bessel_eval(f: usize, x: f32, mode: Rounding, name: &'static str) -> Option<(f32, Status)> {
+    let a = x.to_bits() & 0x7fff_ffff;
+    if a == 0 || a >= BES_TINY_BITS || (f >= 2 && x < 0.0) {
+        return bessel_finish(x, bessel_core(f, x)?, mode, name);
+    }
+    let neg = x < 0.0;
+    let xd = f64::from(x);
+    match f {
+        0 => {
+            stats::record(name, true);
+            let v = if matches!(mode, Rounding::Down | Rounding::Zero) { f32::from_bits(0x3f7f_ffff) } else { 1.0 };
+            Some((v, Status::flags(Flags::INEXACT)))
+        }
+        1 => {
+            // |x| near 2^-125: whether the result underflows depends on the direction's
+            // tininess after rounding; the accurate path decides those two operands.
+            if (0x00ff_ffff..=0x0100_0000).contains(&a) {
+                return None;
+            }
+            // The floats lo < |J1| < hi: below 2^-125 |x| = a·2^-149 and |x|/2 is a float (a even,
+            // nearest = hi) or a midpoint (a odd, nearest = lo, |J1| lies below it).
+            let (lo, hi, near) = if a > 0x0100_0000 {
+                (a - 0x0080_0001, a - 0x0080_0000, a - 0x0080_0000)
+            } else {
+                let lo = (a - 1) >> 1;
+                (lo, lo + 1, if a & 1 == 0 { lo + 1 } else { lo })
+            };
+            let m = match mode {
+                Rounding::Nearest => near,
+                Rounding::Zero => lo,
+                Rounding::Up => if neg { lo } else { hi },
+                Rounding::Down => if neg { hi } else { lo },
+            };
+            stats::record(name, true);
+            let v = f32::from_bits(m | (x.to_bits() & 0x8000_0000));
+            let fl = if a < 0x00ff_ffff { Flags::INEXACT.union(Flags::UNDERFLOW) } else { Flags::INEXACT };
+            // ERANGE only for an underflow to zero (m == 0, which needs a <= 2), never for a
+            // subnormal result: `crate::float::range_errno`'s rule (spec/behaviour/libm-exact.md).
+            let st = Status::flags(fl);
+            Some((v, if m == 0 { st.with(crate::status::MathError::Range) } else { st }))
+        }
+        2 => {
+            // ln x correctly rounded (0.5u of |ln| ≥ 13.8), + c (|c| < 0.12, same sign: ≤ 1.01u of
+            // |L|), 1 - z and the products and sum 4u, 2/π 1u: ≤ 7u relative, no cancellation.
+            let l = crate::fast64::log_nearest(xd)? + BES_C0;
+            let z = 0.25 * xd * xd; // exact: x² of a float has 48 bits, ≥ 2^-298
+            let y = TWO_OVER_PI * (l * (1.0 - z) + z);
+            bessel_finish(x, (y, 8.0 * U53 * y.abs()), mode, name)
+        }
+        _ => {
+            // w = RN(RN(2/π)/x) within 2u; (x/π)(L - 1/2) ≤ 2^-35·w (any error in it is lost
+            // below 2^-80·w); the difference 1u: ≤ 4u relative.
+            let w = TWO_OVER_PI / xd;
+            if w >= BES_Y1_OVF {
+                stats::record(name, true);
+                // ERANGE only where the overflow rounds to -inf (nearest, down), not where it
+                // rounds to -FLT_MAX (up, toward zero): `crate::float::range_errno`'s rule.
+                let st = Status::flags(Flags::INEXACT.union(Flags::OVERFLOW));
+                return Some(if matches!(mode, Rounding::Down | Rounding::Nearest) {
+                    (f32::NEG_INFINITY, st.with(crate::status::MathError::Range))
+                } else {
+                    (-f32::MAX, st)
+                });
+            }
+            let l = crate::fast64::log_nearest(xd)? + BES_C1;
+            let y = INV_PI_D * xd * l - w;
+            bessel_finish(x, (y, 4.0 * U53 * y.abs()), mode, name)
+        }
+    }
+}
+
 /// The rounding test for an absolute bound e: margin e/ulp(y) < e·2^53/|y| (ulp(y) > |y|·2^-53),
 /// refused at or beyond 2^26 (the test's mask is 2^28; y near a zero lands here).
 #[inline(always)]
@@ -179,6 +267,7 @@ pub(super) fn bessel_finish(x: f32, (y, e): (f64, f64), mode: Rounding, name: &'
         stats::record(name, false);
         return None;
     }
+    // RANGE: 0 <= d < 2^26 (NaN and larger returned above).
     finish(x, y, d as u64 + 1, mode, name)
 }
 
@@ -186,6 +275,40 @@ pub(super) fn bessel_finish(x: f32, (y, e): (f64, f64), mode: Rounding, name: &'
 mod tests {
     use super::*;
     use super::super::tests::{accurate, agree_in, exhaustive_oracle, MODES};
+
+    /// The tiny band (D-10.106): every answer below 2^-20 (J0, J1 from their brackets, Y0, Y1
+    /// through the rounding test, Y1's overflow) is the accurate path's value and status in every
+    /// rounding mode, on odd and even subnormals, the 2^-125 edges, normal operands and around
+    /// Y1's overflow threshold. (No spec clause: LIBM-RETHINK-BESSEL, D-10.106.)
+    #[test]
+    fn bessel_tiny_band_agrees_with_the_accurate_path() {
+        let mut xs: std::vec::Vec<f32> = (1u32..=6)
+            .chain([0x7f_fffd, 0x7f_fffe, 0x80_0000, 0x80_0001, 0xff_fffd, 0x100_0001, 0x100_0002, 0x357f_ffff])
+            .map(f32::from_bits)
+            .collect();
+        xs.extend((0..64u32).map(|k| f32::from_bits(0x0100_0000 + k * 0x0053_1a37 % 0x3480_0000)));
+        xs.extend([2.0e-39_f32, 2.1e-39, 1.9e-39, 1.87e-39, 1.8e-39, 1e-40]);
+        let mut taken = 0;
+        for f in BES {
+            for &x in &xs {
+                for x in [x, -x] {
+                    for m in MODES {
+                        if let Some((v, s)) = super::super::eval(f, x, m) {
+                            taken += 1;
+                            let (w, t) = accurate(f, x, m);
+                            // Status's equality is flags and errno; `hw` is a hint whose supersets
+                            // are all correct (the accurate path reports every bit).
+                            assert!(
+                                v.to_bits() == w.to_bits() && s == t,
+                                "{f:?}({x:e}) {m:?}: fast {v:e} {s:?}, accurate {w:e} {t:?}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        assert!(taken > 1500, "tiny band: fast path taken {taken} times");
+    }
 
     /// The Bessel functions (not in the all-encodings stride test: their accurate path costs
     /// ~2.3e5 instructions a call, so their agreement tests sample, and the exhaustive sweeps

@@ -1,0 +1,22 @@
+{"task": "DL-DLOPEN-LOAD-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: dlopen/dlerror work end to end in Liella's ld.so and libc (new test green kernel-started and as ld.so PROGRAM, 5/5 plants caught); direct gate has 1 unexplained failure (xtask affected selection test); differences rows, compat and D-27 records still owed",
+ "branch": "task/dl-dlopen-load-2", "head": null,
+ "gate": {"affected": "6491 passed / 1 failed (xtask affected::tests::a_loader_change_does_not_select_the_math_suites)", "peak": "14G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "Probe (ruling #5266, tools/probe/dl/gaps): the reference loads objects with e_ehsize 0 or a PT_LOAD p_align of 3; Liella's ELF reader refuses both ('malformed ELF object'). Recommend keeping the refusal and recording it as a differences row in the next run.",
+   "The C library's start stores its own __libc_stack_end, and after 'ld.so PROGRAM' the start's stack words are rearranged: the loader now records argc/argv/envp/auxv in run_init (START_ARGS) instead of re-reading the stack.",
+   "Run 1's guessed texts were wrong for other EI_CLASS values and for a missing PT_DYNAMIC; both now follow the probe.",
+   "xtask/src/policy.rs: the 'slice' unsafe category is now permitted in boundary src/ld/ and src/dlerr.rs (same trust as src/ld.rs)."
+ ],
+ "refused": [],
+ "impact": [
+   {"kind": "unblock", "what": "dlopen/dlerror in dynamic programs: unblocks DL-16b (dlsym), DL-16c, DL-16d and CONF-DYN-HELPERS' dlopen programs", "before": null, "after": null, "unit": null, "measured": false},
+   {"kind": "coverage", "what": "crates/ld/tests/dlopen.rs (24 checks, 2 start modes) and 5 plants, all caught", "before": 0, "after": 5, "unit": "plants", "measured": true},
+   {"kind": "correctness", "what": "dlopen texts for 9 malformed-header cases now match the reference (probe)", "before": null, "after": 9, "unit": "texts", "measured": true}
+ ],
+ "jobs": ["dl-dlopen-load-2-gate", "dl-dlopen-load-2-plants"],
+ "improvement": "The loader's start data that dlopen needs should have one documented record (START_OBJS/START_ARGS) from the start: re-reading the initial stack later is unsafe after ld.so PROGRAM, and that cost a debug cycle here.",
+ "next_step": "Explain and fix the a_loader_change_does_not_select_the_math_suites failure (compare against origin/next first), then the COMPAT-NEW and D-NEW records plus differences rows for #5125/#5126, a static-program test and liella_ld::dlopen unit tests (handoff/DL-DLOPEN-LOAD.md).",
+ "report_file": "handoff/DL-DLOPEN-LOAD.md"}

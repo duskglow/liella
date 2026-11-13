@@ -1,0 +1,10 @@
+id = "D-10.110"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+story = "LIBM-F64-BESSEL-BANDS"
+date = "2026-11-12"
+body = '''
+**`double` Bessel functions below 2^-27 answered by the fast tier for every operand** (LIBM-F64-BESSEL-BANDS, ruling #4953; extends D-10.13's fast tier, the `double` counterpart of D-10.106). Before: `y0` and `y1` below 2^-1000 and `j1` below 2^-1021 went to the 384-bit path (LIBM-TAIL-PROBE: about 1.4e5 instructions a call), and `j0`, `j1` below 2^-27 built a multi-precision value to round (469 to 504 instructions against 37 to 50 in the reference). Method (DLMF 10.2.2, 10.8.1-2; the series of `crate::fast_bessel` to first order in `z = x²`, dropped terms below 2^-98 relative): `J0 = 1 − x²/4 + ...` and `J1 = (x/2)(1 − x²/8 + ...)` lie strictly inside a quarter of the last place below 1 and `x/2`, so the result is read off the bits in each mode (subnormal `J1` through `float::round` from `(2m − 1)·2^-1076` with a sticky bit: underflow, `ERANGE` only for a zero result); `Y0 = (2/π)·ln x + C_0 + z·(C_1 − (2/π)·ln x/4)` and `Y1 = −(2/π)/x + x·((2/π)·ln x/2 + D_0)` in double-double with `fast64::log_dd` (a subnormal `x` scaled by 2^128 first, `128·ln 2` taken off), `Y1` carried as `Y1·2^-128` and settled with that scale by the existing rounding test; below `⌊(2/π)·2^50·(1 − 2^-40)⌋·2^-1074` every mode overflows (`elem::overflow`: ∞ or the largest finite value, `ERANGE` for ∞). Operands the rounding test refuses keep the 384-bit path (`y1` just above its overflow threshold; otherwise about 2^-37 of the band). Checked against the 384-bit path in value, flags and `errno` in all four modes (crates/math/tests/fast_bessel.rs, `double_bessel_tiny_band_settles_and_matches_the_accurate_path`). The large-operand band (`x >= 32`, the modulus-phase form with an exact fixed-point reduction) and a second tier near the zeros below 32 (Taylor expansions about each zero; Harrison, "Fast and accurate Bessel function computation", ARITH 2009) are not part of this record (handoff/LIBM-F64-BESSEL-BANDS.md).
+'''

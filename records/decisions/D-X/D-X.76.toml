@@ -1,0 +1,9 @@
+id = "D-X.76"
+section = "x"
+status = "active"
+story = "LAYOUT-SINGLE-FAULT-TEST"
+date = "2026-11-12"
+tests = ["crates/core/tests/hot_text_products.rs::init_startup_data_accesses_are_in_the_data1_cluster"]
+body = '''
+**The start-up data access check names every declarable object outside the clusters, not a fault count** (LAYOUT-SINGLE-FAULT-TEST, 2026-11-12, #4869; layout check only, no symbol, no behaviour change). The start-up fault bounds keep one fault of slack, so one object left out of `crates/libc-so/startup-state.list` passed them (LAYOUT-DATA-CLUSTERS-11's `_nl_msg_cat_cntr`: setlocale + printf 50 -> 51, bound 51). `init_startup_data_accesses_are_in_the_data1_cluster` traces every mode of `page_faults.c` (it now fails when a mode is missing from `STARTUP_PROBE_MODES`) with each `.data`, `.bss` and `.lbss` input section on a 64 KiB boundary of its own, and names each library access (libc.a or the start object) outside `.data1` and, for first calls, the `.lbss` cluster (D-X.74): a section of its own up to the list's limit (8 KiB, xtask/src/coldbss.rs `STATE_DECLARED_MAX`; it stopped at 4 KiB, so heap::HEAP was out of its reach), and an object in a member's shared `.data`/`.bss` by the symbol hit. The extension found the first close reading `liella_machine_aio_used` in points.S's shared `.data`; it has a section of its own and is declared as first-call state (an assembly member's, so it stays in `.data1`).
+'''

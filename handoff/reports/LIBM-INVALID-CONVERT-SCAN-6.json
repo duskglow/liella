@@ -1,0 +1,12 @@
+{"task": "LIBM-INVALID-CONVERT-SCAN-6", "model": "opus", "tokens": null,
+ "result": "origin/next merged cleanly after LAYOUT-DATA-CLUSTERS-4C; clippy, static, so, layout-check (STARTUP-DATA-WINDOWS ro 1 <= 1) and hot_text_products green; plants 8 of 8 CAUGHT; FULL-escalated gate pending",
+ "branch": "task/libm-invalid-convert-scan-6", "head": null,
+ "gate": {"affected": "pending (libm-invalid-convert-scan-6-gate, escalated to FULL by xtask changes)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["wide_dd ignored tier sweep fails (Expm1 error 2^-100 at bound 2^-100, wide_dd.rs:745); file not changed by this branch",
+                   "lgammaf negative operands 21x reference by instructions: LIBM-F32-REST-NEXT"],
+ "refused": [],
+ "improvement": "A held story's unhold could pre-run layout-check on the merged head automatically, since the merge plus that check settles whether the hold reason is gone",
+ "next_step": "Read libm-invalid-convert-scan-6-gate and -plants on keke; green means land",
+ "report_file": "handoff/libm-invalid-convert-scan.md",
+ "jobs": ["libm-invalid-convert-scan-6-pre", "libm-invalid-convert-scan-6-plants", "libm-invalid-convert-scan-6-gate"]}

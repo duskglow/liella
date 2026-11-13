@@ -1,0 +1,4 @@
+# LIBM-F64-SPECIAL-QUICK-REST plants (cargo xtask plants; docs/plants.md): erf_nearest's branch on `ax >= SMALL`
+# and the sign helper `with_sign_of` in crates/math/src/fast_special.rs (both builds through the C entries).
+sign-mask-dropped | crates/math/src/fast_special.rs | lit:0x8000_0000_0000_0000)) ==> 0x4000_0000_0000_0000)) | cargo test -p liella-boundary --release --test erf_quick | msg:erfc?\(.*\) misrounded
+series-range-widened | crates/math/src/fast_special.rs | lit:let v = if ax >= SMALL { ==> let v = if ax >= 0.5 { | cargo test -p liella-boundary --release --test erf_quick | msg:erf\(.*\) misrounded

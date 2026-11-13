@@ -1,0 +1,12 @@
+{"task": "LIBM-F32-REST", "model": "opus", "tokens": null,
+ "result": "asinf, acosf, atanf, atan2f on the one-pass float path (D-10.82); proofs, gate, plants and counts running; timing and lgammaf/erff/erfcf/hypotf to LIBM-F32-REST-2",
+ "branch": "task/libm-f32-rest", "head": null,
+ "gate": {"affected": "running (mei:f32rest-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["static, partial-write and the sampled one-pass tests green before the long jobs (mei:f32rest-check1); clippy clean (mei:f32rest-gen1); records check ok (mei:f32rest-rec2)",
+                   "booked timing (IVB, N100) not run in this story: the change swaps the software root for sqrtsd, so LIBM-F32-REST-2 times the four rows first"],
+ "refused": [],
+ "improvement": "the one-pass recipe needs a direction-independent table index (s*32 + 1.5*2^52 floors/ceils under directed rounding); atan_red_any is reusable for that",
+ "next_step": "LIBM-F32-REST-2: booked timing of asinf/acosf/atanf/atan2f on IVB and N100, then lgammaf latency, then erff/erfcf/hypotf",
+ "report_file": "handoff/LIBM-F32-REST.md",
+ "jobs": ["mei:f32rest-gate", "mei:f32rest-plants", "mei:f32rest-exh", "mei:f32rest-percall"]}

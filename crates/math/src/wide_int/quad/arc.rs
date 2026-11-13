@@ -52,9 +52,40 @@
 //!    relative. Every result is within `2^-160.2` relative; the rounding test assumes `2^-152`.
 //!    Results lie in `[2^-122, π]` (the callers settle `|x| < 2^-58` for `atan` and `|y/x| <
 //!    2^-121` with `x > 0` for `atan2`; a smaller `atan2` is refused by the exponent check).
+//!
+//! `asin` and `acos` (D-10.97): `asin a = atan2(|a|, s)`, `acos a = atan2(s, |a|)` (`π −` that for
+//! `a < 0`), `s = √(1 − a²)`, through the same kernel on 192-bit operands ([`atan_le3`]). The
+//! route was chosen by count: the kernel costs about 1 100 instructions and the root about 100,
+//! while a direct `asin` table (centres with their own Taylor coefficients) needs about 20 terms
+//! of 192 bits per centre and a root above `1/2` anyway.
+//! 7. `1 − a²`. `a = A·2^ea`, `ea <= −113`: `A²` (226 bits) exactly in 256, `a²` in units `2^-254`
+//!    (exact for `a >= 2^-14`, else truncated, and at least one unit so that `W < 2^254` when
+//!    `a < 2^-127`: below `2^-226` relative to `1 − a² > 1 − 2^-28`),
+//!    `W = (2^254 − a²)·2^lw` with `lw` even and `W` in `[2^252, 2^254)`. `a < s` exactly when `a² <
+//!    1/2` (exact where it matters; `a² = 1/2` has no solution).
+//! 8. Root ([`root3`]), `wh = ⌊W/2^128⌋`: the seed `s0 = hw(dbl(⌊wh/2^72⌋))·2^36` (`hw` within
+//!    `2^-52`, the truncation `2^-52` and the 54-bit conversion `2^-53` halved under the root) is
+//!    `√wh` within `2^-51.19`; `v = r·(2^90/wd) = 2^126/s0` within `2^-50.42` (`r²/wd = (1 +
+//!    e)²`, two roundings). `s1 = s0·2^64 + (wh − s0²)·v/2^63` (the residual exact): Newton's
+//!    `ε²/2 < 2^-103.4`, `v`'s error times the correction `2^-101.6`, the dropped `W mod 2^128` and
+//!    the truncations `2^-124`: `√W` within `2^-101.0`. Then `S = s1·2^64 + ((W − s1²)/2^64)·R/2^126`
+//!    with `W − s1²` exact (below `2^155`, floored to units `2^64`: `2^-189`) and `R = v·2^63 +
+//!    v·(2^126 − ⌊s1·v/2^64⌋)/2^63`, one Newton step on the reciprocal: `2^253/s1` within `2^-98.8`.
+//!    `S` is `√W·2^64` within `2^-203` (Newton) `+ 2^-199.8` (`R`) `+ 2^-189 + 2^-186.4` (the floors,
+//!    12 units against `2^190`): within `2^-186`.
+//! 9. Kernel on 192-bit operands ([`atan_le3`]). The index of step 2 from the top 53 bits of `y`
+//!    and `x`'s scale `ix`: `256/dbl(⌊A/2^60⌋)` for `x = |a|`, `v·2^(−107−l)` for `x = s` (`l` the
+//!    normalising shift; `v` is `2^190/s1` within `2^-50.42 + 2^-51.19`, the top 53 bits truncate
+//!    `2^-52`): within `2^-49.1 < 2^-48.7` with `y`'s truncation and the product, so step 2 holds.
+//!    `j = 0`: `div3` of the two significands. `j >= 1`: `y·2^-k/4 − c·x/4` and `x/4 + c·y·2^-k/4`
+//!    on the significands floored at `2^-9` and `2^-2` of their units (below `2^192`: the
+//!    denominator is under `2^190(1 + t)`), each within one unit of a value at least `2^174`:
+//!    `t` moves by at most `2^-173.9`, and `s`'s `2^-186` with it; steps 3 to 6 then hold with
+//!    `2^-160.25 + 2^-173.8`: `asin`, `acos` within `2^-160.2`. Results lie in `[2^-58, π)`:
+//!    the caller settles `|a| < 2^-58`, and `acos(1 − 2^-113) > 2^-57`.
 
 use super::super::arc::ATAN_J;
-use super::super::{mul_wide, mulhi, mulhi64};
+use super::super::{M64, big_u64, mul_wide, mulhi, mulhi64};
 use super::{ONE, Scaled, W3, div3, mul32, mulhi3, norm, round};
 use crate::float::{Float, Kind, Num};
 use crate::status::{Rounding, Status};
@@ -105,6 +136,191 @@ pub(crate) fn atan2<F: Float>(y: &Num, x: &Num, mode: Rounding) -> Option<(F, St
     round::<F>(y.neg, m, e, mode)
 }
 
+/// `asin a` rounded into `F` (binary128) in `mode` for `0 < |a| < 1` (other operands give
+/// `None`; the caller settles `|a| < 2^-58`); `hw` is a `double` square root within `2^-52`
+/// on `[2^52, 2^54)` (the boundary's `sqrtsd`, or [`crate::wide_int::arc::soft_sqrt`]).
+pub(crate) fn asin<F: Float>(n: &Num, mode: Rounding, hw: impl Fn(f64) -> f64) -> Option<(F, Status)> {
+    if F::PREC != 113 || F::EXPLICIT {
+        return None;
+    }
+    let (m, e) = asin_approx(n, hw)?;
+    round::<F>(n.neg, m, e, mode)
+}
+
+/// `acos a` rounded into `F` (binary128) in `mode` for `0 < |a| < 1`; `hw` as for [`asin`].
+pub(crate) fn acos<F: Float>(n: &Num, mode: Rounding, hw: impl Fn(f64) -> f64) -> Option<(F, Status)> {
+    if F::PREC != 113 || F::EXPLICIT {
+        return None;
+    }
+    let (m, e) = acos_approx(n, hw)?;
+    round::<F>(false, m, e, mode)
+}
+
+/// `asin|a| = atan2(|a|, s)`: `A(|a|, s)` when `|a| < s`, else `π/2 − A(s, |a|)` (step 9; `|a|`'s
+/// index scale needs no root, so its `divsd` runs beside it).
+#[inline(always)]
+fn asin_approx(n: &Num, hw: impl Fn(f64) -> f64) -> Option<Scaled> {
+    let a = mag(n)?;
+    let ia = 256.0 / dbl((a.m >> 60) as u64);
+    let (s, is, below) = root_one_minus_sq(a, hw)?;
+    let a = wide(a);
+    Some(if below { atan_le3(a, s, is) } else { sub_from(191, atan_le3(s, a, ia)) })
+}
+
+/// `acos|a| = atan2(s, |a|)` the same way, then `π −` that for `a < 0`.
+#[inline(always)]
+fn acos_approx(n: &Num, hw: impl Fn(f64) -> f64) -> Option<Scaled> {
+    let a = mag(n)?;
+    let ia = 256.0 / dbl((a.m >> 60) as u64);
+    let (s, is, below) = root_one_minus_sq(a, hw)?;
+    let a = wide(a);
+    let t = if below { sub_from(191, atan_le3(a, s, is)) } else { atan_le3(s, a, ia) };
+    Some(if n.neg { sub_from(190, t) } else { t })
+}
+
+/// A [`Q`] as `(M, E)`, `M` in `[2^191, 2^192)`.
+fn wide(a: Q) -> Scaled {
+    (W3 { h: a.m << 15, l: 0 }, a.e - 79)
+}
+
+/// `(h, l)·2^n` for a 256-bit `h·2^128 + l`, the bits shifted out zero.
+fn shl256((h, l): (u128, u128), n: u32) -> (u128, u128) {
+    match n {
+        0 => (h, l),
+        1..128 => ((h << n) | (l >> (128 - n)), l << n),
+        128..256 => (l << (n - 128), 0),
+        _ => (0, 0),
+    }
+}
+
+/// `⌊(h, l)/2^n⌋` for a 256-bit `h·2^128 + l`.
+fn shr256((h, l): (u128, u128), n: u32) -> (u128, u128) {
+    match n {
+        0 => (h, l),
+        1..128 => (h >> n, (l >> n) | (h << (128 - n))),
+        128..256 => (0, h >> (n - 128)),
+        _ => (0, 0),
+    }
+}
+
+/// `√(1 − a²)` for `0 < a < 1` as `(M, E)` (steps 7 and 8), its index scale (step 9) and whether
+/// `a < √(1 − a²)`; `None` for `a >= 1`. Inlined into its two callers, as the x87 tier's.
+#[inline(always)]
+fn root_one_minus_sq(a: Q, hw: impl Fn(f64) -> f64) -> Option<(Scaled, f64, bool)> {
+    if a.e > -113 {
+        return None; // a >= 1
+    }
+    // A² below 2^226, exactly: Ah²·2^128 + 2·Ah·Al·2^64 + Al².
+    let (ah, al) = (a.m >> 64, a.m & M64);
+    let p = ah * al;
+    let (lo, c) = (al * al).overflowing_add(p << 65);
+    let sq = (ah * ah + (p >> 63) + u128::from(c), lo);
+    let sh = -2 * a.e - 254; // a² = A²·2^-(254 + sh), sh >= -28
+    let (h, l) = if sh <= 0 { shl256(sq, (-sh) as u32) } else { shr256(sq, sh as u32) };
+    let below = h < 1 << 125; // a² < 2^253 units = 1/2
+    // a² truncated to nothing (a < 2^-127) counts as one unit, so W stays below 2^254 (step 7).
+    let l = if h == 0 { l.max(1) } else { l };
+    let (wl, b) = 0u128.overflowing_sub(l); // 2^254 − a²: nonzero, below 2^254
+    let wh = (1u128 << 126) - h - u128::from(b);
+    let lz = if wh != 0 { wh.leading_zeros() } else { 128 + wl.leading_zeros() };
+    let lw = (lz - 2) & !1;
+    let (s, vd) = root3(shl256((wh, wl), lw), hw);
+    let l = s.h.leading_zeros(); // 0, 1 or 2: S near 2^190.5
+    // 256/top53(S << l) = 2^(83 − l)/s1 = v·2^(−107 − l) (step 9).
+    let ix = vd * f64::from_bits(u64::from(1023 - 107 - l) << 52);
+    Some((norm(s, 191 + lw / 2), ix, below))
+}
+
+const TWO90: f64 = (1u128 << 90) as f64;
+const TWO36: f64 = (1u64 << 36) as f64;
+
+/// Step 8: `√W·2^64` (near `[2^190, 2^191)`) for `W = wh·2^128 + wl` in `[2^252, 2^254)`, within
+/// `2^-186`, and `v = 2^126/s0` as a `double` (step 9's index scale).
+#[inline(always)]
+fn root3((wh, wl): (u128, u128), hw: impl Fn(f64) -> f64) -> (W3, f64) {
+    let wd = ((wh >> 72) as u64) as i64 as f64; // in [2^52, 2^54): rounded to 53 bits
+    let iw = TWO90 / wd;
+    let r = hw(wd); // √wd, in [2^26, 2^27]
+    let s0 = big_u64(r * TWO36); // √wh within 2^-51.19, in [2^62, 2^63]
+    let vd = r * iw; // 2^90/r = 2^126/s0, in [2^63, 2^64]
+    let v = big_u64(vd);
+    // 128 bits: s1 = s0·2^64 + (wh − s0²)·2^63/s0, |wh − s0²| < 2^78.
+    let e0 = wh.wrapping_sub(u128::from(s0) * u128::from(s0)) as i128;
+    let c = mul_wide(e0.unsigned_abs(), v) << 1;
+    let s = u128::from(s0) << 64;
+    let s1 = if e0 < 0 { s - c } else { s + c }; // √W within 2^-101.0, below 2^127
+    // W − s1² exactly (modulo 2^256), below 2^155 in magnitude: its bits 64 ..= 191.
+    let (q1, q0) = (s1 >> 64, s1 & M64);
+    let p = q1 * q0;
+    let (sl, cy) = (q0 * q0).overflowing_add(p << 65);
+    let sh = q1 * q1 + (p >> 63) + u128::from(cy);
+    let (rl, b) = wl.overflowing_sub(sl);
+    let rh = wh.wrapping_sub(sh).wrapping_sub(u128::from(b));
+    let res = ((rh << 64) | (rl >> 64)) as i128;
+    // R = 2^253/s1: v·2^63 and one Newton step from s1·v/2^64 = 2^126(1 + δ).
+    let vw = u128::from(v);
+    let d = (1i128 << 126).wrapping_sub((q1 * vw + ((q0 * vw) >> 64)) as i128);
+    let dr = mul_wide(d.unsigned_abs(), v) << 1;
+    let rr = if d < 0 { (vw << 63) - dr } else { (vw << 63) + dr };
+    let corr = mulhi(res.unsigned_abs(), rr) << 2; // |W − s1²|·2^63/s1
+    let (base, cw) = (W3 { h: s1, l: 0 }, W3 { h: corr >> 64, l: corr as u64 });
+    (if res < 0 { base.sub(cw) } else { base.add(cw) }, vd)
+}
+
+/// `v·j` for `v` below `2^120` and `j <= 128`.
+fn mul_small(v: W3, j: u64) -> W3 {
+    let lo = u128::from(v.l) * u128::from(j);
+    W3 { h: v.h * u128::from(j) + (lo >> 64), l: lo as u64 }
+}
+
+/// `v·2^n` for `n < 192`, the bits shifted out zero.
+fn shl3(v: W3, n: u32) -> W3 {
+    match n {
+        0..64 => v.shl(n),
+        64..128 => W3 { h: (v.h << 64) | u128::from(v.l), l: 0 }.shl(n - 64),
+        _ => W3 { h: u128::from(v.l) << 64, l: 0 }.shl(n - 128),
+    }
+}
+
+/// Step 9: steps 2 to 5 for `0 < t = y/x <= 1 + 2^-160` on 192-bit operands `(M, E)`, `y`'s
+/// exponent at most `x`'s; `ix` within `2^-49.1` of `256/⌊x.M/2^139⌋`.
+#[inline(always)]
+fn atan_le3(y: Scaled, x: Scaled, ix: f64) -> Scaled {
+    let k = x.1 - y.1; // >= 0
+    let mut j = 0;
+    if k <= 8 {
+        // RANGE: y' = ⌊y.M/2^139⌋ and x' are in [2^52, 2^53), ix ≈ 256/x': the product is
+        // positive and below 2^10, far inside the signed range.
+        let h = (dbl((y.0.h >> 75) as u64) * ix) as usize; // in [128, 512)
+        j = ((h >> k) + 1) >> 1;
+    }
+    if j == 0 {
+        let q = div3(y.0, x.0); // (y.M/x.M)·2^190
+        let l = q.h.leading_zeros();
+        let kr = k + l as i32 - 2;
+        return norm(atan_small(q.shl(l), kr), (191 + kr) as u32);
+    }
+    // (y − cx)/4 and (x + cy)/4 in units of x.M's: below 2^191 and 2^192 (step 9).
+    let k = k as u32;
+    let (yn, cx) = (y.0.shr(2 + k), mul_small(x.0.shr(9), j as u64));
+    let den = x.0.shr(2).add(mul_small(y.0.shr(9 + k), j as u64));
+    let tj = W3::with_lo(ATAN_J[j - 1], ATAN_J_LO[j - 1]); // atan(j/128), units 2^-192
+    let neg = (yn.h, yn.l) < (cx.h, cx.l);
+    let an = if neg { cx.sub(yn) } else { yn.sub(cx) };
+    let a = if an == (W3 { h: 0, l: 0 }) {
+        tj
+    } else {
+        let ln = if an.h != 0 { an.h.leading_zeros() } else { 128 + an.l.leading_zeros() };
+        let ld = den.h.leading_zeros(); // den in [2^189, 2^192): 0, 1 or 2
+        let q = div3(shl3(an, ln), den.shl(ld)); // |r|·2^(190 + ln − ld)
+        let lq = q.h.leading_zeros();
+        let kr = (lq + ln) as i32 - ld as i32 - 2; // |r| = (q << lq)·2^(-192-kr), kr >= 7
+        let p = atan_small(q.shl(lq), kr).shr((kr - 1) as u32); // units 2^-192
+        if neg { tj.sub(p) } else { tj.add(p) }
+    };
+    norm(a, 192)
+}
+
 /// The magnitude of a finite nonzero binary128 operand, normalised (step 1).
 fn mag(n: &Num) -> Option<Q> {
     if n.kind != Kind::Finite || n.sig == 0 || n.sig >> 113 != 0 {
@@ -129,6 +345,8 @@ fn atan_le(y: Q, x: Q) -> Scaled {
     let k = x.e - y.e; // >= 0: y <= x, both normalised
     let mut j = 0;
     if k <= 8 {
+        // RANGE: y.m, x.m in [2^112, 2^113): both tops in [2^52, 2^53), so h is in [128, 512),
+        // a signed conversion in range (no invalid).
         let h = (dbl((y.m >> 60) as u64) * (256.0 / dbl((x.m >> 60) as u64))) as usize; // in [128, 512)
         j = ((h >> k) + 1) >> 1;
     }
@@ -233,6 +451,7 @@ mod tests {
     use super::*;
     use crate::float::F128;
     use crate::mp::{self, Mp};
+    use crate::wide_int::arc::soft_sqrt;
     use crate::wide_int::tests::{MODES, Rng, Tally};
 
     /// The proved bound of step 6.
@@ -413,7 +632,7 @@ mod tests {
     /// four modes, and the hard cases.
     /// `cargo test --release -p liella-math --lib wide_int::quad::arc -- --ignored`.
     #[test]
-    #[ignore = "10^7 operands against the 384-bit route: run in release as a job"]
+    #[ignore = "10^7 operands against the 384-bit route: cargo xtask long-sweeps runs it in release (nightly and release runs)"]
     fn tier_agrees_with_the_wide_route_long() {
         const TOTAL: usize = 10_000_000;
         let threads = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
@@ -447,6 +666,146 @@ mod tests {
         hard_cases(&mut hard);
         eprintln!(
             "wide_int::quad::arc long: {} operands, {} calls, {} undecided, worst error 2^{:.2}; hard cases: {} calls, {} undecided, worst 2^{:.2}",
+            TOTAL,
+            all.calls,
+            all.undecided,
+            all.worst.log2(),
+            hard.calls,
+            hard.undecided,
+            hard.worst.log2()
+        );
+        assert!(all.undecided * 100_000 <= all.calls, "{} of {} undecided", all.undecided, all.calls);
+    }
+
+    // Spec clause: §10.3 (_Float128 asinf128/acosf128 correctly rounded in the four directions, D-10.19, D-10.97).
+
+    fn check_asin(n: &Num, tally: &mut Tally) {
+        let (one, a) = (Mp::from_i64(1), exact(n).abs());
+        let v = mp::atan(a.div(one.sub(a).mul(one.add(a)).sqrt())); // as the 384-bit route
+        let want = if n.neg { v.neg() } else { v };
+        check(want, asin_approx(n, soft_sqrt), n.neg, |mode| asin::<F128>(n, mode, soft_sqrt), tally, &format!("asin {n:?}"));
+    }
+
+    fn check_acos(n: &Num, tally: &mut Tally) {
+        let (one, v) = (Mp::from_i64(1), exact(n));
+        let want = mp::atan(one.sub(v).div(one.add(v)).sqrt()).ldexp(1);
+        check(want, acos_approx(n, soft_sqrt), false, |mode| acos::<F128>(n, mode, soft_sqrt), tally, &format!("acos {n:?}"));
+    }
+
+    fn check_arcs(n: &Num, tally: &mut Tally) {
+        check_asin(n, tally);
+        check_acos(n, tally);
+    }
+
+    /// `asin`, `acos`: bands of `floor(log2 |a|)` from the smallest operand the tier takes (below
+    /// `2^-14` the square is truncated, step 7) to `[1/2, 1)`, and `1 − d` with `d` of a random
+    /// length (the root of a small `1 − a²`).
+    fn arc_operand(g: &mut Rng, band: usize) -> Num {
+        match band {
+            0 => operand(g, (-58, -15)),
+            1 => operand(g, (-14, -2)),
+            2 => operand(g, (-1, -1)),
+            _ => {
+                let bits = 1 + (g.next() % 111) as u32;
+                let d = ((u128::from(g.next()) << 64 | u128::from(g.next())) >> (128 - bits)) | 1;
+                num(g.next() & 1 != 0, (1 << 113) - d, -113)
+            }
+        }
+    }
+
+    /// A binary128 operand nearest `v` (positive, below 1).
+    fn nearest(v: Mp) -> Num {
+        crate::float::decode(mp::round::<F128>(v, Rounding::Nearest).0)
+    }
+
+    /// Near `1/2`, `√½` (the switch between `A(a, s)` and `π/2 − A(s, a)`), `1` and the least
+    /// operand; `√(1 − 4^-k)`, where `W` of step 7 lies at either end of `[2^252, 2^254)`; and the
+    /// index boundaries `t = (2j + 1)/256` of both kernels' quotients (`a/s` and `s/a`).
+    fn arc_hard_cases(tally: &mut Tally) {
+        let one = Mp::from_i64(1);
+        let top = (1u128 << 113) - 1;
+        let mut ops = vec![num(false, 1 << 112, -170), num(false, top, -171), num(false, 1 << 112, -127), num(false, top, -128)];
+        let mut centres = vec![one.ldexp(-1), one.ldexp(-1).sqrt()];
+        for k in 1..=4 {
+            centres.push(one.sub(one.ldexp(-2 * k)).sqrt());
+        }
+        for j in 0..128u64 {
+            let t = one.mul_u64(2 * j + 1).ldexp(-8);
+            let r = one.add(t.mul(t)).sqrt();
+            centres.push(t.div(r));
+            centres.push(one.div(r));
+        }
+        for c in centres {
+            let n = nearest(c);
+            for d in [-2i128, -1, 0, 1, 2] {
+                let sig = n.sig.wrapping_add_signed(d);
+                ops.push(if sig >> 113 != 0 { num(false, sig >> 1, n.exp + 1) } else { num(false, sig, n.exp) });
+            }
+        }
+        for d in [1u128, 2, 3, 1 << 20, 1 << 60, 1 << 100] {
+            ops.push(num(false, (1 << 113) - d, -113));
+        }
+        for n in &ops {
+            for neg in [false, true] {
+                check_arcs(&Num { neg, ..*n }, tally);
+            }
+        }
+    }
+
+    #[test]
+    fn arc_sine_agrees_with_the_wide_route() {
+        let mut g = Rng(0x3c6e_f372_fe94_f82b);
+        let mut tally = Tally::default();
+        for i in 0..400 {
+            check_arcs(&arc_operand(&mut g, i % 4), &mut tally);
+        }
+        assert!(tally.undecided * 1000 <= tally.calls, "{} of {} undecided", tally.undecided, tally.calls);
+        let mut hard = Tally::default();
+        arc_hard_cases(&mut hard);
+        eprintln!(
+            "wide_int::quad::arc asin/acos: {} calls, {} undecided, worst error 2^{:.2}; hard cases: {} calls, {} undecided, worst 2^{:.2}",
+            tally.calls,
+            tally.undecided,
+            tally.worst.log2(),
+            hard.calls,
+            hard.undecided,
+            hard.worst.log2()
+        );
+    }
+
+    /// The brief's sweep: 10^7 seeded operands (each through `asin` and `acos`) over the bands in
+    /// the four modes, and the hard cases.
+    /// `cargo test --release -p liella-math --lib wide_int::quad::arc::tests::arc_sine -- --ignored`.
+    #[test]
+    #[ignore = "10^7 operands against the 384-bit route: run in release as a job"]
+    fn arc_sine_agrees_with_the_wide_route_long() {
+        const TOTAL: usize = 10_000_000;
+        let threads = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
+        let tallies: Vec<Tally> = std::thread::scope(|s| {
+            let handles: Vec<_> = (0..threads)
+                .map(|i| {
+                    s.spawn(move || {
+                        let mut g = Rng(0xa54f_f53a_5f1d_36f1 ^ (i as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15));
+                        let mut tally = Tally::default();
+                        for k in (i..TOTAL).step_by(threads) {
+                            check_arcs(&arc_operand(&mut g, k % 4), &mut tally);
+                        }
+                        tally
+                    })
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap_or_else(|p| std::panic::resume_unwind(p))).collect()
+        });
+        let mut all = Tally::default();
+        for t in &tallies {
+            all.calls += t.calls;
+            all.undecided += t.undecided;
+            all.worst = all.worst.max(t.worst);
+        }
+        let mut hard = Tally::default();
+        arc_hard_cases(&mut hard);
+        eprintln!(
+            "wide_int::quad::arc asin/acos long: {} operands, {} calls, {} undecided, worst error 2^{:.2}; hard cases: {} calls, {} undecided, worst 2^{:.2}",
             TOTAL,
             all.calls,
             all.undecided,

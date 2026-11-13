@@ -530,6 +530,8 @@ pub fn run_thread_dtors() {
 /// including those registered meanwhile (a static program's `.fini_array` and `_fini` are one
 /// of them, registered at startup), then every stream's pending output is written (§12.1), then
 /// the whole process ends.
+// LAYOUT-HOTKEY-INLINE-STABLE: a fixed boundary for its start-up/fork hot-text key (off the hot paths: the call is free).
+#[inline(never)]
 pub fn exit(status: i32) -> ! {
     run_thread_dtors();
     exit_handlers::run_all(&EXIT_HANDLERS, &CSys, &KernelPages, status, &mut conv::CCalls);
