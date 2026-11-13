@@ -385,6 +385,12 @@ fn map_thread(len: usize, guard: usize) -> KResult<usize> {
 
 fn list_insert(d: &'static Thread) {
     let _g = LIST.lock(&CSys);
+    link_locked(d);
+}
+
+/// [`list_insert`]'s body, the thread-list lock held by the caller.
+#[inline(always)]
+fn link_locked(d: &'static Thread) {
     let me = addr_of(d);
     let head = HEAD.load(Relaxed);
     d.next.store(head, Relaxed);
@@ -429,6 +435,39 @@ pub(crate) fn find(tp: usize) -> Option<&'static Thread> {
         a = d.next.load(Relaxed);
     }
     None
+}
+
+/// `__liella_thread_walk(cb, ctx)` (`LIELLA_PRIVATE`, DL-16d): Liella's `ld.so` gives a
+/// `dlopen`ed module's TLS block to every thread. Under the thread-list lock, which a thread's
+/// creation holds while its loader `tls_init` runs and it is listed: `cb(ctx, tp)` for each listed
+/// thread (and the caller, if it is not listed), then `cb(ctx, 0)` before the lock is released, so
+/// the loader publishes its table for later creations within the same critical section. A thread
+/// is visited while its mapping lives (it leaves the list before that is released). Returns 0.
+#[cfg_attr(not(feature = "runtime"), allow(dead_code))]
+pub(crate) extern "C" fn walk_threads(cb: usize, ctx: usize) -> usize {
+    if cb == 0 {
+        return 0;
+    }
+    let call = |tp: usize| {
+        let w = |v: usize| i64::from_ne_bytes(v.to_ne_bytes());
+        let _ = ffi::liella_machine_call3(cb, w(ctx), w(tp), 0);
+    };
+    let me = tb::tp();
+    let _g = LIST.lock(&CSys);
+    let mut listed = false;
+    let mut a = HEAD.load(Acquire);
+    while a != 0 {
+        let d = tb::desc_at(a);
+        a = d.next.load(Relaxed);
+        let tp = d.tp.load(Relaxed);
+        listed |= tp == me;
+        call(tp);
+    }
+    if !listed {
+        call(me);
+    }
+    call(0);
+    0
 }
 
 /// Visit every listed thread (the thread-list lock held): for the setxid broadcast, `fork`'s
@@ -659,17 +698,6 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
         }
     };
     let tp = base + lay.tp;
-    // The TLS block: the image, then zeros (fresh or cleared memory). The loader's area (address
-    // 0): its `tls_init` writes the images, zeros to each block's end, the dtv and the block's dtv
-    // word (a reused mapping held an earlier thread's bytes there); no other store below touches
-    // that word.
-    if let Some(t) = img {
-        if t.addr == 0 {
-            let _ = ffi::liella_machine_call3(LOADER_INIT.load(Acquire), i64::from_ne_bytes(tp.to_ne_bytes()), 0, 0);
-        } else {
-            conv::copy_mapped(t.addr, base + lay.tls, t.filesz);
-        }
-    }
     let me = tb::current();
     let b = tb::fresh(tp);
     b.tcb.store(tp, Relaxed);
@@ -731,7 +759,24 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
     // Before the clone: from here on every mutex operation uses atomics (the new thread reads
     // the cleared byte, written before the clone system call).
     LOCK_ALONE.store(false, Release);
-    list_insert(d);
+    {
+        let _g = LIST.lock(&CSys);
+        // The TLS block: the image, then zeros (fresh or cleared memory). The loader's area
+        // (address 0): its `tls_init` writes every module's block, the dtv and the block's dtv word
+        // (a reused mapping held an earlier thread's bytes there; no store above touches that
+        // word). Under the list lock, with the listing: a `dlopen` that adds a module walks the
+        // list under this lock (`__liella_thread_walk`), so this thread either reads the loader's
+        // table after that walk or is listed for it, and gets the module's block exactly once
+        // (DL-16d, plan/ph14/dl-16-dlopen.md §5 point 1).
+        if let Some(t) = img {
+            if t.addr == 0 {
+                let _ = ffi::liella_machine_call3(LOADER_INIT.load(Acquire), i64::from_ne_bytes(tp.to_ne_bytes()), 0, 0);
+            } else {
+                conv::copy_mapped(t.addr, base + lay.tls, t.filesz);
+            }
+        }
+        link_locked(d);
+    }
     LIVE.fetch_add(1, AcqRel);
     let r = ffi::liella_machine_clone_thread(CLONE_FLAGS, sp, &b.tid, &b.tid, tp);
     // The creator's own mask again (unchanged if blocking failed).

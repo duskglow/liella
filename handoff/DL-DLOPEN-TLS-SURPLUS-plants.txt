@@ -1,0 +1,10 @@
+# DL-DLOPEN-TLS-SURPLUS (DL-16d): plants on the static-surplus TLS of dlopen'd objects.
+# The race of a thread creation against a dlopen (the fill moved under the thread-list lock) has no
+# deterministic plant: s27_dlopen_tls_surplus's racer threads check the result whichever side wins.
+walk-skips-live-thread | crates/boundary/src/thread.rs | lit:call(tp); ==> if tp == me { call(tp); } | cargo xtask affected --only conformance:s27_dlopen_tls_surplus --with-exports --run | msg:s27_dlopen_tls_surplus: T1: line [0-9]+
+walk-no-publish | crates/boundary/src/thread.rs | lit:call(0); ==> | cargo xtask affected --only conformance:s27_dlopen_tls_surplus --with-exports --run | msg:no TLS block for this module|s27_dlopen_tls_surplus: (T2|racer): line [0-9]+
+unwind-no-rollback | crates/boundary/src/ld/dlopen.rs | lit:l.surplus.rollback(l.tls_mark); ==> | cargo xtask affected --only conformance:s27_dlopen_tls_surplus --with-exports --run | msg:attempt [0-9]+: .*cannot allocate memory in static TLS block
+place-not-recorded | crates/boundary/src/ld/dlopen.rs | lit:*s = MaybeUninit::new(o); ==> let _ = (s, o); | cargo xtask affected --only conformance:s27_dlopen_tls_surplus --with-exports --run | msg:s27_dlopen_tls_surplus: main: line [0-9]+|no TLS block for this module
+start-object-no-place | crates/boundary/src/ld/dlopen.rs | lit:let mut o = Obj { elf, dynm, bias: w[2], name: b"", tls }; ==> let mut o = Obj { elf, dynm, bias: w[2], name: b"", tls: tls.and(None) }; | cargo xtask affected --only conformance:s27_dlopen_tls_surplus --with-exports --run | msg:s27_dlopen_tls_surplus: main: line [0-9]+|no TLS block for this module
+surplus-no-remainder | crates/ld/src/tls.rs | lit:let want = m.vaddr.wrapping_neg() & mask; ==> let want = 0u64; | cargo test -p liella-ld --test tls tls_surplus | msg:alignment and p_vaddr remainder
+surplus-overlap | crates/ld/src/tls.rs | lit:d <= a || d.wrapping_sub(m.memsz) >= b ==> d <= a || d >= b | cargo test -p liella-ld --test tls tls_surplus | msg:panicked|FAILED

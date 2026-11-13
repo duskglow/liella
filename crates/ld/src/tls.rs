@@ -133,15 +133,17 @@ impl<const N: usize> Surplus<N> {
         if !align.is_power_of_two() || align > tp_align.max(1) {
             return None;
         }
-        // TP - d keeps the remainder r = p_vaddr % align when d % align == (align - r) % align.
-        let want = align.wrapping_sub(m.vaddr % align) % align;
+        // TP - d keeps the remainder r = p_vaddr mod align when d == -r (mod align); `align` is a
+        // power of two, so `mask` reduces modulo it.
+        let mask = align.wrapping_sub(1);
+        let want = m.vaddr.wrapping_neg() & mask;
         let used = self.used.get(..self.len)?;
         let free = |d: u64| used.iter().all(|&(a, b)| d <= a || d.wrapping_sub(m.memsz) >= b);
         // The nearest place starts where the surplus or a block ends (the block cannot move
         // nearer without crossing that edge).
         let at = |s: u64| -> Option<u64> {
             let min = s.checked_add(m.memsz)?;
-            let d = min.checked_add(want.wrapping_add(align).wrapping_sub(min % align) % align)?;
+            let d = min.checked_add(want.wrapping_sub(min) & mask)?;
             (d <= hi && free(d)).then_some(d)
         };
         let d = core::iter::once(lo).chain(used.iter().map(|&(_, b)| b)).filter(|&s| s >= lo).filter_map(at).min()?;

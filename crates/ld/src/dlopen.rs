@@ -4,7 +4,7 @@
 //! dlerror texts. The boundary driver (`crates/boundary/src/ld.rs`) opens, maps, relocates and runs.
 
 use crate::arch::Arch;
-use crate::elf::{et, pt, Elf, ElfError};
+use crate::elf::{et, Elf, ElfError};
 use crate::map::{self, MapError};
 
 /// `RTLD_LAZY` (`<dlfcn.h>`). Bound eagerly, like `RTLD_NOW`, until DL-20 brings lazy binding.
