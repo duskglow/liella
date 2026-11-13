@@ -1193,7 +1193,7 @@ fn map_inputs(map: &str, prefix: &str) -> Vec<(String, u64, u64)> {
         let Some(name) = f.next().filter(|n| l.starts_with(' ') && n.starts_with(prefix)) else { continue };
         let mut rest: Vec<&str> = f.collect();
         if rest.is_empty() {
-            rest = lines.get(i + 1).map(|n| n.split_whitespace().collect()).unwrap_or_default();
+            rest = lines.get(i.saturating_add(1)).map(|n| n.split_whitespace().collect()).unwrap_or_default();
         }
         if let (Some(a), Some(s)) = (rest.first().and_then(|a| hex(a)), rest.get(1).and_then(|s| hex(s))) {
             out.push((name.to_string(), a, s));
@@ -1220,14 +1220,14 @@ fn init_startup_data_pages_hold_at_every_data_phase() {
         let crt1 = if pad == 0 { root().join("target/liella/liella-crt1.o") } else { padded_crt1(&dir, region, pad) };
         let map = link_map(&dir, &crt1);
         let cluster = map_inputs(&map, ".data.rel.ro.local.liella_startup");
-        let (lo, hi) = cluster.iter().filter(|c| c.2 > 0).fold((u64::MAX, 0), |(lo, hi), c| (lo.min(c.1), hi.max(c.1 + c.2)));
+        let (lo, hi) = cluster.iter().filter(|c| c.2 > 0).fold((u64::MAX, 0), |(lo, hi), c| (lo.min(c.1), hi.max(c.1.saturating_add(c.2))));
         if lo >= hi {
             bad.push(format!("{region} {pad:#x}: no start-up relro cluster in the link"));
             continue;
         }
-        let pages = ((hi - 1) >> 12) - (lo >> 12) + 1;
+        let pages = (hi.saturating_sub(1) >> 12).saturating_sub(lo >> 12).saturating_add(1);
         eprintln!("startup pages {region} {pad:#x}: relro cluster {lo:#x}..{hi:#x}, {pages} pages, {} sections", cluster.len());
-        if lo % 4096 != 0 {
+        if lo & 0xfff != 0 {
             bad.push(format!("{region} {pad:#x}: relro cluster starts at {lo:#x}, not on a page boundary"));
         }
         spans.push((format!("{region} {pad:#x}"), pages));
@@ -1236,7 +1236,7 @@ fn init_startup_data_pages_hold_at_every_data_phase() {
             bad.push(format!("{region} {pad:#x}: heap::RESERVE_MEM not found in .lbss"));
         }
         for (name, a, _) in reserve {
-            if a % 4096 != 0 {
+            if a & 0xfff != 0 {
                 bad.push(format!("{region} {pad:#x}: {name} at {a:#x}, not on a page boundary"));
             }
         }
