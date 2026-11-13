@@ -340,7 +340,7 @@ pub fn cmd(root: &Path, args: &[String]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{differing, dir, marked_dir, marker_text, rel_in, resolve, tree_hash, Layout, Mode, GENERATED, MARKER, OUT, STAMP, TRACKED};
+    use super::{differing, dir, marked_dir, marker_text, rel_in, resolve, tree_hash, Layout, Mode, GENERATED, MARKER, OUT, STAMP, TRACE_ENV, TRACKED};
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -462,6 +462,21 @@ mod tests {
             for regen in [false, true] {
                 assert!(Layout::parse(Some(bad), regen).unwrap_err().contains("LIELLA_LAYOUT_TRACE"), "{bad} {regen}");
             }
+        }
+    }
+
+    /// LAYOUT-TRACE-DEFAULT (no spec clause: build tooling): the list tooling builds from the committed lists, so
+    /// every product build `tools/hottext/regen.sh` runs is a regen build (`--hottext-regen`) or names
+    /// `LIELLA_LAYOUT_TRACE=0`; a plain `cargo xtask so` there would trace its own layout and check nothing of the
+    /// list it just rewrote.
+    #[test]
+    fn regen_builds_never_rely_on_the_default_layout() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let sh = fs::read_to_string(root.join("tools/hottext/regen.sh")).unwrap();
+        let builds: Vec<&str> = sh.lines().filter(|l| !l.trim_start().starts_with('#') && l.contains("cargo xtask so")).collect();
+        assert!(builds.len() >= 3, "regen.sh: found {} product builds, expected the --both, --build and rewritten-list builds", builds.len());
+        for l in builds {
+            assert!(l.contains("--hottext-regen") || l.contains(&format!("{TRACE_ENV}=0 cargo xtask so")), "regen.sh builds with the default layout (trace at build): {l}");
         }
     }
 
