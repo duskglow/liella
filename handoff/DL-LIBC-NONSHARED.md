@@ -1,7 +1,15 @@
 # DL-LIBC-NONSHARED: Liella's libc_nonshared.a and installed libc.so (owner ruling #4807)
 
-**State.** Branch `task/dl-libc-nonshared` (from `origin/next`). The head is in the hand-back and in
-handoff/reports/DL-LIBC-NONSHARED.json. Jobs ran on mei, role `~/w/s3`. Decision **D-27.28** (records/decisions/D-27/D-27.28.toml).
+**State.** Branch `task/dl-libc-nonshared-2` (continuation of `task/dl-libc-nonshared`, from `origin/next`). The head
+is in the hand-back and in handoff/reports/DL-LIBC-NONSHARED-2.json. Decision **D-27.28** (records/decisions/D-27/D-27.28.toml).
+
+**DL-LIBC-NONSHARED-2 (keke, role `~/w/n2`).** The first run went red only because its hand-back named a gate job
+(`dl-libc-nonshared-gate-2`) that was never started; its `gate-3` attempt on mei left a log but no jobs.tsv row
+(it did not finish under jobrun). No code fault: clippy, `cargo xtask so` and `cargo xtask static` passed on the
+inherited head 9cf7e59f9 (jobs `dl-libc-nonshared-2-clippy-1`, `-so-1`, `-static-1`). This run changes no code; it
+reruns the proof on keke: the gate (`cargo xtask affected --base origin/next --run`, which escalates to FULL because
+`csys/nonshared/*.c` and `xtask/src/so.rs` are not mapped to a narrower tier), the plants
+(handoff/DL-LIBC-NONSHARED-2-plants.txt, the first run's three plants unchanged) and the dynamic subset tests.
 
 ## What landed
 * `csys/nonshared/{atexit,at_quick_exit,pthread_atfork,stack_chk_fail_local}.c`: one-statement members, hidden, no

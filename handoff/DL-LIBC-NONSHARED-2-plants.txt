@@ -1,0 +1,4 @@
+# DL-LIBC-NONSHARED plants (cargo xtask plants; docs/plants.md)
+ns-atexit-null | csys/nonshared/atexit.c | lit:(void *)0, __dso_handle); ==> (void *)0, (void *)0); | cargo test -p liella-boundary --test s01_startup_symbols s1_2_c_5_nonshared_archive_two_way | msg:dlclose did not run the library.s atexit handler
+ns-script-no-archive | xtask/src/so.rs | lit:GROUP ( libc.so.6 libc_nonshared.a AS_NEEDED ==> GROUP ( libc.so.6 AS_NEEDED | cargo test -p liella-boundary --test s01_startup_symbols s1_2_c_5_nonshared_archive_two_way | msg:libc_nonshared.a is not on the link line|the link against Liella.s libc.so failed
+ns-liella-version | csys/nonshared/at_quick_exit.c | lit:__asm__("__cxa_at_quick_exit") ==> __asm__("liella_heap_alloc") | cargo test -p liella-boundary --test s01_startup_symbols s1_2_c_5_nonshared_archive_two_way | msg:references a version the reference does not export
