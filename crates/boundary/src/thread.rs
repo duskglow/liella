@@ -457,6 +457,8 @@ pub(crate) fn serialized<T>(f: impl FnOnce() -> T) -> T {
 /// Visit the thread block of every listed thread, and the calling thread's if it is not listed,
 /// with the thread-list lock held (in a process that certainly has one thread, only the calling
 /// thread's, without the lock): `setlocale` storing the global locale's ctype words (D-5.5).
+/// Inlined into its keyed callers (`locale::publish_global`): no hot-text key of its own.
+#[inline(always)]
 pub(crate) fn each_block(mut f: impl FnMut(&'static liella_rt::tls::ThreadBlock)) {
     if alone() {
         return f(tb::current());

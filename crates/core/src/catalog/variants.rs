@@ -58,6 +58,8 @@ fn normalize(codeset: &[u8], out: &mut [u8; MAX_NAME]) -> usize {
 }
 
 /// Call `f` with each directory name for `locale`, most specific first, until it returns `Some`.
+/// Inlined into its callers: no hot-text key of its own.
+#[inline(always)]
 pub fn each<T>(locale: &[u8], mut f: impl FnMut(&[u8]) -> Option<T>) -> Option<T> {
     if locale.len() >= MAX_NAME || locale.contains(&b'/') {
         return None;
