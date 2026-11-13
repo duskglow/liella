@@ -1,0 +1,10 @@
+id = "D-X.86"
+section = "x"
+status = "active"
+amends = ["D-X.53"]
+story = "LAYOUT-DEADKEY-WARN"
+date = "2026-11-13"
+tests = ["xtask/src/hottext.rs::dead_key_warns_and_fails_only_under_the_promotion_flag"]
+body = '''
+**A dead hot-text key warns on branches, the gate, the plants baseline and the train; it fails only in the next->main promotion run (`LIELLA_PROMOTE=1`)** (LAYOUT-DEADKEY-WARN, 2026-11-13; owner ruling #5193 on LAYOUT-RETHINK's measurements, plan/layout-rethink.md section 3.2; amends D-X.53 (2); build policy only, no ABI or behaviour change; interim until LT-5 deletes the key lists). A key of `hot-text.list` that matches no function section of a profile's `libc.a` (in practice a function inlined into a grouped caller, harmless: its code is placed with that caller) printed a failure in `cargo xtask so` and so stopped unrelated branches, while the harmful class (newly outlined functions) is caught by the page-fault bounds and window budgets, not by the key check. Now `hottext::group` (reached by `so`, the gate, the plants baseline and `hottext-recheck`) and `hottext-repair`'s final check print one `warning: dead hot-text key <key> (<tier>) in <file>: ... <profile>-profile libc.a` line per dead key and a count line, and fail only when the environment variable `LIELLA_PROMOTE` is exactly `1`, which the coordinator's promotion run sets. The variable is read once per process (`DeadKeys::from_env`); the tests pass the mode explicitly, so they do not depend on the caller's environment (the pattern of HOTLIST-TRAIN-REGEN-4). Unchanged: a stale `hot-text.absent` line still fails everywhere; the regen build (`--hottext-regen`) still prints everything and fails on nothing; page-fault bounds, window budgets, layout contracts and the pin check (`check_pinned`) are untouched. The other key files (`startup-text.keys`, `probe-text.keys`, `startup-data.keys`) had no dead-key failure: the layout check reports their missing keys as information and fails only when every key is missing, which stays.
+'''
