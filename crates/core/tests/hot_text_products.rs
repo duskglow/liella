@@ -722,6 +722,61 @@ fn init_startup_state_statics_are_in_data1() {
     }
 }
 
+/// The kernel's fault-around window (64 KiB on the reference hosts): a static program's first text
+/// fault maps the 16 pages from the start of its executable segment.
+const FIRST_WINDOW: u64 = 0x10000;
+
+/// LAYOUT-FIRST-WINDOW (D-X pending record; #5026, #5096): the start-up group (the start file's
+/// `.text.startup*`, the start-up tier of `hot-text.list` and the keys of `hot-text.first-window`,
+/// which `cargo xtask so` links right after that tier) ends inside the first fault-around window of
+/// the probe, and `liella_sys_fstat` with it. When a 0x240-byte start-up growth moved fstat to
+/// 0x418040, one page past the window 0x408000..0x417fff, the release tool, locale, localtime and
+/// localtime_mktime probes each took one more text fault, inside their bounds' slack. Prints the
+/// margin. No spec clause (layout of the products).
+#[test]
+fn init_startup_group_ends_inside_the_first_fault_around_window() {
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = std::env::temp_dir().join(format!("liella-first-window-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let map = link_map(&dir, &r.join("target/liella/liella-crt1.o"));
+    let ph = Command::new("readelf").arg("-lW").arg(dir.join("page_faults")).output().expect("readelf -lW");
+    let _ = std::fs::remove_dir_all(&dir);
+    // `LOAD off vaddr paddr filesz memsz flags align`, flags as separate words (`R E`); the
+    // executable one starts the text mapping.
+    let seg = String::from_utf8_lossy(&ph.stdout)
+        .lines()
+        .map(|l| l.split_whitespace().collect::<Vec<_>>())
+        .find(|w| w.first() == Some(&"LOAD") && w.get(6..).is_some_and(|f| f.contains(&"E") || f.contains(&"RE")))
+        .and_then(|w| u64::from_str_radix(w[2].trim_start_matches("0x"), 16).ok())
+        .expect("no executable LOAD segment in the probe");
+    let (start, end) = (seg & !0xfff, (seg & !0xfff) + FIRST_WINDOW);
+    let list = std::fs::read_to_string(r.join("crates/libc-so/hot-text.list")).expect("hot-text.list");
+    let startup = list.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).take_while(|l| l.split('\t').nth(1) == Some("startup")).count();
+    let first = std::fs::read_to_string(r.join("crates/libc-so/hot-text.first-window")).expect("hot-text.first-window");
+    let group = startup + first.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).count();
+    // Link positions 0..group are the group (`.text.sorted.h<5 digits>.<f>`; a cluster moved to the
+    // end has 8 digits and sorts after it).
+    let position = |n: &str| n.strip_prefix(".text.sorted.h").and_then(|r| r.split_once('.')).filter(|(d, _)| d.len() == 5).and_then(|(d, _)| d.parse::<usize>().ok());
+    let inputs = text_inputs(&map);
+    let group_end = inputs.iter().filter(|(n, _, s, _)| *s > 0 && (n.starts_with(".text.startup") || position(n).is_some_and(|p| p < group))).map(|(_, a, s, _)| a + s).max().expect("no start-up group in the link map");
+    let fstat = inputs.iter().find(|(n, _, s, _)| *s > 0 && n.starts_with(".text.sorted.h") && n.ends_with(".liella_sys_fstat")).map(|(_, a, s, _)| (*a, a + s));
+    // Bytes left in the window; negative when the group ends past it.
+    let margin = i128::from(end) - i128::from(group_end);
+    eprintln!("first window {start:#x}..{end:#x}: start-up group ({group} list keys) ends {group_end:#x}, margin {margin} bytes; liella_sys_fstat {fstat:x?}");
+    const PROBES: &str = "the tool, locale, localtime and localtime_mktime probes each take one more text fault";
+    let mut bad = Vec::new();
+    if group_end > end {
+        bad.push(format!("FIRST-WINDOW margin: the start-up group ends {group_end:#x}, {} bytes past the first fault-around window {start:#x}..{end:#x}: {PROBES}; shrink the start-up text or move rarely-run functions out of the group, never raise this window", -margin));
+    }
+    match fstat {
+        None => bad.push("FIRST-WINDOW liella_sys_fstat: not in the hot group of the probe (key renamed? update crates/libc-so/hot-text.first-window)".to_string()),
+        Some((a, e)) if e > end => bad.push(format!("FIRST-WINDOW liella_sys_fstat: {a:#x}..{e:#x} ends past the first fault-around window {start:#x}..{end:#x}: {PROBES} (#5026); keep it in crates/libc-so/hot-text.first-window")),
+        Some(_) => {}
+    }
+    assert!(bad.is_empty(), "{bad:#?}");
+}
+
 /// The input sections of the `.text` output section of a GNU ld map, in address order:
 /// (name, address, size, file). A long name sits alone on its line, the rest on the next.
 fn text_inputs(map: &str) -> Vec<(String, u64, u64, String)> {
