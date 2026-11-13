@@ -40,9 +40,25 @@ fault counts in ~/work/DL-TLS-THREADS-COST/faults-{fast,release}.log). Next's ow
 
 ## Jobs (kanon)
 dl-tls-threads-cost-hot (rc 0), -percall, -percall-prev, -percall2, -percall3 (rc 0); dl-tls-threads-cost-gate2
-(clippy, static, hot-lists, fault tests both profiles, dl_tls_threads, `affected --run --base origin/next`) and
-dl-tls-threads-cost-plants (4 plants, handoff/DL-TLS-THREADS-COST-plants.txt) on the final code head.
+(final code; clippy, static rc 0, hot_text_products red, stopped before `affected --run`) and
+dl-tls-threads-cost-plants (rc 2, baseline build refused: see below).
 Superseded: dl-tls-threads-cost-gate (static red on the first record: empty `amends`, host name; fixed in 395a8a34a).
+
+## Why this run is INCOMPLETE (budget checkpoint)
+- dl-tls-threads-cost-plants: rc 2, no plant ran. This stack is based where DL-TLS-THREADS was cut (63 commits
+  behind origin/next) and does NOT have LAYOUT-DEADKEY-WARN: a plain `cargo xtask so` in the plant copy (tracked
+  lists, no target/hot-lists) still FAILS on the two dead keys (`locale::publish_global`, the `name::candidates`
+  closure) that bbe7c0530 creates.
+- dl-tls-threads-cost-gate2 (stopped by me after the failures below; clippy and static rc 0 on the final code):
+  with the fresh lists from `cargo xtask hot-lists`, `hot_text_products` fails in BOTH profiles:
+  `init_zero_fault_clusters_sit_in_one_window` (CLUSTER-WINDOW: cluster `time` at 0x43bc40..0x48991b fast,
+  0x444180..0x489a4b release, straddles a 64 KiB window) and `init_zero_fault_calls_hold_at_every_text_phase`
+  (same cluster, pre 0x800). Not established whether the fresh list alone causes it (next with fresh lists not
+  run). Logs: kanon ~/work/DL-TLS-THREADS-COST/faults-{fast,release}.log. Tool faults with fresh lists on the final head: fast 51, release 52.
+- Next step: merge origin/next into this branch (brief allowance needed: it brings LAYOUT-DEADKEY-WARN), rerun
+  `cargo xtask hot-lists`, check CLUSTER-WINDOW on next with fresh lists vs this branch, then the gate and the
+  plants file (handoff/DL-TLS-THREADS-COST-plants.txt; countcheck.sh is in kanon ~/work/DL-TLS-THREADS-COST/,
+  copy it to the repo or the new host).
 
 ## Open / RULING NEEDED
 - The hot-text lists: the coordinator's note asks for regen.sh output committed; CONTRIBUTING (HOTLIST-TRAIN-REGEN)
