@@ -184,6 +184,36 @@ pub fn cexp_route<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
     ziv(|| n::cexp(x, y, mode), || w::cexp(x, y, mode), || wx::cexp(x, y, mode), || wy::cexp(x, y, mode))
 }
 
+/// `csinh`: the quick tier of `float` and `double` ([`crate::complex_fast::sinh`],
+/// LIBM-CPLX-SINCOS) when it can prove both parts, else the 384-bit route.
+pub fn csinh<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
+    if let Some(r) = crate::complex_fast::sinh::csinh_any(x, y, mode) {
+        return r;
+    }
+    csinh_route(x, y, mode)
+}
+
+/// `csin`: the quick tier as [`csinh`] (`csinh(y + ix)` swapped), else the 384-bit route.
+pub fn csin<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
+    if let Some(r) = crate::complex_fast::sinh::csin_any(x, y, mode) {
+        return r;
+    }
+    csin_route(x, y, mode)
+}
+
+/// `csinh` by the 384-bit route and its ladder alone (the quick tier's fallback and its reference
+/// in the tests); not part of the ABI.
+#[doc(hidden)]
+pub fn csinh_route<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
+    ziv(|| n::csinh(x, y, mode), || w::csinh(x, y, mode), || wx::csinh(x, y, mode), || wy::csinh(x, y, mode))
+}
+
+/// `csin` by the 384-bit route and its ladder alone (as [`csinh_route`]).
+#[doc(hidden)]
+pub fn csin_route<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
+    ziv(|| n::csin(x, y, mode), || w::csin(x, y, mode), || wx::csin(x, y, mode), || wy::csin(x, y, mode))
+}
+
 /// `clog`: the quick tier of `float` and `double` ([`crate::complex_fast`], D-10.74) when it can
 /// prove both parts, else the 384-bit route.
 pub fn clog<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
@@ -218,12 +248,8 @@ pub fn csqrt_route<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
 ziv_fns! {
     /// `clog10`.
     clog10;
-    /// `csinh`.
-    csinh;
     /// `ccosh`.
     ccosh;
-    /// `csin`.
-    csin;
     /// `ccos`.
     ccos;
     /// `ctanh`.

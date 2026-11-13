@@ -1,0 +1,30 @@
+{
+ "task": "LIBM-CPLX-SINCOS-3",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: merged origin/next a5636ce6b; clippy and static pass, but the fast-profile product build still loses hot-text keys (catalog::textdomain, getopt::next) on this branch; stopped per the coordinator note; decline-rate causes diagnosed and the middle tier designed in the handoff",
+ "branch": "task/libm-cplx-sincos-3",
+ "head": null,
+ "gate": {
+  "affected": "not run (product build red: hot-text keys); lint job clippy+static rc 0",
+  "peak": null
+ },
+ "accepted_first_attempt": false,
+ "rulings": [
+  {
+   "item": "fast-profile hot-text keys _RNvNtC15liella_boundary7catalog10textdomain and getopt::next (CArgs, CLongs) match no function section once this branch's libm code is added (origin/next a5636ce6b alone passes CI's gate)",
+   "recommendation": "a layout story that pins every hot-text key against fat-LTO inlining (not key by key), before this branch continues"
+  }
+ ],
+ "informational": [
+  "Regime 3 (large |x|) declines are overflowing results (x > ~709.8, 5.06% of the regime), not loose bounds; regime 4 (y near k*pi/2) declines come from trig::eps's absolute 2^-89 term relative to a ~2^-30 factor; regimes 0-2 (~2^-11.7) also miss the 2^-20 target, so a middle tier is needed everywhere",
+  "libm-cplx-sincos-3-check1 (mei, rc 1) is the evidence of the hot-text red (clippy and static passed, xtask so failed); not a job on the final head"
+ ],
+ "refused": [],
+ "improvement": "the hot-text check could name the change that moved each key (e.g. a size or inline-cost diff against next) so a red build is attributed without a second product build",
+ "next_step": "after the layout fix lands: overflow answers in the tier, then the middle tier designed in the handoff, sweep rates before/after, gate, plants, percall",
+ "report_file": "handoff/libm-cplx-sincos.md",
+ "jobs": [
+  "libm-cplx-sincos-3-lint"
+ ]
+}

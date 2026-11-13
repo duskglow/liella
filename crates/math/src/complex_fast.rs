@@ -619,6 +619,10 @@ pub(crate) fn csqrt_any<F: Float>(x: F, y: F, mode: Rounding) -> Option<((F, F),
     tier_any(x, y, |a, b| csqrt(a, b, mode), |a, b| fast32::csqrtf(a, b, mode, soft_sqrt))
 }
 
+#[path = "complex_fast_sinh.rs"]
+pub mod sinh;
+pub use sinh::{csin_nearest, csinh_nearest};
+
 #[path = "complex_fast_pow.rs"]
 pub mod pow;
 
