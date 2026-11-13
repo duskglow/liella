@@ -8,3 +8,9 @@ zone-outlined | crates/legacy/src/time_compat.rs | perl:s/#\[inline\(always\)\]\
 entry-at-outlined | crates/boundary/src/zone.rs | perl:s/#\[inline\(always\)\]\n(    fn entry_at\()/#[inline(never)]\n$1/ | cargo test -p liella --test hot_text_products -- init_first_mktime_after_localtime_r_takes_no_fault | msg:first mktime after localtime_r: [0-9]+ page faults
 locpath-cached-none | crates/legacy/src/global_locale.rs | perl:s/(if let Some\(p\) = self\.locpath\.get\(\) \{\n\s+return )p;/${1}None;/ | cargo test -p liella-boundary --test s07_locale_symbols --test reload | msg:test result: FAILED|panicked at
 locpath-never-cached | crates/legacy/src/global_locale.rs | perl:s/\n        self\.locpath\.set\(Some\(p\)\);// | cargo test -p liella-boundary --test s07_locale_symbols --test reload | equivalent:the cache only saves re-reading LOCPATH within one selection (SETLOCALE-3); without it every category reads the same value and selects the same files
+# cargo xtask plants results (5 plants: 3 CAUGHT, 0 SURVIVED, 2 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# fresh-outlined: CAUGHT, caught by hot_text_products init_first_mktime_after_localtime_r_takes_no_fault
+# zone-outlined: EQUIVALENT
+# entry-at-outlined: CAUGHT, caught by hot_text_products init_first_mktime_after_localtime_r_takes_no_fault
+# locpath-cached-none: CAUGHT, caught by reload reloads_race_with_readers
+# locpath-never-cached: EQUIVALENT

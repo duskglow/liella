@@ -1,53 +1,54 @@
-# HOTTEXT-TIME-CLUSTER-STABLE: handoff
+# HOTTEXT-TIME-CLUSTER-STABLE(-2): handoff
 
-State: branch `task/hottext-time-cluster-stable` from next bc146ccec; head in handoff/reports/HOTTEXT-TIME-CLUSTER-STABLE.json.
-Build role kanon:~/w/kn1. Scratch on kanon: `~/work/HOTTEXT-TIME-CLUSTER-STABLE/` (probe-job.sh, proof-job.sh,
-measure.py = LAYOUT-STABILITY-RETHINK's with layout-check on the unpadded link of each profile only, verdict.py,
-per-tree results.jsonl under `sincos/`, `pow/`, `next/`).
+State: branch `task/hottext-time-cluster-stable-2` (stacks on `task/hottext-time-cluster-stable`), from next
+bc146ccec; head in handoff/reports/HOTTEXT-TIME-CLUSTER-STABLE-2.json. Build role mei:~/w/s2. Scratch on mei:
+`~/work/HOTTEXT-TIME-CLUSTER-STABLE-2/` (measure.py = LAYOUT-STABILITY-RETHINK's with env filters MPROFILES,
+MREGIONS, MNOANCHOR, MNOLC; summ.py; faultsym.py = a mode's perf fault addresses -> nm symbol; mjob.sh, mrel.sh,
+proof.sh; next-src = an origin/next 7ab1f35a7 tree; m-pow, m-sincos = next + libm-cplx-*-5 + this branch).
+Decisions in force: pending records HOTTEXT-TIME-CLUSTER-STABLE-1 (inline(always) on select's lock-free path) and
+HOTTEXT-TIME-CLUSTER-STABLE-2-1 (LOCPATH cache in a Cell). Rulings #5255 (item 1 dropped), #5256 (LT-1 closes the class).
 
-## Finding: the hypothesis was wrong
+## Run 1 (HOTTEXT-TIME-CLUSTER-STABLE)
 
-next merged with task/libm-cplx-sincos-5 and with task/libm-cplx-pow-5 (fast profile, before the fix):
-- every hot-text cluster boundary key present; the **time cluster byte-identical to next** (positions 271..=280,
-  10 sections, 17,130 bytes, aligned 32 KiB). Only the rebind cluster changed (16 sections, 15,406 B against
-  next's 17 / 20,654 B) and rebind stayed at 0.
-- mktime after localtime_r 1 at every pre/cold pad (`htcs-probe-sincos-fast`, `htcs-probe-pow-fast`), localtime 20,
-  localtime_r + mktime 21 (bound 20).
-- perf page-faults, pages of the mktime mode absent from the localtime mode: one address, the entry of an
-  out-of-line `liella_legacy::recheck::TscGate::fresh` instantiated for `time_compat::select`'s closure (sincos
-  0x70b640, pow 0x62cd00). The fast profile (thin LTO, 16 codegen units) stopped inlining it into `select` (a key)
-  when libm grew; the copy has no key, so it sits in cold text.
-- release profile of the same sincos tree: all `recheck` code inlined, mktime 0, localtime_r + mktime 19: passes.
-- Why a boundary cannot be the cause on next: a cluster's range comes from list positions (`parse_clusters`), not
-  from the archive, and a key missing from the archive fails the plain `so` (dead-key check, D-X.56). LAYOUT-RETHINK
-  3.2 measured with `--hottext-regen` (the check off), where executed-but-unlisted functions also rose (7 / 26).
+The libm branches' extra first-mktime fault was an out-of-line, unkeyed `TscGate::fresh` (fast profile), not a
+lost cluster boundary. Fix: `#[inline(always)]` on `TscGate::fresh`, `recheck::tsc_holds`, `Entry::zone`,
+`Glue::entry_at`, `tb::zone_entry_at`. Proof on kanon: mktime 0 at all 147 pads per profile on next+sincos-5 and
+next+pow-5.
 
-## Fix (pending record records/pending/HOTTEXT-TIME-CLUSTER-STABLE-1.toml, series D-X)
+## Run 2: htcs-gate-2's red (init_data_clusters_hold_at_every_text_phase, tool 53 at cold 0x8000, 54 elsewhere)
 
-`#[inline(always)]` on the unkeyed functions of `select`'s lock-free path: `TscGate::fresh`, `recheck::tsc_holds`,
-`time_compat::Entry::zone`, `zone::Glue::entry_at`, `tb::zone_entry_at`. Per-call counts: see the report json.
+Coordinator's first question: does origin/next give tool 53 at any pre/cold pad? **No.** mei (Skylake-SP), fast,
+19 pads per region (`htcs2-measure-next`): next tool unpadded 54; cold 54-55 (55 at 0x4000, 0x5000, 0x9000, 0xE000,
+none of the test's four pads); pre 54-56. Never 53. The branch (`htcs2-measure-branch`): cold 53-55 (53 at 0x8000,
+0x9000), test red on mei too. So not start-up jitter alone: the branch made it phase-sensitive.
 
-## Proof (both profiles, measure.py: 147 configurations per profile = orig + 6 regions x 19 pads + 2 anchors x 16)
+Cause (perf page-fault addresses, `faultsym.py`): the tool probe runs `OnceCell<Option<&[u8]>>::try_init` (core's
+out-of-line `#[cold]` first fill behind `global_locale::Files::locpath`'s `get_or_init`) in cold text, unkeyed and
+unpinnable (core code). On next it lay ~1.4 MB from `setlocale_locked` (cold too); the branch's inline set changed
+liella_legacy's codegen-unit partition and moved it 53 KiB from it, so at cold phases 0x7800-0x9000 the two shared
+one 64 KiB fault-around window (one fault fewer).
 
-| tree | fast mktime | fast lt+mktime | release mktime | release lt+mktime | three tests | layout-check |
-|---|---|---|---|---|---|---|
-| next + sincos-5 + fix (`htcs-proof-sincos`) | 0 at all | 18-19 | 0 at all | 17-19 | pass both | rc 0 both |
-| next + pow-5 + fix (`htcs-proof-pow`) | 0 at all | 18-19 | 0 at all | 17-19 | pass both | rc 0 both |
-| next + fix (`htcs-proof-next`) | see report json | | | | | |
+Fix (this run, 3c3511f8c): `Files::locpath` caches in `Cell<Option<Option<&[u8]>>>`; the fill is inlined, the probe no
+longer runs that function. Same read-once-per-selection behaviour. Not done: narrowing the inline(always) set (it
+would only reshuffle the partition; the cause is the unkeyed cold function, any liella_legacy change could move it).
 
-strings and rebind 0 in every configuration of every tree.
+| mei, Skylake-SP | fast tool unpadded | fast cold pads | fast pre pads | test's 4 cold pads | release tool |
+|---|---|---|---|---|---|
+| origin/next 7ab1f35a7 | 54 | 54-55 | 54-56 | 54 | 56 (cold 56-57, pre 54-56) |
+| branch before (2b6c7a33c) | 54 | 53-55 | 54-55 | 54 54 53 54: red | not measured |
+| branch with fix | 53 | 53-54 | 53-55 | 53 x4: pass | 56, identical to next (fill already inlined) |
 
-## Not done, with reasons (RULING NEEDED)
+mktime 0 at every pre/cold pad of every tree above (both profiles where measured). TOOL_BOUND stays 56: the release
+count is 56 (one bound for both profiles), so the fast gain cannot tighten it. INFORMATIONAL: release tool sits AT
+the bound on next (56/56) with a 57 at cold 0xC000.
 
-- Brief item 1 (fixed cluster boundaries plus a check that every boundary is fixed): not done, because the
-  boundaries were not the cause (above). The internal boundary keys (time both, rebind last, rebind-tail both,
-  float both) carry the same risk as the other ~240 unpinned keys: a loud dead-key build failure, not a silent
-  misalignment. Recommend pinning them with the #5068 batches (counts per pin), not as a special case. The brief's
-  plant (internal boundary) therefore has no test to catch it; the plants here move each always-inlined function
-  back out of line instead.
-- The class itself (a function on a 0-fault path that a codegen change outlines without a key) stays open for other
-  paths until LT-1 (trace at build) lands. Recommend raising LT-1's priority over more per-path inline rules.
+Merge proofs (coordinator: re-prove LIBM-CPLX-POW-6 / SINCOS-6 after any change; -6 branches do not exist yet, so
+-5): `htcs2-proof-pow` (e16164ecf), `htcs2-proof-sincos` (537f8d48b), both rc 0: first-mktime, lt+mktime bound,
+zero-fault phases, data-phase and tool-bound tests pass in both profiles; mktime 0 at all 39 pre/cold configurations
+per profile; fast tool 54 unpadded, cold 54-55, pre 54-56 (= next alone: the -1 seen on the branch's own base does
+not show on next + libm, not investigated); release tool 56, cold 56-57.
 
 ## Next step
 
-Coordinator: land after the jobs in the report json verify; rule on the two items above.
+Coordinator: verify the JOBS in the report json; land; unhold LIBM-CPLX-POW-6 / SINCOS-6. The class stays open
+until LT-1 (ruling #5256). Plants: handoff/HOTTEXT-TIME-CLUSTER-STABLE-2-plants.txt.
