@@ -1313,6 +1313,7 @@ fn s13_2_f_0() {
     REMOVE_AT_FILTER.set(Some(d.at("scan")));
     let mut list = null_mut();
     errno::set_raw(0);
+    // FS-ORDER: only the count and errno are checked, never which entries or their order.
     let n = x::scandir(d.c("scan").as_ptr(), Some(&mut list), Some(remove_dir_filter), None);
     REMOVE_AT_FILTER.set(None);
     assert!(n > 0 && errno::get() == 0, "scandir of a directory removed while it reads: {n} entries, errno {}", errno::get());
