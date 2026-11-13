@@ -82,28 +82,6 @@ fn compose(buf: &mut [u8], parts: &[&[u8]]) -> usize {
     n
 }
 
-#[cfg(test)]
-#[allow(clippy::indexing_slicing)]
-mod tests {
-    use super::compose;
-
-    // s27_1_c_5 (dlerror returns the text of the last failure): the text is the parts in order,
-    // NUL-terminated, cut to the buffer so the NUL always fits; an empty buffer is left alone.
-    #[test]
-    fn s27_1_c_5_compose_concatenates_and_cuts_before_the_nul() {
-        let mut b = [0xffu8; 8];
-        assert_eq!(compose(&mut b, &[b"ab", b": ", b"c"]), 5);
-        assert_eq!(&b[..6], b"ab: c\0");
-        let mut b = [0xffu8; 4];
-        assert_eq!(compose(&mut b, &[b"ab", b"cd"]), 3);
-        assert_eq!(&b, b"abc\0");
-        let mut b = [0xffu8; 1];
-        assert_eq!(compose(&mut b, &[b"x"]), 0);
-        assert_eq!(b, [0]);
-        assert_eq!(compose(&mut [], &[b"x"]), 0);
-    }
-}
-
 /// Clear the calling thread's pending text (a successful `dl*` call).
 pub fn clear() {
     let r = record(false);
@@ -124,4 +102,26 @@ pub fn take() -> usize {
     }
     flag.fill(0);
     r.wrapping_add(TEXT)
+}
+
+#[cfg(test)]
+#[allow(clippy::indexing_slicing)]
+mod tests {
+    use super::compose;
+
+    // s27_1_c_5 (dlerror returns the text of the last failure): the text is the parts in order,
+    // NUL-terminated, cut to the buffer so the NUL always fits; an empty buffer is left alone.
+    #[test]
+    fn s27_1_c_5_compose_concatenates_and_cuts_before_the_nul() {
+        let mut b = [0xffu8; 8];
+        assert_eq!(compose(&mut b, &[b"ab", b": ", b"c"]), 5);
+        assert_eq!(&b[..6], b"ab: c\0");
+        let mut b = [0xffu8; 4];
+        assert_eq!(compose(&mut b, &[b"ab", b"cd"]), 3);
+        assert_eq!(&b, b"abc\0");
+        let mut b = [0xffu8; 1];
+        assert_eq!(compose(&mut b, &[b"x"]), 0);
+        assert_eq!(b, [0]);
+        assert_eq!(compose(&mut [], &[b"x"]), 0);
+    }
 }
