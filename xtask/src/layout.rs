@@ -1003,9 +1003,28 @@ fn decision_ids(root: &Path) -> Result<BTreeSet<String>, String> {
     Ok(out)
 }
 
-/// Whether `changed` holds a decision change (a file under one of `DECISION_DIRS`).
+/// Where a new record waits for the id the coordinator assigns (D-X.55); CI holds the branch until then.
+const PENDING_DIR: &str = "records/pending/";
+
+/// Whether `changed` holds a decision change: a file under one of `DECISION_DIRS`, or a pending decision record
+/// under `PENDING_DIR` (`rule_d_inputs` keeps only the pending records that are decisions, see
+/// [`pending_is_decision`]).
 fn decision_change(changed: &[String]) -> bool {
-    changed.iter().any(|f| DECISION_DIRS.iter().any(|d| f.starts_with(d)))
+    changed.iter().any(|f| DECISION_DIRS.iter().any(|d| f.starts_with(d)) || f.starts_with(PENDING_DIR))
+}
+
+/// Whether a pending record's text is a decision record: its `id` names a D-id (`D-NEW` or a reserved one), not
+/// a compatibility flag or a saturation claim.
+fn pending_is_decision(text: &str) -> bool {
+    text.lines().any(|l| {
+        l.strip_prefix("id").map(str::trim_start).and_then(|r| r.strip_prefix('=')).is_some_and(|v| v.trim_start().starts_with("\"D-"))
+    })
+}
+
+/// `changed` without the pending records that are not decision records (`read` gives a file's text; a pending
+/// record that is gone or unreadable is dropped too).
+fn keep_pending_decisions(changed: Vec<String>, read: impl Fn(&str) -> Option<String>) -> Vec<String> {
+    changed.into_iter().filter(|f| !f.starts_with(PENDING_DIR) || read(f).is_some_and(|t| pending_is_decision(&t))).collect()
 }
 
 /// The rows' own problems: kind known, D-row present.
@@ -1099,9 +1118,11 @@ fn git(root: &Path, args: &[&str]) -> Option<String> {
 }
 
 /// The base the branch is compared with, as `affected` does: `origin/next` where it exists, else `origin/main`.
+/// A changed pending record stays in the list only when it is a decision record (one that is gone or unreadable
+/// does not count).
 fn rule_d_inputs(root: &Path) -> Result<(Vec<String>, Option<Vec<Contract>>), String> {
     let base = if git(root, &["rev-parse", "--verify", "--quiet", "origin/next"]).is_some() { "origin/next" } else { "origin/main" };
-    let changed = crate::affected::changed_files(root, base)?;
+    let changed = keep_pending_decisions(crate::affected::changed_files(root, base)?, |f| std::fs::read_to_string(root.join(f)).ok());
     if !changed.iter().any(|f| f == MANIFEST) {
         return Ok((changed, Some(Vec::new())));
     }
@@ -1213,10 +1234,34 @@ mod tests {
         assert!(rule_d(&rec, Some(&base), &loosened).is_empty(), "with a decision record change (D-X.55)");
         let near = vec![MANIFEST.to_string(), "records/compat/COMPAT-1.toml".to_string()];
         assert_eq!(rule_d(&near, Some(&base), &loosened).len(), 1, "another record is not a decision change");
+        let pend = vec![MANIFEST.to_string(), "records/pending/STORY-1.toml".to_string()];
+        assert!(rule_d(&pend, Some(&base), &loosened).is_empty(), "with a pending decision record (D-X.55)");
+        assert!(rule_d(&pend, None, &loosened).is_empty(), "a pending decision record in a tree without history");
         assert!(rule_d(&other, Some(&base), &loosened).is_empty(), "the manifest did not change");
         assert!(rule_d(&m, Some(&base), &[a.clone(), b.clone(), row("C", "align=8")]).is_empty(), "an added row");
         assert!(rule_d(&m, Some(&[]), &base).is_empty(), "a new manifest");
         assert_eq!(rule_d(&m, None, &base).len(), 1, "unknown base: the change needs a decision change");
+    }
+
+    #[test]
+    fn only_a_pending_decision_record_counts_as_a_decision_change() {
+        // no spec clause: tooling (D-X.48 rule d with D-X.55's pending records).
+        assert!(pending_is_decision("id = \"D-NEW\"\nseries = \"D-X\"\n"));
+        assert!(pending_is_decision("id=\"D-X.90\"\n"));
+        assert!(!pending_is_decision("id = \"COMPAT-NEW\"\ndecisions = [\"D-X.48\"]\n"), "a compatibility flag");
+        assert!(!pending_is_decision("id = \"SR-NEW\"\n"), "a saturation claim");
+        assert!(!pending_is_decision("ids = \"D-NEW\"\n"), "another key");
+        assert!(!pending_is_decision("id = \"SR-NEW\"\nbody = '''\n  id = \"D-NEW\" quoted\n'''\n"), "an indented line of the body");
+        let read = |f: &str| match f {
+            "records/pending/A-1.toml" => Some("id = \"D-NEW\"\n".to_string()),
+            "records/pending/A-2.toml" => Some("id = \"COMPAT-NEW\"\n".to_string()),
+            _ => None,
+        };
+        let changed = ["layout/contracts.tsv", "records/pending/A-1.toml", "records/pending/A-2.toml", "records/pending/gone.toml"];
+        let kept = keep_pending_decisions(changed.iter().map(|s| s.to_string()).collect(), read);
+        assert_eq!(kept, ["layout/contracts.tsv", "records/pending/A-1.toml"], "other files stay; only the pending decision record is kept");
+        let compat_only = keep_pending_decisions(vec![MANIFEST.to_string(), "records/pending/A-2.toml".to_string()], read);
+        assert_eq!(rule_d(&compat_only, None, &[]).len(), 1, "a pending compatibility flag is no decision change");
     }
 
     #[test]

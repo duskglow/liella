@@ -11,3 +11,10 @@ ltd-regen-unset | xtask/src/hotlists.rs | lit:"" if regen => return Ok(Layout::C
 ltd-regen-explicit | xtask/src/hotlists.rs | lit:if regen && layout != Layout::Committed { ==> if false && layout != Layout::Committed { | cargo test -p xtask layout_switch_defaults_to_the_trace_and_is_strict | msg:layout_switch_defaults_to_the_trace_and_is_strict \.\.\. FAILED
 # regen.sh's check of the rewritten list builds with the default (it would trace and check nothing of that list).
 ltd-regen-rebuild-default | tools/hottext/regen.sh | lit:(cd "$T" && LIELLA_LAYOUT_TRACE=0 cargo xtask so) ==> (cd "$T" && cargo xtask so) | cargo test -p xtask regen_builds_never_rely_on_the_default_layout | msg:regen\.sh builds with the default layout
+# LAYOUT-TRACE-DEFAULT-2: layout rule d counts a pending decision record (records/pending/, D-X.55) as a decision change.
+# A pending decision record no longer counts.
+ltd-pending-dir | xtask/src/layout.rs | lit:f.starts_with(d)) || f.starts_with(PENDING_DIR)) ==> f.starts_with(d))) | cargo test -p xtask layout::tests | msg:with a pending decision record
+# Any pending record with a quoted id counts as a decision (a compatibility flag or saturation claim too).
+ltd-pending-any-id | xtask/src/layout.rs | lit:starts_with("\"D-") ==> starts_with("\"") | cargo test -p xtask layout::tests | msg:a compatibility flag
+# The filter keeps every pending record, decision or not.
+ltd-pending-filter | xtask/src/layout.rs | lit:!f.starts_with(PENDING_DIR) || read(f) ==> true || read(f) | cargo test -p xtask layout::tests | msg:only the pending decision record is kept
