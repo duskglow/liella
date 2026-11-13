@@ -132,7 +132,10 @@ count() {
                 awk '/^# TOTAL:/ { t += $3 } /^# PASS:/ { p += $3 } /^# FAIL:/ { f += $3 } /^# SKIP:/ { s += $3 }
                      /^# XFAIL:/ { x += $3 } /^# ERROR:/ { e += $3 } /^# XPASS:/ { f += $3 }
                      END { print t + 0, p + 0, f + 0, s + 0, x + 0, e + 0 }' > "$out"
-            grep -E '^(FAIL|ERROR|XPASS): ' "$log" | sort -u > "$out.failed" ;;
+            grep -E '^(FAIL|ERROR|XPASS): ' "$log" | sort -u > "$out.failed"
+            # Each test's result from its .trs file, to compare the two builds test by test.
+            (cd "$dir" && find . -name '*.trs' | sort | while IFS= read -r f; do
+                printf '%s %s\n' "$f" "$(sed -n 's/^:test-result: //p' "$f" | sed -n 1p)"; done) > "$out.results" ;;
         gawk)
             n=$(sed -n 's/^\([0-9][0-9]*\) TESTS* FAILED.*/\1/p' "$log" | tail -1)
             t=$(grep -c '^[a-zA-Z0-9_]*$' "$log")
@@ -273,6 +276,11 @@ for p in $progs; do
         sort -u "$work/results/$p.liella.count.failed" | comm -13 "$work/results/$p.g.tmp" - > "$work/results/$p.liella-only.failed"
         rm -f "$work/results/$p.g.tmp"
         echo "smoke: $p: $(wc -l < "$work/results/$p.liella-only.failed") failure(s) on Liella only ($work/results/$p.liella-only.failed)"
+    fi
+    if [ -f "$work/results/$p.glibc.count.results" ] && [ -f "$work/results/$p.liella.count.results" ]; then
+        join "$work/results/$p.glibc.count.results" "$work/results/$p.liella.count.results" | awk '$2 != $3' \
+            > "$work/results/$p.differ"
+        echo "smoke: $p: $(wc -l < "$work/results/$p.differ") test(s) with another result on Liella (test, reference, Liella: $work/results/$p.differ)"
     fi
 done
 [ $bad -eq 0 ] || echo "smoke: FAIL: a Liella build produced an object not linked against Liella (see results/*.check.log)"

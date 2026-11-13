@@ -72,18 +72,19 @@ gawk_build() {
     ./configure --disable-nls --without-readline --without-mpfr --disable-extensions &&
         make -j"$J" SUBDIRS="support ."
 }
-gawk_test() { make check SUBDIRS="support ."; }
+gawk_test() { make check SUBDIRS="support . test"; }
 
-# make-dfsg: Debian removes doc/ and regenerates configure without it; without autotools on the host the
+# make-dfsg: Debian removes doc/ (the manual and make.1) and regenerates configure without it; without autotools on the host the
 # shipped configure still lists doc/Makefile, so the build gives it an empty one (a harness step, not a
 # change to the program).
 make_src=make-dfsg
 make_kind=make
 make_build() {
     [ -f doc/Makefile.in ] || { mkdir -p doc && printf 'all check install clean distclean:\n' > doc/Makefile.in; }
-    ./configure --disable-nls --without-guile && make -j"$J"
+    ./configure --disable-nls --without-guile && make -j"$J" make
 }
-make_test() { make check; }
+# The regression suite alone (`check` also wants the manual page, which the dfsg source does not have).
+make_test() { make check-local; }
 
 bash_src=bash
 bash_kind=bash

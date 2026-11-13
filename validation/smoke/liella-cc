@@ -46,8 +46,9 @@ fi
 if [ $cxx = yes ]; then
     set -- "$@" -Wl,-Bstatic -lstdc++ -Wl,-Bdynamic -lm
 fi
+# `-x none`: a `-x LANG` among the program's arguments (`-xc -`) must not make the libc.so script a source.
 if [ $mode = dynamic ]; then
     exec "$cc" -nodefaultlibs -L"$sys" "-Wl,--dynamic-linker=$ldso" "$@" \
-        -Wl,--start-group "$sys/libc.so" -lgcc -lgcc_eh -Wl,--end-group
+        -x none -Wl,--start-group "$sys/libc.so" -lgcc -lgcc_eh -Wl,--end-group
 fi
-exec "$cc" -nodefaultlibs -L"$sys" "$@" -Wl,--start-group "$sys/libc.so" -lgcc -lgcc_eh -Wl,--end-group
+exec "$cc" -nodefaultlibs -L"$sys" "$@" -x none -Wl,--start-group "$sys/libc.so" -lgcc -lgcc_eh -Wl,--end-group
