@@ -4,7 +4,7 @@
  "tokens": null,
  "result": "COMPLETE: next (trace-at-build) merged; init_data_clusters_hold_at_every_text_phase passes in fast (tool 50 every pad) and release (tool 49); the gate's one red (s27_dynlink_helper_dlsym pending on this story, now passing) fixed by dropping its pending mark; conformance 134/0",
  "branch": "task/dl-dlsym-4",
- "head": null,
+ "head": "c57cdd977",
  "gate": {
   "affected": "11734 passed / 0 failed + conformance 133/1 on 1a8066d41 (s27_dynlink_helper_dlsym pending mark, fixed); conformance 134 passed / 0 failed on c57cdd977",
   "peak": "16G"
