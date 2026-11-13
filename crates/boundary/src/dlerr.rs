@@ -8,7 +8,8 @@
 //! clears it too, tools/probe/dl/gaps), and `dlerror` returns it once. The returned string stays
 //! valid until the thread's next failure or its exit (longer than dlopen(3) promises). Releasing the
 //! record at thread exit is DL-15's thread-exit hook. When the mapping cannot be made the failure
-//! has no text (`dlerror` returns NULL), the only way the record can be missing.
+//! has no text (`dlerror` returns NULL), the only way the record can be missing. This module names
+//! no liella-ld item (see `compose`).
 
 use crate::{conv, raw, tb};
 use core::sync::atomic::Ordering::Relaxed;
@@ -53,8 +54,54 @@ pub fn set(parts: &[&[u8]]) {
         return;
     }
     let (flag, text) = bytes(r).split_at_mut(TEXT);
-    liella_ld::dlopen::compose(text, parts);
+    compose(text, parts);
     flag.copy_from_slice(&1u64.to_ne_bytes());
+}
+
+/// Write `parts` one after another into `buf`, cut to leave room for the NUL written after them:
+/// the length written (without the NUL). An empty `buf` gets nothing. Kept here, not in liella-ld:
+/// this module is built in every boundary build, and a liella-ld edge from it would tie
+/// liella-math's tests (boundary with `selftest`) to every loader change (xtask affected).
+fn compose(buf: &mut [u8], parts: &[&[u8]]) -> usize {
+    let room = buf.len().saturating_sub(1);
+    let mut n = 0usize;
+    for part in parts {
+        for &b in *part {
+            if n >= room {
+                break;
+            }
+            if let Some(slot) = buf.get_mut(n) {
+                *slot = b;
+            }
+            n = n.saturating_add(1);
+        }
+    }
+    if let Some(slot) = buf.get_mut(n) {
+        *slot = 0;
+    }
+    n
+}
+
+#[cfg(test)]
+#[allow(clippy::indexing_slicing)]
+mod tests {
+    use super::compose;
+
+    // s27_1_c_5 (dlerror returns the text of the last failure): the text is the parts in order,
+    // NUL-terminated, cut to the buffer so the NUL always fits; an empty buffer is left alone.
+    #[test]
+    fn s27_1_c_5_compose_concatenates_and_cuts_before_the_nul() {
+        let mut b = [0xffu8; 8];
+        assert_eq!(compose(&mut b, &[b"ab", b": ", b"c"]), 5);
+        assert_eq!(&b[..6], b"ab: c\0");
+        let mut b = [0xffu8; 4];
+        assert_eq!(compose(&mut b, &[b"ab", b"cd"]), 3);
+        assert_eq!(&b, b"abc\0");
+        let mut b = [0xffu8; 1];
+        assert_eq!(compose(&mut b, &[b"x"]), 0);
+        assert_eq!(b, [0]);
+        assert_eq!(compose(&mut [], &[b"x"]), 0);
+    }
 }
 
 /// Clear the calling thread's pending text (a successful `dl*` call).

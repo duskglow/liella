@@ -245,28 +245,6 @@ pub fn reopen(opens: u32) -> (u32, bool) {
     }
 }
 
-/// Write `parts` one after another into `buf`, cut to leave room for the NUL written after them:
-/// the length written (without the NUL). An empty `buf` gets nothing.
-pub fn compose(buf: &mut [u8], parts: &[&[u8]]) -> usize {
-    let room = buf.len().saturating_sub(1);
-    let mut n = 0usize;
-    for part in parts {
-        for &b in *part {
-            if n >= room {
-                break;
-            }
-            if let Some(slot) = buf.get_mut(n) {
-                *slot = b;
-            }
-            n = n.saturating_add(1);
-        }
-    }
-    if let Some(slot) = buf.get_mut(n) {
-        *slot = 0;
-    }
-    n
-}
-
 /// Whether `name` is a bare name (no `/`): matched against the loaded objects' `DT_SONAME` before
 /// any search (P-2), never against their file names.
 pub fn bare(name: &[u8]) -> bool {
