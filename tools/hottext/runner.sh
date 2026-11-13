@@ -6,13 +6,26 @@
 hot_jobs_max=${HOTTEXT_JOBS:-$(nproc)}
 
 run_traced() { # <names out> <log> <env assignment>... -- <program> <args...>: started in the background
+    # LAYOUT-TRACE-HOST-CANONICAL: HOT_TEXT_* assignments go to the tracer; every other NAME=value is the
+    # program's whole environment (trace_gdb.py HOT_TEXT_ENV_*): nothing of the caller's reaches it.
     local out=$1 log=$2; shift 2
     local envs=()
-    while [ "$1" != -- ]; do envs+=("$1"); shift; done
+    while [ "$1" != -- ]; do
+        case $1 in HOT_TEXT_*=*) envs+=("$1");; *=*) envs+=("HOT_TEXT_ENV_$1");; *) echo "run_traced: not an assignment: $1" >&2; return 1;; esac
+        shift
+    done
     shift
     while [ "$(jobs -rp | wc -l)" -ge "$hot_jobs_max" ]; do wait -n || true; done
+    # The tree's data files (canon_host.sh) when the caller prepared them (canon_prepare).
     # shellcheck disable=SC2086
-    ( rc=0; env "${envs[@]}" HOT_TEXT_OUT="$out" timeout 900 ${HOTTEXT_GDB:-gdb} -nx -batch -x "$here/trace_gdb.py" --args "$@" > "$log" 2>&1 || rc=$?; echo $rc > "$log.rc" ) &
+    ( rc=0; env "${envs[@]}" HOT_TEXT_REDIRECT="${hot_redirect:-}" HOT_TEXT_OUT="$out" timeout 900 ${HOTTEXT_GDB:-gdb} -nx -batch -x "$here/trace_gdb.py" --args "$@" > "$log" 2>&1 || rc=$?; echo $rc > "$log.rc" ) &
+}
+
+canon_prepare() { # the tree's data files for this run's traces, in $work/hostdata (canon_host.sh)
+    local o
+    o=$(bash "$here/canon_host.sh" "$work/hostdata") || exit 1
+    printf '%s\n' "$o" | sed '$d'
+    hot_redirect=$(printf '%s\n' "$o" | tail -1)
 }
 
 trace_tagged() { # <tier> <env assignment>... -- <program> <args...>: run_traced into names.<n> (n: the

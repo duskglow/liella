@@ -101,12 +101,12 @@ Other crates: abi, boundary, core, kernel, ld, ld-so, legacy, libc-so, libm-so, 
 | `/sys/devices/system/cpu` | crates/core/src/system.rs:351 |
 | `/sys/devices/system/cpu/online` | crates/core/src/system.rs:331 |
 | `/usr/` | crates/core/src/catalog/xopen.rs:197 |
-| `/usr/bin/ls` | crates/rt/src/start.rs:492 |
+| `/usr/bin/ls` | crates/rt/src/start.rs:505 |
 | `/usr/bin/prog` | crates/legacy/src/argp.rs:72 |
-| `/usr/lib` | crates/ld/src/arch.rs:305 |
+| `/usr/lib` | crates/ld/src/arch.rs:317 |
 | `/usr/lib/locale` | crates/core/src/locale/mod.rs:533 |
 | `/usr/lib/locale/locale-archive` | crates/core/src/locale/mod.rs:535 |
-| `/usr/lib/x86_64-linux-gnu` | crates/ld/src/arch.rs:305 |
+| `/usr/lib/x86_64-linux-gnu` | crates/ld/src/arch.rs:317 |
 | `/usr/share/i18n/charmaps/` | crates/legacy/src/global_locale.rs:96 |
 | `/usr/share/locale` | crates/legacy/src/intl.rs:62 |
 | `/usr/share/locale-langpack` | crates/legacy/src/intl.rs:66 |
