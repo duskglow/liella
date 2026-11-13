@@ -1352,8 +1352,8 @@ thread_local! {
 /// read (its files first).
 extern "C" fn remove_dir_filter(_e: *const core::ffi::c_void) -> c_int {
     if let Some(p) = REMOVE_AT_FILTER.take() {
-        for f in std::fs::read_dir(&p).unwrap() {
-            std::fs::remove_file(f.unwrap().path()).unwrap();
+        for n in ["f0", "f1", "f2"] {
+            std::fs::remove_file(p.join(n)).unwrap();
         }
         std::fs::remove_dir(&p).unwrap();
     }
