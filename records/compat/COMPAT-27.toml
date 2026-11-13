@@ -1,4 +1,4 @@
-id = "COMPAT-NEW"
+id = "COMPAT-27"
 behaviour = "`newlocale` returning `NULL` for an unknown locale name (§7.3, `s7_3_f_0`; D-7.17, NEWLOCALE-ENOENT-ROW, ruling #5424)"
 glibc = "`NULL` is returned with `errno` left 0 in some rows: an unknown name loaded into a base, and `\"\"` with an environment naming an unknown locale (probe rows in `spec/behaviour/newlocale-mask.md`, `newlocale-mask.glibc.txt`)"
 liella = "`NULL` with `errno` set to `ENOENT` in every such row (POSIX `newlocale`: `ENOENT` when the locale data is not available)"
