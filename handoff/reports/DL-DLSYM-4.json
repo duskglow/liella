@@ -1,0 +1,55 @@
+{
+ "task": "DL-DLSYM-4",
+ "model": "opus",
+ "tokens": null,
+ "result": "COMPLETE: next (trace-at-build) merged; init_data_clusters_hold_at_every_text_phase passes in fast (tool 50 every pad) and release (tool 49); the gate's one red (s27_dynlink_helper_dlsym pending on this story, now passing) fixed by dropping its pending mark; conformance 134/0",
+ "branch": "task/dl-dlsym-4",
+ "head": null,
+ "gate": {
+  "affected": "11734 passed / 0 failed + conformance 133/1 on 1a8066d41 (s27_dynlink_helper_dlsym pending mark, fixed); conformance 134 passed / 0 failed on c57cdd977",
+  "peak": "16G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "the gate escalates to FULL on every run of this branch (dl.S, compat_aliases.S, xtask/src/compat.rs carry the dlsym/dlvsym exports)",
+  "superseded: shiki dl-dlsym-4-lint (clippy on the bare merge: E0599 syms_upto, fixed in 1a8066d41)",
+  "superseded: shiki dl-dlsym-4-gate (FULL, rc 1 only for the stale PENDING-LIELLA: DL-16b mark of s27_dynlink_helper_dlsym; all 11734 tests passed)"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "unblock",
+   "what": "dlsym/dlvsym in ld.so (DL-16b) ready to land; enables DL-16c (lock-free readers) and DL-17 (dlclose)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  },
+  {
+   "kind": "faults",
+   "what": "init_data_clusters_hold_at_every_text_phase tool probe, fast profile, worst pad (run 3 vs this merged head; mostly next's trace-at-build)",
+   "before": 54,
+   "after": 50,
+   "unit": "minor faults",
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "s27_dynlink_helper_dlsym runs as a full conformance program on Liella (was pending)",
+   "before": 0,
+   "after": 1,
+   "unit": "programs",
+   "measured": true
+  }
+ ],
+ "improvement": "a held story whose release condition is a landing could be resumed with the merge and the named test pre-run by the dispatcher; this run was 2 jobs of real work behind a FULL gate it cannot avoid",
+ "next_step": "land; then DL-16c (lock-free dlsym readers), DL-17 (dlclose, makes the unique pin testable), the growable object table story (#5351)",
+ "report_file": "handoff/DL-DLSYM-4-report.md",
+ "jobs": [
+  "dl-dlsym-4-lint3",
+  "dl-dlsym-4-layout-release",
+  "dl-dlsym-4-layout-fast",
+  "dl-dlsym-4-conformance"
+ ]
+}
