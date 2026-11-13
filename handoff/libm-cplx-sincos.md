@@ -48,4 +48,6 @@ Same for csin. Target <= 2^-20 declines in every regime: met (0 of 10^6).
 3. ccos/ccosh on the shared kernel (ccos(z) = ccosh(iz)); abs(t) < 2^-30 and >= 2^20 in the tier; FMA build.
 
 Do not redo: the quick-tier design and its bounds, the middle tier and overflow step, run 3's diagnosis.
-Plants: handoff/LIBM-CPLX-SINCOS-4-plants.txt (9, job libm-cplx-sincos-4-plants2) plus handoff/LIBM-CPLX-SINCOS-2-plants.txt.
+Plants: handoff/LIBM-CPLX-SINCOS-4-plants.txt (9 plants, written, NOT RUN): libm-cplx-sincos-4-plants3 (rc 2) stopped at
+its baseline `cargo xtask so` on the same hot-text key; the tool has no lib-only mode. Run it (and the -2 file) once
+`so` builds. Earlier tries: plants (a `|` in a replacement: refused), plants2 (records body newline). Records check: ok.
