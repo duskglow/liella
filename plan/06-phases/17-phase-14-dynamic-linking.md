@@ -185,7 +185,8 @@ Implementation:
     `_dynamic` as fixed-name primitives, with the register convention in the file header.
 20. **DL-16 `DL-DLOPEN`** (M, after DL-14). `dlopen`/`dlsym`/`dlvsym`/`dlerror`, all `RTLD_*`
     modes, `dlopen(NULL)`, `RTLD_DEFAULT`/`RTLD_NEXT`, unique symbols; no unloading yet. Proof:
-    s27_1_c_1*, c_3, c_5, f_0 clause tests; dlerror texts equal DL-0b's.
+    s27_1_c_1*, c_3, c_5, f_0 clause tests; dlerror texts equal DL-0b's. Plan and story split:
+    `plan/ph14/dl-16-dlopen.md` (DL-16P, DL-16H, DL-16a..d; `dlopen` in static programs is the later DL-16S).
 21. **DL-17 `DL-DLCLOSE-RCU`** (M, after DL-16, HIGH). Reference counts, `dlclose` with
     destructors and unmapping, the RCU snapshot and grace period, `dl_iterate_phdr` and
     `_dl_find_object` over the live list (replacing D-27.4/D-27.5 for dynamic programs), the

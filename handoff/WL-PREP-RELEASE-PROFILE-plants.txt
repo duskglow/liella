@@ -1,0 +1,12 @@
+# WL-PREP-RELEASE-PROFILE plants (cargo xtask plants; format docs/plants.md).
+# no-switch: the products are built without the release switch (plain `cargo xtask so`, the fast profile): the build's
+#   .profile marker says fast and the release build is refused.
+wlrp-no-switch | validation/wl_lock.sh | lit:LIELLA_FULL_PROFILE=$full bash -lc ==> bash -lc | bash validation/wl_lock_test.sh | msg:FAIL release build of a sha with a legacy fast cache \(rc\): expected \[0\] got \[[0-9]+\]
+# sha-key: the cache is keyed by sha only, so the old fast set under <sha> is found for release: the profile check refuses it.
+wlrp-sha-key | validation/wl_lock.sh | lit:then echo "$1-release"; else echo "$1"; fi ==> then echo "$1"; else echo "$1"; fi | bash validation/wl_lock_test.sh | msg:FAIL release build of a sha with a legacy fast cache \(rc\): expected \[0\] got \[[0-9]+\]
+# no-cache-check: a cached set is used whatever its marker says: a fast set under a release key is taken for release.
+wlrp-no-cache-check | validation/wl_lock.sh | lit:[ "$m" = "$p" ] && return 0 ==> return 0 | bash validation/wl_lock_test.sh | msg:FAIL fast set under a release key refused \(rc\): expected \[1\] got \[[0-9]+\]
+# no-build-check: a build that left the other profile's products is cached anyway.
+wlrp-no-build-check | validation/wl_lock.sh | lit:echo "wl: $sha: the build left products of profile '$m' in $t, this run wants $p" >&2; return 1; } ==> true; } | bash validation/wl_lock_test.sh | msg:FAIL build that left fast products refused \(rc\): expected \[1\] got \[[0-9]+\]
+# unmapped: wl_lock.sh loses its self-test row in affected, so a change to it would select nothing.
+wlrp-unmapped | xtask/src/affected.rs | lit:    ("validation/wl_lock.sh", &[VALIDATION_LOCK_TEST]), ==> | cargo test -p xtask every_validation_wl_script_is_mapped | msg:every_validation_wl_script_is_mapped.*(FAILED|panicked)|wl_lock\.sh: no covering self-test

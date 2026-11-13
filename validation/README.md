@@ -558,11 +558,13 @@ is the caller's job; the queue is `jobrun`. From a developer's role directory (s
     ~/bin/jobrun <label> count -- sh -c 'cd ~/w/<role> && bash validation/wl_trace.sh . strcoll_short strcoll'
 
 * **No git needed.** A role directory has no `.git`, only the marker `.synced`. The revision (the cache key under
-  `~/wl/{src,products,percall,count}/<rev>`) is `--rev REV`, else the marker's `head=`, else `unknown` (a run of its own,
+  `~/wl/src/<rev>`, and `~/wl/{products,kit,percall,count}/<rev>-release` for the products of the shipped release
+  profile, `LIELLA_FULL_PROFILE=1`; `WL_PROFILE=fast` builds and reads the fast test profile under the old key `<rev>`;
+  `wl_key` in `validation/wl_lock.sh`) is `--rev REV`, else the marker's `head=`, else `unknown` (a run of its own,
   never cached across runs, never an error). A tree the marker calls dirty (`tree=...-<hash>`) is refused unless `--rev`
   names it. The role tree itself is copied to `~/wl/src/<rev>` (not `target/`, `.git`, the marker files).
 * **Base without git.** The base column needs the base's source or products on the host already:
-  `--base <full sha>` with `~/wl/src/<sha>` or `~/wl/products/<sha>` present (any earlier run from a git checkout leaves
+  `--base <full sha>` with `~/wl/src/<sha>` or `~/wl/products/<sha>-release` present (any earlier run from a git checkout leaves
   them). wl_percall without `--base` drops the base column; wl_count needs `--base` (exit 2 otherwise). In a git worktree,
   or with a rev of the repository you run in, the old behaviour (merge-base with origin/next, `git archive`) is unchanged.
 * `--nowait` is accepted and ignored (jobrun detaches). The tool's stdout is the result (the same tables as before);

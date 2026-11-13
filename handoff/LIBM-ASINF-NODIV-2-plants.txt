@@ -1,0 +1,12 @@
+# LIBM-ASINF-NODIV (D-10.103) plants: cargo xtask plants handoff/LIBM-ASINF-NODIV-plants.txt --dir <RAM dir>
+asin-coeff | crates/math/src/coeffs/fast32_asin.rs | lit:0x3f96e970285ab49c ==> 0x3f96e970385ab49c | LIELLA_SWEEP_STRIDE=3 cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored math_asinf_onepass_sweep | msg:asinf differs from the envelope
+atan32-coeff | crates/math/src/coeffs/fast32_atan32.rs | lit:0x3fc99999997a1a68 ==> 0x3fc9a999997a1a68 | cargo test -p liella-math --release --lib -- fast32::tests::inverse_trig_onepass | msg:onepass bound: atan\(0x[0-9a-f]+\)
+split-up | crates/math/src/fast32/inv_trig.rs | lit:const ASIN_SPLIT: u32 = 0x3f00_0000; ==> const ASIN_SPLIT: u32 = 0x3f20_0000; | cargo test -p liella-math --release --lib -- fast32::tests::inverse_trig_onepass | msg:onepass bound: a(sin|cos)\(0x[0-9a-f]+\): -?[0-9]+
+split-down | crates/math/src/fast32/inv_trig.rs | lit:const ASIN_SPLIT: u32 = 0x3f00_0000; ==> const ASIN_SPLIT: u32 = 0x3ee0_0000; | cargo test -p liella-math --release --lib -- fast32::tests::inverse_trig_onepass | msg:onepass bound: a(sin|cos)\(0x[0-9a-f]+\): -?[0-9]+
+atan-table-short | crates/math/src/fast32/inv_trig.rs | lit:let j = if k < ATAN_RECIP_J.len() { ==> let j = if k < 128 { | cargo test -p liella-math --release --lib -- fast32::tests::inverse_trig_onepass | msg:onepass bound: atan\(0x[0-9a-f]+\)
+# cargo xtask plants results (5 plants: 5 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# asin-coeff: CAUGHT, caught by s10_math_symbols math_asinf_onepass_sweep
+# atan32-coeff: CAUGHT, caught by liella_math fast32::tests::inverse_trig_onepass_kernels_are_within_their_bound
+# split-up: CAUGHT, caught by liella_math fast32::tests::inverse_trig_onepass_kernels_are_within_their_bound
+# split-down: CAUGHT, caught by liella_math fast32::tests::inverse_trig_onepass_kernels_are_within_their_bound
+# atan-table-short: CAUGHT, caught by liella_math fast32::tests::inverse_trig_onepass_kernels_are_within_their_bound

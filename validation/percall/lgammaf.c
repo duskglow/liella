@@ -24,6 +24,12 @@ static float lg_r(float x) { int s; float r = lgammaf_r(x, &s); return r * (floa
 #define CHK_M25 PC_CHECKING { volatile float v = -2.5f; float r = lgammaf(v); \
     if (r == LG_M25_DN || r == LG_M25_UP) pc_check("lgammaf(-2.5) faithful to -0.0562437164976740507"); \
     else pc_check("%.9g", (double)r); }
+/* zero: the 64 encodings from 32 below the cbench_libm row's x = -3.14382577 (bits 0xc0493471, beside lnΓ's zero
+ * near -3.1435, where |lgammaf| < 2^-8) up (LIBM-F32-REST-NEXT): the path such operands take. */
+static void fill_bits(unsigned b) {
+    for (int k = 0; k < 64; k++) { union { unsigned u; float f; } c = { b + (unsigned)((k * 37 + 11) & 63) }; tab[k] = c.f; }
+}
+CASE(lgammaf_zero, 100000, 1) { fill_bits(0xc0493471u - 32u); LOOP1(lgammaf(x)); CHK1(lgammaf, -3.14382577f); }
 CASE(lgammaf_pos, 1000000, 1) { fill(0.3f, 19.7f); LOOP1(lgammaf(x)); CHK1(lgammaf, 2.5f); }
 CASE(lgammaf_neg, 1000000, 1) { fill(-19.7f, -0.3f); LOOP1(lgammaf(x)); CHK_M25; }
 CASE(lgammaf_r_neg, 1000000, 1) { fill(-19.7f, -0.3f); LOOP1(lg_r(x)); CHK1(lg_r, -3.5f); }

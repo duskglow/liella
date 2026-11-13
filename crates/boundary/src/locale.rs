@@ -436,9 +436,14 @@ fn new_object(handle: usize) -> usize {
     addr
 }
 
-/// The categories of an `LC_*_MASK` combination, or `EINVAL` for unknown bits.
+/// `1 << LC_ALL` (bit 6): accepted alone as every category; with any other bit it is `EINVAL`.
+const LC_ALL_BIT: i32 = 1 << 6;
+
+/// The categories of an `LC_*_MASK` combination, or `EINVAL` for unknown bits. `1 << LC_ALL`
+/// alone means every category (libstdc++ asks for it at start-up), as the reference answers it.
 fn categories(mask: i32) -> Result<([Cat; 12], usize), liella::error::Errno> {
     let all = Cat::ALL.iter().fold(0i32, |m, c| m | (1 << c.number()));
+    let mask = if mask == LC_ALL_BIT { all } else { mask };
     if mask & !all != 0 {
         return Err(liella::error::Errno::EINVAL);
     }
@@ -460,7 +465,14 @@ pub fn newlocale(mask: i32, name: Option<&[u8]>, base: usize) -> Result<usize, l
     let (cats, n) = categories(mask)?;
     let name = name.ok_or(liella::error::Errno::EINVAL)?;
     let base_locale = if base == 0 { Locale::C } else { *of(base) };
-    let handle = gl::newlocale(&CSys, &Glue, cats.get(..n).unwrap_or(&[]), name, base_locale)?;
+    let cats = cats.get(..n).unwrap_or(&[]);
+    let handle = if name.is_empty() {
+        // `""`: each category from the environment, as `setlocale(cat, "")` takes it.
+        let getenv = |k: &[u8]| -> Option<&'static [u8]> { process::getenv(k).map(strz::env_value) };
+        gl::newlocale_env(&CSys, &Glue, cats, &getenv, base_locale)?
+    } else {
+        gl::newlocale(&CSys, &Glue, cats, name, base_locale)?
+    };
     // `base` is consumed: reuse its block (D-7.3).
     if base != 0 && base != GLOBAL {
         if let Some(w) = tb::locale_object(base) {
@@ -561,7 +573,11 @@ pub fn setlocale(category: i32, name: Option<&[u8]>) -> Option<&'static [u8]> {
         Some(n) => gl::Request::Name(n),
     };
     let before = gl::global_handle();
-    let r = gl::setlocale(&CSys, &Glue, cat, req);
+    // `""` is never answered from the query cache: straight to the locked path.
+    let r = match req {
+        gl::Request::Environment(_) => gl::setlocale_locked(&CSys, &Glue, cat, &req),
+        _ => gl::setlocale(&CSys, &Glue, cat, req),
+    };
     // A changed category may select other message catalogs (§7.7, `_nl_msg_cat_cntr`).
     if gl::global_handle() != before {
         publish_global();
@@ -706,7 +722,7 @@ pub fn setlocale_c(category: i32, name: liella::error::KResult<Option<&[u8]>>) -
 
 /// `newlocale` for C (`name` NULL: `EINVAL`).
 pub fn newlocale_c(mask: i32, name: liella::error::KResult<&[u8]>, base: usize) -> liella::error::KResult<usize> {
-    newlocale(mask, Some(name?), base)
+    newlocale(mask, name.ok(), base)
 }
 
 /// The name of category `category` (a C `LC_*` number) of the calling thread's current locale,

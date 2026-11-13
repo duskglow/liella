@@ -1,0 +1,10 @@
+id = "D-10.106"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+story = "LIBM-RETHINK-BESSEL"
+date = "2026-11-12"
+body = '''
+**`float` Bessel functions below 2^-20 from the leading series terms** (LIBM-RETHINK-BESSEL, ruling #4936; amends D-10.49's range). `j0f`, `j1f`, `y0f`, `y1f` for 0 < \|x\| < 2^-20 (42% of `float` bit patterns) no longer go to the multi-precision path (LIBM-TAIL-PROBE: 7e3 to 1.5e5 instructions a call against 41 to 83 in the reference). Method, from DLMF 10.2.2 and 10.8.1-2 (L = ln(x/2) + γ): J0 = 1 - x²/4 + O(x⁴) and J1 = (x/2)(1 - x²/8 + O(x⁴)) are answered from their brackets with no rounding test (1 - 2^-42 < J0 < 1; \|x\|/2·(1 - 2^-43) < \|J1\| < \|x\|/2, so the result in each direction is one of the two floats around \|x\|/2, read off the bits, subnormal results with underflow, ERANGE only for a zero result); Y0 = (2/π)(L(1 - x²/4) + x²/4) and Y1 = -2/(πx) + (x/π)(L - 1/2) use the correctly rounded `double` log and a relative bound (7u and 4u, margins 8u and 4u) through the existing rounding test; Y1 overflows (FE_OVERFLOW; ERANGE where the result rounds to -∞, not to -FLT_MAX upward or toward zero) for w = 2/(πx) ≥ 2^128·(1 + 2^-43). errno follows `crate::float::range_errno`'s rule (spec/behaviour/libm-exact.md; the recorded j1f and y1f probes agree), checked by the tiny-band test and the exhaustive sweeps. Operands the test refuses keep the accurate path (expected tens per function in the band). Alternatives weighed: widening D-10.49's fits down to 2^-149 (rejected: an absolute bound loses J1's and Y1's relative accuracy, and the fits buy nothing over two series terms). The float oracle's series (`oracle32::bessel_est`) now starts at 2^-149, so the exhaustive sweeps check the band. Large \|x\| ≥ 2^19 (the modulus-phase form, DLMF 10.18.17-18, with an exact fixed-point reduction of x·2/π, and an exception table) and the `double` bands are follow-ups (handoff/LIBM-RETHINK-BESSEL.md).
+'''

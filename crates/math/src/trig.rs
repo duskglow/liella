@@ -244,7 +244,30 @@ pub fn sincos<F: Small>(x: F, mode: Rounding) -> ((F, F), Status) {
     ((s, c), st.and(ct))
 }
 
-/// `atan t` for a non-negative double-double `t` (finite).
+/// The proved relative error bound of [`atan_dd`], `36u²` (`u = 2^-53`; the proof gives `34.6u²`).
+pub(crate) const ATAN_DD_REL: f64 = f64::from_bits(0x39a2_0000_0000_0000);
+
+/// `atan t` for a non-negative double-double `t` (finite), within [`ATAN_DD_REL`] relative when
+/// no step underflows.
+///
+/// **Proof** (`u = 2^-53`; the primitives' bounds `A2 = 3u²/(1 − 4u)`, `F2 = 2u²/(1 − 2u)`, `M1 =
+/// 3u²(1 + 2u)`, `M2 = 8u²(1 + 2^-50)`, `D2 = 5u²(1 + 2^-48)` as proved at
+/// [`crate::exp_log::log_dd`]). A relative error `δ` in an argument moves `atan` by at most
+/// `|δ|` relative (`v/((1 + v²)·atan v) <= 1`).
+/// 1. `t <= 1`: `c = jf/64` with `|t.hi − c| <= 2^-7`; `t.hi − c` is a multiple of `ulp(t.hi)`
+///    below `2^-7`, so exact, and then `0` or larger than `|t.lo|`: `t − c` is exact. `1 + t·c`
+///    is within `M1·tc/(1 + tc) + F2 <= 3.5u²`, the quotient `u'` within `D2 + 3.5u² = 8.5u²`,
+///    `|u'| <= 2^-7(1 + 2^-45)`.
+/// 2. `H = Σ_{k<9} (−u'²)^k/(2k+1)`: alternating, truncation `u'^18/19 <= 2^-130`; the `f64`
+///    tail `u'^8(1/9 − ...)` within `2^-56·0.23u = 0.03u²`; the last dd step `A2`, the earlier
+///    ones, the coefficients and `u'²`'s `M2` scaled by `u'² <= 2^-14`: `0.01u²`. `εH = 3.04u²`,
+///    and `u'·H` is within `ε_at = M2 + 8.5u² + εH = 19.55u²` of `atan u`.
+/// 3. `atan c + atan u` (`ATAN_J64` within `u²` relative: tests): `jf = 0` adds zero (`ε_at`);
+///    `jf >= 1`: `t >= 1/128`, `atan c <= 2.0001·atan t` and `|atan u| <= atan t`, so `2.0001u² +
+///    ε_at + A2 = 24.56u²` (`ε_small`).
+/// 4. `t > 1`: `1/t` within `D2`, then `π/2 − atan(1/t)` with `atan(1/t) <= π/4 <= atan t` and
+///    `PI_2` within `u²`: `2u² + ε_small + D2 + A2 = 34.56u²`. `t > 2^60`: `|1/t.hi − atan(1/t)|
+///    <= 2^-112`, so `2u² + F2 + 2^-112/(π/2)`. The bound is the largest, `34.56u² < ATAN_DD_REL`.
 pub(crate) fn atan_dd(t: Dd) -> Dd {
     if t.hi > 1.152_921_504_606_847e18 {
         // Above 2^60: π/2 − 1/t, the correction already far below the last place of π/2.

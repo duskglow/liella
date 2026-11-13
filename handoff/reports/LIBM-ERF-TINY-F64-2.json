@@ -1,0 +1,29 @@
+{
+ "task": "LIBM-ERF-TINY-F64-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "f64 erf |x| < 2^-55 in place finished: static fixed, plants 7/7 CAUGHT, erf_typ row added; typical erf not slower in either build (FMA 119.6->117.6, SSE2 146.1->145.1), tiny 232->51.7 (FMA) / 230.9->85.8 (SSE2), subnormal 265.9->77.0 / 263.9->75.1 vs glibc 35.0 / 44.6",
+ "branch": "task/libm-erf-tiny-f64-2",
+ "head": "0ccb708ac",
+ "gate": {
+  "affected": "2438 passed / 0 failed (8 suites ok)",
+  "peak": "3.0G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "D-10.113 is reserved (ruling #5029); the record stays records/pending/LIBM-ERF-TINY-F64-1.toml for the coordinator to assign",
+  "gate SKIPPED lines (2): s10_math_symbols fpu_control dynamic waits for ld.so (#814), not this change"
+ ],
+ "refused": [],
+ "improvement": "wl_percall's usage line should say GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA is how to count the baseline math build (found only via the tunables test and D-10.50)",
+ "next_step": "none for this story; coordinator assigns D-10.113",
+ "report_file": "handoff/LIBM-ERF-TINY-F64.md",
+ "jobs": [
+  "libm-erf-tiny-f64-2-lint2",
+  "libm-erf-tiny-f64-2-gate-b",
+  "libm-erf-tiny-f64-2-plants-b",
+  "libm-erf-tiny-f64-2-percall-b",
+  "libm-erf-tiny-f64-2-percall-sse2-b"
+ ]
+}

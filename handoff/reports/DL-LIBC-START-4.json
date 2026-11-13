@@ -1,0 +1,12 @@
+{"task": "DL-LIBC-START-4", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: hello-world red fixed (reference prints 'lost' on every host; Liella now matches probed glibc 2.39: preinit changes undone, old fini not called) + ld.so COPY-definition version gap fixed; dynamic conformance subset fails at link (__libc_stack_end, loader symbol)",
+ "branch": "task/dl-libc-start-4", "head": "d347d9318",
+ "gate": {"affected": "gate2 rc 6: clippy/static/so/hot_text_products/reloc_libc_start pass; s1_1_c_0_dynamic_start_conformance link failure; affected not run", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["-3's red was a wrong expected text, not host dependence: glibc 2.39 prints 'preinit setenv lost' on mei and keke", "ld.so refused libc for any PIE with a COPY relocation (versym naming a verneed index); fixed in crates/ld/src/symbols.rs", "the dynamic conformance subset links only libc.so.6 and misses the loader's __libc_stack_end"],
+ "refused": [],
+ "improvement": "a test's expected constant should come from a probe recorded in the test (host, version, date); -3 hard-coded an unprobed value and three runs chased 'host dependence'",
+ "next_step": "link Liella's ld.so into conformance_dynamic (crates/boundary/tests/products/mod.rs ~313), rerun ~/work/DL-LIBC-START-4/gate.sh on mei, then fix counts.sh's --counters-only usage and compare cbench_startup base vs head",
+ "report_file": "handoff/DL-LIBC-START-4-report.md",
+ "jobs": ["dl-libc-start-4-gate2", "dl-libc-start-4-plants2"]}

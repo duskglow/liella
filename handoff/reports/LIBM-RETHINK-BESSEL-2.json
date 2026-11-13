@@ -1,0 +1,11 @@
+{"task": "LIBM-RETHINK-BESSEL-2", "model": "opus", "tokens": null,
+ "result": "f32 tiny band (D-10.106) fixed and verified: ERANGE only for an underflow to zero or an overflow to -inf (probe-settled; run 1 set it for any underflow/overflow), tiny-band test compares flags+errno not the hw hint; percall rerun with the 40-hex base: j0f 94.0, j1f 119.7, y0f 340.9, y1f 313.6 instr/call vs base 6401-152383 and glibc 54-98",
+ "branch": "task/libm-rethink-bessel-2", "head": "9d9f58f63",
+ "gate": {"affected": "1571 passed / 0 failed (6 suites ok, 1 skipped; rc 0)", "peak": "3.3G"}, "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["run 1's gate (keke) was rc 1 at static (bare | in D-10.106, fixed by run 1's 9d2108944) so its affected stage never ran; run 1's sweeps failed j1f/y1f on errno and its plants baseline failed (the tiny-band test compared Status::hw)", "percall self-check MISMATCH on y0f/y1f(1e-10f): base and new agree, glibc differs in the last place; Liella's are the nearest floats by hand (Y1 true -6366197638.7, ulp 512: Liella -6366197760, glibc -6366197248); pre-existing", "y1f_tiny 313.6 vs 305.5 on the uncorrected, never-landed 9d2108944 (+8.1, not analysed); j1f_tiny 119.7 vs 123.9"],
+ "refused": [],
+ "improvement": "a gate that chains clippy && static && affected hides an untested change behind a lint red: the dispatcher could flag a gate whose test-summary shows 0 suites instead of reading it as a plain rc 1",
+ "next_step": "LIBM-F32-BESSEL-LARGE (handoff/LIBM-RETHINK-BESSEL/LIBM-F32-BESSEL-LARGE.md), then LIBM-F64-BESSEL-BANDS",
+ "report_file": "handoff/LIBM-RETHINK-BESSEL.md",
+ "jobs": ["libm-rethink-bessel-2-gate3", "libm-rethink-bessel-2-plants2", "libm-rethink-bessel-2-percall3", "libm-rethink-bessel-2-sweeps2"]}

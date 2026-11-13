@@ -1,0 +1,5 @@
+# LIBM-CEXP-ROUTE: cexp's middle tier (crates/math/src/complex_fast.rs: middle, middle_part, sin_or_cos, middle_round)
+mid-skip-test | crates/math/src/complex_fast.rs | perl:s/scale\(fast64::settle\(p, eps, 0, mode\)\?\.0, s\)/scale(p.hi, s)/ | cargo test -p liella-math --lib complex_fast | msg:the middle tier answered next to a boundary
+mid-no-p2 | crates/math/src/complex_fast.rs | perl:s/\.add\(g\.neg\(\)\)// | cargo test -p liella-math --lib complex_fast | msg:(trig|middle) error .* above the bound
+mid-quadrant | crates/math/src/complex_fast.rs | perl:s/\(dd::to_i32\(n\) \+ i32::from\(part == Part::Re\)\) & 3/dd::to_i32(n) & 3/ | cargo test -p liella-math --lib complex_fast | msg:(trig|middle) error .* above the bound
+mid-not-called | crates/math/src/complex_fast.rs | perl:s/None => middle\(x, y, Part::Re, mode\)\?/None => return None/ | cargo test -p liella-math --lib complex_fast | msg:the middle tier declined the bench operand

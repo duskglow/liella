@@ -1,0 +1,13 @@
+{"task": "LAYOUT-STARTUP-STATE-LOCALE-4", "model": "opus", "tokens": null,
+ "result": "lssl3-branch2 rc 3 fixed (intl::RESOLVED is page aligned by type, so the build now checks only that the first .lbss section starts a page); true = next at every pad, locale -1..-2, tool -2..-3, 0 worse cells, both profiles; two pending D-X records written",
+ "branch": "task/layout-startup-state-locale-4", "head": "739e356c3",
+ "gate": {"affected": "11643 passed / 0 failed (FULL, escalated; 32 suites; conformance 130/0)", "peak": "13G"}, "accepted_first_attempt": null,
+ "rulings": [{"item": "two pending D-X decision records (order rule #4923, first-call cluster #4942/#4949) need ids", "recommendation": "assign the next two D-X ids"}],
+ "informational": ["the gate escalated itself to FULL (xtask/src changed), so it runs longer than a direct-tier gate", "pre pads move true 11 -> 12 on next and the branch alike (text-side jitter #4347)"],
+ "refused": [],
+ "improvement": "the affected tool escalates any xtask/src change to a FULL gate; a change confined to the products' build (coldbss.rs) could gate on the product tests plus xtask unit tests",
+ "next_step": "coordinator: assign the two pending D-X ids; nothing else is left in the story",
+ "report_file": "handoff/LAYOUT-STARTUP-STATE-LOCALE.md",
+ "plants": "9 plants: 9 CAUGHT, 0 SURVIVED, 0 WARN (layout-startup-state-locale-4-plants2)",
+ "superseded": ["layout-startup-state-locale-4-plants (stopped after 4 plants; plants file fixed for the new build check, rerun as plants2)"],
+ "jobs": ["lssl4-gate", "layout-startup-state-locale-4-plants2", "lssl4-branch1", "lssl4-lint1"]}

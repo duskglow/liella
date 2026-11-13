@@ -1,0 +1,4 @@
+# SETLOCALE-POSIX-ATTR plants: reintroduce the cause (a repeated setlocale(cat, "POSIX") misses the no-change path).
+# The count test builds its own static program against the products, so each plant rebuilds them first.
+reported-as-given | crates/core/src/locale/mod.rs | lit:if name == b"POSIX" { C_NAME } else { name } ==> name | cargo xtask so && cargo test -p liella-boundary --test setlocale_posix_repeat | msg:LC_(CTYPE|ALL) "POSIX" again [0-9]+ instructions per call.*left the no-change path
+fastpath-as-given | crates/legacy/src/global_locale.rs | lit:s == n || s == locale::reported(n) ==> s == n | cargo xtask so && cargo test -p liella-boundary --test setlocale_posix_repeat | msg:LC_(CTYPE|ALL) "POSIX" again [0-9]+ instructions per call.*left the no-change path

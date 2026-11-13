@@ -1,0 +1,33 @@
+{
+ "task": "LIBM-TINY-FASTPATHS-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "sinf/cosf/tanf/sincosf 2^19 <= |x| < inf reduced in the fast path (fixed-point Payne-Hanek, |dr| <= 1.01*2^-53|r|, kernel bounds unchanged); target not reached: trig tiny, exp huge, asinf, log1pf, expm1f remain",
+ "branch": "task/libm-tiny-fastpaths-2",
+ "head": "81e094df1",
+ "gate": {
+  "affected": "affected ok (rc 0; the direct-tier gate prints no counts)",
+  "peak": "4.5G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "decision id for the f32 trig huge-operand reduction (records/pending/LIBM-TINY-FASTPATHS-2-1.toml, D-NEW series D-10)",
+   "recommendation": "assign the next D-10 id"
+  }
+ ],
+ "informational": [
+  "probe-after (x32 sinf/cosf/tanf) and the exhaustive sweeps were still running at hand-back: the continuation reads ~/work/LIBM-TINY-FASTPATHS-2/probe-after on kanon (large band and kernel range vs LIBM-TAIL-PROBE's binades-f32.tsv)"
+ ],
+ "refused": [],
+ "improvement": "the probe tool lives only on origin/task/libm-tail-probe and its analyze step takes an undocumented prefix: landing validation/libm_tail with a one-line summary mode would save each libm story several calls",
+ "next_step": "f32 trig tiny band (sin/cos/tan/sincos |x| < 2^-22.6 in the RN entries), then the exp family's huge/underflow edges",
+ "report_file": "handoff/LIBM-TINY-FASTPATHS.md",
+ "jobs": [
+  "libm-tiny-fastpaths-2-gate",
+  "libm-tiny-fastpaths-2-plants",
+  "libm-tiny-fastpaths-2-sweeps",
+  "libm-tiny-fastpaths-2-probe",
+  "libm-tiny-fastpaths-2-lint"
+ ]
+}

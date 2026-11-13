@@ -1,0 +1,14 @@
+# LAYOUT-CHECK-VERDICT-CACHE plants: `cargo xtask plants handoff/LAYOUT-CHECK-VERDICT-CACHE-plants.txt --dir <new RAM dir>`
+# One input left out of the key (each caught by the test that changes only that input).
+key-no-manifest | xtask/src/layout_verdict.rs | lit:vec![crate::layout::MANIFEST.to_string()] ==> Vec::new() | cargo test -p xtask --bin xtask -- layout_verdict | msg:the key ignores the manifest
+key-no-rule-file | xtask/src/layout_verdict.rs | lit:rel.push(v); ==> let _ = v; | cargo test -p xtask --bin xtask -- layout_verdict | msg:the key ignores a file a rule names
+key-no-product-bytes | xtask/src/layout_verdict.rs | lit:out.push(format!("product {name} {h}")); ==> out.push(format!("product {name}")); | cargo test -p xtask --bin xtask -- layout_verdict | msg:the key ignores a product
+key-no-probe | xtask/src/layout_verdict.rs | lit:out.push(format!("probe {PROBE} preprocessed {}", sha256_text(&pre)?)); ==> let _ = &pre; | cargo test -p xtask --bin xtask -- layout_verdict | msg:the key ignores the probe
+key-no-checker | xtask/src/layout_verdict.rs | lit:("checker".into(), exe), ==> | cargo test -p xtask --bin xtask -- layout_verdict | msg:the checker's bytes
+# The train served a cached verdict.
+train-uses-cache | xtask/src/layout_verdict.rs | lit:if set("LIELLA_TRAIN") { ==> if set("LIELLA_TRAIN") && false { | cargo test -p xtask --bin xtask -- layout_verdict | msg:the_train_and_the_opt_out_never_use_the_cache.*FAILED
+# A corrupt or foreign entry read as a pass.
+corrupt-sum-unchecked | xtask/src/layout_verdict.rs | lit:if sha256_text(&format!("{head}\n"))? != sum { ==> if false { | cargo test -p xtask --bin xtask -- layout_verdict | msg:corrupt entry [0-9]+ read as a pass
+foreign-key-accepted | xtask/src/layout_verdict.rs | lit:if key_line.strip_prefix("key ") != Some(key) { ==> if false { | cargo test -p xtask --bin xtask -- layout_verdict | msg:corrupt entry [0-9]+ read as a pass
+# The archive check disassembles other sections than the ones it checks.
+jcc-wrong-sections | xtask/src/jcc.rs | lit:.filter(|s| only.contains(base_name(s))) ==> .filter(|s| !only.contains(base_name(s))) | cargo test -p xtask --bin xtask -- jcc:: | msg:archive_check_disassembles_exactly_the_named_sections.*FAILED
