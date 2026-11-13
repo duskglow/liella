@@ -1023,6 +1023,7 @@ fn trace_layout(root: &Path, product: &Path, profile: Profile) -> Result<(), Str
     let logf = fs::File::create(&log).map_err(|e| format!("{}: {e}", log.display()))?;
     let errf = logf.try_clone().map_err(|e| e.to_string())?;
     println!("so: {}=1: tracing the probes linked against this build (log {})", crate::hotlists::TRACE_ENV, log.display());
+    let before = tracked_files(root)?;
     let st = Command::new("bash")
         .arg(root.join("tools/hottext/regen.sh"))
         .arg(root)
@@ -1034,6 +1035,18 @@ fn trace_layout(root: &Path, product: &Path, profile: Profile) -> Result<(), Str
         .stderr(errf)
         .status()
         .map_err(|e| format!("tools/hottext/regen.sh: {e}"))?;
+    // A build never writes the tree: the trace's lists go to `lists` only, and the hand-kept inputs stay
+    // as committed (a regen.sh step that rewrites one in place would dirty every trace-mode build).
+    let changed = restore_tracked(root, &before)?;
+    if !changed.is_empty() {
+        return Err(format!(
+            "so: {}=1: tools/hottext/regen.sh changed {} in {} during the trace (restored); a trace-at-build run writes only {}",
+            crate::hotlists::TRACE_ENV,
+            changed.join(", "),
+            crate::hotlists::TRACKED,
+            lists.display()
+        ));
+    }
     if !st.success() {
         let text = fs::read_to_string(&log).unwrap_or_default();
         let tail: Vec<&str> = text.lines().rev().take(8).collect::<Vec<_>>().into_iter().rev().collect();
@@ -1043,6 +1056,41 @@ fn trace_layout(root: &Path, product: &Path, profile: Profile) -> Result<(), Str
         println!("so: trace-at-build: {l}");
     }
     Ok(())
+}
+
+/// The regular files directly in [`crate::hotlists::TRACKED`] (the committed lists and the hand-kept inputs), by
+/// name, with their contents (LAYOUT-TRACE-AT-BUILD: [`trace_layout`] checks the trace left them alone).
+fn tracked_files(root: &Path) -> Result<std::collections::BTreeMap<String, Vec<u8>>, String> {
+    let dir = root.join(crate::hotlists::TRACKED);
+    let mut out = std::collections::BTreeMap::new();
+    for e in fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))? {
+        let e = e.map_err(|e| format!("{}: {e}", dir.display()))?;
+        if e.file_type().map_err(|er| format!("{}: {er}", e.path().display()))?.is_file() {
+            let data = fs::read(e.path()).map_err(|er| format!("{}: {er}", e.path().display()))?;
+            out.insert(e.file_name().to_string_lossy().into_owned(), data);
+        }
+    }
+    Ok(out)
+}
+
+/// Puts [`crate::hotlists::TRACKED`] back as `before` recorded it (a changed or removed file rewritten, an added
+/// one removed) and returns the names it had to put back, sorted.
+fn restore_tracked(root: &Path, before: &std::collections::BTreeMap<String, Vec<u8>>) -> Result<Vec<String>, String> {
+    let dir = root.join(crate::hotlists::TRACKED);
+    let after = tracked_files(root)?;
+    let mut changed = Vec::new();
+    for (name, data) in before {
+        if after.get(name) != Some(data) {
+            fs::write(dir.join(name), data).map_err(|e| format!("{}: {e}", dir.join(name).display()))?;
+            changed.push(name.clone());
+        }
+    }
+    for name in after.keys().filter(|n| !before.contains_key(*n)) {
+        fs::remove_file(dir.join(name)).map_err(|e| format!("{}: {e}", dir.join(name).display()))?;
+        changed.push(name.clone());
+    }
+    changed.sort();
+    Ok(changed)
 }
 
 /// The archive's last steps, after the start-up state placement: the hot-text grouping from the lists `layout`
