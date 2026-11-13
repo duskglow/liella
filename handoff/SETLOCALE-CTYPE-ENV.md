@@ -49,3 +49,12 @@ The kept path is right for LC_ALL empty; the query cache slot is recorded for LC
 ## Notes
 
 - One heredoc (a python edit of the test file) used in this run against the no-heredoc rule; no effect on results.
+
+## Gate result (run 2): RED, start-up page faults
+
+setlocale-ctype-env-2-gate-2: 6482 passed, 2 failed: hot_text_products
+init_short_programs (setlocale + printf 55 faults > bound 51) and init_coreutils_shaped (58 > 56)
+(job setlocale-ctype-env-2-faults). setlocale(LC_ALL, "") is start-up code, so this is not layout
+jitter: EXACT NEXT STEP is `tools/hottext/regen.sh . --build` on this branch (the dropped
+find_named closure key and the changed setlocale_env/getenv_many/read_at sections), then rerun
+`cargo test -p liella --test hot_text_products init_` and the direct gate. Do not land before.
