@@ -391,6 +391,54 @@ fn inverse_trig_cores_are_within_their_bounds() {
     verdict.pass();
 }
 
+/// The one-pass kernels' `double` results (asinf, acosf: polynomial below |x| = 1/2, half-angle
+/// form above; atanf: the table-point reduction above |x| = 1) within INV_ONEPASS_BOUND ulp of
+/// [`atan2_dd`], round to nearest: every encoding of the band 3/8 ≤ |x| < 3/4 around the split
+/// (a split moved either way puts the polynomial outside its fit interval, hundreds of ulp off
+/// within the band), every 509th over the rest of the range, and every 61st atanf operand in
+/// [1, 64), across the table's bins and its end at 32. Above 1 atanf is held to its own proof's
+/// 5.4u (relative, u = 2^-53), not the shared bound: a table point read from the wrong bin or
+/// cut short leaves |u| up to 1/16 outside the fit's interval, about 16u, inside the shared
+/// bound. The agreement sweeps see such a loss only next to a `float` boundary. (No spec clause:
+/// LIBM-ASINF-NODIV, D-10.103.)
+#[test]
+fn inverse_trig_onepass_kernels_are_within_their_bound() {
+    let Some(verdict) = crate::verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".fast32.inverse_trig_onepass_kernels_are_within_their_bound")).begin() else {
+        return;
+    };
+    use crate::dd::{two_sum, Dd};
+    let ulp = |y: f64| f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
+    let bound = INV_ONEPASS_BOUND as f64;
+    let check = |y: f64, f: Dd, what: &str, b: u32| {
+        let err = Dd::from(y).sub(f).to_f64();
+        assert!(err.abs() <= bound * ulp(y), "onepass bound: {what}({b:#010x}): {} ulp", err / ulp(y));
+    };
+    let one = Dd::from(1.0);
+    let band = (0x3ec0_0000u32..0x3f40_0000).step_by(16);
+    let rest = (0x0080_0000u32..0x3f80_0000).step_by(509);
+    let mut seen = 0u32;
+    for b in band.chain(rest).flat_map(|b| [b, b | 1 << 31]) {
+        let a = f64::from(f32::from_bits(b));
+        let (p, q) = (crate::dd::sqrt(two_sum(1.0, -a)), crate::dd::sqrt(two_sum(1.0, a)));
+        check(acos_y(b, f64::sqrt), atan2_dd(p, q).scale(2.0), "acos", b);
+        if b & 0x7fff_ffff >= 0x3280_0000 {
+            let d = crate::dd::sqrt(two_sum(1.0, -a).mul(two_sum(1.0, a)));
+            check(asin_y(b, f64::sqrt), atan2_dd(Dd::from(a), d), "asin", b);
+            check(atan_y(b), atan2_dd(Dd::from(a), one), "atan", b);
+        }
+        seen += 1;
+    }
+    // atanf above 1 (D-10.103's proof at `atan_onepass_any`): 5.4u relative.
+    let above_one = 5.4 / 9_007_199_254_740_992.0;
+    for b in (0x3f80_0001u32..0x4280_0000).step_by(61).chain((0x4280_0000..0x7f80_0000).step_by(0x1_0001)) {
+        let y = atan_y(b);
+        let err = Dd::from(y).sub(atan2_dd(Dd::from(f64::from(f32::from_bits(b))), one)).to_f64();
+        assert!(err.abs() <= above_one * y, "onepass bound: atan({b:#010x}): {} u above 1", err / y * 9_007_199_254_740_992.0);
+    }
+    assert!(seen > 2_500_000, "{seen}");
+    verdict.pass();
+}
+
 /// atan2f's fast path against the accurate path in every mode: pairs across the range with
 /// both signs, the octant edges |y| = |x| ± 1 ulp, the bench row's square [-10, 10]² (and its
 /// fallback rate), and the C Annex F F.10.1.4 special cases (zeros, infinities, NaN), which

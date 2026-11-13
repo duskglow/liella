@@ -1,0 +1,13 @@
+{"task": "TEST-LONG-SWEEPS-BOUNDARY-2", "model": "opus", "tokens": null,
+ "result": "14 rows timed alone (fast-entry sweep over 1800 s); ruling #5062 applied and enforced by the static check: 10 rows under 60 s moved to the nightly long group",
+ "branch": "task/test-long-sweeps-boundary-2", "head": "38a1c74f3",
+ "gate": {"affected": "11658 passed / 0 failed (32 suites; conformance 125 passed)", "peak": "16G (page cache included), oom_kill=0"}, "accepted_first_attempt": null,
+ "rulings": [{"item": "the weekly exhaustive group runs at least 3.75 h, more than the 150 min slot cap (why tlsb-sweeps ended rc 124)", "recommendation": "run it as one jobrun job per row, or as chains of rows under 150 min each"},
+             {"item": "s10 math_double_fast_entry_sweep at LIELLA_FE_SWEEP_CHUNKS=200 runs over 30 min", "recommendation": "keep it weekly in its own job, or split its chunks across rows"}],
+ "informational": ["kanon slot queue: 5 slots but only 4 distinct CPU pin sets (0-27); a fifth concurrent job shares CPUs 0-6 and 28-34 stay idle",
+                   "ruling #5061 (fast_special/fast_bessel/fast_gamma at 10^5) left to TEST-LONG-SWEEPS-SIZES as ruled"],
+ "refused": [],
+ "improvement": "the slots wrapper's 150 min cap and the 4-of-5 CPU pin sets on kanon are invisible to agents; slots-status could print the cap and flag doubled pins",
+ "next_step": "none for this story; the weekly exhaustive job needs the runtime ruling before it is scheduled",
+ "report_file": "handoff/test-long-sweeps-boundary.md",
+ "jobs": ["tlsb2-lint1", "tlsb2-gate1", "tlsb2-plants1"]}

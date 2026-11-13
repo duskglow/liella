@@ -234,6 +234,8 @@ const R_X86_64_IRELATIVE: usize = 37;
 /// go through `bootstrap::irelative` instead), so the offsets and resolver addresses are absolute. Runs after the CPU paths are chosen (a resolver
 /// may call the library), before any constructor, and before the program's RELRO is protected
 /// (the target words lie in `.got`, which RELRO covers).
+// LAYOUT-HOTKEY-INLINE-STABLE: release already inlines it; always inlined, its code stays in the keyed caller in both profiles.
+#[inline(always)]
 fn apply_irelative() {
     let (start, end) = (ffi::liella_link_rela_iplt_start(), ffi::liella_link_rela_iplt_end());
     // `Elf64_Rela`: r_offset, r_info, r_addend.
@@ -274,6 +276,8 @@ fn run_array(start: usize, end: usize, argc: c_int, argv: usize, envp: usize) {
 
 /// A static program's destructors, registered at startup as one exit entry: `.fini_array`
 /// in reverse, then `_fini`.
+// LAYOUT-HOTKEY-INLINE-STABLE: a fixed boundary for its start-up/fork hot-text key (off the hot paths: the call is free).
+#[inline(never)]
 extern "C" fn run_fini() {
     let (start, end) = (ffi::liella_link_fini_start(), ffi::liella_link_fini_end());
     let n = end.saturating_sub(start) / 8;
@@ -354,6 +358,8 @@ pub fn early_init(info: usize) {
 
 /// `__libc_start_main(main, argc, argv, init, fini, rtld_fini, stack_end)`; with `PIE`, the
 /// static-PIE start `liella-rcrt1.o` calls (`liella_start_main_static_pie`, D-27.10).
+// LAYOUT-HOTKEY-INLINE-STABLE: a fixed boundary for its start-up/fork hot-text key (off the hot paths: the call is free).
+#[inline(never)]
 pub fn start<const PIE: bool>(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Option<Fn0>, fini: Option<Fn0>, rtld_fini: Option<Fn0>, stack_end: *mut c_void) -> ! {
     let n_args = usize::try_from(argc).unwrap_or(0);
     let argv_addr = argv.expose_provenance();

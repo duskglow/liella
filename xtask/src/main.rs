@@ -36,12 +36,14 @@
 //! | `affected`     | Run only the tests a change can affect (conservative selection; see `affected.rs`): `--list` prints the selection with a reason per item, `--run` runs it and prints a summary; one of the two is required (without either: the one-line usage, exit 2; XTASK-AFFECTED-EXPLICIT); `--base <ref>` (default `origin/main`), `--files <path>...` instead of the git query. Escalates to the full gate for `csys/`, `crates/abi`, build and generated files. The full gate still runs once at merge. |
 //! | `so`           | Build the products: `libc.a`, `libc.so.6` (version script from Appendix C.3 and the native C ABI's nodes, D-X.10) and `liella-crt1.o` in `target/liella` (never on Cargo's library path). Built with `[profile.fast]` (thin LTO, 16 codegen units; TOOL-PROFILE) for tests and iteration; `LIELLA_FULL_PROFILE=1` uses the shipped `release` profile (fat LTO). `bench` always builds `release` and refuses fast products (`target/liella/.profile` records which). |
 //! | `hottext-repair` | HOTTEXT-DEAD-KEY-REPAIR: repair dead hot-text keys on a tree with `next` merged in, without tracing: builds both profiles' processed archives (`target/liella` untouched), drops the keys of `crates/libc-so/hot-text.list` no profile matches, records a key one profile no longer matches in `hot-text.absent` ("inlined in <profile> at <rev>"; `--at <rev>`, default `origin/next`), removes stale `hot-text.absent` lines, prints what changed, and fails when the dead-key check still fails. Never adds or reorders keys (a real regen: tools/hottext/regen.sh). |
+//! | `hottext-recheck` | HOTLIST-REGEN-CHEAP: the check a cheap regen (`tools/hottext/regen.sh . --both`) ends with: reruns the hot-text grouping and its dead-key check (enforced) on each profile's saved pre-grouping archive with the rewritten list, instead of a second full `so`. |
+//! | `hot-lists`    | HOTLIST-TRAIN-REGEN: regenerate the train-owned start-up lists (`hot-text.list`, `startup-text.keys`, `probe-text.keys`, `startup-data.keys` of `crates/libc-so/`) for both profiles (`tools/hottext/regen.sh . --both --allow-drop`, merge mode) into `target/hot-lists/` with a stamp of the tree state; the build, the layout check and static read that copy while the stamp matches (one info line). `--in-place` or `LIELLA_TRAIN=1` rewrites the tracked lists (the train); there a tracked list that differs from a stamped regeneration is fatal (`hotlists.rs`). |
 //! | `repro`        | The products must not depend on the build directory (ruling #713): builds them in two fresh source copies under `target/repro` (`--dir <base>` elsewhere; not `/dev/shm` under `~/bin/gate`, #714) with the `fast` profile (`--release`: the shipped one) and compares every file of `target/liella`: whole files, then ELF sections (archive members too), accepting differences in `.symtab`/`.strtab` only. Fails naming the first differing file, member and section (`repro.rs`). A nightly job, not part of the gate. |
 //! | `native`       | The native Rust interface (D-X.10): `liella-native` with each feature on its own (clippy, unit tests); its static example built against `libc.a` and run, its dynamic example built against `libc.so.6` and checked with `readelf`. |
 //! | `fuzz`         | The fuzz harnesses of `fuzz/` (a workspace of its own, nightly, libFuzzer through `cargo fuzz`): `--list`; `<target> --time <minutes>` (or `--all`) runs in chunks resuming from the corpus outside the repository (`~/liella-fuzz-corpus`); `--repro`, `--tmin <file>`, `--cmin` for triage (implementation-plan.md §4.5). |
 //! | `bench-rows`   | The bench rows a change can move plus the sentinel rows (`bench/sentinels.tsv`), for a TARGETED bench (`benchrows.rs`, BENCH-AFF): `--base <ref>` / `--range <a>..<b>` / `--files <p>,...`, `--out <file>` for `bench --rows-file`. `bench --affected <base>` selects and times only those rows (`bench/c/cbench_rows.h`). FULL for build, link, allocator, startup and harness changes. The full bench on main stays the safety net. |
 //! | `sweep`        | The timing sweep (`sweep.rs`, SWEEP-RUN-TOOL): `run --out <dir> [--only a,b]` in a staged tree runs `bench --no-build --staged --counters` and exits 0 when every selected row was measured and `<dir>/sweep.tsv` written, flagged rows or not (nonzero: the measurement did not finish); `compare --new <class>=<sweep.tsv>... (--old <class>=<sweep.tsv>... \| --old-table <results.md>)` prints the report sections against the previous sweep. |
-//! | `long-sweeps`  | The `#[ignore]`d accuracy sweeps of liella-math (`longsweeps.rs`, TEST-LONG-SWEEPS-RUN): `[--group long\|exhaustive\|count\|all] [--list]` (default `long`) runs each once in release by its exact name and fails naming each that failed or ran no test. `test` runs the `long` and `count` groups when `LIELLA_NO_VERDICT_CACHE=1` (nightly and release); `exhaustive` is a weekly job of its own. `static` checks that every ignored test of `crates/math` is a row of the runner or of its `NOT_SWEEPS` list. |
+//! | `long-sweeps`  | The long accuracy sweeps of the workspace, `#[ignore]`d or sized by an environment variable (`longsweeps.rs`, TEST-LONG-SWEEPS-RUN, TEST-LONG-SWEEPS-BOUNDARY): `[--group long\|exhaustive\|count\|all] [--only <test>]... [--list\|--table]` (default `long`) runs each once in release, in its crate's package, by its exact name with its row's environment (the full size), and fails naming each that failed or ran no test. `test` runs the `long` and `count` groups when `LIELLA_NO_VERDICT_CACHE=1` (nightly and release); `exhaustive` is a weekly job of its own. `static` checks that every ignored or environment-scaled test under `crates/*/{src,tests}` is a row of the runner (setting every variable its size reads) or of its `NOT_SWEEPS` list. |
 //! | `fuzz-check`  | Type-check every fuzz target on the pinned nightly (`cargo check --bins` in `fuzz/`; no fuzzer runtime). Part of `test` and of `affected` when `crates/` or `fuzz/` sources change: the harnesses are a workspace of their own and a library signature change breaks them silently (HYGIENE-1). |
 //! | `locks`        | The tracked lock files (`Cargo.lock`, `crates/Cargo.lock`, `fuzz/Cargo.lock`) against their manifests (`locks.rs`, FUZZ-LOCK-FRESH): `--check` runs `cargo metadata --locked` per workspace and fails naming each lock cargo would rewrite (a `static` check, `lock-fresh`; a stale lock rewritten by a build made `affected --base` escalate to FULL); `--update` lets cargo rewrite them, to commit. |
 //! | `rust-dylib`   | The Rust dylib `libliella_rust.so.<abi>` (D-X.10) of a version in `spec/abi/rust-abi.toml` (default: the current one): builds it with that version's pinned rustup toolchain (failing if it is absent), after checking that toolchain's `rustc -vV` against the definition; builds it and a program against it in `target/liella/rust/<abi>`, checks soname, note, `LIELLA_RUST_ABI` and `DT_NEEDED` with `readelf`; builds a synthetic second version beside it and checks that both coexist. |
@@ -62,7 +64,9 @@ mod classed;
 mod codemap;
 mod jcc;
 mod layout;
+mod layout_verdict;
 mod benchstage;
+mod sha256;
 mod float_casts;
 mod forkalloc;
 mod fs_order;
@@ -75,6 +79,7 @@ mod copies;
 mod csys;
 mod fuzz;
 mod hottext;
+mod hotlists;
 mod langinfo;
 mod math;
 mod native;
@@ -162,6 +167,8 @@ fn main() -> ExitCode {
         "lab-names" => labnames::check(&root),
         "hottext-check" => hottext::static_check(&root),
         "hottext-repair" => hottext::repair_cmd(&root, &args[1..]),
+        "hottext-recheck" => hottext::recheck_cmd(&root, &args[1..]),
+        "hot-lists" => hotlists::cmd(&root, &args[1..]),
         "private-paths" => privpaths::check(&root),
         "csys-gen" => csys::run(&root, args.iter().any(|a| a == "--check")),
         "abi-gen" => abi::run(&root, args.iter().any(|a| a == "--check")),
@@ -186,7 +193,10 @@ fn main() -> ExitCode {
         "bench-rows" => benchrows::run(&root, &args[1..]),
         "sweep" => sweep::run(&root, &args[1..]),
         "long-sweeps" => longsweeps::run(&root, &args[1..]),
-        "so" => hottext::regen_mode(&args[1..]).and_then(|_| so::run_so(&root)),
+        "so" => hottext::regen_mode(&args[1..]).and_then(|libc_only| match libc_only {
+            Some(dir) => so::run_regen_libc(&root, &dir, so::Profile::for_tests()),
+            None => so::run_so(&root),
+        }),
         "repro" => repro::run(&root, &args[1..]),
         "native" => native_examples::run_native(&root),
         "rust-dylib" => rust_dylib::run_rust_dylib(&root, args.get(1).map(String::as_str)),
@@ -198,7 +208,7 @@ fn main() -> ExitCode {
         "layout-check" => layout::run(&root, &args[1..]),
         "startup-ro-plan" => startup_ro::dump(&root, &args[1..]),
         _ => {
-            println!("usage: cargo xtask <stubs [--force] | trace [--untested [--out F]] | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | arch-check | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] [--in-place] | kernel-index [--check] [--in-place] | codemap [--check] [--in-place] | records-gen [--check] [--in-place] | records (check | fmt [--check] | new <decision|compat|saturation> <id> [--section S] [--series S] [--story S]) | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] | sweep (run --out <dir> [--only a,b] | compare --new <class>=<tsv>... (--old <class>=<tsv>... | --old-table <md>) [--label L]) [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; --tunables V, or else a non-empty GLIBC_TUNABLES in the caller's environment, sets it for both sides; the two differing is an error) | fuzz <target> --time <minutes> | fuzz-check | so | hottext-repair [--at <rev>] | test | ctest | nextest <args> | affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
+            println!("usage: cargo xtask <stubs [--force] | trace [--untested [--out F]] | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | arch-check | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] [--in-place] | kernel-index [--check] [--in-place] | codemap [--check] [--in-place] | records-gen [--check] [--in-place] | records (check | fmt [--check] | new <decision|compat|saturation> <id> [--section S] [--series S] [--story S]) | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] | sweep (run --out <dir> [--only a,b] | compare --new <class>=<tsv>... (--old <class>=<tsv>... | --old-table <md>) [--label L]) [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; --tunables V, or else a non-empty GLIBC_TUNABLES in the caller's environment, sets it for both sides; the two differing is an error) | fuzz <target> --time <minutes> | fuzz-check | so | hottext-repair [--at <rev>] | hottext-recheck | test | ctest | nextest <args> | affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
             Ok(())
         }
     };
@@ -295,7 +305,7 @@ fn test_steps(root: &Path, extra: &[String], t: &mut steptime::Steps) -> Result<
     // with `runtime`: a test process must keep the host C library's start and exit.
     workspace_tests(root, &cargo, Some("liella-boundary/export,liella-boundary/selftest"), extra, t, "tests-interposed")?;
     // The nightly and release runs (`LIELLA_NO_VERDICT_CACHE=1`, every accuracy shard) also run the ignored long
-    // sweeps of liella-math in release (`longsweeps.rs`, TEST-LONG-SWEEPS-RUN); the ordinary gate leaves them out.
+    // sweeps in release (`longsweeps.rs`, TEST-LONG-SWEEPS-RUN); the ordinary gate leaves them out.
     if std::env::var("LIELLA_NO_VERDICT_CACHE").as_deref() == Ok("1") {
         t.time("long-sweeps", || longsweeps::run_groups(root, &[longsweeps::Group::Long, longsweeps::Group::Count]))?;
     }

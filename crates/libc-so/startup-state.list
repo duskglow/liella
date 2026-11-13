@@ -151,6 +151,9 @@ liella_boundary::process::SECURE
 # The catalog change counter the first setlocale bumps (LAYOUT-DATA-CLUSTERS-11): after next's merge it was that
 # call's only write on the last `.bss` page start-up leaves untouched (one fault, setlocale + printf 51 -> 50).
 symbol _nl_msg_cat_cntr
+# The flag every close reads first (csys/src/machine/points.S; LAYOUT-SINGLE-FAULT-TEST): in the assembly member's
+# shared `.data` the first close (the `rebind` probe's) read it on a page whose place followed emission order.
+symbol liella_machine_aio_used
 # The rest of what the first setlocale and the first printf to stdout touch (LAYOUT-STARTUP-STATE-LOCALE, #4915):
 # left in `.bss`/`.data`, their page followed emission order, and setlocale + printf read 50 or 51 and tool 54 to
 # 56 by `.bss` pad. hot_text_products `init_startup_data_accesses_are_in_the_data1_cluster` traces every probe.

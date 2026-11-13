@@ -4,7 +4,7 @@
 #
 #   wl_count_run.sh WORKLOAD,WORKLOAD,... BASE_SHA NEW_SHA
 #
-# Kits (~/wl/kit/<variant>/bin, with at least the programs the workloads use) are made by wl_prep.sh
+# Kits (~/wl/kit/$(wl_vkey <variant>)/bin: <sha>-release for a commit, validation/wl_lock.sh; with at least the programs the workloads use) are made by wl_prep.sh
 # first. Per workload and variant: one warm-up, `perf stat -r 3` (instructions:u, instructions:k,
 # page-faults of the shell and its children), one run through md5sum (output check), one
 # `strace -c -f`, three runs, median (syscalls: the gating number EXCLUDES the scheduling-dependent calls, reported apart, see below). Page faults are the MEDIAN of FAULT_RUNS (default 5) single runs, with
@@ -34,6 +34,7 @@ list=$1
 base=$2
 new=$3
 . "$(dirname "$0")/wl_workloads.sh"
+. "$(dirname "$0")/wl_lock.sh"   # wl_key: a commit's kit and rows are keyed by sha and products profile (WL-PREP-RELEASE-PROFILE)
 work=$WL/work
 tmp=$WL/tmp.count.$$
 mkdir -p "$tmp"
@@ -53,7 +54,7 @@ etag=
 measure() { # workload cmd variant [fresh] [noenv] -> row on stdout; fresh=1 ignores the cache, noenv=1 drops WLC_ENV
     local name=$1 cmd=$2 v=$3 fresh=${4:-0} c cache e=$wenv t=$etag
     [ "${5:-0}" = 1 ] && { e=; t=; }
-    cache=$WL/count/$v/$name$t.p.tsv
+    cache=$WL/count/$(wl_vkey "$v")/$name$t.p.tsv
     # Time-dependent output (ls -l prints HH:MM for files younger than ~6 months, the year for older ones, so the
     # md5 changes when a file crosses that boundary): a row cached on an earlier day has a stale md5 and would
     # report DIFF against freshly measured rows (LSLR-OUTPUT-DIFF). Such a row is used only on the day it was made.
@@ -62,7 +63,7 @@ measure() { # workload cmd variant [fresh] [noenv] -> row on stdout; fresh=1 ign
     esac
     if [ "${COUNT_FRESH:-0}" != 1 ] && [ "$fresh" != 1 ] && [ -s "$cache" ] \
         && [ "$(awk -F'\t' 'NR == 1 { print NF }' "$cache")" = 11 ]; then cat "$cache"; return; fi
-    c=${cmd//@/$WL/kit/$v/bin}
+    c=${cmd//@/$WL/kit/$(wl_vkey "$v")/bin}
     [ -n "$e" ] && c="env $e $c"
     (cd "$work" && sh -c "$c" 2>/dev/null | cat > /dev/null)
     local runs="" i out sum sys

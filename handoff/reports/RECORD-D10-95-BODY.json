@@ -1,0 +1,11 @@
+{"task": "RECORD-D10-95-BODY", "model": "sonnet", "tokens": null,
+ "result": "COMPLETE: D-10.95's strto* flags sentence kept as history with a superseded-by-D-8.12 note; D-8.12 amends D-10.95; no other record made the claim",
+ "branch": "task/record-d10-95-body", "head": "616268efc",
+ "gate": {"affected": "371 passed / 0 failed", "peak": "1.2G"},
+ "accepted_first_attempt": null,
+ "rulings": [], "informational": ["records-gen renders 38 views out of tree, 1 stale (s10, train-owned); D-10.95 row shows the note and (Amended by D-8.12.)"],
+ "refused": [],
+ "improvement": "records.md says the link lives on the amending record; a brief asking to edit the old record could say so, saving the schema lookup",
+ "next_step": "land",
+ "report_file": "handoff/RECORD-D10-95-BODY.md",
+ "jobs": ["RECORD-D10-95-BODY-static", "RECORD-D10-95-BODY-clippy", "RECORD-D10-95-BODY-recgen", "RECORD-D10-95-BODY-gate"]}

@@ -11,7 +11,7 @@
 # <dir|rev>: a Liella tree on this host. A role directory (has .synced, no .git): the revision is --rev REV, else the
 #   `head=` of its .synced marker, else "unknown" (never an error; not cached across runs); a tree .synced calls dirty is
 #   refused unless --rev names it. WITHOUT git the base is the role's .synced `merge_base=` (written by sync_role --base; `base_sha=` is the base ref's
-#   tip), or --base <full sha> (wins). Its source or products must be cached here (~/wl/src/<sha>, ~/wl/products/<sha>;
+#   tip), or --base <full sha> (wins). Its source or products must be cached here (~/wl/src/<sha>, ~/wl/products/<sha>-release;
 #   prime with validation/wl_prime_base.sh <host> <sha> from a git checkout), else exit 2 (the base column is not optional for counts).
 #   A git worktree directory (its HEAD; dirty refused) or any rev of the repository you run in works as before. BASE defaults to `git merge-base NEW origin/next` (TOOLS-15; a --base
 #   REV the branch is behind becomes merge-base NEW REV, WL_BASE_EXACT=1 keeps it; see wl_base.sh); the base
@@ -20,7 +20,7 @@
 # What runs (all on this host):
 #   1. NEW (role tree copy or git archive) and BASE (git archive) to ~/wl/src/<sha> (skipped when present);
 #   2. wl_prep.sh with WL_PROGS = only the programs the named workloads use: cargo xtask so for each sha
-#      (cached in ~/wl/products/<sha>) and a relink of just those programs (cached in ~/wl/kit/<sha>);
+#      (cached in ~/wl/products/<sha>-release) and a relink of just those programs (cached in ~/wl/kit/<sha>-release);
 #   3. wl_count_run.sh: perf stat -r 3 + strace -c + md5 per workload and variant; rows cached per
 #      variant in ~/wl/count/<sha>/ (BASE results are reused by every later call).
 # Prints one table per workload: new, base, glibc, new/glibc, new/base, SAME/DIFF output.
@@ -66,6 +66,7 @@ target=$1
 shift
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/wl_local.sh"
+profile=$(wl_profile) || exit 2   # the products profile (wl_lock.sh): release, what ships; WL_PROFILE=fast for a comparison
 root=; gitmode=0
 if [ -d "$target" ]; then
     if wl_is_git "$target"; then
@@ -123,7 +124,7 @@ prep() {
     wl_install_local || return 1   # B = ~/wl/bin/v-<hash>, never overwritten
     for s in $new $base; do
         if [ "$s" = "$new" ]; then k=$srckey; else k=$s; fi
-        [ -f ~/wl/products/$k/libc.a ] || [ -f ~/wl/src/$k/Cargo.toml ] && continue
+        [ -f ~/wl/products/$(wl_key "$k")/libc.a ] || [ -f ~/wl/src/$k/Cargo.toml ] && continue
         [ -d ~/wl/src/$k ] && rm -rf ~/wl/src/$k   # empty or partial tree from an earlier failed unpack: unpack again
         if [ $gitmode = 1 ]; then
             t=~/wl/src/.$k.$$; rm -rf "$t"; mkdir -p "$t" || return 1
@@ -136,7 +137,7 @@ prep() {
             wl_local_src "$root" "$k" || return 1
         fi
     done
-    cmd="${rec}WL_PROGS='$progs' bash $B/wl_prep.sh $srckey $base && WLC_ENV='$wenv' COUNT_FRESH=${COUNT_FRESH:-0} FAULT_PCT=${FAULT_PCT:-2} bash $B/wl_count_run.sh $list $base $srckey"
+    cmd="${rec}export WL_PROFILE=$profile && WL_PROGS='$progs' bash $B/wl_prep.sh $srckey $base && WLC_ENV='$wenv' COUNT_FRESH=${COUNT_FRESH:-0} FAULT_PCT=${FAULT_PCT:-2} bash $B/wl_count_run.sh $list $base $srckey"
 }
 [ $nowait = 1 ] && echo "wl_count: --nowait ignored (this tool runs where it is started; jobrun detaches)" >&2
 prep || exit 1
