@@ -1,0 +1,13 @@
+{"task": "DL-LIBC-START-8", "model": "opus", "tokens": null,
+ "result": "merged next (DL-LIBC-EARLY-6, STRTO-FENV-FLAGS-3) keeping both sides (StartInfo init hooks + rseq_size, one ld.so __libc_stack_end, five loader exports); hot lists regenerated per profile, three dead keys dropped, five unpinned generic keys kept out",
+ "branch": "task/dl-libc-start-8", "head": "8c95bc90c",
+ "gate": {"affected": "see kanon:dl-libc-start-8-gate (FULL tier)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "regen.sh adds traced keys that cargo xtask static (check_pinned) refuses, so a merge regen can go red on static", "recommendation": "merge.py skips and names a new Rust key that is neither #[inline(never)] nor in hot-text.unpinned; or a story pins the five keys (find_cached, attach_charmap, TscGate::fresh, variants::each, record_for) with counts"}],
+ "informational": ["fast-profile inlining in liella_boundary moves with unrelated code in the crate: three keys went dead, five generics became sections (layout jitter class, #4347)", "StartInfo.rseq_size -> LOADER_RSEQ is unobservable while dynamic programs may not create threads (D-22.10); DL-14 threads should test it", "#4807 accepted by the owner; DL-LIBC-NONSHARED queued"],
+ "refused": [],
+ "impact": [{"kind": "unblock", "what": "DL-LIBC-START-7's work (native_dynamic expected output, D-10.100) can land on current next", "before": null, "after": null, "unit": null, "measured": false},
+            {"kind": "coverage", "what": "plants on the merge sites (StartInfo init_array, LD_EXPORTS)", "before": 0, "after": 3, "unit": "plants", "measured": true}],
+ "improvement": "the hot-list regen and cargo xtask static disagree on what a new key may be; one rule in merge.py would stop every merge regen from going red on static",
+ "next_step": "land; then the regen/check_pinned ruling",
+ "report_file": "handoff/DL-LIBC-START-8-report.md",
+ "jobs": ["dl-libc-start-8-check2", "dl-libc-start-8-gate", "dl-libc-start-8-plants"]}

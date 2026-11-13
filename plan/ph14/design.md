@@ -370,7 +370,7 @@ With our loader:
 | Relocation (§6) | ld.so | libc.so.6 is relocated first (deepest dependency) |
 | **`__liella_libc_early_init(&StartInfo)`** (LIELLA_PRIVATE) | ld.so calls libc | libc's steps 3-4 move here: `environ`, program names, tunables, CPU paths (`cpu::init_with`, the D-4.25 flag), the NULL-folding guard (S6). Runs before *any* constructor, `.preinit_array` included, so constructors see a fully initialised libc |
 | Init (§9) | ld.so | preinit (program), then shared objects' init, dependencies first |
-| `_start` → `__libc_start_main` | program | detects the Liella-runtime flag + `rtld_fini`: skips steps 1-4, registers `rtld_fini`, runs the program's `DT_INIT`/`INIT_ARRAY` when `init` is NULL (new crt1) or calls `init` (old crt1); order confirmed by the M14-0 corpus |
+| `_start` → `__libc_start_main` | program | detects the Liella-runtime flag + `rtld_fini`: skips steps 1-4, registers `rtld_fini` (not an old crt1's `fini`), publishes the initial `environ` and names again (undoing `.preinit_array` changes), runs the program's `DT_INIT`/`INIT_ARRAY` when `init` is NULL (new crt1) or calls `init` (old crt1); order confirmed by the M14-0 corpus |
 | threads | libc | `pthread_create` gets static TLS + dtv through `__liella_tls_*` (§7): full threads |
 | malloc | libc | unchanged (libc's heap; lazy init). The loader keeps a separate small arena (mmap-backed) for link maps and dynamic TLS (R14-5) and never calls the interposable `malloc` |
 

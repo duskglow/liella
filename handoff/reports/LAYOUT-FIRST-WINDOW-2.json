@@ -1,0 +1,81 @@
+{
+ "task": "LAYOUT-FIRST-WINDOW-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "merged origin/next (HOTLIST-REGEN-CHEAP) into the first-window branch: first-window and cluster inputs now read from the hand-written inputs dir; vs next eed0052ec release tool/locale/localtime/localtime_mktime each -1 fault, fast localtime/localtime_mktime -1, nothing worse; pre-#5026 values not reached because next itself grew +2",
+ "branch": "task/layout-first-window-2",
+ "head": "419f9e087",
+ "gate": {
+  "affected": "FULL (escalated): 32 suites, 11706 passed / 0 failed, conformance 130/0",
+  "peak": "16G"
+ },
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": [
+  "next eed0052ec release profile fails init_short_programs_stay_within_their_page_fault_bounds (setlocale + printf 53 > 51) on its own; this head 52 > 51, still red; fast passes",
+  "pre-#5026 release values (tool 52, locale 50) not reached: next gained +2 on tool/locale since a5636ce6b, independent of this branch",
+  "fast first-window margin fell from 1012 to 180 bytes with next's start-up growth; release margin 1844 bytes",
+  "the FIRST-WINDOW products test reads crates/libc-so/hot-text.list (as the other products tests do), not a train-owned copy under target/hot-lists",
+  "probe jobs mei:lfw2-probe-base and mei:lfw2-probe-head (the counts above) end rc 1 only on the release short-program bound that is red on next itself; evidence, not named in jobs"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "faults",
+   "what": "release tool probe vs next eed0052ec (Skylake-SP)",
+   "before": 56,
+   "after": 55,
+   "unit": "minor faults",
+   "measured": true
+  },
+  {
+   "kind": "faults",
+   "what": "release locale probe",
+   "before": 53,
+   "after": 52,
+   "unit": "minor faults",
+   "measured": true
+  },
+  {
+   "kind": "faults",
+   "what": "release localtime / localtime_mktime probes",
+   "before": 19,
+   "after": 18,
+   "unit": "minor faults",
+   "measured": true
+  },
+  {
+   "kind": "faults",
+   "what": "fast localtime / localtime_mktime probes",
+   "before": 19,
+   "after": 18,
+   "unit": "minor faults",
+   "measured": true
+  },
+  {
+   "kind": "correctness",
+   "what": "first-window keys would be silently skipped when the list is a train-owned copy under target/hot-lists (merge resolution reads them from crates/libc-so)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  },
+  {
+   "kind": "coverage",
+   "what": "FIRST-WINDOW products test + xtask unit test, 2 plants CAUGHT on the merged head",
+   "before": 0,
+   "after": 2,
+   "unit": "plants",
+   "measured": true
+  }
+ ],
+ "improvement": "the products test's fault lines are prefixed by the test name under --nocapture, so `grep ^minor faults` misses some; a `cargo xtask faults --compare <base>` printing one table would save every layout story its own probe and grep scripts",
+ "next_step": "land; follow-up story: find next's release start-up growth since a5636ce6b (+2 tool/locale) and widen the 180-byte fast first-window margin",
+ "report_file": "handoff/LAYOUT-FIRST-WINDOW.md",
+ "jobs": [
+  "mei:lfw2-gate",
+  "mei:lfw2-plants",
+  "mei:lfw2-lint1",
+  "mei:lfw2-fwcheck"
+ ]
+}

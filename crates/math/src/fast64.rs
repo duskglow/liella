@@ -1075,12 +1075,16 @@ fn step(h: f64, up: bool) -> f64 {
 /// `y.hi + y.lo`, so `f(x)` lies strictly between `y.hi` and its neighbour on the side of `y.lo`
 /// (when `y.hi` is a power of two and `y.lo < 0`, `|y.lo|` is at most a quarter of `ulp(y.hi)`);
 /// when both ends lie on one side of `y.hi`, the directed rounding is `y.hi` or that neighbour.
+///
+/// `m = 1023` (D-10.105): the argument above is unchanged up to the scaling. A rounded `v` with
+/// `|v| >= 2` stands for `|v|·2^1023 >= 2^1024`, the rounding with an unbounded exponent beyond
+/// `DBL_MAX`: overflow in `mode` ([`crate::elem::overflow`]); below 2 the scaling is exact.
 pub(crate) fn settle(y: Dd, eps: f64, m: i32, mode: Rounding) -> Option<(f64, Status)> {
     let e = eps + dd::abs(y.hi) * SLACK;
     if m < -1022 || (m == -1022 && y.hi <= 1.0) {
         return tiny(y, e, m, mode);
     }
-    if m > 1022 {
+    if m > 1023 {
         return None;
     }
     let (dn, up) = (y.lo - e, y.lo + e);
@@ -1105,6 +1109,9 @@ pub(crate) fn settle(y: Dd, eps: f64, m: i32, mode: Rounding) -> Option<(f64, St
         };
         if toward_up == above { step(y.hi, above) } else { y.hi }
     };
+    if m == 1023 && dd::abs(v) >= 2.0 {
+        return Some(crate::elem::overflow::<f64>(v < 0.0, mode));
+    }
     Some((v * dd::pow2(m), Status::flags(Flags::INEXACT)))
 }
 

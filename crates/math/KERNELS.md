@@ -67,10 +67,10 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast32/gamma.rs:33` `fn horner<const N: usize>(c: &[u64; N], s: f64) -> f64` — bound: undocumented — doc: c[0] + s·(c[1] + s·(...)) by Horner.
 - `fast32/gamma.rs:48` `pub(super) fn gamma_core(xd: f64) -> Option<f64>` — bound: undocumented — doc: Γ(x) as a `double` with relative error ≤ 55.1u (u = 2^-53), for 2^-20 ≤ |x|, -42 < x < 36, x not a negative integer (`None` outside).
 - `fast32/gamma.rs:79` `fn ln64(v: f64) -> f64` — bound: undocumented — doc: ln v for a positive normal `double` v in [2^-181, 2^181], absolute error ≤ (1.45 + 2|y|)u.
-- `fast32/gamma.rs:104` `pub(super) fn lgamma_core(x: f32) -> Option<(f64, u64)>` — bound: undocumented — doc: lnΓ(x) = ln|Γ(x)| as a `double` y and its margin (ulp of y), piecewise, for a finite x: * |x - 1| ≤ 1/8: y = z·q(z), z = x - 1 exact.
-- `fast32/gamma.rs:115` `fn lgamma_core_signed(x: f32) -> Option<(f64, u64, i32)>` — bound: undocumented — doc: [`lgamma_core`] and the sign of Γ(x) (1 or -1).
-- `fast32/gamma.rs:147` `pub fn eval_lgamma(x: f32, mode: Rounding) -> Option<((f32, Status), i32)>` — bound: undocumented — doc: `lgammaf` by the fast path with the sign of Γ(x) (`signgam`), or `None` (see [`eval`]): the value as `eval(Fast::Lgamma, ..)`, the sign from Γ(x) itself ([`lgam…
-- `fast32/gamma.rs:154` `pub fn eval_tgamma(x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `tgammaf` by the fast path, or `None` (see [`eval`]).
+- `fast32/gamma.rs:120` `fn lgamma_core_signed(x: f32) -> Option<(f64, u64, i32, bool)>` — bound: undocumented — doc: [`lgamma_core`] and the sign of Γ(x) (1 or -1).
+- `fast32/gamma.rs:178` `fn lgamma_edge(xd: f64) -> Option<(f64, u64, i32, bool)>` — bound: undocumented — doc: lnΓ(x) for the operands [`lgamma_core_signed`]'s `double` pieces refuse, as its (y, margin in ulp of y, sign of Γ(x)), or `None` (the poles, x ≤ -16 off the pol…
+- `fast32/gamma.rs:206` `pub fn eval_lgamma(x: f32, mode: Rounding) -> Option<((f32, Status), i32)>` — bound: undocumented — doc: `lgammaf` by the fast path with the sign of Γ(x) (`signgam`), or `None` (see [`eval`]): the value as `eval(Fast::Lgamma, ..)`, the sign from Γ(x) itself ([`lgam…
+- `fast32/gamma.rs:214` `pub fn eval_tgamma(x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `tgammaf` by the fast path, or `None` (see [`eval`]).
 
 ## fast32/hyperbolic.rs (f32 hyperbolic)
 
@@ -130,20 +130,20 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 ## fast32.rs (f32 core)
 
 - `fast32.rs:343` `pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `f(x)` for `float` `x` by the fast path, or `None` when the operand is outside its domain or the rounding test fails (the caller then runs the accurate path).
-- `fast32.rs:386` `fn finish(x: f32, y: f64, delta: u64, mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test on y, the statistics under `name` and the hardware flags (see [`eval`]).
-- `fast32.rs:396` `include!("fast32_tables.rs");`
-- `fast32.rs:410` `pub(crate) fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32>` — bound: undocumented — doc: The rounding test and the final rounding of y = f·(1 + θ), |y - f| < `delta` ulp(y).
-- `fast32.rs:437` `pub fn eval_nearest(f: Fast, x: f32) -> Option<f32>` — bound: undocumented — doc: `f(x)` rounded to nearest by the fast path, for the in-place entry of a caller in the default MXCSR (MATH-M6-ENVELOPE-COST prototype), or `None`.
-- `fast32.rs:489-503` `nearest_fn!` entries: exp_nearest, exp2_nearest, exp10_nearest, log_nearest, log2_nearest, log10_nearest, sin_nearest, cos_nearest, tan_nearest, sinh_nearest, cosh_nearest, tanh_nearest, asinh_nearest, acosh_nearest, atanh_nearest
-- `fast32.rs:509` `pub fn exp_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `expf` in the caller's rounding direction and MXCSR, which it does not read, by one `double` evaluation and one conversion (LIBM-F32-ONEPASS, D-10.63), or `None…
-- `fast32.rs:515` `pub fn exp2_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `exp2f` as [`exp_onepass_any`].
-- `fast32.rs:527` `pub fn exp10_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `exp10f` as [`exp_onepass_any`] (D-10.72): `c` = RN(128·log2 10), |x| < 37.9 (|x·log2 10| < 125.9, so [`exp_onepass`]'s range and proof hold unchanged: |z| < 2^…
-- `fast32.rs:536` `pub fn log_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `logf` in the caller's rounding direction and MXCSR, unread (D-10.72; proof at [`log_onepass`]).
-- `fast32.rs:542` `pub fn log2_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `log2f` as [`log_onepass_any`].
-- `fast32.rs:548` `pub fn log10_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `log10f` as [`log_onepass_any`].
-- `fast32.rs:566-586` `fast_fn!` entries: exp, exp2, exp10, log, log2, log10, log1p, sin, cos, tan, asin, acos, atan, expm1, cbrt, sinh, cosh, tanh, asinh, acosh, atanh
-- `fast32.rs:591` `pub fn erf(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `erf` for `float`: the fast path, else [`erf_refused`] (the tiny operands' direct path, else the accurate path).
-- `fast32.rs:599` `pub fn erfc(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `erfc` for `float`: the fast path, else [`erfc_refused`] (as [`erf`]).
+- `fast32.rs:383` `fn finish(x: f32, y: f64, delta: u64, mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test on y, the statistics under `name` and the hardware flags (see [`eval`]).
+- `fast32.rs:393` `include!("fast32_tables.rs");`
+- `fast32.rs:407` `pub(crate) fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32>` — bound: undocumented — doc: The rounding test and the final rounding of y = f·(1 + θ), |y - f| < `delta` ulp(y).
+- `fast32.rs:434` `pub fn eval_nearest(f: Fast, x: f32) -> Option<f32>` — bound: undocumented — doc: `f(x)` rounded to nearest by the fast path, for the in-place entry of a caller in the default MXCSR (MATH-M6-ENVELOPE-COST prototype), or `None`.
+- `fast32.rs:486-500` `nearest_fn!` entries: exp_nearest, exp2_nearest, exp10_nearest, log_nearest, log2_nearest, log10_nearest, sin_nearest, cos_nearest, tan_nearest, sinh_nearest, cosh_nearest, tanh_nearest, asinh_nearest, acosh_nearest, atanh_nearest
+- `fast32.rs:506` `pub fn exp_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `expf` in the caller's rounding direction and MXCSR, which it does not read, by one `double` evaluation and one conversion (LIBM-F32-ONEPASS, D-10.63), or `None…
+- `fast32.rs:512` `pub fn exp2_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `exp2f` as [`exp_onepass_any`].
+- `fast32.rs:524` `pub fn exp10_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `exp10f` as [`exp_onepass_any`] (D-10.72): `c` = RN(128·log2 10), |x| < 37.9 (|x·log2 10| < 125.9, so [`exp_onepass`]'s range and proof hold unchanged: |z| < 2^…
+- `fast32.rs:533` `pub fn log_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `logf` in the caller's rounding direction and MXCSR, unread (D-10.72; proof at [`log_onepass`]).
+- `fast32.rs:539` `pub fn log2_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `log2f` as [`log_onepass_any`].
+- `fast32.rs:545` `pub fn log10_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `log10f` as [`log_onepass_any`].
+- `fast32.rs:563-583` `fast_fn!` entries: exp, exp2, exp10, log, log2, log10, log1p, sin, cos, tan, asin, acos, atan, expm1, cbrt, sinh, cosh, tanh, asinh, acosh, atanh
+- `fast32.rs:588` `pub fn erf(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `erf` for `float`: the fast path, else [`erf_refused`] (the tiny operands' direct path, else the accurate path).
+- `fast32.rs:596` `pub fn erfc(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `erfc` for `float`: the fast path, else [`erfc_refused`] (as [`erf`]).
 
 ## fast32_tables.rs (fast32_tables)
 
@@ -362,8 +362,8 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast64.rs:1039` `pub fn pow(x: f64, y: f64, neg: bool, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `x^y = ±e^(y·ln x)` for a positive finite `x != 1` (the magnitude of the caller's `x`), a finite `y`, the sign `neg` (`x < 0` and `y` an odd integer).
 - `fast64.rs:1056` `fn pow_eps(v: Dd, tail: f64, dz: f64) -> f64` — bound: undocumented — doc: [`pow`]'s bound `eps + 1.02·|v.hi|·dz` on the error of `v` (proof at [`pow`]).
 - `fast64.rs:1061` `fn step(h: f64, up: bool) -> f64` — bound: undocumented — doc: The neighbour of a nonzero finite `h` toward +∞ (`up`) or −∞.
-- `fast64.rs:1078` `pub(crate) fn settle(y: Dd, eps: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: The correctly rounded `(y ± eps)·2^m` in `mode`, or `None` when the interval holds a rounding boundary (or the result is outside the ranges handled here).
-- `fast64.rs:1122` `fn tiny(y: Dd, e: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: [`settle`] for a positive result with `m <= -1022` (subnormal, or in the lowest normal binade, where the grid is 2^-1074 throughout; anything at or above 2^-102…
+- `fast64.rs:1082` `pub(crate) fn settle(y: Dd, eps: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: The correctly rounded `(y ± eps)·2^m` in `mode`, or `None` when the interval holds a rounding boundary (or the result is outside the ranges handled here).
+- `fast64.rs:1129` `fn tiny(y: Dd, e: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: [`settle`] for a positive result with `m <= -1022` (subnormal, or in the lowest normal binade, where the grid is 2^-1074 throughout; anything at or above 2^-102…
 
 ## fast_bessel.rs (fast_bessel)
 
@@ -417,29 +417,39 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast_gamma.rs:160` `pub fn lgamma(x: f64, mode: Rounding) -> Option<((f64, Status), i32)>` — bound: undocumented — doc: `lgamma x` correctly rounded in `mode` and the sign of `Γ(x)`, for `x` in [`domain`] other than 1 and 2 (exact zeros), or `None` (the caller runs the accurate p…
 - `fast_gamma.rs:169` `pub fn tgamma_kernel(x: f64) -> Option<(Dd, f64, i32)>` — bound: undocumented — doc: `tgamma x` as `(y, eps, m)`, `1 <= |y.hi| < 2`: `|Γ(x) − y·2^m| <= eps·2^m`, or `None`.
 - `fast_gamma.rs:183` `pub fn tgamma(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `tgamma x` correctly rounded in `mode` for a non-integer `x` in [`domain`], or `None`.
+- `fast_gamma.rs:217` `pub fn lgamma_tiny(x: f64) -> Option<(Dd, f64, i32)>` — bound: undocumented — doc: `lgamma x` for `0 < |x| < 2^-60` as `(y, eps, sign)`: `lnΓ(x) = −ln|x| − γx + R`, `|R| <= ζ(2)x²/2 < 2^-120` (the series' terms alternate and decrease).
+- `fast_gamma.rs:237` `pub fn tgamma_tiny(x: f64) -> Option<(Dd, f64, i32)>` — bound: undocumented — doc: `tgamma x` for `0 < |x| < 2^-60` (subnormals included) as `(y, eps, m)` for [`fast64::settle`]: `Γ(x) = 1/x − γ + R`, `|R| <= 0.99|x| + |x|² < 2^-59.9` (DLMF 5.…
+- `fast_gamma.rs:264` `pub fn lgamma_large(x: f64) -> Option<(Dd, f64, i32)>` — bound: undocumented — doc: `lgamma x` for `16 <= x < X_BIG` as `(y, eps)`: Stirling, `lnΓ(x) = x(ln x − 1) − ln(x)/2 + ln(2π)/2 + S`, `S = Σ_{k=1}^{10} c_k x^{1−2k}` within `|c_11|·x^-21 …
+- `fast_gamma.rs:300` `fn binade(v: f64) -> i32` — bound: undocumented — doc: The unbiased binade of a normal nonzero `v`.
+- `fast_gamma.rs:309` `fn settle_wide(y: Dd, eps: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: [`fast64::settle`] for `(y ± eps)·2^m` with `m` up to the overflow.
+- `fast_gamma.rs:318` `pub fn lgamma_band(x: f64, mode: Rounding) -> Option<((f64, Status), i32)>` — bound: undocumented — doc: `lgamma` on the bands above, correctly rounded, with `Γ(x)`'s sign, or `None` (the caller runs the accurate path): `|x| < 2^-60`, and `x >= 16` (overflow from `…
+- `fast_gamma.rs:332` `pub fn tgamma_band(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `tgamma` for `0 < |x| < 2^-60`, correctly rounded, or `None` ([`tgamma_tiny`] normalizes `y` for [`settle_wide`]; `x = ±2^-1024` is its one case left to the acc…
 
 ## fast_special.rs (fast_special)
 
 - `fast_special.rs:155` `fn with_sign_of(v: f64, x: f64) -> f64` — bound: undocumented — doc: `v` with `x`'s sign for `v > 0` (`erf |x|` here, never zero or NaN): `−v` for negative `x`, `v` otherwise, the same value as `if x < 0.0 { -v } else { v }` (`x`…
-- `fast_special.rs:167` `fn taylor(row: &[u64; 19], t: f64) -> Dd` — bound: undocumented — doc: The Taylor row `row` (layout in the module doc, `M = 4` double-doubles, degree 14) at `t`.
-- `fast_special.rs:187` `fn slot(x: f64, base: u64) -> (usize, f64)` — bound: undocumented — doc: The slot centre of `x` (module doc) and its index from `base`.
-- `fast_special.rs:199` `fn erf_small(x: f64) -> Dd` — bound: undocumented — doc: `erf x` for `2^-55 <= x < 2^-5` (module doc; the generator's bound `ERF_SMALL_EPS` assumes this order): `z = x²` exact, `R = q2 + zh·(q3 + … + zh·q6)` in `f64`,…
-- `fast_special.rs:217` `fn erf_table_dd(x: f64) -> (Dd, f64)` — bound: undocumented — doc: `erf x` for `2^-5 <= x < 6` as `(y, eps)`: `|erf x − y| <= eps` (module doc).
-- `fast_special.rs:226` `fn erf_small_dd(x: f64) -> (Dd, f64)` — bound: undocumented — doc: `erf x` for `2^-55 <= x < 2^-5` as `(y, eps)`: `|erf x − y| <= eps` (module doc).
-- `fast_special.rs:238` `pub fn erf_kernel(x: f64) -> (Dd, f64, i32)` — bound: undocumented — doc: `erf x` for `0 < x < 6` as `(y, eps, m)`: `|erf x − y·2^m| <= eps·2^m` (module doc).
-- `fast_special.rs:266` `pub fn erfc_kernel(x: f64) -> Option<(Dd, f64, i32)>` — bound: undocumented — doc: `erfc x` for `1 <= x < ERFC_MAX` as `(y, eps, m)`, `1 <= y.hi < 2`: `|erfc x − y·2^m| <= eps·2^m` (module doc), or `None` when `e^(−x²)`'s kernel declines.
-- `fast_special.rs:290` `pub fn erf_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `erf x` rounded to nearest for the in-place envelope (module doc, "In-place entries"), or `None`: NaN, `±∞` and `|x| < 2^-55` always, and the rare operands both…
-- `fast_special.rs:329` `pub fn erfc_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `erfc x` rounded to nearest for the in-place envelope (module doc, "In-place entries"), or `None`: NaN, `±∞`, `|x| < 2^-55`, results below `2^-1021` and the rar…
-- `fast_special.rs:364` `fn erf_quick_dd(x: f64) -> Dd` — bound: undocumented — doc: The quick phase's `erf x` for `2^-5 <= x < 6` as `(zh, zl)` within `RHO_ERF_Q·|zh|` (module doc, "Quick phase"; the order is the bound's).
-- `fast_special.rs:387` `fn erfc_low_near(x: f64, (y, eps): (Dd, f64)) -> Option<f64>` — bound: undocumented — doc: `erfc x` on `(−6, 1)` as `1 ± erf |x|` from `erf |x|` as `(y, eps)`, rounded to nearest, or `None` (the in-place entry's `1 − erf` branch).
-- `fast_special.rs:400` `fn erf_table_near(x: f64) -> Option<f64>` — bound: undocumented — doc: The table path for `2^-5 <= x < 6` when the quick phase's rounding test refuses: out of line and cold, so the quick phase keeps no table value live across it (t…
-- `fast_special.rs:409` `fn erfc_table_near(x: f64, ax: f64) -> Option<f64>` — bound: undocumented — doc: As [`erf_table_near`] for `erfc` (`ax = |x|`, `2^-5 <= ax < 6`, `x < 1`).
-- `fast_special.rs:417` `fn erf_quick_near(x: f64) -> Option<f64>` — bound: undocumented — doc: The quick phase's `erf x` rounded to nearest for `2^-5 <= x < 6`, or `None` when its rounding test refuses (module doc, "Quick phase").
-- `fast_special.rs:425` `fn erfc_quick_near(x: f64, ax: f64) -> Option<f64>` — bound: undocumented — doc: The quick phase's `erfc x` rounded to nearest for `ax = |x|`, `2^-5 <= ax < 6`, `x < 1`, or `None` when its rounding test refuses.
-- `fast_special.rs:440` `pub fn erf_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: `erf x` rounded to nearest by the quick phase alone, or `None` (outside `2^-5 <= |x| < 6`, or the rounding test refuses); [`erf_nearest`] runs the same phase fi…
-- `fast_special.rs:457` `pub fn erfc_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: `erfc x` rounded to nearest by the quick phase alone (`−6 < x < 1`, `|x| >= 2^-5`), or `None`; [`erfc_nearest`] runs the same phase first.
-- `fast_special.rs:467` `kernels!(; #[inline(always)]; two_prod; fast64::exp_dd);`
-- `fast_special.rs:478` `kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma; fast64::fused::exp_dd);`
-- `fast_special.rs:482` `fn mirrored(mode: Rounding) -> Rounding` — bound: undocumented — doc: `mode` with up and down swapped (rounding `−a` is the negation of rounding `a` in it).
-- `fast_special.rs:492` `pub fn erf(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `erf x` for a finite nonzero `x`, correctly rounded in `mode`, or `None` (the caller runs the accurate path).
-- `fast_special.rs:508` `pub fn erfc(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `erfc x` for a finite `x` with `2^-100 <= |x|` and `x < ERFC_MAX`, correctly rounded in `mode`, or `None` (the caller runs the accurate path).
+- `fast_special.rs:180` `fn erf_linear_int(x: f64, ax: f64) -> f64` — bound: undocumented — doc: `erf x` for `|x| < 2^-55` rounded to nearest with the default environment's flags, by integer arithmetic (LIBM-ERF-TINY-F64; the proof is tools/proofs/erf_tiny_…
+- `fast_special.rs:204` `fn taylor(row: &[u64; 19], t: f64) -> Dd` — bound: undocumented — doc: The Taylor row `row` (layout in the module doc, `M = 4` double-doubles, degree 14) at `t`.
+- `fast_special.rs:224` `fn slot(x: f64, base: u64) -> (usize, f64)` — bound: undocumented — doc: The slot centre of `x` (module doc) and its index from `base`.
+- `fast_special.rs:236` `fn erf_small(x: f64) -> Dd` — bound: undocumented — doc: `erf x` for `2^-55 <= x < 2^-5` (module doc; the generator's bound `ERF_SMALL_EPS` assumes this order): `z = x²` exact, `R = q2 + zh·(q3 + … + zh·q6)` in `f64`,…
+- `fast_special.rs:254` `fn erf_table_dd(x: f64) -> (Dd, f64)` — bound: undocumented — doc: `erf x` for `2^-5 <= x < 6` as `(y, eps)`: `|erf x − y| <= eps` (module doc).
+- `fast_special.rs:263` `fn erf_small_dd(x: f64) -> (Dd, f64)` — bound: undocumented — doc: `erf x` for `2^-55 <= x < 2^-5` as `(y, eps)`: `|erf x − y| <= eps` (module doc).
+- `fast_special.rs:275` `pub fn erf_kernel(x: f64) -> (Dd, f64, i32)` — bound: undocumented — doc: `erf x` for `0 < x < 6` as `(y, eps, m)`: `|erf x − y·2^m| <= eps·2^m` (module doc).
+- `fast_special.rs:303` `pub fn erfc_kernel(x: f64) -> Option<(Dd, f64, i32)>` — bound: undocumented — doc: `erfc x` for `1 <= x < ERFC_MAX` as `(y, eps, m)`, `1 <= y.hi < 2`: `|erfc x − y·2^m| <= eps·2^m` (module doc), or `None` when `e^(−x²)`'s kernel declines.
+- `fast_special.rs:328` `pub fn erf_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `erf x` rounded to nearest for the in-place envelope (module doc, "In-place entries"), or `None`: NaN and `±∞` always, and the rare operands both rounding tests…
+- `fast_special.rs:372` `pub fn erfc_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `erfc x` rounded to nearest for the in-place envelope (module doc, "In-place entries"), or `None`: NaN, `±∞`, `|x| < 2^-55`, results below `2^-1021` and the rar…
+- `fast_special.rs:407` `fn erf_quick_dd(x: f64) -> Dd` — bound: undocumented — doc: The quick phase's `erf x` for `2^-5 <= x < 6` as `(zh, zl)` within `RHO_ERF_Q·|zh|` (module doc, "Quick phase"; the order is the bound's).
+- `fast_special.rs:430` `fn erfc_low_near(x: f64, (y, eps): (Dd, f64)) -> Option<f64>` — bound: undocumented — doc: `erfc x` on `(−6, 1)` as `1 ± erf |x|` from `erf |x|` as `(y, eps)`, rounded to nearest, or `None` (the in-place entry's `1 − erf` branch).
+- `fast_special.rs:443` `fn erf_table_near(x: f64) -> Option<f64>` — bound: undocumented — doc: The table path for `2^-5 <= x < 6` when the quick phase's rounding test refuses: out of line and cold, so the quick phase keeps no table value live across it (t…
+- `fast_special.rs:452` `fn erfc_table_near(x: f64, ax: f64) -> Option<f64>` — bound: undocumented — doc: As [`erf_table_near`] for `erfc` (`ax = |x|`, `2^-5 <= ax < 6`, `x < 1`).
+- `fast_special.rs:460` `fn erf_quick_near(x: f64) -> Option<f64>` — bound: undocumented — doc: The quick phase's `erf x` rounded to nearest for `2^-5 <= x < 6`, or `None` when its rounding test refuses (module doc, "Quick phase").
+- `fast_special.rs:468` `fn erfc_quick_near(x: f64, ax: f64) -> Option<f64>` — bound: undocumented — doc: The quick phase's `erfc x` rounded to nearest for `ax = |x|`, `2^-5 <= ax < 6`, `x < 1`, or `None` when its rounding test refuses.
+- `fast_special.rs:483` `pub fn erf_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: `erf x` rounded to nearest by the quick phase alone, or `None` (outside `2^-5 <= |x| < 6`, or the rounding test refuses); [`erf_nearest`] runs the same phase fi…
+- `fast_special.rs:500` `pub fn erfc_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: `erfc x` rounded to nearest by the quick phase alone (`−6 < x < 1`, `|x| >= 2^-5`), or `None`; [`erfc_nearest`] runs the same phase first.
+- `fast_special.rs:515` `fn erf_linear_cold(x: f64, ax: f64) -> f64` — bound: undocumented — doc: The baseline build's tiny-band call: [`erf_linear_int`] kept out of line, so the in-place entry's typical path keeps its register assignment (LIBM-ERF-TINY-F64-…
+- `fast_special.rs:519` `kernels!(; #[inline(always)]; two_prod; fast64::exp_dd; erf_linear_cold);`
+- `fast_special.rs:542` `fn erf_linear_fma(x: f64, ax: f64) -> f64` — bound: undocumented — doc: [`super::erf_linear_int`]'s result for normal `x` by one FMA (case F of the proof tool): `fma(x, CH64, x·CL64)·2^-64`, every intermediate normal and the last pr…
+- `fast_special.rs:552` `kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma; fast64::fused::exp_dd; erf_linear_fma);`
+- `fast_special.rs:556` `fn mirrored(mode: Rounding) -> Rounding` — bound: undocumented — doc: `mode` with up and down swapped (rounding `−a` is the negation of rounding `a` in it).
+- `fast_special.rs:566` `pub fn erf(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `erf x` for a finite nonzero `x`, correctly rounded in `mode`, or `None` (the caller runs the accurate path).
+- `fast_special.rs:582` `pub fn erfc(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `erfc x` for a finite `x` with `2^-100 <= |x|` and `x < ERFC_MAX`, correctly rounded in `mode`, or `None` (the caller runs the accurate path).

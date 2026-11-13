@@ -1,8 +1,8 @@
 /* Spec §27.1 (dlsym, RTLD_DEFAULT): a symbol exported by a shared object the program links
  * against is found by name in the global scope and calls through the returned address. Proves
- * the runner's dynamic-link mode (LINK-HELPERS); runs on the reference only until Liella has a
- * loader. Each failing check exits with its line number. */
+ * the runner's dynamic-link mode (LINK-HELPERS). Each failing check exits with its line number. */
 /* LINK-HELPERS: dlh_add */
+/* PENDING-LIELLA: DL-16b (DL-DLSYM) */
 #define _GNU_SOURCE
 #include <dlfcn.h>
 
