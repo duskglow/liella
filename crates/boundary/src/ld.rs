@@ -870,6 +870,8 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
     let (head, view) = image_view(prog, bias, name, prog_views);
     // The program's own file is not known (no file is read): (dev, ino) that no file has.
     let mut ids: [FileId; OBJECTS_MAX] = [(u64::MAX, u64::MAX); OBJECTS_MAX];
+    // Each object's run-time program header table (address, count), for `dlopen` (DL-16a).
+    let mut phdrs = [(prog.phdr, prog.phnum); OBJECTS_MAX];
     let image = liella_ld::elf::Elf::from_image::<Native>(head, view).unwrap_or_else(|_| fail_with(&[name, b": malformed program headers\n"], program::FAILURE));
     let dynm = image.dynamic().ok().flatten().unwrap_or_else(|| fail_with(&[name, b": no valid dynamic section\n"], program::FAILURE));
     let first = Obj { elf: image, dynm, bias: u64::try_from(bias).unwrap_or(0), name, tls: None };
@@ -927,6 +929,7 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
             let loaded = loaded.unwrap_or_else(|e| fail_with(&[name, b": ", e.message()], program::FAILURE));
             maps[n] = (at, file.len());
             ids[n] = id;
+            phdrs[n] = (usize::try_from(loaded.phdr).unwrap_or(0), usize::from(loaded.phnum));
             objs[n] = parse(file, name, loaded.bias);
             edge(q, n, name);
             n += 1;
@@ -1003,6 +1006,14 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: 
     for &(at, len) in maps[1..n].iter().chain(&views).filter(|m| m.1 != 0) {
         let _ = raw::munmap(at, len);
     }
+    for (k, (slot, o)) in START_OBJS.iter().zip(objs).enumerate() {
+        let (phdr, phnum) = phdrs[k];
+        let words = [u64::try_from(phdr).unwrap_or(0), u64::try_from(phnum).unwrap_or(0), o.bias, ids[k].0, ids[k].1];
+        slot.iter().zip(words).for_each(|(w, v)| w.store(v, Relaxed));
+    }
+    START_INTERP.store(interp.unwrap_or(usize::MAX), Relaxed);
+    START_PAGE.store(page, Relaxed);
+    START_N.store(n, Release);
     run_init(&hooks[..n], &edges[..ne], sp, early.map(|f| f.early_init), rseq_size)
 }
 
@@ -1014,6 +1025,21 @@ fn fn_addr(f: extern "C" fn(usize) -> usize) -> usize {
 
 /// Most `DT_NEEDED` links over all objects of one start.
 const EDGES_MAX: usize = 1024;
+
+/// What `dlopen` needs to see the start-time objects again (DL-16a, D-27.34; nothing is allocated at
+/// start): per object, in load order, its run-time program header table address and count, its
+/// bias and its file's (`st_dev`, `st_ino`) (the program's: none, `u64::MAX`).
+static START_OBJS: [[AtomicU64; 5]; OBJECTS_MAX] = [const { [const { AtomicU64::new(0) }; 5] }; OBJECTS_MAX];
+/// Start-time objects recorded in [`START_OBJS`] (0: `link` did not run).
+static START_N: AtomicUsize = AtomicUsize::new(0);
+/// Index of `ld.so` itself among them (`usize::MAX`: not among them).
+static START_INTERP: AtomicUsize = AtomicUsize::new(usize::MAX);
+/// The page size.
+static START_PAGE: AtomicU64 = AtomicU64::new(0);
+/// The program's `argc`, `argv`, `envp` and auxiliary vector as `run_init` found them on the initial
+/// stack, for `dlopen` (its constructors' arguments, its search's environment). Recorded, never
+/// re-read from the stack: after `ld.so PROGRAM` the start's words are rearranged (argv[0] dropped).
+static START_ARGS: [AtomicUsize; 4] = [const { AtomicUsize::new(0) }; 4];
 
 /// The words of a function array in a mapped, relocated object.
 fn array_words(a: init::Array) -> &'static [u64] {
@@ -1051,6 +1077,9 @@ fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<
     let argc = stack_word(sp);
     let argv = sp.wrapping_add(8);
     let envp = argv.wrapping_add(usize::try_from(argc).unwrap_or(0).wrapping_add(1).wrapping_mul(8));
+    for (slot, v) in START_ARGS.iter().zip([usize::try_from(argc).unwrap_or(0), argv, envp]) {
+        slot.store(v, Relaxed);
+    }
     let args = |v: usize| i64::from_ne_bytes(u64::try_from(v).unwrap_or(0).to_ne_bytes());
     let (a, b, c) = (i64::from_ne_bytes(argc.to_ne_bytes()), args(argv), args(envp));
     let call = |f: u64| {
@@ -1061,6 +1090,7 @@ fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<
         while stack_word(auxv) != 0 {
             auxv = auxv.wrapping_add(8);
         }
+        START_ARGS[3].store(auxv.wrapping_add(8), Relaxed);
         // The program's own DT_INIT and DT_INIT_ARRAY go to its C library's start (design §14,
         // D-27.24): `__libc_start_main` runs them after every shared object's initialisation.
         let prog = hooks.first().copied().unwrap_or_default();
@@ -1079,6 +1109,7 @@ fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<
             tls_align: usize::try_from(THREAD_TLS_ALIGN.load(Relaxed)).unwrap_or(0),
             tls_init: fn_addr(thread_tls_init),
             tls_release: fn_addr(thread_tls_release),
+            dlopen: dlopen::entry_address(),
         };
         let at = core::ptr::from_ref(&info).expose_provenance();
         let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), args(at), 0, 0);
@@ -1108,6 +1139,8 @@ extern "C" fn fini_all() {
     if FINI_DONE.swap(true, AcqRel) {
         return;
     }
+    // The `dlopen`ed objects first, the last initialised first (DL-16a).
+    dlopen::fini_loaded();
     for slot in FINI_HOOKS.iter().take(FINI_LEN.load(Acquire)) {
         let [addr, len, fini] = [0, 1, 2].map(|k| slot.get(k).map_or(0, |w| w.load(Relaxed)));
         for f in init::fini_calls(fini, array_words(init::Array { addr, len })) {
@@ -1486,6 +1519,8 @@ fn list(env: &List<'_>, prog: &'static [u8], strict: bool) -> ! {
 
 /// Words the loader copies of the auxiliary vector (128 pairs, `AT_NULL` included).
 const AUXV_WORDS_MAX: usize = 256;
+
+mod dlopen;
 /// Words per program header.
 const PHDR_WORDS: usize = liella_rt::start::PHDR_WORDS;
 

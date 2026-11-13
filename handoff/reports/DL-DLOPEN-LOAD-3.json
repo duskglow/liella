@@ -1,0 +1,66 @@
+{
+ "task": "DL-DLOPEN-LOAD-3",
+ "model": "opus",
+ "tokens": null,
+ "result": "run 2's direct-gate failure explained and fixed (ungated dlerr named liella-ld); #5125/#5126/#5294 differences rows and compat options plus the DL-16a D-27 decision as pending records; tests for #5125, check order, mode precedence, open count, static dlopen",
+ "branch": "task/dl-dlopen-load-3",
+ "head": "cce283898",
+ "gate": {
+  "affected": "11700 passed / 0 failed (32 suites; conformance 130 passed / 0 failed)",
+  "peak": "16G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "assign ids to records/pending/DL-DLOPEN-LOAD-3-1..5 (four COMPAT, one D-27) and update the four differences rows that cite the pending paths",
+   "recommendation": "assign in file order; the rows and -5's body name the pending files"
+  }
+ ],
+ "informational": [
+  "process capacity of 512 loaded objects (one more refused with a text) has not been probed against the reference; recommend DL-16b probe it",
+  "static dlopen(NULL) gives the static-program text with an empty name; DL-16S decides dlopen(NULL) in a static program"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "tooling",
+   "what": "a loader-only change no longer selects liella-math's suites (dlerr no longer links liella-ld)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  },
+  {
+   "kind": "coverage",
+   "what": "tests added: #5125 checks in dlopen.rs, static-program dlopen, dlopen_rules.rs (3), dlerr compose unit test",
+   "before": 0,
+   "after": 6,
+   "unit": "tests",
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "plants added",
+   "before": 0,
+   "after": 7,
+   "unit": "plants",
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "differences rows and registered compat options",
+   "before": 0,
+   "after": 4,
+   "unit": "rows",
+   "measured": true
+  }
+ ],
+ "improvement": "the affected selection test's failure message could name the boundary module that created the new edge; it took a source read to find dlerr.rs",
+ "next_step": "coordinator assigns the five pending ids; then DL-16b (dlsym) stacks on this branch",
+ "report_file": "handoff/DL-DLOPEN-LOAD.md",
+ "jobs": [
+  "shiki:dl-dlopen-load-3-gate2",
+  "shiki:dl-dlopen-load-3-plants2",
+  "shiki:dl-dlopen-load-3-t4"
+ ]
+}

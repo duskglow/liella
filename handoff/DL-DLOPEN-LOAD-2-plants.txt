@@ -1,0 +1,6 @@
+# DL-DLOPEN-LOAD-2: plants on dlopen/dlerror (crates/ld/tests/dlopen.rs catches each; the program exits with the check number).
+unwind-keeps-reservation | crates/boundary/src/ld/dlopen.rs | lit:        map::Mapper::unmap(&mut SysMapper { fd: -1 }, node.reserve.0, node.reserve.1); ==>         let _ = node.reserve; | cargo xtask so && cargo test -p liella-ld --test dlopen | msg:dlopen check Some\(19\) failed
+unwind-keeps-file | crates/boundary/src/ld/dlopen.rs | lit:        let _ = raw::munmap(node.file.0, node.file.1); ==>         let _ = node.file; | cargo xtask so && cargo test -p liella-ld --test dlopen | msg:dlopen check Some\(19\) failed
+identity-ignored | crates/boundary/src/ld/dlopen.rs | lit:(nd.dev, nd.ino) == (st.dev, st.ino) ==> (nd.dev, nd.ino) == (st.ino, st.dev) | cargo xtask so && cargo test -p liella-ld --test dlopen | msg:dlopen check Some\([47]\) failed
+success-keeps-text | crates/boundary/src/dlerr.rs | lit:        bytes(r).get_mut(..TEXT).into_iter().for_each(|f| f.fill(0)); ==>         let _ = r; | cargo xtask so && cargo test -p liella-ld --test dlopen | msg:dlopen check Some\(22\) failed
+unknown-mode-high-bits | crates/ld/src/dlopen.rs | lit:    if m & !KNOWN != 0 { ==>     if m & !KNOWN & 0xffff != 0 { | cargo xtask so && cargo test -p liella-ld --test dlopen | msg:dlopen check Some\(12\) failed

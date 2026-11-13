@@ -347,6 +347,9 @@ pub mod private {
         /// `extern "C" fn(tp) -> usize`: the thread at `tp` is ending (its last call into the
         /// loader); the area itself goes with the thread's mapping.
         pub tls_release: usize,
+        /// The loader's `dlopen` entry (DL-16a, plan/ph14/dl-16-dlopen.md §1): `(file, mode, caller)`
+        /// to a handle or NULL, the failure text set in the calling thread's dlerror record; 0: none.
+        pub dlopen: usize,
     }
 
     #[cfg(test)]
