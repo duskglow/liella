@@ -54,7 +54,9 @@ pub struct Entry {
 }
 
 impl Entry {
-    /// The zone.
+    /// The zone. Always inlined: [`select`]'s lock-free path returns it, and an out-of-line copy
+    /// would have no hot-text key (HOTTEXT-TIME-CLUSTER-STABLE, as `recheck::TscGate::fresh`).
+    #[inline(always)]
     pub fn zone(&self) -> &Zone {
         self.loaded.zone.as_ref().unwrap_or(self.loaded.fixed)
     }
