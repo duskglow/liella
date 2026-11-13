@@ -1,0 +1,13 @@
+# LAYOUT-TRACE-DEFAULT plants: trace-at-build is the default of every product build (`cargo xtask so` with the
+# switch unset). Product plants build in the plants copy with the default and run the products check of
+# hot_text_products; switch plants run the xtask unit tests.
+# The default silently back to the committed lists (every build parsed as a regen build): the products carry no marker.
+ltd-default-committed | xtask/src/so.rs | lit:let layout = Layout::from_env(regen)?; ==> let layout = Layout::from_env(true)?; | cargo xtask so && cargo test -p liella --test hot_text_products init_products_are_grouped_from_a_trace_of_their_own_build | msg:TRACE-AT-BUILD: target/liella/\.hot-lists: .*committed lists
+# The marker's list hashes no longer those of the lists the build grouped from.
+ltd-marker-hash | xtask/src/hotlists.rs | lit:out.push_str(&format!("{g} {h:016x}\n")); ==> out.push_str(&format!("{g} {:016x}\n", h ^ 1)); | cargo xtask so && cargo test -p liella --test hot_text_products init_products_are_grouped_from_a_trace_of_their_own_build | msg:TRACE-AT-BUILD: .* changed after the build that grouped from it
+# A regen build with the switch unset traces instead of reading the committed lists (it then refuses itself).
+ltd-regen-unset | xtask/src/hotlists.rs | lit:"" if regen => return Ok(Layout::Committed), ==> "" if regen && false => return Ok(Layout::Committed), | cargo test -p xtask layout_switch_defaults_to_the_trace_and_is_strict | msg:layout_switch_defaults_to_the_trace_and_is_strict \.\.\. FAILED
+# A regen build accepts an explicit trace or opt-out.
+ltd-regen-explicit | xtask/src/hotlists.rs | lit:if regen && layout != Layout::Committed { ==> if false && layout != Layout::Committed { | cargo test -p xtask layout_switch_defaults_to_the_trace_and_is_strict | msg:layout_switch_defaults_to_the_trace_and_is_strict \.\.\. FAILED
+# regen.sh's check of the rewritten list builds with the default (it would trace and check nothing of that list).
+ltd-regen-rebuild-default | tools/hottext/regen.sh | lit:(cd "$T" && LIELLA_LAYOUT_TRACE=0 cargo xtask so) ==> (cd "$T" && cargo xtask so) | cargo test -p xtask regen_builds_never_rely_on_the_default_layout | msg:regen\.sh builds with the default layout
