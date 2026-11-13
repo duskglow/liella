@@ -235,7 +235,8 @@ fn one<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, r: &Rela, deferre
         RelocKind::None => Ok(false),
         RelocKind::Relative if !deferred => put(img, field(r.kind, 0)?, text).map(|()| false),
         RelocKind::Relative => Ok(false),
-        RelocKind::Irelative if !deferred => Ok(true),
+        // Pass 1 checks the field a deferred entry will write, so pass 2 meets no new error.
+        RelocKind::Irelative if !deferred => inside(&o.elf, r.offset, 8, false).then_some(true).ok_or(RelocError::Outside(r.offset)),
         RelocKind::Irelative => {
             let resolver = field(r.kind, 0)?.map_or(0, |f| f.value);
             let v = img.call(resolver);
@@ -249,7 +250,7 @@ fn one<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, r: &Rela, deferre
             match (t.ifunc, deferred) {
                 (false, false) => put(img, field(r.kind, t.s)?, text).map(|()| false),
                 (false, true) => Ok(false),
-                (true, false) => Ok(true),
+                (true, false) => inside(&o.elf, r.offset, 8, false).then_some(true).ok_or(RelocError::Outside(r.offset)),
                 (true, true) => {
                     let s = img.call(t.s);
                     put(img, field(r.kind, s)?, false).map(|()| true)
@@ -306,6 +307,20 @@ fn text_segments<I: Image>(o: &Obj<'_>, img: &mut I, page: u64, open: bool) -> R
 ///
 /// The first [`RelocError`] met.
 pub fn relocate<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, img: &mut I, page: u64, unique: &mut dyn UniqueRegistry) -> Result<(), RelocError<'a>> {
+    if relocate_first::<A, I>(set, i, img, page, unique)? {
+        relocate_deferred::<A, I>(set, i, img, unique)?;
+    }
+    Ok(())
+}
+
+/// Pass 1 of object `i` (DL-16a two-pass relocation, plan/ph14/dl-16-dlopen.md §2): every symbol
+/// reference resolved, every field outside the IFUNC entries written, and each IFUNC entry's field
+/// checked; no foreign code runs. Whether any entry was deferred to [`relocate_deferred`].
+///
+/// # Errors
+///
+/// The first [`RelocError`] met.
+pub fn relocate_first<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, img: &mut I, page: u64, unique: &mut dyn UniqueRegistry) -> Result<bool, RelocError<'a>> {
     let o = *set.objs.get(i).ok_or(RelocError::Lookup(LookupError::NoObject(i)))?;
     let text = textrel(&o.dynm);
     if text {
@@ -316,11 +331,22 @@ pub fn relocate<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, img: &mu
         // Restored before any resolver can run, also on failure.
         text_segments(&o, img, page, false).map_err(|()| RelocError::Protect)?;
     }
-    if first? {
-        for table in [o.dynm.rela::<A>(), o.dynm.jmprel::<A>()] {
-            for r in table.map_err(RelocError::Elf)?.into_iter().flatten() {
-                one::<A, I>(set, i, &r, true, text, img, unique)?;
-            }
+    first
+}
+
+/// Pass 2 of object `i`: the IFUNC entries [`relocate_first`] deferred, each calling its resolver.
+/// After a successful pass 1 of the same set it meets no new error (pass 1 resolved the same
+/// symbols and checked the same fields).
+///
+/// # Errors
+///
+/// The first [`RelocError`] met.
+pub fn relocate_deferred<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, img: &mut I, unique: &mut dyn UniqueRegistry) -> Result<(), RelocError<'a>> {
+    let o = *set.objs.get(i).ok_or(RelocError::Lookup(LookupError::NoObject(i)))?;
+    let text = textrel(&o.dynm);
+    for table in [o.dynm.rela::<A>(), o.dynm.jmprel::<A>()] {
+        for r in table.map_err(RelocError::Elf)?.into_iter().flatten() {
+            one::<A, I>(set, i, &r, true, text, img, unique)?;
         }
     }
     Ok(())

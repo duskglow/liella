@@ -334,6 +334,9 @@ pub mod private {
         /// plus `tls::RSEQ_OFFSET` (`__rseq_size` as the loader publishes it); 0: none registered,
         /// so the C library registers none for new threads either (D-27.26).
         pub rseq_size: usize,
+        /// The loader's `dlopen` entry (DL-16a, plan/ph14/dl-16-dlopen.md §1): `(file, mode, caller)`
+        /// to a handle or NULL, the failure text set in the calling thread's dlerror record; 0: none.
+        pub dlopen: usize,
     }
 
     #[cfg(test)]

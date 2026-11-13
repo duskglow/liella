@@ -981,6 +981,8 @@ fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<
             init_array: w(prog.init_array.addr),
             init_array_len: w(prog.init_array.len),
             rseq_size,
+            // DL-16a's loader entry is not wired yet (WIP): libc's `dlopen` fails with a text.
+            dlopen: 0,
         };
         let at = core::ptr::from_ref(&info).expose_provenance();
         let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), args(at), 0, 0);
