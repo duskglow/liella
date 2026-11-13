@@ -66,6 +66,89 @@ pub struct Area {
     pub dtv_words: u64,
     /// The number of modules (the highest module ID).
     pub modules: u64,
+    /// Variant II: the bytes below the thread pointer the modules' blocks take (the surplus starts
+    /// there and ends at [`Area::tp`]). Variant I: the offset above the thread pointer they reach.
+    pub used: u64,
+}
+
+impl Area {
+    /// This area with room in its dtv for `slots` module slots (never fewer than its own modules):
+    /// modules loaded later get their slot without moving the vector (DL-16d). Only the length
+    /// grows; the words past the modules in use are never written at start. `None` on overflow.
+    pub fn with_dtv_slots(self, slots: u64) -> Option<Area> {
+        let dtv_words = DTV_HEADER.checked_add(slots.max(self.modules))?;
+        let len = self.dtv.checked_add(dtv_words.checked_mul(8)?)?;
+        Some(Area { len, dtv_words, ..self })
+    }
+}
+
+/// The module slots every thread's dtv has room for when objects can be loaded later (DL-16d,
+/// plan/ph14/dl-16-dlopen.md §5): one per object the loader can hold. Address space only.
+pub const MODULES_MAX: usize = 512;
+
+/// The static surplus's placements for modules loaded after start (DL-16d, R14-4, plan
+/// /ph14/dl-16-dlopen.md §5): first fit nearest the thread pointer, with each block's alignment.
+/// Every thread's surplus has the same offsets, so a place is one offset from the thread pointer.
+/// All-zero is the empty value (it lives in the loader's zeroed mapping). DL-16 never frees a
+/// place; a failed `dlopen` takes its places back with [`Surplus::rollback`].
+#[derive(Clone, Copy, Debug)]
+pub struct Surplus<const N: usize> {
+    len: usize,
+    /// Each place's `[start, end)` in bytes below the thread pointer, in placement order.
+    used: [(u64, u64); N],
+}
+
+impl<const N: usize> Default for Surplus<N> {
+    fn default() -> Self {
+        Self { len: 0, used: [(0, 0); N] }
+    }
+}
+
+impl<const N: usize> Surplus<N> {
+    /// The places made (a mark for [`Surplus::rollback`]).
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Whether no place is made.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Take back every place made after `mark`.
+    pub fn rollback(&mut self, mark: usize) {
+        self.len = self.len.min(mark);
+    }
+
+    /// A place for `m`'s block in the surplus `[lo, hi)` (bytes below a thread pointer aligned to
+    /// `tp_align`): its offset from the thread pointer. The block's address keeps `p_vaddr`'s
+    /// remainder modulo its alignment. `None`: no room, an alignment the thread pointer does not
+    /// have (or not a power of two), `p_filesz > p_memsz`, all `N` places taken, or variant I
+    /// (ARCH: its surplus lies above the thread block, A-4).
+    pub fn place<A: Arch>(&mut self, lo: u64, hi: u64, tp_align: u64, m: &Module) -> Option<i64> {
+        if A::TLS_VARIANT != TlsVariant::II || m.filesz > m.memsz || self.len >= N {
+            return None;
+        }
+        let align = m.align.max(1);
+        if !align.is_power_of_two() || align > tp_align.max(1) {
+            return None;
+        }
+        // TP - d keeps the remainder r = p_vaddr % align when d % align == (align - r) % align.
+        let want = align.wrapping_sub(m.vaddr % align) % align;
+        let used = self.used.get(..self.len)?;
+        let free = |d: u64| used.iter().all(|&(a, b)| d <= a || d.wrapping_sub(m.memsz) >= b);
+        // The nearest place starts where the surplus or a block ends (the block cannot move
+        // nearer without crossing that edge).
+        let at = |s: u64| -> Option<u64> {
+            let min = s.checked_add(m.memsz)?;
+            let d = min.checked_add(want.wrapping_add(align).wrapping_sub(min % align) % align)?;
+            (d <= hi && free(d)).then_some(d)
+        };
+        let d = core::iter::once(lo).chain(used.iter().map(|&(_, b)| b)).filter(|&s| s >= lo).filter_map(at).min()?;
+        *self.used.get_mut(self.len)? = (d.wrapping_sub(m.memsz), d);
+        self.len = self.len.wrapping_add(1);
+        0i64.checked_sub_unsigned(d)
+    }
 }
 
 /// Why no layout was made.
@@ -132,6 +215,7 @@ pub fn layout<A: Arch>(mods: &[Option<Module>], out: &mut [Option<Placed>], tail
         };
         *slot = Some(Placed { module: id, tp_offset: at });
     }
+    let used = off;
     let off = off.checked_add(surplus).ok_or(TlsError::Overflow)?;
     let dtv_words = DTV_HEADER.checked_add(id).ok_or(TlsError::Overflow)?;
     let (tp, end) = match A::TLS_VARIANT {
@@ -143,7 +227,7 @@ pub fn layout<A: Arch>(mods: &[Option<Module>], out: &mut [Option<Placed>], tail
     };
     let dtv = up(end, 8).ok_or(TlsError::Overflow)?;
     let len = dtv.checked_add(dtv_words.checked_mul(8).ok_or(TlsError::Overflow)?).ok_or(TlsError::Overflow)?;
-    Ok(Area { len, align: max, tp, dtv, dtv_words, modules: id })
+    Ok(Area { len, align: max, tp, dtv, dtv_words, modules: id, used })
 }
 
 /// The dtv of a thread whose thread pointer is `tp`: generation `generation`, a slot per module of
