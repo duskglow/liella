@@ -1,54 +1,58 @@
-# LAYOUT-TRACE-HOST-CANONICAL (LT-4): handoff (run 2, LAYOUT-TRACE-HOST-CANONICAL-2, context checkpoint)
+# LAYOUT-TRACE-HOST-CANONICAL (LT-4): handoff (run 3, LAYOUT-TRACE-HOST-CANONICAL-3, context checkpoint)
 
-State: branch `task/layout-trace-host-canonical-2` (on top of run 1's `task/layout-trace-host-canonical`), role mei:~/w/s3
-(Skylake-SP). Spec: `~/state/briefs/LAYOUT-TRACE-HOST-CANONICAL.md` "The change"; plan `plan/layout-rethink.md` (branch
-task/layout-rethink) 2(e), 3, 4; rulings #5191, #5222 (cost: owner 11-13 says correctness first, cost does not gate),
-#5223. Decision: pending record `records/pending/LAYOUT-TRACE-HOST-CANONICAL-2-1.toml` (D-NEW, series D-X; the whole
-design, one place). Code: tools/hottext only (trace_gdb.py, canon_host.sh, hostdata/, runner.sh, regen.sh,
-probe_text.sh); xtask/src/so.rs untouched.
+State: branch `task/layout-trace-host-canonical-3` (on top of -2's branch, no merge), role keke:~/w/n1 (Zen 1). Spec:
+`~/state/briefs/LAYOUT-TRACE-HOST-CANONICAL.md` "The change"; plan `plan/layout-rethink.md` (branch task/layout-rethink)
+2(e), 3, 4; rulings #5191, #5222, #5223, #5241 (prove with `--both`; no contract relief). Decision: pending record
+`records/pending/LAYOUT-TRACE-HOST-CANONICAL-2-1.toml` (D-NEW, series D-X). Code: tools/hottext and xtask/src/hottext.rs
+(tests, one message); xtask/src/so.rs untouched.
 
-## Run 2 (this run)
+## Run 3 (this run)
 
-1. **p_cold cut short (lthc-canon3-mei, #5226) - fixed.** With the syscall catchpoint on, the first cancellable
-   `openat` stops at the instruction after `syscall`, which is the label `liella_machine_cancel_window_end` carrying a
-   one-shot breakpoint not yet hit; gdb resuming that stop over the breakpoint ended the program (seen: "No frame",
-   trace ends at cancel_window_end). Now: a syscall stop is told by `%orig_rax` (call number; -1 at a breakpoint trap),
-   entry/return toggled per thread; the breakpoint at the stop pc is deleted at entry and its function counted at the
-   return; redirection also applies when the stop pc is a label. p_cold 407 -> 482 names, regen's call check passes.
-   (gdb's `to_string` output does not carry the catchpoint report: do not detect stops from it.)
-2. **#5223 nscache region:** `/dev/shm/liella-nscache-<uid>` -> `@run/nscache`, a fresh file per program run (tracer
-   empties `<stage>/run` before each class run); unlink/unlinkat are redirected too.
-3. **Two self-checks (the plants' catchers):** (a) any path the program opens/stats/unlinks that is neither redirected
-   nor a residual input (HOST_OK: /usr/share/locale, locale-langpack, zoneinfo, /proc, /sys, /dev/null, /dev/urandom,
-   /tmp, the run dir) fails the trace; it found p_nss reading **/etc/resolv.conf, /etc/host.conf, /etc/gai.conf**: the
-   tree now supplies stock copies (tools/hottext/hostdata). (b) an AVX2 class and a non-AVX2 class with identical runs
-   fail (every probe differs at least by `liella_machine_xgetbv0`; measured per class on 6 probes).
-4. **Proof on the intermediate head e30dd53** (before 3; jobs lthc2-proof-<host>): fast `regen.sh . --replace --build`
-   on Skylake-SP and Haswell-EP: **all four lists byte-identical and libc.a 412c17ffe4abfda5..., libc.so.6
-   f55cc779eb7a8c84... identical**; Zen 1 not finished (stopped for the final-head proof). The release step
-   (`LIELLA_FULL_PROFILE=1 regen.sh . --build` after a fast `--replace`) failed in its own product build: release
-   products from fast-only lists break STARTUP-TEXT-WINDOWS and STARTUP-DATA-WINDOWS before any trace. Not the tracer:
-   the one-profile path cannot start release from a fast-only list. The final proof uses `regen.sh . --both` instead.
-   Trace time (fast regen incl. two builds): 492 s Skylake-SP, 895 s Haswell-EP (loaded).
+1. **Why lthc2-gate (mei) went red:** two causes, both on the branch. (a) `cargo xtask static`: the gate ran on
+   ffb4253, before 551efeb removed the build flag's name from the -2 report json (fixed already, static green
+   on the inherited head on keke). (b) a real test failure: runner.sh now passes the program's assignments as
+   `HOT_TEXT_ENV_<NAME>`, and `regen_runner_runs_traces_together_and_keeps_their_order`'s fake tracer still printed
+   its own LANG. Fixed: the fake prints the environment the way trace_gdb.py builds it, and the test gives the
+   runner a caller LANG/TZ that must not leak (f18e111). Not layout jitter.
+2. **#5241:** regen.sh's usage and the dead-key message name `regen.sh . --both` as the both-profile path and say why
+   a release `--build` after a fast `--replace` fails (bc77b8d).
+3. **`--replace` then `--both` failed on every host** (lthc2-proof2-mei: `hottext-recheck: release: hot-text.absent:
+   20 stale release line(s)`). --replace drops next's relic keys (tier extra, profiles `-`: no trace hits them),
+   but their allow-list lines stayed. Fixed: `prune.py --absent` drops allow-list lines whose key left the list;
+   regen.sh runs it on the --replace path only (the train's `--both --allow-drop` never touches the hand-written
+   file). Drops nothing on next's own lists (f58747b; test `regen_replace_drops_the_allow_list_lines_of_keys_it_drops`).
+4. **Host input found: the order of names at one address followed the caller's locale.** trace_gdb.py wrote aliases
+   (`bcmp`/`__memcmpeq`/`liella_machine_equal`, `__vfprintf_chk`/`liella_vfprintf4`) in nm's order, and nm sorts by
+   locale. A plain jobrun on keke (LANG=en_US.UTF-8) gave startup-text.keys 7ec03f8a / probe-text.keys 76f63692 vs
+   3242d4f0 / c8d5c8c0 under `~/bin/gate` (C): same keys, swapped neighbours. Fixed: nm with LC_ALL=C and a sort per
+   address (1acfdbc; test `trace_writes_the_names_at_one_address_in_byte_order`). The -2 proof matched only because
+   every proof job ran under `~/bin/gate`.
+5. **Proof so far (fast `--replace --build`, tree2 = -2's head, all under ~/bin/gate):** Zen 1, Skylake-SP and (run 2)
+   Haswell-EP: lists `fd7e54b5 3242d4f0 c8d5c8c0 2d993846`, libc.a 412c17ffe4abfda5, libc.so.6 f55cc779eb7a8c84, all
+   identical. Fast regen time: 1019 s Zen 1 (loaded), 596 s Skylake-SP. `--both` was never green before item 3.
 
-## Jobs started on the final head (read these)
+## Jobs started on the final head 1acfdbc (collect these)
 
-- mei: `lthc2-plants` (handoff/LAYOUT-TRACE-HOST-CANONICAL-2-plants.txt, 5 plants), `lthc2-gate` (affected --run --base
-  origin/next).
-- keke, mei, shiki: `lthc2-proof2-<host>` (`~/work/LAYOUT-TRACE-HOST-CANONICAL-2/proof2.sh`, output out2/, log
-  `~/logs/lthc2-proof2-<host>.log`): `proof:` lines carry the list and product digests.
+- keke: `lthc3-lint3` (clippy all-features + static), `lthc3-gate3` (affected --run --base origin/next),
+  `lthc3-plants3` (handoff/LAYOUT-TRACE-HOST-CANONICAL-3-plants.txt, 10 plants, --timeout 1500),
+  `lthc3-proof2-keke` (proof3.sh bounds).
+- mei: `lthc3-proof2-mei`; shiki: `lthc3-proof2-shiki` (`~/work/LAYOUT-TRACE-HOST-CANONICAL-3/proof3.sh`: tree3 =
+  git archive of 1acfdbc at the same path on every host, plain jobrun, no gate wrapper, so the caller's locale is
+  the host's: this is the test of item 4). Output `~/work/LAYOUT-TRACE-HOST-CANONICAL-3/out3/`; `proof:` lines in
+  `~/logs/lthc3-proof2-<host>.log`; keke adds `bounds:` lines (both profiles: `cargo xtask so` contracts and
+  `cargo test -p liella --test hot_text_products` with the canonical lists).
 
 ## Next step (exact)
 
-1. Collect the jobs. Compare the `proof:` digest lines of the three hosts (fast lists + fast libc.a/libc.so.6; --both
-   lists + target/product/regen/{fast,release}/libc.a). Identical = the brief's proof; any difference: diff the lists
-   (`out2/<step>/`), then the per-trace names files, and find the input (canon_host digests line).
-2. Bounds and contracts with the canonical list on one host, both profiles: in tree2 after proof2, `cargo xtask so`
-   and `LIELLA_FULL_PROFILE=1 cargo xtask so` (layout contracts) plus `cargo test -p liella --test hot_text_products`.
-   If the lists should land, commit the regenerated lists from tree2 (they are generated: copy, never edit).
-3. Plants: all five must be CAUGHT; list any WARN line.
-4. Open: the release one-profile regen path from a fast-only list (item 4 above): regen.sh `--build` with release
-   could get layout-contract relief like its dead-key relief, or the docs should say "use --both"; RULING NEEDED if it matters.
+1. Collect the six jobs. Compare `proof:` lines across the three hosts: fast lists + fast products, `--both` lists +
+   `both fast/release products`. Expected fast lists = the run-2 digests above (C order). Any difference: diff
+   `out3/<step>/` between hosts, then the names files under `target/product/regen/*.trace`.
+2. `bounds:` lines green on keke = the brief's last proof item. A bound red with lists that only reorder: read
+   the start-up layout jitter rule in the brief before acting.
+3. Plants: all ten CAUGHT; list WARN lines (WARN-DEV-SHM is expected on a Zen 1 host).
+4. Then update the pending record's body (add: tool locale, item 4; `--both` as the both-profile path and the
+   `--replace` allow-list pruning, items 2-3; the proof numbers), the report json, and hand back COMPLETE. The record
+   was left unchanged in run 3 so the hand-back head's content equals what the jobs tested.
 
-Things not to redo: namespaces for data (nscache private table); `files`-only nsswitch or empty /usr/share/locale (other
-paths); detecting syscall stops from gdb's printed output or from the pc.
+Things not to redo: namespaces for data (nscache private table); `files`-only nsswitch or empty /usr/share/locale;
+detecting syscall stops from gdb's printed output or from the pc; the one-profile release regen (#5241: use --both).
