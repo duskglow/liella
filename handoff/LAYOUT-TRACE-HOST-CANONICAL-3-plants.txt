@@ -1,0 +1,18 @@
+# LAYOUT-TRACE-HOST-CANONICAL-3 plants (cargo xtask plants; docs/plants.md), run on a Zen 1 host (RAM under
+# /dev/shm/claude). The five plants of -2 (handoff/LAYOUT-TRACE-HOST-CANONICAL-2-plants.txt) with this host's RAM
+# paths: each command traces every regen probe (regen.sh --trace-only) against a RAM copy of the role's fast
+# products (built from this tree); the tracer under test is the plant copy's. Then the runner's environment
+# hand-off, caught by the xtask unit test this run fixed.
+# lthc3-cpu-host: the CPU entry runs its own code (the host's CPUID) instead of the virtual CPU's answer.
+lthc3-cpu-host | tools/hottext/trace_gdb.py | lit:answer(emul[pc], cls) ==> pass | d=$(mktemp -d /dev/shm/claude/lthc3-pt.XXXXXX) && rmdir $d && bash tools/hottext/regen.sh . --products /dev/shm/claude/LAYOUT-TRACE-HOST-CANONICAL-3/prod --trace-only $d | msg:ran the same functions: the program did not see the virtual CPU
+# lthc3-locale-host: the locale archive is the host's, not the tree's en_US.UTF-8 archive.
+lthc3-locale-host | tools/hottext/canon_host.sh | lit:/usr/lib/locale/locale-archive=$a: ==> | d=$(mktemp -d /dev/shm/claude/lthc3-pt.XXXXXX) && rmdir $d && bash tools/hottext/regen.sh . --products /dev/shm/claude/LAYOUT-TRACE-HOST-CANONICAL-3/prod --trace-only $d | msg:read host files the tree does not supply.*/usr/lib/locale/locale-archive
+# lthc3-nscache-host: the name-service cache region is the host's /dev/shm file (create or attach by host state).
+lthc3-nscache-host | tools/hottext/canon_host.sh | lit::/dev/shm/liella-nscache-$u=@run/nscache ==> | d=$(mktemp -d /dev/shm/claude/lthc3-pt.XXXXXX) && rmdir $d && bash tools/hottext/regen.sh . --products /dev/shm/claude/LAYOUT-TRACE-HOST-CANONICAL-3/prod --trace-only $d | msg:read host files the tree does not supply.*/dev/shm/liella-nscache-[0-9]+
+# lthc3-resolv-host: the resolver configuration is the host's.
+lthc3-resolv-host | tools/hottext/canon_host.sh | lit:for f in nsswitch.conf resolv.conf host.conf gai.conf; ==> for f in nsswitch.conf host.conf gai.conf; | d=$(mktemp -d /dev/shm/claude/lthc3-pt.XXXXXX) && rmdir $d && bash tools/hottext/regen.sh . --products /dev/shm/claude/LAYOUT-TRACE-HOST-CANONICAL-3/prod --trace-only $d | msg:read host files the tree does not supply.*/etc/resolv.conf
+# lthc3-syscall-bp: the breakpoint on a system call's return address is kept at its entry stop (the program ends there).
+lthc3-syscall-bp | tools/hottext/trace_gdb.py | perl:s/(count the function at the return\.\n\s*)bp\.delete\(\)/$1pass/ | d=$(mktemp -d /dev/shm/claude/lthc3-pt.XXXXXX) && rmdir $d && bash tools/hottext/regen.sh . --products /dev/shm/claude/LAYOUT-TRACE-HOST-CANONICAL-3/prod --trace-only $d | msg:p_cold: library functions named in the source never ran
+# lthc3-runner-env: the runner passes the program's assignments to the tracer's own environment, unprefixed
+# (the program would then get no LANG/TZ from the trace and the caller's environment would reach gdb).
+lthc3-runner-env | tools/hottext/runner.sh | lit:*=*) envs+=("HOT_TEXT_ENV_$1");; ==> *=*) envs+=("$1");; | cargo test -p xtask --bin xtask -- hottext::tests::regen_runner_runs_traces_together_and_keeps_their_order | msg:regen_runner_runs_traces_together_and_keeps_their_order.*(FAILED|panicked)|names\.1 is not trace p1
