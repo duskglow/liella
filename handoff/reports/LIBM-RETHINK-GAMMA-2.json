@@ -61,7 +61,7 @@
   }
  ],
  "improvement": "A test helper that builds floats from (exponent, fraction) should be shared and tested once: run 1 lost its diagnosis budget to a wrapped exponent in a hand-rolled one.",
- "next_step": "LIBM-RETHINK-GAMMA-3: profile lgamma tiny and x>=16 (3.9x/4.2x) before designing; then x<=-16 by reflection, f64 tgamma 16<=x<171.6, and the f32 bands with exhaustive sweeps (handoff/libm-rethink-gamma.md).",
+ "next_step": "LIBM-RETHINK-GAMMA-3: profile lgamma tiny and x>=16 (4.0x/4.3x) before designing; then x<=-16 by reflection, f64 tgamma 16<=x<171.6, and the f32 bands with exhaustive sweeps (handoff/libm-rethink-gamma.md).",
  "report_file": "handoff/libm-rethink-gamma.md",
  "jobs": [
   "libm-rethink-gamma-2-gate3",
