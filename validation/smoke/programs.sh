@@ -2,7 +2,8 @@
 #   NAME_src       the Debian source package (fetched from the trixie suite on deb.debian.org)
 #   NAME_kind      how its test result is read: automake (test-suite.log files), rc (one suite, its status),
 #                  gawk ("N TESTS FAILED" / "ALL TESTS PASSED"), make ("N Tests in M Categories Failed"),
-#                  bash (run-* sections compared with the reference build's)
+#                  bash (run-* sections compared with the reference build's), perl (t/TEST summary),
+#                  python (regrtest summary)
 #   NAME_build     configure and build in the current directory (a fresh copy of the source); CC and CXX are set
 #   NAME_test      run the program's own test suite there
 #   NAME_skip      (optional) why its test suite does not run here
@@ -77,3 +78,38 @@ bash_src=bash
 bash_kind=bash
 bash_build() { ./configure --without-bash-malloc --disable-nls --without-curses && make -j"$J"; }
 bash_test() { make tests; }
+
+# perl: miniperl and `make minitest` (the core tests that run without extensions: DynaLoader needs dlsym,
+# which Liella's libc.so.6 does not export yet, DL-16b). libswanted keeps the link to libm and the thread
+# library (libcrypt, libgdbm and the like would be system libraries found only by a library search).
+perl_src=perl
+perl_kind=perl
+perl_build() {
+    sh Configure -des -Dcc="$CC" -Dprefix="$PWD/inst" -Dlibswanted="m pthread" -Dusethreads && make -j"$J" miniperl
+}
+perl_test() { make minitest; }
+
+# python3.13: every extension module built in (MODULE_BUILDTYPE=static) and the dynamic loader disabled
+# (ac_cv_func_dlopen=no): the import of extension modules needs dlsym (DL-16b). Modules whose libraries the
+# host has no headers for (zlib, ssl, ctypes, ...) are not built on either side. The test run is a sample.
+python3_src=python3.13
+python3_kind=python
+python3_tests="test_os test_posix test_re test_math test_float test_long test_struct test_string test_str
+ test_time test_datetime test_strftime test_locale test_threading test_thread test_subprocess test_signal
+ test_select test_fcntl test_socket test_tempfile test_shutil test_glob test_fnmatch test_pwd test_grp
+ test_resource test_mmap test_errno test_sys test_unicodedata test_codecs test_format test_builtin test_dict"
+python3_build() {
+    MODULE_BUILDTYPE=static ac_cv_func_dlopen=no ac_cv_lib_dl_dlopen=no ./configure --without-ensurepip \
+        --disable-test-modules && make -j"$J"
+}
+python3_test() {
+    # shellcheck disable=SC2086
+    ./python -m test -j"$J" --timeout 1200 $python3_tests
+}
+
+# cppunit: a C++ library and its own test program (iostream, exceptions, the C++ runtime) built with
+# liella-c++; libstdc++ is linked statically (no libstdc++.so.6 to search for).
+cppunit_src=cppunit
+cppunit_kind=automake
+cppunit_build() { ./configure --disable-shared --disable-doxygen --disable-html-docs && make -j"$J"; }
+cppunit_test() { make -j"$J" check; }

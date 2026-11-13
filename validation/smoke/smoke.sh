@@ -24,7 +24,7 @@ J=$(nproc)
 limit=5400
 suite=trixie
 mirror=https://deb.debian.org/debian
-SMOKE_PROGRAMS="zlib xz_utils sqlite3 grep sed diffutils findutils coreutils gawk make bash"
+SMOKE_PROGRAMS="zlib xz_utils sqlite3 grep sed diffutils findutils coreutils gawk make bash perl python3 cppunit"
 
 . "$here/programs.sh"
 
@@ -156,6 +156,21 @@ count() {
             fi
             f=$(wc -l < "$out.failed")
             echo "$t $((t - f)) $f 0 0 0" > "$out" ;;
+        perl)
+            t=$(sed -n 's/^Files=\([0-9]*\),.*/\1/p' "$log" | tail -1); t=${t:-0}
+            f=$(sed -n 's/^Failed \([0-9]*\) tests* out of.*/\1/p' "$log" | tail -1); f=${f:-0}
+            [ "$5" = 0 ] || [ "$f" -gt 0 ] || f=1
+            echo "$t $((t - f)) $f 0 0 0" > "$out"
+            grep -E '\.\.\. *FAILED|\.\.\.\.* *FAILED' "$log" | sed 's/ *\.\.\..*//' | sort -u > "$out.failed" ;;
+        python)
+            # regrtest prints the names of failed and skipped tests as indented lines after a header line.
+            awk '/^[0-9]+ tests? (failed|failed again)/ { m = "f"; next } /^[0-9]+ tests? (skipped|altered|omitted|run no tests)/ { m = "s"; next }
+                 /^[^ ]/ { m = "" } m != "" && /^    / { for (i = 1; i <= NF; i++) print m, $i }' "$log" > "$out.names"
+            t=$(eval "echo \${${name}_tests}" | wc -w)
+            f=$(grep -c '^f ' "$out.names"); s=$(grep -c '^s ' "$out.names")
+            [ "$5" = 0 ] || [ "$f" -gt 0 ] || f=1
+            echo "$t $((t - f - s)) $f $s 0 0" > "$out"
+            sed -n 's/^f //p' "$out.names" | sort -u > "$out.failed" ;;
         rc)
             if [ "$5" = 0 ]; then echo "1 1 0 0 0 0" > "$out"; else echo "1 0 1 0 0 0" > "$out"; echo "suite (exit $5)" > "$out.failed"; fi ;;
     esac
