@@ -86,42 +86,51 @@ pub fn differing(a: &Path, b: &Path) -> Vec<&'static str> {
     GENERATED.iter().copied().filter(|g| fs::read(a.join(g)).ok() != fs::read(b.join(g)).ok()).collect()
 }
 
-/// LAYOUT-TRACE-AT-BUILD (LT-1, rulings #5190/#5191): the opt-in switch of `cargo xtask so`. `1`: the build links
-/// the probes against the archive it built, traces them and groups from that trace ([`Layout::Traced`]); `ungrouped`:
-/// the explicit opt-out for a builder without a tracer, an ungrouped product ([`Layout::Ungrouped`]). Unset or empty:
-/// the committed lists, as before ([`Layout::Committed`]).
+/// LAYOUT-TRACE-AT-BUILD (LT-1, rulings #5190/#5191) and LAYOUT-TRACE-DEFAULT: the layout switch of `cargo xtask
+/// so`. Unset, empty or `1`: the build links the probes against the archive it built, traces them and groups from
+/// that trace ([`Layout::Traced`], the default of every product build since LAYOUT-TRACE-DEFAULT); `ungrouped`: the
+/// explicit opt-out for a builder without a tracer, an ungrouped product ([`Layout::Ungrouped`]); `0`: the committed
+/// lists ([`Layout::Committed`]), kept for the list tooling (regen, repair, bench comparisons) until LT-5 deletes
+/// those lists. A regen build (`--hottext-regen`) reads the committed lists whatever the default.
 pub const TRACE_ENV: &str = "LIELLA_LAYOUT_TRACE";
 /// The marker `so` writes next to products it grouped from a trace of their own build (or left ungrouped): line 1
 /// the directory of the lists it used (`target/product/<profile>`), then `<list> <hash>` per list (so the layout
 /// verdict cache, which hashes the products directory, sees a list change). Every later reader of the generated
-/// lists (`layout-check`, the tests) reads that directory. A build without [`TRACE_ENV`] removes it first.
+/// lists (`layout-check`, the tests) reads that directory. A build from the committed lists removes it first.
 pub const MARKER: &str = ".hot-lists";
 
 /// Where the start-up layout of a `cargo xtask so` comes from ([`TRACE_ENV`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Layout {
-    /// The committed (or train-regenerated) lists: the default.
+    /// The committed (or train-regenerated) lists: regen builds, and `0` (list tooling until LT-5).
     Committed,
-    /// A trace of the probes linked against this build's un-grouped archive.
+    /// A trace of the probes linked against this build's un-grouped archive: the default.
     Traced,
     /// No grouping at all (no tracer on this builder; explicit).
     Ungrouped,
 }
 
 impl Layout {
-    /// The layout `value` of [`TRACE_ENV`] selects.
-    pub fn parse(value: Option<&str>) -> Result<Layout, String> {
-        match value.unwrap_or("") {
-            "" | "0" => Ok(Layout::Committed),
-            "1" => Ok(Layout::Traced),
-            "ungrouped" => Ok(Layout::Ungrouped),
-            v => Err(format!("{TRACE_ENV}={v:?}: want 1 (trace at build) or ungrouped (no tracer: ungrouped product), or unset")),
+    /// The layout `value` of [`TRACE_ENV`] selects for a product build; `regen`: the build is a regen build
+    /// (`--hottext-regen`), which traces nothing itself and reads the committed lists (it is what
+    /// `tools/hottext/regen.sh` traces), so with it only an unset (or empty) switch or `0` is accepted.
+    pub fn parse(value: Option<&str>, regen: bool) -> Result<Layout, String> {
+        let layout = match value.unwrap_or("") {
+            "" if regen => return Ok(Layout::Committed),
+            "" | "1" => Layout::Traced,
+            "0" => Layout::Committed,
+            "ungrouped" => Layout::Ungrouped,
+            v => return Err(format!("{TRACE_ENV}={v:?}: want unset or 1 (trace at build, the default), ungrouped (no tracer: ungrouped product) or 0 (the committed lists: list tooling until LT-5)")),
+        };
+        if regen && layout != Layout::Committed {
+            return Err(format!("so: {TRACE_ENV}={} and --hottext-regen together: a regen build reads the committed lists", value.unwrap_or("")));
         }
+        Ok(layout)
     }
 
-    /// This process's layout ([`TRACE_ENV`]).
-    pub fn from_env() -> Result<Layout, String> {
-        Layout::parse(std::env::var(TRACE_ENV).ok().as_deref())
+    /// This process's layout ([`TRACE_ENV`]) for a product build (`regen`: see [`Layout::parse`]).
+    pub fn from_env(regen: bool) -> Result<Layout, String> {
+        Layout::parse(std::env::var(TRACE_ENV).ok().as_deref(), regen)
     }
 }
 
@@ -132,7 +141,9 @@ static FORCED: OnceLock<PathBuf> = OnceLock::new();
 /// reader resolves them). Fails when a reader already resolved another directory or [`ENV`] is set.
 pub fn force_dir(root: &Path, dir: &Path) -> Result<(), String> {
     if Mode::from_env().over.is_some() {
-        return Err(format!("{TRACE_ENV} and {ENV} together: the trace writes its own lists (unset {ENV})"));
+        return Err(format!(
+            "{ENV} is set, but this build writes its own lists ({TRACE_ENV} unset or 1: trace at build, the default; or ungrouped): unset {ENV}, or set {TRACE_ENV}=0 to build from the lists it names"
+        ));
     }
     FORCED.set(dir.to_path_buf()).map_err(|_| "hot-lists: the lists directory was forced twice".to_string())?;
     match self::dir(root) {
@@ -430,17 +441,27 @@ mod tests {
         let _ = (fs::remove_dir_all(&a), fs::remove_dir_all(&b));
     }
 
-    /// LAYOUT-TRACE-AT-BUILD (no spec clause: build tooling, ruling #5191 opt-in): the switch is off unless set to
-    /// exactly `1` (trace) or `ungrouped` (the explicit opt-out); any other value is an error, never a silent default.
+    /// LAYOUT-TRACE-DEFAULT (no spec clause: build tooling, rulings #5190-#5194): a product build traces its own
+    /// layout unless told otherwise (unset, empty or `1`); `ungrouped` is the explicit opt-out and `0` the committed
+    /// lists; a regen build reads the committed lists and refuses an explicit trace or opt-out; any other value is
+    /// an error, never a silent default.
     #[test]
-    fn layout_switch_is_opt_in_and_strict() {
-        assert_eq!(Layout::parse(None), Ok(Layout::Committed));
-        assert_eq!(Layout::parse(Some("")), Ok(Layout::Committed));
-        assert_eq!(Layout::parse(Some("0")), Ok(Layout::Committed));
-        assert_eq!(Layout::parse(Some("1")), Ok(Layout::Traced));
-        assert_eq!(Layout::parse(Some("ungrouped")), Ok(Layout::Ungrouped));
-        for bad in ["yes", "true", "2", "Ungrouped"] {
-            assert!(Layout::parse(Some(bad)).unwrap_err().contains("LIELLA_LAYOUT_TRACE"), "{bad}");
+    fn layout_switch_defaults_to_the_trace_and_is_strict() {
+        assert_eq!(Layout::parse(None, false), Ok(Layout::Traced));
+        assert_eq!(Layout::parse(Some(""), false), Ok(Layout::Traced));
+        assert_eq!(Layout::parse(Some("1"), false), Ok(Layout::Traced));
+        assert_eq!(Layout::parse(Some("0"), false), Ok(Layout::Committed));
+        assert_eq!(Layout::parse(Some("ungrouped"), false), Ok(Layout::Ungrouped));
+        assert_eq!(Layout::parse(None, true), Ok(Layout::Committed));
+        assert_eq!(Layout::parse(Some(""), true), Ok(Layout::Committed));
+        assert_eq!(Layout::parse(Some("0"), true), Ok(Layout::Committed));
+        for explicit in ["1", "ungrouped"] {
+            assert!(Layout::parse(Some(explicit), true).unwrap_err().contains("--hottext-regen"), "{explicit}");
+        }
+        for bad in ["yes", "true", "2", "Ungrouped", " 1"] {
+            for regen in [false, true] {
+                assert!(Layout::parse(Some(bad), regen).unwrap_err().contains("LIELLA_LAYOUT_TRACE"), "{bad} {regen}");
+            }
         }
     }
 
