@@ -57,7 +57,7 @@ static uint64_t count(int cat, const char *name) {
 int main(void) {
     const char *comp;
     setenv("PATH", "/usr/bin:/bin", 1);
-    setenv("HOME", "/home/u", 1);
+    setenv("HOME", "/nonexistent", 1);
     setenv("LOGNAME", "u", 1);
     setenv("LS_COLORS", "di=01;34", 1);
     setenv("LESS", "-R", 1);
