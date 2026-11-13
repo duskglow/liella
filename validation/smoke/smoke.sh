@@ -231,14 +231,14 @@ selftest() {
     # Negative controls, one per rule of check-elf.sh: each must be rejected on its own.
     #   system: the system compiler's build (system loader, libc.so.6 by soname)
     #   interp: Liella's libc by path, the system's loader as PT_INTERP
-    #   soname: Liella's loader, the system's libc.so.6 named as well
+    #   soname: Liella's loader and libc, the system's libc.so.6 named as well (--no-as-needed keeps both)
     #   static: a static program (no PT_INTERP)
     #   nolibc: Liella's loader, no C library named at all
     for k in system interp soname static nolibc; do mkdir -p "$t/bad-$k"; done
     lcc() { env LIELLA_SMOKE_SYSROOT="$sys" LIELLA_SMOKE_LDSO="$ldso" "$work/bin/liella-cc" "$@"; }
     { gcc -O1 "$here/selftest/hello.c" -lm -o "$t/bad-system/hello" &&
         lcc -O1 "$here/selftest/hello.c" -lm -Wl,--dynamic-linker=/lib64/ld-linux-x86-64.so.2 -o "$t/bad-interp/hello" &&
-        lcc -O1 "$here/selftest/hello.c" -lm /lib/x86_64-linux-gnu/libc.so.6 -Wl,--allow-shlib-undefined -o "$t/bad-soname/hello" &&
+        lcc -O1 "$here/selftest/hello.c" -lm -Wl,--no-as-needed /lib/x86_64-linux-gnu/libc.so.6 -Wl,--allow-shlib-undefined -o "$t/bad-soname/hello" &&
         gcc -O1 -static "$here/selftest/hello.c" -lm -o "$t/bad-static/hello" &&
         lcc -O1 -nostartfiles -Wl,--as-needed "$here/selftest/nolibc.c" -o "$t/bad-nolibc/nolibc"; } >> "$t/build.log" 2>&1 ||
         { echo "smoke-selftest: FAIL a negative control does not build (see $t/build.log)"; return 1; }
