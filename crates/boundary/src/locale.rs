@@ -534,31 +534,30 @@ pub fn setlocale(category: i32, name: Option<&[u8]>) -> Option<&'static [u8]> {
         return gl::setlocale(&CSys, &Glue, cat, gl::Request::Query);
     };
     let name = Some(name);
-    // `""`: every variable the selection may read, from one walk over `environ` (SETLOCALE-3:
-    // fourteen `getenv` scans before); a name it was not given to look up is looked up alone.
-    // One category reads only `LC_ALL`, its own variable and `LANG`, and a non-empty `LC_ALL`
-    // decides every category, so the walk stops at it (SETLOCALE-CTYPE-ENV: every `L` entry was
-    // compared with all fourteen names, to the end of the environment, on every call).
-    let mut keys = ENV_KEYS;
+    // `""`, one category: each variable the selection reads (`LC_ALL`, `LC_<cat>`, `LANG`, in
+    // that order, only as far as the first non-empty one) through `getenv`'s scanner, a few
+    // instructions per entry (SETLOCALE-CTYPE-ENV: a walk for all fourteen names cost ~80 per entry,
+    // since they all start with `L`). `LC_ALL`: `LC_ALL` first, and when it decides nothing the
+    // other thirteen from one walk over `environ` (SETLOCALE-3: thirteen scans).
     let mut found: [Option<&'static [u8]>; ENV_KEYS.len()] = [None; ENV_KEYS.len()];
-    let mut asked = 0;
-    if name == Some(b"") {
-        asked = match cat {
-            Some(c) => {
-                keys[1] = c.name();
-                keys[2] = crate::startup_names::LANG;
-                3
+    let mut known = 0;
+    if name == Some(b"") && cat.is_none() {
+        let all = process::getenv(crate::startup_names::LC_ALL).map(strz::env_value);
+        known = 1;
+        if all.is_none_or(<[u8]>::is_empty) {
+            let mut at = [None; ENV_KEYS.len()];
+            process::getenv_many(ENV_KEYS.get(1..).unwrap_or_default(), at.get_mut(1..).unwrap_or_default());
+            for (v, a) in found.iter_mut().zip(at) {
+                *v = a.map(strz::env_value);
             }
-            None => ENV_KEYS.len(),
-        };
-        let mut at = [None; ENV_KEYS.len()];
-        process::getenv_many(keys.get(..asked).unwrap_or_default(), &mut at, 1);
-        for (v, a) in found.iter_mut().zip(at) {
-            *v = a.map(strz::env_value);
+            known = ENV_KEYS.len();
+        }
+        if let Some(v) = found.first_mut() {
+            *v = all;
         }
     }
     let getenv = |k: &[u8]| -> Option<&'static [u8]> {
-        match keys.get(..asked).unwrap_or_default().iter().position(|&n| n == k) {
+        match ENV_KEYS.get(..known).unwrap_or_default().iter().position(|&n| n == k) {
             Some(i) => found.get(i).copied().flatten(),
             None => process::getenv(k).map(strz::env_value),
         }

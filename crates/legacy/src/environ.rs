@@ -107,13 +107,11 @@ pub fn getenv_bounded(st: &EnvState<'_>, name: &[u8], mem: &impl CWords, read: &
 /// [`getenv_bounded`] for each of `names` in one walk over the array (SETLOCALE-3: `setlocale`
 /// with `""` asks for up to fourteen names): `out[k]` becomes what `getenv_bounded` answers for
 /// `names[k]` (`out` beyond `names`, names beyond `out`, and names past the 64th are left alone). The walk stops once
-/// every name is found, or once a name whose bit is set in `decisive` is found with a non-empty
-/// value (the caller needs no other answer then; the names not found yet stay `None`). An entry
-/// is read past its first byte only for a name that starts with it, and then once, as far as the
+/// every name is found. An entry is read past its first byte only for a name that starts with it, and then once, as far as the
 /// longest name and its `=`: a name is compared only when the entry's `=` is where the name's
 /// end would put it (SETLOCALE-CTYPE-ENV: the setlocale names all start with `L`, and each was
 /// measured and compared on its own).
-pub fn getenv_many(st: &EnvState<'_>, names: &[&[u8]], out: &mut [Option<usize>], decisive: u64, mem: &impl CWords, read: &mut impl ReadAt<u8>) {
+pub fn getenv_many(st: &EnvState<'_>, names: &[&[u8]], out: &mut [Option<usize>], mem: &impl CWords, read: &mut impl ReadAt<u8>) {
     let n = names.len().min(out.len()).min(64);
     let (names, out) = (names.get(..n).unwrap_or_default(), out.get_mut(..n).unwrap_or_default());
     out.fill(None);
@@ -127,12 +125,11 @@ pub fn getenv_many(st: &EnvState<'_>, names: &[&[u8]], out: &mut [Option<usize>]
     let mut firsts = [0u64; 4];
     let mut any_first = false;
     let mut all = 0u64;
-    // Bytes of an entry that decide every name: the longest name, its `=`, and one value byte
-    // (whether a decisive value is empty).
+    // Bytes of an entry that decide every name: the longest name and its `=`.
     let mut reach = 0usize;
     for (k, name) in names.iter().enumerate() {
         all |= bit(k);
-        reach = reach.max(name.len().saturating_add(2));
+        reach = reach.max(name.len().saturating_add(1));
         match name.first() {
             Some(&b) => {
                 if let Some(w) = firsts.get_mut(usize::from(b >> 6)) {
@@ -156,7 +153,6 @@ pub fn getenv_many(st: &EnvState<'_>, names: &[&[u8]], out: &mut [Option<usize>]
         // Where the entry's first `=` is (`None`: not within `reach`, so no name's `=` is there
         // either). A name without `=` matches only an entry whose first `=` follows it directly.
         let eq = t.iter().position(|&b| b == b'=');
-        let mut stop = false;
         for (k, (name, slot)) in names.iter().zip(out.iter_mut()).enumerate() {
             let mine = bit(k);
             if done & mine != 0 || name.first().is_some_and(|&f| Some(f) != first) {
@@ -172,11 +168,7 @@ pub fn getenv_many(st: &EnvState<'_>, names: &[&[u8]], out: &mut [Option<usize>]
                 let Some(value) = name.len().checked_add(1) else { continue };
                 *slot = p.checked_add(value);
                 done |= mine;
-                stop |= decisive & mine != 0 && t.get(value).is_some();
             }
-        }
-        if stop {
-            break;
         }
     }
 }

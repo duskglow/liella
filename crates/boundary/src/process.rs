@@ -228,11 +228,9 @@ fn rescan_getenv(name: &[u8]) -> Option<usize> {
 }
 
 /// The value address of each of `names` (`getenv`'s answer for each; at most 64) found in one
-/// walk over `environ` (`environ::getenv_many`, whose own reads decide the answers). `decisive`:
-/// bit k set when a non-empty value for `names[k]` decides the caller's question (the walk stops
-/// there; the names not found by then are left `None`).
-pub fn getenv_many(names: &[&[u8]], out: &mut [Option<usize>], decisive: u64) {
-    environ::getenv_many(&env(), names, out, decisive, &conv::env_text(), &mut conv::env_text());
+/// walk over `environ` (`environ::getenv_many`, whose own reads decide the answers).
+pub fn getenv_many(names: &[&[u8]], out: &mut [Option<usize>]) {
+    environ::getenv_many(&env(), names, out, &conv::env_text(), &mut conv::env_text());
 }
 
 /// `secure_getenv(name)`: `getenv`, except in secure mode.
