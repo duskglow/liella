@@ -89,7 +89,9 @@ impl Candidate {
 /// components weighted modifier 4, territory 2, codeset 1, in descending order of the kept
 /// components' total; a codeset in its literal form, then its normalized form when that
 /// differs. Candidates that are not a single path component ([`component`]: empty, `.`, `..`)
-/// are skipped. Calls `f` for each until it returns `Some`.
+/// are skipped. Calls `f` for each until it returns `Some`. Never inlined: its instance for
+/// `find_named` is a hot-text key (a locale lookup, once per name: the call is free).
+#[inline(never)]
 pub fn candidates<T>(parts: &Parts<'_>, mut f: impl FnMut(&[u8]) -> Option<T>) -> Option<T> {
     let mut norm = [0u8; MAX_NAME];
     let norm_len = parts.codeset.map_or(0, |c| normalize_codeset(c, &mut norm));
