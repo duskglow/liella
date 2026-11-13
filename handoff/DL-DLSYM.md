@@ -1,38 +1,32 @@
-# DL-DLSYM (DL-16b): handoff (run 2, DL-DLSYM-2)
+# DL-DLSYM (DL-16b): handoff (run 3, DL-DLSYM-3)
 
-**State.** Branch `task/dl-dlsym-2` (continues `task/dl-dlsym`), base DL-DLOPEN-LOAD-3 plus `origin/next` merged
-(ruling #5331, merge commit `59b3d5117`). Role shiki:~/w/sh1. Full report: handoff/DL-DLSYM-2-report.md (this page
-is the summary).
+**State.** Branch `task/dl-dlsym-3` (continues `task/dl-dlsym-2`, `task/dl-dlsym`); `origin/next` d483eefbe merged
+(the base DL-DLOPEN-LOAD-4 landed there; rulings #5331, #5350). Role shiki:~/w/sh1. Full report of this run:
+handoff/DL-DLSYM-3-report.md; earlier: handoff/DL-DLSYM-2-report.md.
 
 **Done.**
-- Run 1 (DL-DLSYM): `dlsym`/`dlvsym` in `ld.so` (crates/boundary/src/ld/dlopen/dlsym.rs): scopes, RTLD_NEXT,
-  RTLD_DEFAULT (+ caller's local scope, #5127), DEEPBIND, unique table with pinning, IFUNC and start-time STT_TLS
-  answers, handle validation, texts; exports in libc.so.6 and libc.a (#5264).
-- Run 2: the `dl-dlsym-t1` red was the test, not the loader: it named its start-time helpers by `DT_SONAME`, which
-  the start-time loader cannot search for yet (it opens `DT_NEEDED` by path only); they are now linked by path.
-  Then check 10 found a real defect: `dlvsym` answered a definition from an object without version tables.
-  dynlink.md row "dlvsym missing version ... also for an object without versions" says it fails; `Want::Version`
-  now matches only an exact version (relocations keep D-27.11's permissive `Want::Reference`). Pending records:
-  `records/pending/DL-DLSYM-2-1.toml` (DL-16b design, series D-27) and `-2.toml` (amends D-27.11).
-- `s27_dlsym_handles` (handles.c) and `s27_dlopen_failures` flipped from PENDING-LIELLA to passing (both pass on
-  Liella after the merge; run.sh failed the stale pending mark of the second).
-- Check 45 added (RTLD_DEFAULT from the program finds the program first). Plants: handoff/DL-DLSYM-2-plants.txt (12).
-- Probe P-14 (#5321): the reference opens 2000 distinct objects, no limit; Liella refuses the 513th
-  (`<name>: cannot load more objects`). dynlink.md row P-14 and a differences row; capacity ruling open.
+- Run 1: `dlsym`/`dlvsym` in `ld.so` (crates/boundary/src/ld/dlopen/dlsym.rs): scopes, RTLD_NEXT, RTLD_DEFAULT
+  (+ caller's local scope, #5127), DEEPBIND, unique table with pinning, IFUNC and start-time STT_TLS answers, handle
+  validation, texts; exports in libc.so.6 and libc.a (#5264).
+- Run 2: `dlvsym` refuses objects without version tables (pending DL-DLSYM-2-2 amends D-27.11); handles.c and
+  s27_dlopen_failures pass; probe P-14 (capacity) with a differences row; 12 plants CAUGHT.
+- Run 3: merged next; placed the start-up layout red of run 2 (ruling #5350). It is not this branch's start-up
+  code: the `tool` probe's extra fault is `liella_legacy::global_locale::setlocale_locked`, a tool-path function
+  that next's tracked (train-owned) `crates/libc-so/hot-text.list` does not list, so it lies in cold text and
+  straddles a page at `cold 0x2000` once this branch's library code shifts it. With the lists regenerated as the
+  train does before its build (`cargo xtask hot-lists`), this head gives tool 51 at every pad (53 with the tracked
+  list; next 53). Numbers and method in the report.
 
 **Decisions in force.** D-27.11 (amended by pending DL-DLSYM-2-2), D-27.32, D-27.33, D-27.35; rulings #5127, #5264,
-#5331; pending DL-DLSYM-2-1.
+#5331, #5350, #5351 (512-object refusal kept with its differences row); pending DL-DLSYM-2-1.
 
-**Open / RULING NEEDED.** #5321 capacity: recommend a growable object table (restores the reference's behaviour; no
-switch needed) as its own story. `pin_unique` is not observable until `dlclose` (DL-17): no test or plant reaches it.
+**Open.** RULING NEEDED (report): accept the gate run with the train's hot-list regeneration first. The capacity
+story (growable object table, #5351) is briefed separately. `pin_unique` is observable only with `dlclose` (DL-17).
 
-**Do not redo:** the scope design (P-5); the version rule change (dynlink.md row is probe-settled).
+**Do not redo:** the scope design (P-5); the version rule (dynlink.md row, probe-settled); the layout placement above
+(the regenerated lists already fix it; no code move or bound change is needed).
 
-**Gate: RED on one start-up layout test** (`hot_text_products::init_data_clusters_hold_at_every_text_phase`: tool
-row 53 faults, 54 at pad `cold 0x2000`; origin/next 1700e1798 passes). Plants 12/12 CAUGHT. Details in the report.
-
-**Exact next step.** 1. Run that test on DL-DLOPEN-LOAD-3 merged with next (fresh tree) to see whether the base
-already moves it; 2. per the ruling, fix the layout (ALWAYS FORWARD) or treat as LAYOUT-JITTER; 3. land. Then: DL-16c (lock-free readers; dlsym takes the writer
-lock now), DL-17 (`dlclose`, which makes the unique pin testable), the capacity story (#5321).
+**Exact next step.** Land. Then DL-16c (lock-free readers; dlsym takes the writer lock now), DL-17 (`dlclose`, makes
+the unique pin testable), the capacity story.
 
 **Plan rows to read:** plan/ph14/dl-16-dlopen.md §2, §4, §8; D-27.11, D-27.32; dynlink.md P-3..P-6, P-14.
