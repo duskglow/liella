@@ -48,15 +48,28 @@ maint=${DEB_MAINTAINER:-Liella project <liella-packaging@invalid>}
 
 if [ -z "$products" ]; then
     [ -z "$version" ] || { echo "build.sh: --version goes with --products" >&2; exit 2; }
-    commit=$(git -C "$root" rev-parse --short=12 HEAD)
-    epoch=${SOURCE_DATE_EPOCH:-$(git -C "$root" log -1 --format=%ct HEAD)}
-    version=0.0~snapshot$(date -u -d "@$epoch" +%Y%m%d)+$commit
-    if [ -n "$(git -C "$root" status --porcelain --untracked-files=no)" ]; then
-        echo "build.sh: note: the tree has uncommitted changes; they are not packaged (HEAD $commit is)"
-    fi
     rm -rf "$work/src"
     mkdir -p "$work/src"
-    git -C "$root" archive --format=tar HEAD | tar -x -C "$work/src"
+    if git -C "$root" rev-parse -q --verify HEAD > /dev/null 2>&1; then
+        commit=$(git -C "$root" rev-parse --short=12 HEAD)
+        epoch=${SOURCE_DATE_EPOCH:-$(git -C "$root" log -1 --format=%ct HEAD)}
+        if [ -n "$(git -C "$root" status --porcelain --untracked-files=no)" ]; then
+            echo "build.sh: note: the tree has uncommitted changes; they are not packaged (HEAD $commit is)"
+        fi
+        git -C "$root" archive --format=tar HEAD | tar -x -C "$work/src"
+    else
+        # A synced copy without .git (a build host's role directory): the caller names the commit
+        # it holds and its time; the files are packaged as they are, target/ left out.
+        if [ -z "${LIELLA_DEB_COMMIT:-}" ] || [ -z "${SOURCE_DATE_EPOCH:-}" ]; then
+            echo "build.sh: $root is not a git tree: set LIELLA_DEB_COMMIT and SOURCE_DATE_EPOCH" >&2
+            exit 2
+        fi
+        commit=$(printf '%.12s' "$LIELLA_DEB_COMMIT")
+        epoch=$SOURCE_DATE_EPOCH
+        echo "build.sh: note: $root is not a git tree; packaging its files as commit $commit"
+        tar -C "$root" --exclude=./target --exclude=./.git -cf - . | tar -x -C "$work/src"
+    fi
+    version=0.0~snapshot$(date -u -d "@$epoch" +%Y%m%d)+$commit
     echo "build.sh: building the products of $commit (release profile) in $work/src"
     (cd "$work/src" && LIELLA_PREFIX=$sysroot LIELLA_LIBDIR=usr/lib/$ma LIELLA_FULL_PROFILE=1 SOURCE_DATE_EPOCH=$epoch cargo xtask so)
     products=$work/src/target/liella
