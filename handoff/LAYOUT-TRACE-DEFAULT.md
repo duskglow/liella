@@ -1,66 +1,78 @@
 # LAYOUT-TRACE-DEFAULT: trace-at-build is the default of every product build
 
-State: branch `task/layout-trace-default` (HEAD in handoff/reports/LAYOUT-TRACE-DEFAULT.json). Plan:
-`plan/layout-rethink.md` section 4, rulings #5190-#5194; LT-1 is `handoff/LAYOUT-TRACE-AT-BUILD.md` (D-X.88).
-Decision: `records/pending/LAYOUT-TRACE-DEFAULT-1.toml` (D-NEW, series D-X, amends D-X.88). Plants:
-`handoff/LAYOUT-TRACE-DEFAULT-plants.txt`. First run stopped at the context checkpoint with its jobs running.
+State: branch `task/layout-trace-default-2` (run 2; HEAD in handoff/reports/LAYOUT-TRACE-DEFAULT-2.json), on top of
+`task/layout-trace-default` (run 1). Plan: `plan/layout-rethink.md` section 4, rulings #5190-#5194; LT-1 is
+`handoff/LAYOUT-TRACE-AT-BUILD.md` (D-X.88). Decision: `records/pending/LAYOUT-TRACE-DEFAULT-1.toml` (D-NEW, series
+D-X, amends D-X.88; CI holds the branch until the coordinator assigns its id). Plants:
+`handoff/LAYOUT-TRACE-DEFAULT-plants.txt` (8). The story's work is done; nothing is left but landing.
 
-## What changed (code done, pushed)
+## What changed
 
-* `Layout::parse(value, regen)` (xtask/src/hotlists.rs): unset / empty / `1` -> Traced (the default);
-  `ungrouped` -> Ungrouped; `0` -> Committed (list tooling until LT-5); anything else an error. A regen build
-  (`--hottext-regen`) with the switch unset or `0` reads the committed lists; with `1` / `ungrouped` it fails.
-* `run_so_as` prints which layout it builds; trace messages say `trace-at-build` (no `=1`); the no-tracer
-  message is kept and names the opt-out.
-* `LIELLA_HOT_LISTS` + default trace: error naming `LIELLA_LAYOUT_TRACE=0`.
-* `tools/hottext/regen.sh --build`: its check of the rewritten list builds with `LIELLA_LAYOUT_TRACE=0`.
-* Tests: `layout_switch_defaults_to_the_trace_and_is_strict`, `regen_builds_never_rely_on_the_default_layout`
-  (xtask), `init_products_are_grouped_from_a_trace_of_their_own_build` (hot_text_products: marker present,
-  list hashes match, hot list and start-up keys non-empty).
-* Decision on `0`: keep it as "the committed lists" for regen / repair / comparisons until LT-5 (refusing it
-  would break regen.sh's rewritten-list check, which must build from the committed list).
+* Run 1 (code, unchanged in run 2): `Layout::parse(value, regen)` in xtask/src/hotlists.rs: unset / empty / `1` ->
+  traced (the default), `ungrouped` -> the opt-out, `0` -> the committed lists (kept for regen / repair / comparisons
+  until LT-5), anything else an error; regen builds read the committed lists; `regen.sh --build` builds its check
+  with `=0`; `hot_text_products` checks the products carry the marker of their own trace.
+* Run 2: the ratchet (6cc27b3b9). hot_text_products: TRUE 17 -> 11, LOCALE 51 -> 47, TOOL 56 -> 50, FORK 6 -> 5,
+  LOCALTIME and LOCALTIME_MKTIME 20 -> 18, FLOAT 5 -> 3. layout/contracts.tsv: STARTUP-TEXT-WINDOWS 4/4 -> 2/2,
+  STARTUP-DATA-WINDOWS rw 20/21 -> 11/14 (ro 1/1 stays). Each is the highest count over mei and keke, both profiles,
+  no margin (brief step 4).
+* Run 2: layout rule d (xtask/src/layout.rs, 85d33cf85) counts a changed pending DECISION record
+  (records/pending/, id `D-...`) as a decision change. Before, the contracts ratchet with its pending record was red in
+  `cargo xtask static` (and in handback-check) because rule d looked only under records/decisions/ and
+  plan/07-decisions/. Pending compat / saturation records do not count. Tests: `rule_d_needs_a_decision_...` (two new
+  cases), `only_a_pending_decision_record_counts_as_a_decision_change`; plants ltd-pending-*.
 
-## Tracer availability (brief step 2, checked 13:30Z with `gdb -nx -batch -ex 'python print(1)'`)
+## Proof (brief step 3; run 1's jobs, read in run 2)
 
-mei (Skylake-SP, 48 threads), keke (Zen 1, 60), shiki (Haswell-EP, 26), kanon (Broadwell-EP, 35): gdb 15.1
-with Python, rc 0. nico, kotori, nozomi (timing hosts): no gdb; they have no compiler and never build products,
-so nothing to install. `~/bin/gate` (keke) adds mount/IPC namespaces only; ptrace_scope 1 (gdb traces its own
-child): the gate job below is the first traced build inside the gate.
-`ops host-available` is a setter (host 0/1), not a lister: not run.
+Jobs, all rc 0: keke `layout-trace-default-kproof2` (role n3, run-1 head 97c1112e7) and `-kbesl`; mei
+`layout-trace-default-mbase` (cc19fd05e) and `-mbesl` (cc19fd05e + `origin/task/libm-f32-bessel-large-5`, libm-only:
+`crates/math/src/{fast32,oracle32}/bessel.rs`, `special.rs`, `fast32.rs`, tests; equal-length paths). Each probe:
+warm-up + 5 runs, hot_text_products twice per profile = 10 counted runs per probe and profile, every run identical.
 
-## Jobs started (not yet read)
+| fast / release | true | locale | tool | fork | localtime | lt+mktime | float | text win | ro win | rw pages |
+|---|---|---|---|---|---|---|---|---|---|---|
+| mei base, mei besl, keke base, keke besl | 11 / 10 | 46 / 47 | 50 / 49 | 5 / 5 | 17 / 18 | 17 / 18 | 3 / 3 | 2 / 2 | 1 / 1 | 11 / 14 |
 
-Superseded: `layout-trace-default-lint2` (stopped: static's hottext check refused the literal regen flag in
-hotlists.rs, found by handback-check; fixed in 4e3ac0709, comments and messages only),
-`layout-trace-default-gate` (stopped while queued: it would have tested 97c1112e7), `-lint` / `-kproof` (stopped
-while queued, before a resync). The role still holds 97c1112e7: sync it (rc 0, not 4) once kproof2 and the
-plants end, then run lint (clippy + static + `cargo test -p xtask hotlists`) and the gate on the final head.
+Base vs libm-merged (scratch scripts cmpout.sh / secdiff.py, not in the tree):
+* Release: the four lists identical (same tree, both hosts too); libc.a byte-identical across hosts for the same tree
+  (md5 equal keke vs mei, base and besl). Base vs besl: same size; every `.text` section of libc.a identical; only
+  `__liella_build_tag`, symbol-table strings and switch-table label numbers (`.Lswitch.table.*.N`) differ.
+* Fast: `startup-text.keys` and `startup-data.keys` identical; `hot-text.list` and `probe-text.keys` lose one
+  extra-tier key in besl, `zone::localtime_r` (still in libc.a, but no longer run out of line). The libm change alone
+  makes about 290 functions outside libm compile differently (138 changed bodies, 104 / 52 only in one build:
+  inlining; `runtime::start` among them) and renumbers the hot-list ordinals of the C objects. The fault table does not
+  move: this is the jitter the committed lists could not follow and the trace does.
+* Same product sources, three builds (keke role n3 at 97c1112e7, mei copy at cc19fd05e, mei copy of the final head):
+  the fast `hot-text.list` holds one extra-tier key (`Catalogs::identity`) in two of them and not in the mei base
+  build; the other three fast lists and all release lists are identical. Same fault table in all. Not chased (the
+  fault table is what is bounded); a candidate for LT-2 / LT-3 if fast lists must be exactly reproducible.
 
-keke (role n3, head 97c1112e7, products identical to the final head):
-* `layout-trace-default-kproof2`: `~/work/LAYOUT-TRACE-DEFAULT/proof.sh ~/w/n3 /dev/shm/claude/LAYOUT-TRACE-DEFAULT/out-n3`:
-  default `so` + `layout-check` + `hot_text_products --nocapture` twice (each probe warm-up + 5 runs), fast then
-  release; lists and libc.a kept in the out dir.
-* `layout-trace-default-plants`: 5 plants, `--dir /dev/shm/claude/LAYOUT-TRACE-DEFAULT/plants-1`.
-* `layout-trace-default-kbesl`: proof.sh on `/dev/shm/claude/LAYOUT-TRACE-DEFAULT/besl` = head cc19fd05e merged
-  (git merge-tree, no branch changed) with `origin/task/libm-f32-bessel-large-5` (libm-only; -6 is not pushed).
-mei (zram, no role): `layout-trace-default-mbase` (proof.sh on base = cc19fd05e, plus a second release `so` +
-hot_text_products on the unchanged tree, timed, libc.a compared) and `layout-trace-default-mbesl` (the libm
-merge), both under `/mnt/zram/claude/LAYOUT-TRACE-DEFAULT/` (equal-length paths; outputs in `out-base`, `out-besl`).
-Products are the same at cc19fd05e and the final head (later commits: an xtask unit test and the plants file).
+## Release check for the CI gate (brief step 5)
 
-## Exact next step
+After the fast `cargo xtask affected --tier full --run`, in the same tree (it replaces the fast products, so last):
+`LIELLA_FULL_PROFILE=1 cargo xtask so && LIELLA_FULL_PROFILE=1 cargo test -p liella --test hot_text_products`
+(`so` runs layout-check's contracts itself). Time on mei: see "Run 2 jobs".
 
-1. `~/bin/jobwait` the jobs above (keke and mei); fix any red. Read the fault table:
-   `grep -a "PROOF\|minor faults" ~/logs/layout-trace-default-<label>.log`.
-2. Step 3: compare base vs besl per host and profile (fault lines, `cmp` libc.a, diff the four lists in out-*/).
-3. Step 4 ratchet: every bound in hot_text_products.rs (TRUE 17, LOCALE 51, TOOL 56, FORK 6, LOCALTIME 20,
-   LOCALTIME_MKTIME 20, FLOAT 5) and layout/contracts.tsv budgets (STARTUP-TEXT-WINDOWS 4/4,
-   STARTUP-DATA-WINDOWS ro 1/1, rw 20/21) tightened to the highest value measured over mei and keke, both
-   profiles; never raised. Bound history comments follow the file's style; add the numbers to the pending record.
-4. Step 5: the release check for the CI gate, after the fast `affected --tier full --run` in the same tree:
-   `LIELLA_FULL_PROFILE=1 cargo xtask so && LIELLA_FULL_PROFILE=1 cargo test -p liella --test hot_text_products`
-   (the `so` runs layout-check's contracts itself). Run time on mei: from mbase's `release-again` lines (warm
-   tree) and the first release lines (cold); note the fast products are replaced, so it runs last.
-5. Rerun lint + gate + plants on the final head after the ratchet commit; hand back.
+## Run 2 jobs (mei, role s1)
 
-Do not redo: the code change, the host check, the plants file (unless a plant site moves).
+* `layout-trace-default-2-lint0` (inherited head 3e731bbee: clippy + static) rc 0.
+* `layout-trace-default-2-lint` (6cc27b3b9) rc 1: static rule d refused the contracts ratchet with a pending record
+  (fixed in 85d33cf85). `layout-trace-default-2-plants` stopped (older head).
+* `layout-trace-default-2-lint2` (85d33cf85: clippy + static + `cargo test -p xtask hotlists` and `layout::tests`) rc 0.
+* `layout-trace-default-2-proof` (85d33cf85, RAM copy of s1, proof.sh `again`) rc 0: fault table as above in both
+  profiles, every bound holds (one fast `locale` run read 47 once under load 17-30; the test bounds the lowest of
+  5 runs, 46); second release build byte-identical. Times under that load: fast `so` 1034 s, release `so` 549 s
+  (after the fast build), release `so` again on the unchanged tree 250 s, hot_text_products 11-14 s. Run 1 on a
+  quieter mei: release `so` 290 s, again 81 s, test 5 s. So the release check costs about 5-10 min on mei.
+* `layout-trace-default-2-gate` (85d33cf85, `cargo xtask affected --run`, escalated to FULL by the xtask change) and
+  `layout-trace-default-2-plants2` (8 plants, `/mnt/zram/claude/LAYOUT-TRACE-DEFAULT-2/plants-2`): running at hand-back;
+  plants 1-4 CAUGHT so far.
+
+## Open / not to redo
+
+* Do not redo: the tracer survey (run 1: gdb 15.1 with Python on mei, keke, shiki, kanon; timing hosts build nothing),
+  the code, the proof comparison above.
+* The bounds have no margin: shiki / kanon were not measured (the brief named mei and keke). A count above a bound
+  there is a finding about that host, not a reason to raise the bound.
+* Next: LT-5 (delete the committed lists, the dead-key and pin checks, the hot-lists lane and the train regen step);
+  `0` goes with it.
