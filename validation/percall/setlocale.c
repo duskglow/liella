@@ -3,6 +3,8 @@
  * setlocale(LC_ALL, ""), so the "" rows re-select the locale already in force. */
 #include "percall.h"
 #include <locale.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 CASE(setlocale_ctype_posix, 10000, 1) {
     for (long i = 0; i < n; i++) pc_sink += (long)setlocale(LC_CTYPE, "POSIX");
@@ -31,4 +33,25 @@ CASE(setlocale_ctype_empty, 10000, 1) {
 CASE(setlocale_all_empty, 10000, 1) {
     for (long i = 0; i < n; i++) pc_sink += (long)setlocale(LC_ALL, "");
     PC_CHECKING pc_check("%s", setlocale(LC_ALL, ""));
+}
+/* The common environment of a program: LANG only (LC_ALL unset), the harness's locale moved there. */
+CASE(setlocale_ctype_empty_lang, 10000, 1) {
+    char *l = getenv("LC_ALL"), lang[64];
+    snprintf(lang, sizeof lang, "%s", l ? l : "C");
+    unsetenv("LC_ALL");
+    setenv("LANG", lang, 1);
+    setlocale(LC_CTYPE, "");
+    for (long i = 0; i < n; i++) pc_sink += (long)setlocale(LC_CTYPE, "");
+    PC_CHECKING pc_check("%s", setlocale(LC_CTYPE, ""));
+    setenv("LC_ALL", lang, 1);
+}
+CASE(setlocale_all_empty_lang, 10000, 1) {
+    char *l = getenv("LC_ALL"), lang[64];
+    snprintf(lang, sizeof lang, "%s", l ? l : "C");
+    unsetenv("LC_ALL");
+    setenv("LANG", lang, 1);
+    setlocale(LC_ALL, "");
+    for (long i = 0; i < n; i++) pc_sink += (long)setlocale(LC_ALL, "");
+    PC_CHECKING pc_check("%s", setlocale(LC_ALL, ""));
+    setenv("LC_ALL", lang, 1);
 }
