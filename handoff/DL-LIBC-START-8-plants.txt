@@ -1,0 +1,8 @@
+# DL-LIBC-START-8: the merge with next (DL-LIBC-EARLY-6): StartInfo carries the program's init hooks and the
+# loader's rseq size; ld.so exports __tls_get_addr, __libc_stack_end and the rseq objects. Plus -7's three.
+init-array-not-passed | crates/boundary/src/ld.rs | lit:            init_array: w(prog.init_array.addr), ==>             init_array: 0, | cargo xtask so && cargo test -p liella-ld --test reloc reloc_libc_start | msg:reloc_libc_start_hello_world.*(FAILED|panicked)|order p,
+stack-end-not-exported | xtask/src/so.rs | lit:&["__tls_get_addr", "__libc_stack_end", "__rseq_offset", ==> &["__tls_get_addr", "__rseq_offset", | cargo xtask so && cargo test -p liella-boundary --test s01_startup_symbols s1_1_c_0_dynamic_start_conformance | msg:s1_1_c_0_dynamic_start_conformance.*(FAILED|panicked)|against Liella's libc.so.6
+rseq-export-missing | xtask/src/so.rs | lit:"__rseq_offset", "__rseq_size", "__rseq_flags"]; ==> "__rseq_offset", "__rseq_size"]; | cargo xtask so && cargo test -p liella-boundary --test s22_threads_symbols sym___rseq | msg:ld-linux-x86-64\.so\.[0-9]+ must export __rseq_flags|sym___rseq_flags.*(FAILED|panicked)
+static-only-ignored | xtask/src/native_examples.rs | lit:const STATIC_ONLY: &[&str] = &["kernel types"]; ==> const STATIC_ONLY: &[&str] = &[]; | cargo xtask so && cargo xtask native | msg:native_dynamic: unexpected output
+dynamic-count-wrong | xtask/src/native_examples.rs | lit:let steps = lines.iter() ==> let steps = 1 + lines.iter() | cargo xtask so && cargo xtask native | msg:native_dynamic: unexpected output
+static-derived | xtask/src/native_examples.rs | lit:if linkage == "static" { ==> if linkage == "dynamic" { | cargo xtask so && cargo xtask native | msg:native_static: unexpected output

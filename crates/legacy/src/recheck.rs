@@ -94,11 +94,11 @@ impl TscGate {
     /// calling `clock` while the gate holds; else `clock` is read once ([`now`]) and, when no check is due,
     /// the gate restarts from `tsc`. A due check (`false`) leaves the gate as it is: it had already
     /// expired, or the counter went backwards. A forgotten `last` ([`LastCheck::forget`]) is due at once.
-    ///
-    /// Always inlined (HOTTEXT-TIME-CLUSTER-STABLE): the first `mktime` after `localtime_r` runs it
-    /// inside `time_compat::select`, a hot-text key. A copy of it out of line has no key of its own,
-    /// so it lands in cold text and costs that `mktime` a page fault; the fast profile (thin LTO, 16
-    /// codegen units) emitted one when unrelated libm code grew.
+    /// Inlined into its caller in every build: left to the inliner, the time zone's instantiation was out
+    /// of line in some builds and not others (the choice moved with unrelated code), and out of line it
+    /// sat in cold text, so the first `mktime` after `localtime_r` took a page fault
+    /// (`init_first_mktime_after_localtime_r_takes_no_fault`). A generic, so no hot-text key can pin it
+    /// (HOTTEXT-TIME-CLUSTER-STABLE: the fast profile emitted one when unrelated libm code grew).
     #[inline(always)]
     pub fn fresh(&self, last: &LastCheck, tsc: u64, clock: impl FnOnce() -> u64) -> bool {
         let at = last.0.load(Relaxed);

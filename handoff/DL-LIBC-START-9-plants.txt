@@ -1,0 +1,2 @@
+# DL-LIBC-START-9: start's dynamic-path flag runtime::EARLY_DONE is declared start-up state (moved into .data1).
+early-done-undeclared | crates/libc-so/startup-state.list | lit:liella_boundary::runtime::EARLY_DONE  # __libc_start_main's dynamic-path flag: Liella's ld.so sets it, start reads it (D-27.24) ==> | cargo xtask so && cargo test -p liella --test hot_text_products init_written_startup_objects_are_in_the_data1_cluster | msg:init_written_startup_objects_are_in_the_data1_cluster.*(FAILED|panicked)|runtime10EARLY_DONE .* in \.bss\.

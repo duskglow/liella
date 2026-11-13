@@ -141,7 +141,13 @@ tests directly. The CI FULL gate stays the exhaustive run.
   them (`so` prints a `hot-lists:` info line naming the lists that differ). Any later source change makes the
   stamp stale and the tracked lists are read again, so rerun it. The hand-written inputs next to them
   (`hot-text.clusters`, `hot-text.absent`, `hot-text.unpinned`, `startup-state.list`) are still edited and
-  committed on your branch. A decision that replaces an earlier one is
+  committed on your branch. A dead hot-text key (a key of `hot-text.list` that matches no
+  function section of a profile's `libc.a`, usually a function inlined into a caller) is a
+  `warning: dead hot-text key ...` line in `cargo xtask so`, the gate and the plants baseline, not a
+  failure: it needs no repair on your branch. Only the next->main promotion run fails on it, by
+  setting `LIELLA_PROMOTE=1` (ruling #5193, LAYOUT-DEADKEY-WARN); set it yourself to see that
+  verdict. A stale `hot-text.absent` line, the pins, the fault bounds and the layout contracts
+  still fail everywhere. A decision that replaces an earlier one is
   a new record with `supersedes = ["D-..."]`, a partial change uses `amends`; edit an existing
   record only to correct it or add a test reference. Find a decision with
   `grep -rn "D-12.18" records/` (or in the generated tables). Local details you can decide
