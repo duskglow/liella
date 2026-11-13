@@ -1315,9 +1315,11 @@ const INLINE_NEVER_TIERS: [&str; 7] = TIERS;
 /// The keys of hot-text.list that may name a function without a fixed boundary, one line each:
 /// `<key>\t<tier>\t<reason>` (LAYOUT-HOTKEY-INLINE-STABLE). A key belongs here only when a call
 /// boundary is not free (a hot path, or a measured cost) or no attribute of ours can pin it (a
-/// closure, a function of `core` or `alloc`, a generic shared with hot instantiations). The tier is
-/// the key's tier in hot-text.list: a key that moves tier (a regen found it earlier in a run) must
-/// be justified again for its new tier.
+/// closure, a function of `core` or `alloc`, a generic shared with hot instantiations). The tier
+/// column is the key's tier when the line was written, a note for readers only: hot-text.list is
+/// generated and train-owned, so a regen may move a key to another tier, and nothing reads the
+/// tier here (every tier is checked alike, [`INLINE_NEVER_TIERS`], and no accepted reason depends
+/// on the tier), so it is not compared (HOTTEXT-UNPINNED-TIER).
 pub const UNPINNED_LIST: &str = "crates/libc-so/hot-text.unpinned";
 
 /// The lines of [`UNPINNED_LIST`]: key -> (tier, reason). `#` comments and blank lines skipped.
@@ -1371,9 +1373,6 @@ fn check_pinned(root: &Path, entries: &[Entry], unpinned: &BTreeMap<String, (Str
                 "hot-text.list: {} ({} key): {why}: unrelated code can make LLVM inline it and kill the key; mark it #[inline(never)] where a call boundary is free, or #[inline(always)] into a keyed caller and drop the key, or list it in {UNPINNED_LIST} with the reason",
                 e.key, e.tier
             )),
-            (Some(_), Some((tier, _))) if tier != e.tier => {
-                errs.push(format!("{UNPINNED_LIST}: {} is listed under tier {tier} but is a {} key now: justify it for its new tier", e.key, e.tier))
-            }
             (None, Some(_)) if e.key.starts_with("_R") => errs.push(format!("{UNPINNED_LIST}: {} has a fixed boundary now: remove its line", e.key)),
             _ => {}
         }
@@ -1491,7 +1490,7 @@ mod tests {
         // unmarked start-up method fails, a listed one passes, a marked one passes and makes its
         // line stale, a closure or core key needs a line, a C key never does, a line of a key that
         // is not in the list is stale; every tier is checked (ruling #5024: a libm growth killed
-        // locale, tool and extra keys), and a listed key that changed tier fails until moved.
+        // locale, tool and extra keys); a listed key's tier column is not compared (HOTTEXT-UNPINNED-TIER).
         let root = std::env::temp_dir().join(format!("liella-pinned-{}", std::process::id()));
         let src = root.join("crates/kernel/src");
         std::fs::create_dir_all(&src).unwrap();
@@ -1512,10 +1511,36 @@ mod tests {
         let listed: BTreeMap<String, (String, String)> =
             [line(many, "startup"), line(closure, "fork"), line(parse, "startup"), line(builtin, "extra"), line("_RNvNtC13liella_kernel4vdso1x", "tool")].into_iter().collect();
         let errs = check_pinned(&root, &entries, &listed);
-        assert_eq!(errs.len(), 3, "{errs:?}");
+        assert_eq!(errs.len(), 2, "{errs:?}");
         assert!(errs[0].contains(parse) && errs[0].contains("has a fixed boundary now"), "{errs:?}");
-        assert!(errs[1].contains(builtin) && errs[1].contains("listed under tier extra but is a locale key"), "{errs:?}");
-        assert!(errs[2].contains("1x is no key of hot-text.list"), "{errs:?}");
+        assert!(errs[1].contains("1x is no key of hot-text.list"), "{errs:?}");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_key_that_moves_tier_in_a_regen_leaves_static_green() {
+        // HOTTEXT-UNPINNED-TIER (no spec clause: build tooling): the train regenerates hot-text.list
+        // (`cargo xtask hot-lists --in-place`) and then runs static; a regen that moves an unpinned
+        // key to another tier (train 654: `catalog::textdomain` extra -> tool) must leave the
+        // hand-written hot-text.unpinned valid, since its tier column is a note nothing reads.
+        let root = std::env::temp_dir().join(format!("liella-unpinned-tier-{}", std::process::id()));
+        let src = root.join("crates/kernel/src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(root.join("crates/kernel/Cargo.toml"), "[package]\nname = \"liella-kernel\"\n").unwrap();
+        std::fs::write(src.join("vdso.rs"), "fn builtin() {}\nfn other() {}\n").unwrap();
+        let builtin = "_RNvNtC13liella_kernel4vdso7builtin";
+        let other = "_RNvNtC13liella_kernel4vdso5other";
+        let unpinned = parse_unpinned(&format!("# c\n{builtin}\textra\tboundary cost not measured yet\n{other}\tlocale\thot path\n")).unwrap();
+        for tiers in [("extra", "locale"), ("tool", "startup"), ("startup", "fork")] {
+            let list = format!("{builtin}\t{}\tfast,release\n{other}\t{}\tfast\n", tiers.0, tiers.1);
+            let errs = check_pinned(&root, &parse_list(&list).unwrap(), &unpinned);
+            assert!(errs.is_empty(), "tiers {tiers:?}: {errs:?}");
+        }
+        // The key itself still has to be listed: a moved key whose line is gone still fails.
+        let list = format!("{builtin}\ttool\tfast\n{other}\tlocale\tfast\n");
+        let only_other: BTreeMap<_, _> = unpinned.iter().filter(|(k, _)| k.as_str() == other).map(|(k, v)| (k.clone(), v.clone())).collect();
+        let errs = check_pinned(&root, &parse_list(&list).unwrap(), &only_other);
+        assert!(errs.len() == 1 && errs[0].contains(builtin) && errs[0].contains("tool key"), "{errs:?}");
         std::fs::remove_dir_all(&root).unwrap();
     }
 

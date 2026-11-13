@@ -1,0 +1,11 @@
+id = "D-NEW"
+series = "D-X"
+section = "x"
+status = "active"
+amends = ["D-X.77"]
+story = "HOTTEXT-UNPINNED-TIER"
+date = "2026-11-13"
+tests = ["xtask/src/hottext.rs::a_key_that_moves_tier_in_a_regen_leaves_static_green", "xtask/src/hottext.rs::startup_keys_without_a_fixed_boundary_fail_unless_listed"]
+body = '''
+**The tier column of `crates/libc-so/hot-text.unpinned` is a note: static no longer compares it with the key's tier in `hot-text.list`** (HOTTEXT-UNPINNED-TIER; layout and build tooling only, no ABI or behaviour change; amends D-X.77 (1)). Train 654 regenerated the lists (`cargo xtask hot-lists --in-place`, D-X.82) and `LIELLA_TRAIN=1 cargo xtask static` refused: the regen had moved `catalog::textdomain` from tier extra to tool, and the hand-written unpinned line still said extra, so the train could never commit a regeneration. The only reader of that column was the comparison itself: since ruling #5024 every tier is checked alike (`INLINE_NEVER_TIERS` = every tier), and none of the accepted reasons (#4997: a hot path or measured boundary cost, a closure, a `core`/`alloc` function, a generic with hot instantiations) depends on the tier, so "justify it again for its new tier" asked for nothing new. Rejected: (a) the regen rewrites the tier column: `hot-text.unpinned` is a hand-written input read from the tracked tree, so off the train a regen would leave a diff in a hand-written file on every branch, and the train would have to commit a hand-written file it does not own; (b) dropping the column: it touches every line, so it conflicts with every in-flight branch that removes a line (the ratchet's only edit). The column stays in the format (still a valid tier name) as the tier when the line was written; a line whose key gained a fixed boundary or left the list still fails, and a moved key without a line still fails. Test: `a_key_that_moves_tier_in_a_regen_leaves_static_green`.
+'''

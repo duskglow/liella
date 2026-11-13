@@ -1,0 +1,5 @@
+# HOTTEXT-UNPINNED-TIER: plants on the unpinned-line check (xtask/src/hottext.rs check_pinned).
+# old-tier-kept: the tier comparison is back, so a key the regen moved keeps its old tier and static fails (train 654).
+old-tier-kept | xtask/src/hottext.rs | lit:            (None, Some(_)) if e.key.starts_with("_R") => errs.push( ==>             (Some(_), Some((tier, _))) if tier != e.tier => errs.push(format!("{UNPINNED_LIST}: {} is listed under tier {tier} but is a {} key now", e.key, e.tier)), (None, Some(_)) if e.key.starts_with("_R") => errs.push( | cargo test -p xtask --bin xtask hottext:: | msg:a_key_that_moves_tier_in_a_regen_leaves_static_green.*(FAILED|panicked)|panicked.*a_key_that_moves_tier_in_a_regen
+# moved-key-unlisted-passes: a listed line is accepted for any key, so a moved key whose line is gone passes.
+moved-key-unlisted-passes | xtask/src/hottext.rs | lit:            (Some(why), None) => errs.push(format!( ==>             (Some(why), None) if false => errs.push(format!( | cargo test -p xtask --bin xtask hottext:: | msg:a_key_that_moves_tier_in_a_regen_leaves_static_green.*(FAILED|panicked)|panicked.*a_key_that_moves_tier_in_a_regen
