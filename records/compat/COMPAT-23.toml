@@ -1,4 +1,4 @@
-id = "COMPAT-NEW"
+id = "COMPAT-23"
 behaviour = "IFUNC resolvers in a `dlopen` that fails (§27, `s27_1_f_0`; probe P-10, ruling #5125)"
 glibc = "With `RTLD_NOW`, a root whose dependency list puts an IFUNC-defining object before an object with an undefined symbol fails, but the IFUNC object's resolver has already run (probe P-10, root `R10b`); with the other order, or the IFUNC in the root, it does not run; no constructor runs in any"
 liella = "A failing `dlopen` runs no foreign code: every symbol of the whole new set is resolved and its versions checked first (pass 1), and only then are IFUNC resolvers called (pass 2), so a set that fails runs no resolver whatever its order"

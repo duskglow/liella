@@ -673,7 +673,7 @@ fn unmatched_error(dead: &[&Entry], stale: &[String], profile: &str) -> Option<S
             msg.push_str(&format!("\n  {} ({}, {traced})", e.key, e.tier));
         }
         msg.push_str(&format!(
-            "\nrenamed, now generic or inlined: run tools/hottext/regen.sh . --build (in each profile); a key gone from every build: \
+            "\nrenamed, now generic or inlined: run tools/hottext/regen.sh . --both (both profiles); a key gone from every build: \
              tools/hottext/prune.py; a key absent from this profile by design: a line in crates/libc-so/{ABSENT_LIST} with its reason"
         ));
     }
@@ -2037,6 +2037,57 @@ mod tests {
     }
 
     #[test]
+    fn trace_writes_the_names_at_one_address_in_byte_order() {
+        // LAYOUT-TRACE-HOST-CANONICAL-3 (no spec clause: build tooling): trace_gdb.py writes every
+        // name at a hit address (aliases such as bcmp / __memcmpeq / liella_machine_equal), and the
+        // list keeps that order. nm sorts by the caller's locale (en_US ignores underscores), so a
+        // Zen 1 host's job under en_US.UTF-8 and a gated job in C gave the same keys in two orders.
+        // The tracer must run nm in the C locale and sort each address's names itself.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let py = std::fs::read_to_string(root.join("tools/hottext/trace_gdb.py")).unwrap();
+        let nm = py.find("subprocess.run([\"nm\", \"--defined-only\", binp]").expect("trace_gdb.py: no nm call");
+        let nm_line = py[nm..].lines().next().unwrap();
+        assert!(nm_line.contains("env=nm_env") && py.contains("nm_env = dict(os.environ, LC_ALL=\"C\")"), "trace_gdb.py runs nm in the caller's locale");
+        let sorted = py.find("names = {a: sorted(ns) for a, ns in names.items()}").expect("trace_gdb.py does not sort the names at one address");
+        let written = py.find("for n in names.get(addr, []):").expect("trace_gdb.py: no names output");
+        assert!(nm < sorted && sorted < written, "trace_gdb.py sorts the names after it writes them");
+    }
+
+    #[test]
+    fn regen_replace_drops_the_allow_list_lines_of_keys_it_drops() {
+        // LAYOUT-TRACE-HOST-CANONICAL-3 (no spec clause: build tooling): `regen.sh --replace` keeps
+        // only the keys a trace hit, so an ABSENT_LIST line whose key left the list is stale by
+        // `unmatched`'s rule and the next release build (a later `--both`) refused it.
+        // prune.py --absent drops exactly those lines (comments and listed keys stay, in order) and
+        // regen.sh runs it on the --replace path only, after it writes the list.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let tmp = root.join(format!("target/xtask-absent-prune-test-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("list"), "# list\nkept\tstartup\tfast\nfast_only\tlocale\tfast\n").unwrap();
+        let absent = "# allow-list\nkept\trelease\tinlined in release\ngone\trelease\tinlined in release\n# tail\nfast_only\trelease\tinlined\n";
+        std::fs::write(tmp.join("absent"), absent).unwrap();
+        let o = std::process::Command::new("python3")
+            .arg("-I")
+            .arg(root.join("tools/hottext/prune.py"))
+            .arg("--absent")
+            .arg(tmp.join("list"))
+            .arg(tmp.join("absent"))
+            .output()
+            .expect("python3 runs tools/hottext/prune.py");
+        std::fs::remove_dir_all(&tmp).unwrap();
+        let (out, err) = (String::from_utf8(o.stdout).unwrap(), String::from_utf8_lossy(&o.stderr).into_owned());
+        assert!(o.status.success(), "prune.py --absent: {err}");
+        assert_eq!(out, "# allow-list\nkept\trelease\tinlined in release\n# tail\nfast_only\trelease\tinlined\n", "prune.py --absent kept a stale line or lost a live one");
+        assert!(err.contains("absent: dropped gone\trelease"), "prune.py --absent does not name the line it drops: {err}");
+        assert_eq!(parse_absent(&out).unwrap().len(), 2, "prune.py --absent output is not an allow-list");
+        let sh = std::fs::read_to_string(root.join("tools/hottext/regen.sh")).unwrap();
+        let written = sh.find("put_changed \"$work/list.merged\" \"$list\"").expect("regen.sh: no list write");
+        let guard = sh.find("if [ $replace = 1 ] && [ -f \"$absent\" ]; then").expect("regen.sh: no --replace allow-list prune");
+        let call = sh.find("\"$here/prune.py\" --absent \"$list\" \"$absent\"").expect("regen.sh: prune.py --absent not run");
+        assert!(written < guard && guard < call, "regen.sh prunes the allow-list before it writes the list, or outside --replace");
+    }
+
+    #[test]
     fn a_startup_label_brings_its_section_to_the_head() {
         // LAYOUT-TEXT-PIN-6, #4467 (no spec clause: build tooling, D-X.63): keys.py --aliases maps a
         // label inside a function section (an assembly entry label, an alias) to the section's key,
@@ -2206,7 +2257,9 @@ mod tests {
         // traces of the run have started, so a runner that runs them one at a time fails here
         // (iteration budget, a hang guard only). The tagged file names every trace in start order,
         // each trace writes its own names file with its own environment, a failed trace fails the
-        // wait, and put_changed leaves a file whose bytes did not change untouched.
+        // wait, and put_changed leaves a file whose bytes did not change untouched. The fake prints
+        // the program's environment as trace_gdb.py builds it (LAYOUT-TRACE-HOST-CANONICAL: exactly
+        // the HOT_TEXT_ENV_<NAME> variables, sorted), so the caller's own LANG must not reach it.
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let runner = root.join("tools/hottext/runner.sh");
         let tmp = root.join(format!("target/xtask-runner-test-{}", std::process::id()));
@@ -2225,7 +2278,8 @@ while [ "$(ls BARRIER | wc -l)" -lt COUNT ]; do
     sleep 0.01
 done
 if [ "$1" = fail ]; then exit 3; fi
-printf '%s\n' "$@" "LANG=$LANG" > "$HOT_TEXT_OUT"
+printf '%s\n' "$@" > "$HOT_TEXT_OUT"
+env | sed -n 's/^HOT_TEXT_ENV_//p' | LC_ALL=C sort >> "$HOT_TEXT_OUT"
 "#
             .replace("BARRIER", &barrier.to_string_lossy())
             .replace("COUNT", &progs.len().to_string());
@@ -2247,6 +2301,8 @@ traces_wait
                 .arg(runner.parent().unwrap())
                 .args(progs)
                 .env("HOTTEXT_GDB", format!("bash {}", fake_path.display()))
+                .env("LANG", "caller-lang")
+                .env("TZ", "caller-tz")
                 .env("HOTTEXT_JOBS", progs.len().to_string())
                 .output()
                 .expect("bash runs tools/hottext/runner.sh");

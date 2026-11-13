@@ -1,47 +1,53 @@
-# DL-DLOPEN-LOAD (DL-16a): handoff (run 3, DL-DLOPEN-LOAD-3)
+# DL-DLOPEN-LOAD (DL-16a): handoff (run 4, DL-DLOPEN-LOAD-4)
 
-**State.** Branch `task/dl-dlopen-load-3` (runs 1-2 included; cut from `task/dl-dlopen-load-2`, whose base
-DL-LIBC-START-10 is on next). Role shiki:~/w/sh1. dlopen and dlerror work end to end (kernel-started and
-`ld.so PROGRAM`); the owed records exist as pending records; the branch can land once the jobs below are green and the
-coordinator assigns the five pending ids.
+**State.** Branch `task/dl-dlopen-load-4` (runs 1-3 included, origin/next merged in). Role shiki:~/w/sh2. dlopen and
+dlerror work end to end (kernel-started and `ld.so PROGRAM`), now beside DL-15's per-thread TLS. The records are
+assigned (COMPAT-23..26, D-27.37; the coordinator, ruling #5320). The branch can land once the run-4 jobs are green.
 
-**Run 3 commits.** `a4aa95747` the gate fix; `7566f2c83` records, differences rows, #5125 test, plants file;
-`33b0cf366` `dlopen_rules.rs` and the static-program test; `bf1d41440` clippy (test module last); then this note and
-`handoff/reports/DL-DLOPEN-LOAD-3.json`.
+**Run 4 (merge only, as the brief asked).** `ff86663bc` merges origin/next (2f8ae2e64). The conflicts were in
+`crates/rt/src/start.rs` (StartInfo), `crates/boundary/src/ld.rs` (run_init builds it) and
+`crates/boundary/src/runtime.rs` (early_init reads it). Both changes are kept: next's
+`tls_size/tls_align/tls_init/tls_release` stay where DL-15 put them, `dlopen` comes after them (the order is free:
+only Rust reads the struct, and the build tag ties ld.so and libc to one build), and early_init calls
+`set_loader_tls` and then stores `LOADER_DLOPEN`. Checked beside the conflicts: `crates/ld/src/reloc.rs` merged
+cleanly (DL-15's TLSDESC arm and DL-16a's two-pass split touch different lines); the thread block's `dlerror` word
+(0x280) is not touched by next; a reused thread mapping is zeroed from the block start (thread.rs), so a new thread's
+`dlerror` word starts at 0. `221137a27` adds the plants file `handoff/DL-DLOPEN-LOAD-4-plants.txt`.
+`61755515a` makes the CONF-DYN-HELPERS conformance flip, which the merge brought in and the gate asked for: the
+merged head passed `s27_dlopen_failures` on Liella, so run.sh failed it as a PENDING-LIELLA program that now passes
+(the designed signal). The directive is gone, and the clause test `s27_1_f_0` (crates/core/tests/s27_dynlink_clauses.rs)
+asserts the "1 passed, 0 failed" summary. `s27_dlsym_handles` and `s27_dynlink_helper_dlsym` stay pending on DL-16b.
+Plants (10): two break one half each of the merged handover, one cuts a dlerror text the flipped corpus checks, and
+the seven run-3 plants re-run.
 
-**Gate failure of run 2, found and fixed.** `a_loader_change_does_not_select_the_math_suites` was right:
-`crates/boundary/src/dlerr.rs` is built in every boundary build (not feature-gated) and called
-`liella_ld::dlopen::compose`, so liella-math's tests (boundary with `selftest`) really linked liella-ld. `compose`
-moved into `dlerr.rs` (private, unit test `s27_1_c_5_compose_...`); the selector is unchanged. Rule for later DL
-stories: an ungated boundary module must not name a liella-ld item.
+**Jobs (shiki).** `dl-dlopen-load-4-lint0`: clippy and static on the inherited head f2f4d0e81, rc 0.
+`dl-dlopen-load-4-t1` on ff86663bc: workspace clippy (all targets and features, -D warnings), `cargo xtask static`,
+`cargo xtask so`, dl_tls_threads 2/2, dlopen 2/2, dlopen_rules 3/3, no SKIP, rc 0. Superseded, on 221137a27:
+`-gate` (escalated to FULL by the branch's diff: dl.S, compat_aliases.S, xtask/src/compat.rs) rc 1, 6509 passed / 1
+failed, and that failure was the flip above; `-plants` 9/9 CAUGHT, rc 0. `-t2` on 61755515a: clippy, static, so,
+s27_dynlink_clauses 2 passed, rc 0. Final jobs on 61755515a, `dl-dlopen-load-4-gate2` and `dl-dlopen-load-4-plants2`:
+results in `handoff/DL-DLOPEN-LOAD-4-report.md`.
 
-**Records (pending; ids for the coordinator to assign, in this order).** `records/pending/DL-DLOPEN-LOAD-3-1..4.toml`
-are COMPAT-NEW: -1 #5125 (no IFUNC resolver in a failing set; `decisions` D-27.31), -2 #5126 (`ld.so` by any path is the
-start-time object; D-27.34), -3 #5294 `e_ehsize` != 64, -4 #5294 `p_align` not a power of two (both D-27.7; both
-ignored in a secure process). `-5` is D-NEW series D-27: DL-16a's loader design (state at the first `dlopen`, check
-order, mode refusal = reference behaviour so no row, texts, constructors after the borrow, identity, capacity 512).
-**On assignment also update the references**: the four new rows at the end of the "Deliberate user-facing
-incompatibilities" table of `docs/differences-from-glibc.md` cite `records/pending/DL-DLOPEN-LOAD-3-<k>.toml`, and
-`-5`'s body says "this story's pending records" for the compat ids.
-
-**Tests added.** `crates/ld/tests/dlopen.rs`: checks 25-29 (#5125: two roots, both dependency orders, fail with no
-resolver run; control: the IFUNC object alone runs it) and `s27_1_f_0_static_program_dlopen_fails_with_text`
-(libc.a). `crates/ld/tests/dlopen_rules.rs`: check order and the #5294 refusals on mutated copies of the test's own
-executable, unknown-bit precedence, open-count saturation. Plants: `handoff/DL-DLOPEN-LOAD-3-plants.txt` (7).
-
-**Still owed / open.** CONF-DYN-HELPERS: flip its pending dlopen programs once it is on next. INFORMATIONAL for
-the coordinator: the process capacity of 512 objects (one more is refused with a text) is a limit the reference
-was not probed for; DL-16b or a later story should probe it and decide (row or larger arena).
+**Open / for later stories.**
+- A dlopen'd object that references a start-time object's TLS (for example initial-exec TPOFF against the C
+  library's TLS) is refused with "a thread-local storage relocation refers to an object without a TLS segment":
+  `adopt_start` (crates/boundary/src/ld/dlopen.rs) rebuilds the start-time objects with `tls: None`. This gap predates
+  the merge. DL-15 now records each placed module's ID and TP offset (`THREAD_MODS` in ld.rs), which is what DL-16d
+  needs to fill `tls` there.
+- The dlerror record is not freed at thread exit: DL-15's `tls_release` call in thread.rs is now the hook (DL-15
+  follow-up or DL-16c).
+- Capacity of 512 objects per process: the reference was not probed for it (DL-16b or later: probe it and decide).
+- Rows 318-321 of `docs/differences-from-glibc.md` still read "pending record `records/compat/COMPAT-2x.toml` (id
+  assigned by the coordinator)": the paths are right, the word "pending" is stale (a one-word cleanup).
 
 **Known gaps (later stories, unchanged):** start-time `l_name` = DT_SONAME; TLS of dlopen'd objects (DL-16d); one
-`UniqueTable` per call (DL-16b); start-time `$ORIGIN`; requester chain; fork/lock (DL-16c); dlerror record not
-freed at thread exit (DL-15 hook); static `dlopen(NULL)` gives the static text with an empty name (DL-16S).
+`UniqueTable` per call (DL-16b); start-time `$ORIGIN`; requester chain; fork/lock (DL-16c); static `dlopen(NULL)`
+gives the static text with an empty name (DL-16S).
 
-**Do not redo:** the probes, the driver, START_ARGS, the selector analysis above, the records.
+**Do not redo:** the probes, the driver, START_ARGS, the selector analysis (an ungated boundary module must not name
+a liella-ld item), the records, this merge.
 
-**Next step:** coordinator assigns the ids; then DL-16b (dlsym) stacks on this branch.
+**Next step:** land; then DL-16b (dlsym) stacks on this branch.
 
-**Plan rows to read:** plan/ph14/dl-16-dlopen.md §1-§4, §8; D-27.7, D-27.30, D-27.31, D-27.34; spec/behaviour/dynlink.md
-"dlerror texts" and P-10, P-13.
-
-Jobs on `cce283898` (shiki): `dl-dlopen-load-3-gate2` direct tier, rc 0, 11700 passed / 0 failed, conformance 130/0, peak 16G; `dl-dlopen-load-3-plants2` 7 CAUGHT / 0 SURVIVED / 0 WARN; `dl-dlopen-load-3-t4` clippy + static + the two ld test targets, rc 0. Superseded: `-lint0` (inherited head, rc 0), `-sel`, `-t1` (older heads), `-gate`/`-plants` (stopped to add tests), `-t2` (clippy items_after_test_module), `-t3` (trace: test name), `-recnew` (record skeletons).
+**Plan rows to read:** plan/ph14/dl-16-dlopen.md §1-§4, §8; D-27.7, D-27.30, D-27.31, D-27.34, D-27.37; design §7
+(DL-15's thread TLS); spec/behaviour/dynlink.md "dlerror texts" and P-10, P-13.

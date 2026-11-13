@@ -63,12 +63,12 @@ clause!(s27_1_g_0, "27.1", "Guarantees", r##"Symbol resolution follows ELF rules
 /// objects, the wrong ELF class, a missing dependency, an undefined symbol under RTLD_NOW, a
 /// missing version, bad modes, RTLD_NOLOAD),
 /// each a NULL handle with the reference's dlerror text. Static TLS exhaustion is not covered
-/// (no spec clause test yet). Passes under the reference and under Liella's ld.so (DL-16a,
-/// DL-DLOPEN-LOAD).
+/// (no spec clause test yet). Checked on the reference and on Liella's loader (DL-16a).
 #[test]
 fn s27_1_f_0() {
     let out = conformance(&["s27_dlopen_failures"]);
-    assert_not_pending(&out, "s27_dlopen_failures");
+    // run.sh prints nothing for a program that passes: the summary proves it ran on both.
+    assert!(out.lines().any(|l| l == "conformance: 1 passed, 0 failed"), "s27_dlopen_failures did not pass on both:\n{out}");
 }
 clause!(s27_2_c_0, "27.2", "Contract", r##"Libraries named in `LD_AUDIT` (or `DT_AUDIT`) receive callbacks from the dynamic linker for library search, object load and unload, symbol binding (they can redirect bindings), and PLT entry and exit."##);
 clause!(s27_3_c_0, "27.3", "Contract", r##"Return the address of a TLS variable, given a module ID and an offset, for the calling thread. The block is allocated on first access for modules loaded by `dlopen`."##);

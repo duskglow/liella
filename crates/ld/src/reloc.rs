@@ -73,6 +73,12 @@ pub trait Image {
     /// Change the protection of `len` bytes at `at` (page multiples) to `prot`.
     #[allow(clippy::result_unit_err)]
     fn protect(&mut self, at: u64, len: u64, prot: i32) -> Result<(), ()>;
+    /// The run-time address of the TLS descriptor function for a block in the static area (the
+    /// loader's `liella_machine_ld_tlsdesc_static`, DL-15); `None` (the default): this image has
+    /// none, and a TLS descriptor relocation is refused ([`RelocError::Tls`]).
+    fn tlsdesc_static(&mut self) -> Option<u64> {
+        None
+    }
 }
 
 /// Why an object could not be relocated.
@@ -80,7 +86,8 @@ pub trait Image {
 pub enum RelocError<'a> {
     /// A relocation type the architecture's table does not handle (the raw `r_type`).
     Unsupported(u32),
-    /// A TLS descriptor relocation (the raw `r_type`; not available in this build).
+    /// A TLS descriptor relocation (the raw `r_type`) in an image without a descriptor function
+    /// ([`Image::tlsdesc_static`]).
     Tls(u32),
     /// A TLS relocation whose defining object has no TLS block (the field's offset).
     TlsModule(u64),
@@ -271,8 +278,8 @@ fn one<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, r: &Rela, deferre
             img.copy(p, t.s, len);
             Ok(false)
         }
-        RelocKind::DtpMod | RelocKind::DtpOff | RelocKind::TpOff if deferred => Ok(false),
-        RelocKind::DtpMod | RelocKind::DtpOff | RelocKind::TpOff => {
+        RelocKind::DtpMod | RelocKind::DtpOff | RelocKind::TpOff | RelocKind::TlsDesc if deferred => Ok(false),
+        RelocKind::DtpMod | RelocKind::DtpOff | RelocKind::TpOff | RelocKind::TlsDesc => {
             // No symbol: the object's own module (local-dynamic and initial-exec on a local symbol).
             let (s, def) = if r.sym == 0 {
                 (0, Some(i))
@@ -282,10 +289,24 @@ fn one<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, r: &Rela, deferre
             };
             let placed = def.and_then(|d| set.objs.get(d)).and_then(|d| d.tls).ok_or(RelocError::TlsModule(r.offset))?;
             let ops = TlsOperands { s, a: r.addend, module: placed.module, tp_offset: placed.tp_offset };
-            let f = A::apply_tls(r.kind, ops).map_err(|_| RelocError::Unsupported(r.r_type))?;
-            put(img, Some(f), text).map(|()| false)
+            if r.kind != RelocKind::TlsDesc {
+                let f = A::apply_tls(r.kind, ops).map_err(|_| RelocError::Unsupported(r.r_type))?;
+                return put(img, Some(f), text).map(|()| false);
+            }
+            // A descriptor (DL-15): every initially loaded module's block is in the static area, so
+            // its function is the image's static one and its argument the TP offset.
+            let resolver = img.tlsdesc_static().ok_or(RelocError::Tls(r.r_type))?;
+            let words = A::tls_descriptor(resolver, ops).map_err(|_| RelocError::Unsupported(r.r_type))?;
+            if !inside(&o.elf, r.offset, 16, text) {
+                return Err(RelocError::Outside(r.offset));
+            }
+            let mut bytes = [0u8; 16];
+            for (b, w) in bytes.chunks_exact_mut(8).zip(words) {
+                b.copy_from_slice(&if A::EI_DATA == ELFDATA2LSB { w.to_le_bytes() } else { w.to_be_bytes() });
+            }
+            img.store(p, &bytes);
+            Ok(false)
         }
-        RelocKind::TlsDesc => Err(RelocError::Tls(r.r_type)),
         RelocKind::Unsupported(n) => Err(RelocError::Unsupported(n)),
     }
 }

@@ -1,0 +1,29 @@
+{
+ "task": "DL-DLOPEN-LOAD-4",
+ "model": "opus",
+ "tokens": null,
+ "result": "origin/next merged: DL-15's TLS handover and DL-16a's dlopen entry both kept in StartInfo/run_init/early_init; s27_dlopen_failures flipped from PENDING-LIELLA to checked on Liella; gate and 10/10 plants green",
+ "branch": "task/dl-dlopen-load-4",
+ "head": "61755515a",
+ "gate": {
+  "affected": "11719 passed / 0 failed (32 suites, FULL by escalation; conformance 132 passed / 0 failed, 2 pending on DL-16b)",
+  "peak": "14G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "dlopen'd objects referencing a start-time object's TLS are refused (adopt_start sets tls: None; predates the merge); DL-15's THREAD_MODS holds what DL-16d needs",
+  "the dlerror record is not freed at thread exit; DL-15's tls_release call in thread.rs is the hook",
+  "differences rows 318-321 still say 'pending record' beside the assigned COMPAT-23..26 paths (stale word only)",
+  "process slip: one plants-file comment line edited with sed -i (not refused; content as intended)"
+ ],
+ "refused": [],
+ "impact": [
+  {"kind": "unblock", "what": "DL-16a lands beside DL-15 (merge conflict resolved); DL-16b (dlsym) can stack on it", "before": null, "after": null, "unit": null, "measured": true},
+  {"kind": "coverage", "what": "conformance program s27_dlopen_failures now checked on Liella (was pending); plants added for the merged handover and the flipped test", "before": 0, "after": 3, "unit": "plants", "measured": true}
+ ],
+ "improvement": "the conformance flip of a PENDING-LIELLA program surfaces only as a FULL-gate red after the merge; a pre-merge check (run.sh on the stacked branch's programs) would catch it in the first job",
+ "next_step": "land; then DL-16b (dlsym) stacks on this branch",
+ "report_file": "handoff/DL-DLOPEN-LOAD-4-report.md",
+ "jobs": ["dl-dlopen-load-4-gate2", "dl-dlopen-load-4-plants2"]
+}

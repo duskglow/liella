@@ -1,0 +1,20 @@
+{"task": "DL-LIBC-NONSHARED-2", "model": "opus", "tokens": null,
+ "result": "Continuation: no code change; the first run's red was a gate job that was never started. Clippy, so and static pass on the inherited head; gate, plants and the dynamic subset rerun on keke under jobrun",
+ "branch": "task/dl-libc-nonshared-2", "head": null,
+ "gate": {"affected": "see hand-back (dl-libc-nonshared-2-gate-1)", "peak": null},
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": [
+   "Cause of the first run's red: its hand-back named dl-libc-nonshared-gate-2, which was never started on mei; its gate-3 attempt left a log but no jobs.tsv row, so it did not finish under jobrun. Not a code fault.",
+   "cargo xtask affected escalates this branch to FULL: csys/nonshared/*.c (csys/ C sources are not mapped to a tier) and xtask/src/so.rs. A mapping of csys/nonshared/ and of xtask so.rs's nonshared step to the products tests (s01_startup_symbols, conformance_dynamic) would make the direct tier enough.",
+   "Carried from DL-LIBC-NONSHARED: Liella's __cxa_finalize(dso) does not drop atfork handlers registered with dso (not reachable until the loader has dlclose); the dynamic subset still uses the host's start files; libc_nonshared.a and libc.so are not in remap::PRODUCTS."
+ ],
+ "refused": [],
+ "impact": [
+   {"kind": "unblock", "what": "programs and shared objects link against an installed Liella with no host libc_nonshared.a (owner ruling #4807); carried from DL-LIBC-NONSHARED, this run proves it", "before": null, "after": null, "unit": null, "measured": true},
+   {"kind": "coverage", "what": "tests carried from DL-LIBC-NONSHARED: s1_2_c_5_nonshared_archive_two_way and the link-map check in the dynamic subset; 3 plants", "before": 0, "after": 2, "unit": "tests", "measured": true}
+ ],
+ "improvement": "handback-check could refuse a JOBS label with no jobs.tsv row before the hand-back is sent (the first run sent one), and the affected map could cover csys/nonshared/ so this change gates on the direct tier instead of FULL.",
+ "next_step": "DL-ATFORK-FINALIZE: give atfork entries a module slot and drop them in __cxa_finalize(dso), before phase 14's dlclose.",
+ "report_file": "handoff/DL-LIBC-NONSHARED.md",
+ "jobs": ["dl-libc-nonshared-2-clippy-2", "dl-libc-nonshared-2-static-2", "dl-libc-nonshared-2-dynsub-1", "dl-libc-nonshared-2-gate-1", "dl-libc-nonshared-2-plants-1"]}

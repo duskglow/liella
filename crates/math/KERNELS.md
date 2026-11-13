@@ -34,6 +34,14 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast32/clog_csqrt.rs:138` `pub fn csqrtf(x: f32, y: f32, mode: Rounding, sqrt: impl Fn(f64) -> f64) -> Option<((f32, f32), Status)>` — bound: undocumented — doc: `csqrtf` in `mode`, both parts or `None`.
 - `fast32/clog_csqrt.rs:145` `pub fn csqrtf_nearest(x: f32, y: f32, sqrt: impl Fn(f64) -> f64) -> Option<(f32, f32)>` — bound: undocumented — doc: `csqrtf` to nearest for the in-place entry, `sqrt` the hardware root.
 
+## fast32/csinh.rs (f32 csinh)
+
+- `fast32/csinh.rs:19` `pub(crate) fn csinh_core(x: f32, y: f32) -> Option<(f64, f64)>` — bound: undocumented — doc: `(sinh x·cos y, cosh x·sin y)` as `double`s within the margins above, or `None`.
+- `fast32/csinh.rs:28` `pub fn csinhf(x: f32, y: f32, mode: Rounding) -> Option<((f32, f32), Status)>` — bound: undocumented — doc: `csinhf` in `mode`, both parts or `None` (the 384-bit route then runs).
+- `fast32/csinh.rs:35` `pub fn csinf(x: f32, y: f32, mode: Rounding) -> Option<((f32, f32), Status)>` — bound: undocumented — doc: `csinf` in `mode`: `csinhf(y + ix)` swapped.
+- `fast32/csinh.rs:43` `pub fn csinhf_nearest(x: f32, y: f32) -> Option<(f32, f32)>` — bound: undocumented — doc: `csinhf` to nearest for the in-place entry: both parts or `None` (each conversion to `float` is inexact, the test excluding a `float` value: inexact is raised a…
+- `fast32/csinh.rs:50` `pub fn csinf_nearest(x: f32, y: f32) -> Option<(f32, f32)>` — bound: undocumented — doc: `csinf` to nearest for the in-place entry.
+
 ## fast32/erf.rs (f32 erf)
 
 - `fast32/erf.rs:49` `fn erf_small(v: f64) -> f64` — bound: undocumented — doc: erf v for |v| < 1 as v·P(v²), ε ≤ 7u: the fit 3.67u; s = RN(v²) moves P by under s·|P'/P|·u < 0.4u; Horner in s ∈ [0, 1) with |c_k s^k| falling by over 3 per st…
@@ -129,21 +137,21 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 
 ## fast32.rs (f32 core)
 
-- `fast32.rs:343` `pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `f(x)` for `float` `x` by the fast path, or `None` when the operand is outside its domain or the rounding test fails (the caller then runs the accurate path).
-- `fast32.rs:383` `fn finish(x: f32, y: f64, delta: u64, mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test on y, the statistics under `name` and the hardware flags (see [`eval`]).
-- `fast32.rs:393` `include!("fast32_tables.rs");`
-- `fast32.rs:407` `pub(crate) fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32>` — bound: undocumented — doc: The rounding test and the final rounding of y = f·(1 + θ), |y - f| < `delta` ulp(y).
-- `fast32.rs:434` `pub fn eval_nearest(f: Fast, x: f32) -> Option<f32>` — bound: undocumented — doc: `f(x)` rounded to nearest by the fast path, for the in-place entry of a caller in the default MXCSR (MATH-M6-ENVELOPE-COST prototype), or `None`.
-- `fast32.rs:486-500` `nearest_fn!` entries: exp_nearest, exp2_nearest, exp10_nearest, log_nearest, log2_nearest, log10_nearest, sin_nearest, cos_nearest, tan_nearest, sinh_nearest, cosh_nearest, tanh_nearest, asinh_nearest, acosh_nearest, atanh_nearest
-- `fast32.rs:506` `pub fn exp_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `expf` in the caller's rounding direction and MXCSR, which it does not read, by one `double` evaluation and one conversion (LIBM-F32-ONEPASS, D-10.63), or `None…
-- `fast32.rs:512` `pub fn exp2_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `exp2f` as [`exp_onepass_any`].
-- `fast32.rs:524` `pub fn exp10_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `exp10f` as [`exp_onepass_any`] (D-10.72): `c` = RN(128·log2 10), |x| < 37.9 (|x·log2 10| < 125.9, so [`exp_onepass`]'s range and proof hold unchanged: |z| < 2^…
-- `fast32.rs:533` `pub fn log_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `logf` in the caller's rounding direction and MXCSR, unread (D-10.72; proof at [`log_onepass`]).
-- `fast32.rs:539` `pub fn log2_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `log2f` as [`log_onepass_any`].
-- `fast32.rs:545` `pub fn log10_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `log10f` as [`log_onepass_any`].
-- `fast32.rs:563-583` `fast_fn!` entries: exp, exp2, exp10, log, log2, log10, log1p, sin, cos, tan, asin, acos, atan, expm1, cbrt, sinh, cosh, tanh, asinh, acosh, atanh
-- `fast32.rs:588` `pub fn erf(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `erf` for `float`: the fast path, else [`erf_refused`] (the tiny operands' direct path, else the accurate path).
-- `fast32.rs:596` `pub fn erfc(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `erfc` for `float`: the fast path, else [`erfc_refused`] (as [`erf`]).
+- `fast32.rs:345` `pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `f(x)` for `float` `x` by the fast path, or `None` when the operand is outside its domain or the rounding test fails (the caller then runs the accurate path).
+- `fast32.rs:385` `fn finish(x: f32, y: f64, delta: u64, mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test on y, the statistics under `name` and the hardware flags (see [`eval`]).
+- `fast32.rs:395` `include!("fast32_tables.rs");`
+- `fast32.rs:409` `pub(crate) fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32>` — bound: undocumented — doc: The rounding test and the final rounding of y = f·(1 + θ), |y - f| < `delta` ulp(y).
+- `fast32.rs:436` `pub fn eval_nearest(f: Fast, x: f32) -> Option<f32>` — bound: undocumented — doc: `f(x)` rounded to nearest by the fast path, for the in-place entry of a caller in the default MXCSR (MATH-M6-ENVELOPE-COST prototype), or `None`.
+- `fast32.rs:488-502` `nearest_fn!` entries: exp_nearest, exp2_nearest, exp10_nearest, log_nearest, log2_nearest, log10_nearest, sin_nearest, cos_nearest, tan_nearest, sinh_nearest, cosh_nearest, tanh_nearest, asinh_nearest, acosh_nearest, atanh_nearest
+- `fast32.rs:508` `pub fn exp_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `expf` in the caller's rounding direction and MXCSR, which it does not read, by one `double` evaluation and one conversion (LIBM-F32-ONEPASS, D-10.63), or `None…
+- `fast32.rs:514` `pub fn exp2_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `exp2f` as [`exp_onepass_any`].
+- `fast32.rs:526` `pub fn exp10_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `exp10f` as [`exp_onepass_any`] (D-10.72): `c` = RN(128·log2 10), |x| < 37.9 (|x·log2 10| < 125.9, so [`exp_onepass`]'s range and proof hold unchanged: |z| < 2^…
+- `fast32.rs:535` `pub fn log_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `logf` in the caller's rounding direction and MXCSR, unread (D-10.72; proof at [`log_onepass`]).
+- `fast32.rs:541` `pub fn log2_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `log2f` as [`log_onepass_any`].
+- `fast32.rs:547` `pub fn log10_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `log10f` as [`log_onepass_any`].
+- `fast32.rs:565-585` `fast_fn!` entries: exp, exp2, exp10, log, log2, log10, log1p, sin, cos, tan, asin, acos, atan, expm1, cbrt, sinh, cosh, tanh, asinh, acosh, atanh
+- `fast32.rs:590` `pub fn erf(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `erf` for `float`: the fast path, else [`erf_refused`] (the tiny operands' direct path, else the accurate path).
+- `fast32.rs:598` `pub fn erfc(x: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `erfc` for `float`: the fast path, else [`erfc_refused`] (as [`erf`]).
 
 ## fast32_tables.rs (fast32_tables)
 
@@ -311,7 +319,7 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast64.rs:375` `pub(crate) fn exp_eps(y: Dd, tail: f64) -> f64` — bound: undocumented — doc: [`exp_kernel`]'s bound `|y|·(2^-49·|tail| + 2^-70)` (proof there).
 - `fast64.rs:401` `fn reduce_ln2(xh: f64, kf: f64) -> (f64, f64)` — bound: undocumented — doc: The fast paths' Cody–Waite reduction (MATH-M6-F64-GAP-EXP-REDUCE, register 16.5 #2): `(h, l)` with `h + l = xh − k·(C0 + C1) − k·C2` up to one rounding of `l`, …
 - `fast64.rs:408` `pub(crate) fn reduce_exp(x: f64, kf: f64) -> Dd` — bound: undocumented — doc: [`exp`]'s reduced argument (proof there).
-- `fast64.rs:415` `fn reduce_pow(z: Dd, kf: f64) -> Dd` — bound: undocumented — doc: [`pow`]'s reduced argument (proof there).
+- `fast64.rs:415` `pub(crate) fn reduce_pow(z: Dd, kf: f64) -> Dd` — bound: undocumented — doc: [`pow`]'s reduced argument (proof there).
 - `fast64.rs:425` `pub(crate) fn log_dd(x: f64) -> Option<(Dd, f64)>` — bound: undocumented — doc: `ln x` as `(y, eps)` with `|ln x − y| <= eps` ([`log_kernel`], [`log_eps`]) for a positive finite `x != 1` (the gamma fast tier, `crate::fast_gamma`; the Bessel…
 - `fast64.rs:435` `pub fn exp(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `e^x` for `x` in the accurate path's finite range (`|x| >= 2^-60`, `-746 <= x <= 710`).
 - `fast64.rs:456` `pub fn exp2(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `2^x` for `x` in the accurate path's finite range, `x` not an integer.

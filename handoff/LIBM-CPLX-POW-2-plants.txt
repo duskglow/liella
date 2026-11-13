@@ -1,0 +1,3 @@
+# LIBM-CPLX-POW-2 plants (docs/plants.md): the strict per-part test and an error-bound constant of the cpow tiers.
+strict-test-dropped | crates/math/src/complex_fast_pow.rs | perl:s/if dd::abs\(p\.lo\) <= eps \+ dd::abs\(p\.hi\) \* SLACK \{/if dd::abs(p.lo) < 0.0 {/ | cargo test -p liella-math --lib complex_fast::pow | msg:cpow_tiers_decline_exact_parts.*FAILED|panicked
+arg-bound-loosened | crates/math/src/complex_fast_pow.rs | perl:s/const LI_REL: f64 = f64::from_bits\(0x39d0_0000_0000_0000\)/const LI_REL: f64 = f64::from_bits(0x3c30_0000_0000_0000)/ | cargo test -p liella-math --lib complex_fast::pow | msg:cpow_tiers_match_the_384_bit_route_in_every_mode.*FAILED|panicked

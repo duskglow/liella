@@ -182,6 +182,31 @@ last column says how each answer decides the plan's choice.
 | P-13 program, `ld.so`, libc (`s27_1_c_1`, `s27_1_f_0`) | `probe p13` (PIE build and `-no-pie` build) | the program by its own path or as `/proc/self/exe`: NULL, `cannot dynamically load position-independent executable` (PIE) or `cannot dynamically load executable` (non-PIE). `NOLOAD`: NULL, no text. `ld.so` by name and by `/lib64/ld-linux-x86-64.so.2`: the start-time handle; by its real path `/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2`: **a different handle** (a second object with that `l_name`). libc by name, `NOLOAD`, real path and a `..` path: the start-time handle | the program is refused by path like any executable (identity does not match it). `libc.so.6` by any name is the start-time object. For `ld.so`, Liella's `(st_dev, st_ino)` identity returns the start-time object for every path. That differs from the reference (one loader per process); whether that becomes a differences row is open (maintainer ruling #5126) |
 | P-14 process capacity (`s27_1_c_1`, `s27_1_f_0`; #5321) | a program `dlopen`s N distinct copies of one tiny object (`RTLD_NOW\|RTLD_LOCAL`, each by its own path), N = 511, 512, 513, 1000, 2000 (DL-DLSYM-2 probe, Zen 1 host, glibc 2.39) | every open succeeds for every N, 2000 included: no fixed limit on the number of loaded objects shows up | Liella's loader holds at most 512 objects, start-time objects included, and refuses the next with `<name>: cannot load more objects` (NULL, dlerror text); a differences row records it (maintainer ruling on the capacity, #5321) |
 
+## The link-time archive libc_nonshared.a (DL-LIBC-NONSHARED, D-27.28)
+
+Clauses `s1_2_c_1`, `s1_2_c_3`, `s1_2_c_5`. Black box only, on the Zen 1 build host (glibc 2.39, gcc 13): `ar t` and
+`readelf -sW` of the installed archive, the installed `libc.so` script, `nm` of linked programs, and program behaviour
+(DL-NONSHARED-OPTOUT's probes P1-P2 and this story's `__cxa_finalize` probe). No source or disassembly.
+
+| member | defines (all hidden) | reaches in libc.so.6 | how settled |
+|---|---|---|---|
+| `atexit` | `atexit` | `__cxa_atexit@@GLIBC_2.2.5` | symbol listing; libc.so.6 exports no `atexit`; a linked program has `atexit` local (`t`) |
+| `at_quick_exit` | `at_quick_exit` | `__cxa_at_quick_exit@@GLIBC_2.10` | symbol listing; libc.so.6 exports no `at_quick_exit` |
+| `pthread_atfork` | `__pthread_atfork`, `pthread_atfork` (weak, same address) | `__register_atfork@@GLIBC_2.3.2` | symbol listing; libc.so.6 has `pthread_atfork` only as the non-default `@GLIBC_2.2.5`, so a new link takes the member |
+| `stack_chk_fail_local` | `__stack_chk_fail_local` | `__stack_chk_fail@@GLIBC_2.4` | symbol listing |
+
+All members reference `__dso_handle` (undefined, hidden: the compiler's start files define it).
+
+* **The tag is the VALUE of `__dso_handle`.** In a `-no-pie` program the value is 0, and its address is not. There,
+  `__cxa_finalize(&__dso_handle)` leaves the `atexit` handler, the `at_quick_exit` handler and the atfork handler
+  registered (the quick handler still runs at `quick_exit`). `__cxa_finalize(0)` runs the handler. In a PIE the value is
+  the address, and `__cxa_finalize(__dso_handle)` runs the module's `atexit` handler, then drops its `at_quick_exit`
+  handler AND its atfork handler (a later `fork` does not call it).
+* **At `dlclose`** (P2): a shared object's own `atexit` handler runs when it is unloaded. Its `at_quick_exit` and
+  `pthread_atfork` handlers are dropped, and a later `quick_exit` or `fork` calls neither.
+* **The installed `libc.so`** is `GROUP ( <libc.so.6> <libc_nonshared.a> AS_NEEDED ( <ld-linux-x86-64.so.2> ) )`.
+  The reference names absolute paths. Liella's names bare files, which ld finds on the library search path.
+
 ## Notes for the implementation stories
 
 - DL-16: the texts above are the targets; the `e_machine` case reports a file-missing text for
