@@ -1,55 +1,54 @@
-# LIBM-RETHINK-GAMMA: handoff (run 1, INCOMPLETE at the context checkpoint)
+# LIBM-RETHINK-GAMMA: handoff (after run 2, LIBM-RETHINK-GAMMA-2)
 
-State: branch `task/libm-rethink-gamma`, fast-forwarded to origin/next b888f8ff (the branch was cut on 11-12 while
-the story was held for LIBM-F32-REST-NEXT-3; it had no commits). Code head: see handoff/reports/LIBM-RETHINK-GAMMA.json.
-Role keke:~/w/r5. Reserved decision id: D-10.105 (record NOT written yet).
+State: branch `task/libm-rethink-gamma-2` (run 1's `task/libm-rethink-gamma` plus run 2's commits), head in
+handoff/reports/LIBM-RETHINK-GAMMA-2.json. Role keke:~/w/r5. Decision in force: D-10.105 (record written this run,
+records/decisions/D-10/D-10.105.toml), on top of D-10.13 (tiers, correct rounding) and D-10.87 (lgammaf edge).
 
-## Step 1: traced bands (probe tool, `~/work/libm-rethink-gamma/before` on keke; instr/call, Liella / glibc)
-One input per 2^16-block (f32) / per 1/64 binade (f64), validation/libm_tail/run.sh, band summary by my bands.py:
-| band | Liella before | glibc | path today |
-|---|---|---|---|
-| f64 lgamma 0<\|x\|<2^-60 | 393 275 | ~117 | fast_gamma::domain stops at TINY=2^-60 -> 384-bit lgamma_accurate |
-| f64 tgamma 0<\|x\|<2^-60 | 426 160 | ~142 | same (domain kept \|Γ\| <= 2^61 for settle) |
-| f64 lgamma x>=16 | 79 395 | 121.6 | domain stops at HI=16 -> 384-bit |
-| f64 lgamma/tgamma x<=-16 | 11 525 / 11 609 | 127 / 133 | 384-bit (non-integers in (-2^52,-16]) |
-| tgammaf 0<\|x\|<2^-20 | 428 777 | ~165 | gamma_core domain \|x\|>=2^-20 -> 384-bit |
-| tgammaf x<=-34 / x>=35 | 36 289 / 13 707 | 144 / 137 | fast32::round refuses subnormal and overflowing results -> 384-bit |
-| lgammaf x<=-42 | 35 494 | - | gamma_core domain -> lgamma_edge -> fast_gamma::domain false -> 384-bit |
-| lgammaf tiny | 421.5 | 87-99 | D-10.87 lgamma_edge (landed after LIBM-TAIL-PROBE): already off the 384-bit path |
+## Run 2: the share-assert failure (found, not a code defect)
+The tiny test's failing assert was the **lgamma** share (run 1's "line 64"), not tgamma. The asserts now print the
+operands they miss; every miss was about -4.2e293: the test's `spread` helper wrapped `(e + 1023) as u64` into the
+sign and exponent for e < -1022, so about 5% of the "tiny" operands were negative integers near -2^974. Fixed: the
+helper makes real subnormals. settle was not the cause.
 
-## RETHINK design (before reading the code)
-A (adopted): per-band closed forms in double-double with a proved bound, Ziv's test (fast64::settle) for f64; for
-f32 the same values rounded by the offline-proved fast32 rounding. Tiny: lnΓ(x) = -ln|x| - γx + O(x²), Γ(x) = 1/x - γ
-+ O(x) (DLMF 5.7.1/5.7.3); large: Stirling (DLMF 5.11.1, remainder < first omitted term, 5.11.ii); large negative:
-reflection Γ(x)Γ(1-x) = π/sin(πx). Bound: ~log_dd + 20-40 instructions (tiny), ~log_dd + 60 (Stirling).
-B (rejected): extend the LG_T piecewise-Taylor tables over the new ranges: ~1000 binades of slots up to the overflow
-(MBs) while Stirling needs <= 4 terms above 2^10; tiny |x| reduces to the series anyway. C (f32 only, open): plain
-double + exception table from the exhaustive sweep instead of double-double; decide by the sweep's failure count.
+## Run 2: code
+* tgamma tiny now includes subnormal x (exact 2^512 scaling, q <= 2^562); `fast64::settle` takes m = 1023 (a rounded
+  |v| >= 2 is the overflow in the mode); `settle_wide` takes m >= 1024 as overflow, except |y.hi| = 1 at m = 1024
+  (x = ±2^-1024: value just under 2^1024, toward-zero roundings give DBL_MAX without overflow -> accurate path).
+* lgamma Stirling band reaches the overflow threshold: from 2^512 the form runs on the scale 2^-512 and is normalized
+  (`X_BIG` is gone; X_OVER = 2^1015 stays the no-evaluation overflow).
+* special::lgamma/tgamma call the band forms only on their range (the after-probe showed NaN/inf and x <= -16
+  paying 17-39 instructions for a call that fell back).
+* Probe-settled limit: x = 2^k(1 + j·2^-50), small j, and powers of two below about 2^-100 have 1/x within settle's
+  2^-100 slack of a double: directed tgamma there stays on the 384-bit path (correct; isolated inputs).
 
-## Done (run 1)
-* fast_gamma: `lgamma_tiny` (log_dd), `tgamma_tiny` (exact residual via two_prod, 2^512 scaling below 2^-512),
-  `lgamma_large` (Stirling, 10 terms, 1/(12x) in dd; x*2^-512 above 2^512 because Dekker's split overflows above
-  2^996), `lgamma_band`/`tgamma_band` (overflow for x >= 2^1015); wired in special::lgamma/tgamma after the table tier.
-* tests/gamma_bands.rs: bits, status and sign identical to the 384-bit path in all four modes on spread operands
-  and band edges, plus the share answered by the band form.
-* Jobs: libm-rethink-gamma-check (rc 1: missing_docs), -check2 (rc 1: trace IDs), -check3 (clippy, static,
-  gamma_bands + fast_gamma tests) on the final head.
+## Measurements (probe tool, keke, one input per 1/64 binade; instr/call, Liella before -> after, glibc)
+| band | before | after | glibc | ratio |
+|---|---|---|---|---|
+| tgamma 0<\|x\|<2^-60 | 426 160 | 225.5 | 140.0 | 1.6x |
+| lgamma 0<\|x\|<2^-60 | 393 275 | 408.0 | 102.1 | 4.0x |
+| lgamma x>=16 | 79 395 | 518.1 | 121.6 | 4.3x |
+| lgamma / tgamma x<=-16 | 11 524.9 / 11 609.2 | 11 529.9 / 11 612.4 | 127 / 133 | +5 / +3 (cost) |
+| lgamma / tgamma typical | 681.5 / 724.9 | 683.5 / 726.9 | 222 / 350 | +2 / +2 (cost) |
+| lgamma / tgamma NaN/inf | 110 / 105 | 115 / 108 | 46 / 67 | +5 / +3 (cost) |
+Final head, probe `~/work/libm-rethink-gamma/after3` (job probe-after3). Without the range guard the x<=-16 and
+NaN rows paid +17..39 (after2); the +2..5 left is the guard's compare plus codegen in special::lgamma/tgamma.
+Fix-forward: move the band branch into a `#[cold]` out-of-line helper so the domain path's code is unchanged.
 
-* check3 result: clippy and static pass; fast_gamma 4/4; gamma_bands: every operand AGREES with the 384-bit path
-  (bits, status, sign, four modes), the large-x test passes (>= 98% by the band form), the tiny test fails at
-  its tgamma share assert (line 64, < 85% of tiny operands answered by tgamma_band). NOT DIAGNOSED. Suspects:
-  settle's slack (2^-100·|y.hi|) against lo once |x| < 2^-100 (lo/q tiny when r is small), or the 2^512 scaling.
-  Print the refusal rate per exponent first.
+## Jobs (keke)
+Final head: gate3 (records check, clippy, static, affected --run --base origin/next: ok, peak 1.4G), plants3
+(6 CAUGHT, 1 EQUIVALENT: margin halved; 1 WARN-NO-MSG: settle-1023-refused was caught by the tgamma share assert,
+"tgamma tiny: 3239 of 3316", before the edge assert its msg names), probe-after3.
+Diagnostics: lint0 (inherited head, rc 0), diag1-5, probe-after (after2, pre-guard).
+SUPERSEDED: gate, gate2 (stopped for later commits), plants (pre-guard tree), plants2 (settle m=1023 plant
+SURVIVED: no band operand reaches that branch; a unit test now checks it).
 
-## Not done / exact next step (brief handoff/LIBM-RETHINK-GAMMA/LIBM-RETHINK-GAMMA-2.md)
-1. Gate (`cargo xtask affected --run`, base origin/next), plants (Stirling coefficient sign; γ dropped in
-   tgamma_tiny; margin halved = equivalent: the bounds are conservative), after-probe:
-   `jobrun ... bash ~/work/libm-rethink-gamma/probe-run.sh after` and compare with `before`.
-2. D-10.105 record (`cargo xtask records new decision D-10.105`), method as above with the citations.
-3. Bands left: f64 x <= -16 (reflection, needs sin(πr) in dd), f64 lgamma [2^1012, 2^1015) and tgamma subnormal
-   x (settle refuses m > 1022: add an m = 1023 step with overflow), tgammaf tiny (1/x - γ + c1·x in double, round
-   with margin; powers of two x = ±2^-k, k >= 53, sit on a float: decide by the sign of -γ, no table), tgammaf
-   x <= -34 / >= 35 and lgammaf x <= -42 (fast32::round has no subnormal/overflow results: add them, or reuse
-   the f64 band kernels through lgamma_edge as D-10.87 does).
+## Not done / exact next step (LIBM-RETHINK-GAMMA-3)
+1. lgamma tiny (3.9x) and x >= 16 (4.2x) are above the 2x target: profile one call (wl_trace) before designing;
+   suspects: log_dd's cost, and special::lgamma's dispatch before the band (typical rows pay ~680 vs glibc 222).
+   lgamma x>=16 max 83 118 at 1.2e11: a residue of settle refusals (~0.3%); print the refusal rate per binade.
+2. Bands left: f64 x <= -16 for both (reflection Γ(x)Γ(1-x) = π/sin(πx), needs sin(πr) in dd; 11.5k mean, 25% of
+   the bit patterns), f64 tgamma 16 <= x < 171.6 (pos_ge16 mean 2 567), and the f32 bands (tgammaf |x| < 2^-20,
+   x <= -34 / >= 35, lgammaf x <= -42) with exhaustive sweeps.
 ## Not to redo
-The before measurement; the trace of every band (table above); the design comparison.
+The before measurement and the band traces (~/work/libm-rethink-gamma/before on keke); the design comparison
+(D-10.105); the spread-helper diagnosis.

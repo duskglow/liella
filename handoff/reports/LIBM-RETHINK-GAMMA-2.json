@@ -1,0 +1,71 @@
+{
+ "task": "LIBM-RETHINK-GAMMA-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "COMPLETE: f64 gamma bands off the 384-bit path (tgamma tiny incl. subnormals, lgamma tiny, lgamma x>=16 through the overflow); share-assert failure was the test's operand generator; target 2x reached for tgamma tiny only (lgamma tiny 4.0x, x>=16 4.3x)",
+ "branch": "task/libm-rethink-gamma-2",
+ "head": "452344ea1 (code; handoff commit on top)",
+ "gate": {
+  "affected": "affected --run --base origin/next: ok (gate3, rc 0, peak 1.4G)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "The tiny test's failing assert was the lgamma share, not tgamma: the spread helper wrapped exponents below -1022 into negative integers near -2^974 (fixed; settle was not the cause).",
+  "tgamma directed results for x = 2^k(1 + j*2^-50), small j, and powers of two below about 2^-100 lie inside settle's 2^-100 slack and stay on the 384-bit path (isolated inputs, correct).",
+  "D-10.105 record written by hand in the shape of `records new` (no cargo on the agent host, role busy); `cargo xtask records check` runs in the gate job.",
+  "plants3 WARN-NO-MSG settle-1023-refused: caught by the tgamma share assert (3239 of 3316) before the edge assert its msg names."
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "perf",
+   "what": "f64 tgamma 0<|x|<2^-60 band mean (probe; glibc 140.0)",
+   "before": 426160,
+   "after": 225.5,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "perf",
+   "what": "f64 lgamma 0<|x|<2^-60 band mean (probe; glibc 102.1)",
+   "before": 393275,
+   "after": 408.0,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "perf",
+   "what": "f64 lgamma x>=16 band mean (probe; glibc 121.6)",
+   "before": 79395,
+   "after": 518.1,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "cost",
+   "what": "lgamma/tgamma x<=-16, typical and NaN probe bands: +2..5 instr/call from the band range guard (lgamma typical 681.5 -> 683.5); fix-forward: cold out-of-line band branch",
+   "before": 681.5,
+   "after": 683.5,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "gamma_bands checks (overflow edges, lgamma threshold bisection) and a settle m=1023 unit test; 8 plants",
+   "before": 2,
+   "after": 3,
+   "unit": "tests",
+   "measured": true
+  }
+ ],
+ "improvement": "A test helper that builds floats from (exponent, fraction) should be shared and tested once: run 1 lost its diagnosis budget to a wrapped exponent in a hand-rolled one.",
+ "next_step": "LIBM-RETHINK-GAMMA-3: profile lgamma tiny and x>=16 (3.9x/4.2x) before designing; then x<=-16 by reflection, f64 tgamma 16<=x<171.6, and the f32 bands with exhaustive sweeps (handoff/libm-rethink-gamma.md).",
+ "report_file": "handoff/libm-rethink-gamma.md",
+ "jobs": [
+  "libm-rethink-gamma-2-gate3",
+  "libm-rethink-gamma-2-plants3",
+  "libm-rethink-gamma-2-probe-after3"
+ ]
+}
