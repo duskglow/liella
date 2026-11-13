@@ -1,8 +1,8 @@
 # DL-LIBC-START: the dynamic path of `__libc_start_main` (phase 14 DL-14)
 
-**State:** branch `task/dl-libc-start-8` (DL-LIBC-START-8: -7's head merged with next b31418181, code head
-8c95bc90c). Role kanon:~/w/kn1. Report: handoff/DL-LIBC-START-8-report.md; json handoff/reports/DL-LIBC-START-8.json.
-Plants: handoff/DL-LIBC-START-8-plants.txt (3 on the merge sites + -7's 3). Earlier: -6/-7 reports and plants.
+**State:** branch `task/dl-libc-start-9` (DL-LIBC-START-9 on -8's head e55b7c412; code head a45de8a07). Role
+shiki:~/w/sh2. Report: handoff/DL-LIBC-START-9-report.md; json handoff/reports/DL-LIBC-START-9.json. Plants:
+handoff/DL-LIBC-START-9-plants.txt (1, CAUGHT). Earlier: -6/-7/-8 reports and plants.
 
 **Decisions in force:** D-27.24, D-27.22, D-27.20 (ld.so exports; R14-12 (a) placement), D-27.19, D-27.11 (amended
 by D-27.27), D-27.17, D-27.26 (DL-LIBC-EARLY: rseq, loader exports), D-10.5 (amended by D-10.100), D-X.10, D-X.22. Plan rows:
@@ -26,15 +26,21 @@ plan/06-phases/17-phase-14-dynamic-linking.md DL-14; plan/ph14/design.md §14; R
   `rseq_size`; ld.so defines `__libc_stack_end` once (mangled under feature `runtime`) and stores it with the rseq
   objects; hot lists regenerated per profile, three dead keys dropped, five new unpinned generic keys kept out
   (details and RULING in the -8 report).
+- -9: -8's gate failed only hot_text_products `init_written_startup_objects_are_in_the_data1_cluster`:
+  `runtime::EARLY_DONE` (1 byte, this branch's dynamic-path flag, in startup-data.keys since -8's regen) was not in the
+  hand-written crates/libc-so/startup-state.list, so it stayed in `.bss.<name>`. Declared in the every-start tier;
+  all 23 hot_text_products tests pass. Ruling #5171's five keys were already absent from hot-text.list/.unpinned.
 
 ## Do not redo
 -4's host probes; -5's cause hunt for the link/oracle failures; -6's two binding probes; -8's merge and regen (the
 hot-text.list is next's minus three dead keys; do not re-add the five generic keys without pinning them by count).
 
 ## Next step
-1. If dl-libc-start-8-gate (FULL) or dl-libc-start-8-plants on kanon is red, fix that first (failing suite only).
-2. Land. Then RULING (-8 report): regen.sh vs the check_pinned static check.
+1. If dl-libc-start-9-gate (FULL, shiki) is red, fix that first (failing suite only).
+2. Land. (Ruling #5171 resolved: merge.py skips refused keys, HOTLIST-TRAIN-REGEN-3.)
 3. DL-LIBC-NONSHARED (#4807, accepted) ships Liella's own libc_nonshared.a + libc.so script.
 4. s23_timefmt check 75 fails on the reference: a stdio/time story finds whether the program or the spec is wrong.
 5. DL-14 threads: a test that a dynamic program's new thread registers rseq at the loader's offset (covers
    `StartInfo.rseq_size`).
+6. `runtime::PROGRAM_INIT` (24 bytes) is written by `early_init` on every start under Liella's ld.so but is not
+   start-up state of a static start (the trace is static): declare it when a dynamic start-up fault trace exists.
