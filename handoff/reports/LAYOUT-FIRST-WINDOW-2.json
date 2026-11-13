@@ -6,8 +6,8 @@
  "branch": "task/layout-first-window-2",
  "head": "419f9e087",
  "gate": {
-  "affected": "see mei:lfw2-gate (escalated to FULL)",
-  "peak": null
+  "affected": "FULL (escalated): 32 suites, 11706 passed / 0 failed, conformance 130/0",
+  "peak": "16G"
  },
  "accepted_first_attempt": false,
  "rulings": [],
