@@ -15,4 +15,5 @@
  "improvement": "hot_text_products' phase tests delete their padded links even with TMPDIR set; a keep-links env switch would make a fault map of a failing pad one job instead of a rebuild of padded_crt1",
  "next_step": "rule on LAYOUT-JITTER; if not, map page_faults tool at cold 0x800 vs 0x2000 and declare the object in startup-state.list, then FULL tier and the plants rerun",
  "report_file": "handoff/TB-FOREIGN-WORDS-LOW.md",
- "jobs": ["tb-foreign-words-low-6-step2b", "tb-foreign-words-low-6-rel", "tb-foreign-words-low-6-plants", "tb-foreign-words-low-6-percall2"]}
+ "jobs": ["tb-foreign-words-low-6-rel", "tb-foreign-words-low-6-plants", "tb-foreign-words-low-6-percall2"],
+ "superseded": ["tb-foreign-words-low-6-step2b (final head, rc 1: clippy and static green, fast init_data_clusters_hold_at_every_text_phase red: the open item, evidence for the ruling)", "tb-foreign-words-low-6-lint0 (inherited head, static red)", "tb-foreign-words-low-6-step2 (ca7208ce9, before the keys)", "tb-foreign-words-low-6-percall (ca7208ce9)", "tb-foreign-words-low-6-forkmap, -nextphase, -toolmap (diagnostics)"]}
