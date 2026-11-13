@@ -1,0 +1,25 @@
+{"task": "LAYOUT-RETHINK", "model": "opus", "tokens": null,
+ "result": "Recommend a start-up layout traced from the build being grouped (no function name crosses a build); prototype held next's fault counts in 21 of 22 rows, both profiles, byte-identical rebuilds, contracts green; plan/layout-rethink.md + pending D-X record",
+ "branch": "task/layout-rethink", "head": "73654dde7",
+ "gate": {"affected": "no code change: cargo xtask static on the final head (lr-static)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "May cargo xtask so trace the products it just built (gdb now, ptrace later), and what when it cannot (sandbox)?", "recommendation": "yes; fail without a tracer unless an explicit opt-out builds an ungrouped product; no committed snapshot"},
+  {"item": "Cross-host byte identity of products under trace-at-build", "recommendation": "brief LT-4 (host-canonical trace) before LT-1 becomes the default"},
+  {"item": "HOTLIST-TRAIN-REGEN-2 (not landed)", "recommendation": "withdraw if LT-1 is briefed now, else land as the interim and delete in LT-5"},
+  {"item": "Interim: dead-key failure of D-X.53 (2) as a warning on branches", "recommendation": "yes: measured to fire on the harmless (inlined) class while newly outlined functions cost up to +8 faults unnoticed"},
+  {"item": "Records schema has no proposed status (brief asked for it)", "recommendation": "the pending record is active and says Proposed in its body; add a proposed status or keep this convention"}],
+ "informational": [
+  "Fast tool probe +1 (52 -> 53, one text window) with a list traced from the build alone: open for LT-1",
+  "At inline threshold 300 the fresh list's rebuild failed only because hot-text.clusters names an inlined closure (intl::translate::{closure}); the fallback build read mktime-after-localtime_r 1",
+  "next's committed list lacks 2 functions the fast probes execute today (extra tier) and holds 86 (fast) / 134 (release) keys no current trace of that profile hits",
+  "origin/next moved past the branch base (b31418181) during the run; measurements are against the base",
+  "One ssh call chained && before setsid nohup (my error); its local ssh was stopped by the harness at 10 min, the remote job ran to rc 0"],
+ "refused": [],
+ "impact": [
+  {"kind": "none", "what": "planning only: plan/layout-rethink.md and a pending D-X record; no behaviour change", "before": null, "after": null, "unit": null, "measured": true},
+  {"kind": "unblock", "what": "LT-1..LT-6 (trace-at-build layout) once the owner rules", "before": null, "after": null, "unit": null, "measured": false}],
+ "jobs": ["shiki:lr-proto1", "shiki:lr-proto2", "shiki:lr-proto3", "shiki:lr-static"],
+ "improvement": "The dead-key check guards the harmless failure and misses the costly one; judge layout by tracing the build itself, not by names carried across builds",
+ "next_step": "Owner rules on plan/layout-rethink.md section 5; then brief LT-1 (and LT-4 first if cross-host identity is required)",
+ "report_file": "handoff/LAYOUT-RETHINK.md"}
