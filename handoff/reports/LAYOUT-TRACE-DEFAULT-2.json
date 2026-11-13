@@ -50,8 +50,8 @@
    "measured": false
   }
  ],
- "improvement": "the verify's content check only works for jobs in a role; run proofs in the role, or teach verify to read a RAM copy's .synced tree id",
- "next_step": "coordinator: assign the D-X id of records/pending/LAYOUT-TRACE-DEFAULT-1.toml, read gate and plants2, wire the release check into the CI gate; then LT-5",
+ "improvement": "run handback-check's id scan (or a static step doing the same) before starting long jobs: a placeholder id in a test string cost a full restart of gate, plants and proof",
+ "next_step": "coordinator: assign the D-X id of records/pending/LAYOUT-TRACE-DEFAULT-1.toml, read gate2, plants3 and proof2, wire the release check into the CI gate; then LT-5",
  "report_file": "handoff/LAYOUT-TRACE-DEFAULT.md",
  "jobs": [
   "layout-trace-default-2-gate2",
