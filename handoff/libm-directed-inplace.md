@@ -1,9 +1,21 @@
-# LIBM-DIRECTED-INPLACE(-2, -3, -4): the double exp quick phase in the caller's directed rounding
+# LIBM-DIRECTED-INPLACE(-2 ... -5): the double exp quick phase in the caller's directed rounding
 
-State: branch task/libm-directed-inplace-4 (= -3's head 68e2c202c, which already contains origin/next 9042cc44f,
-plus this handoff and handoff/reports/LIBM-DIRECTED-INPLACE-4.json; no code change in run 4). Role keke:~/w/r5.
+State: branch task/libm-directed-inplace-5 (head: see handoff/reports/LIBM-DIRECTED-INPLACE-5.json). Role mei:~/w/s1.
 Decision D-10.94 (records/decisions/D-10/D-10.94.toml). Run -3's report: handoff/LIBM-DIRECTED-INPLACE-3-report.md.
-**Held: LAYOUT-JITTER** (ruling #4347). The red is a .bss placement change, not this story's code (below).
+
+## Run 5 (after LAYOUT-STARTUP-STATE-TIME landed)
+- Merged origin/next d01086da3 (b9658901c). One conflict, crates/libc-so/hot-text.list (train-owned): next's copy
+  taken. `cargo xtask math-gen` and `stubs` on the merged tree changed nothing. `hottext-repair --at d01086da3` would
+  drop `locale::publish_global` (and then static fails: hot-text.unpinned still names it); per the brief no list is
+  edited here, so its output was NOT kept: the lists are next's, byte for byte.
+- next's new long-sweeps static check wanted this branch's ignored `exp_directed_accuracy_job` in the runner: row
+  added in xtask/src/longsweeps.rs (EXP_DIR_N=10^7, its own default; measured 2.26 s test time, job
+  libm-directed-inplace-5-lint, `long-sweeps --only exp_directed_accuracy_job` ok).
+- Plants (handoff/LIBM-DIRECTED-INPLACE-5-plants.txt, run 2's plants that still apply plus run 3's): 6/6 CAUGHT,
+  job libm-directed-inplace-5-plants.
+- FULL gate (`affected --run --base origin/next --tier full`, it escalates anyway): job libm-directed-inplace-5-gate;
+  result in handoff/reports/LIBM-DIRECTED-INPLACE-5.json. The check that held runs 4/5 is hot_text_products' first
+  localtime_r (bound 20).
 
 ## Done (runs 1-3, unchanged)
 - `fast64::quick::exp_directed::<UP>` (both builds) with its proof (quick.rs module doc "Directed rounding",
@@ -43,11 +55,12 @@ with validation/wl_prep.sh (~/wl/products/9042cc44f9d3...).
 - Per-call MXCSR read cost (~20 TSC ticks on Zen 1) on every elem_* entry: a separate design story (run 3).
 
 ## Not to redo
-The merge with next 9042cc44f (in 68e2c202c). The fault maps above. The run-3 stall fix and its proof.
+The merges with next 9042cc44f (68e2c202c) and d01086da3 (b9658901c). The fault maps above. The run-3 stall fix
+and its proof. The 6 plants of run 5.
 
 ## Next step
-1. When the startup-state fix lands: merge origin/next, `cargo xtask so`, re-run
-   hot_text_products (the two localtime tests) and the direct-tier gate and plants on the merged head.
+1. If the run-5 FULL gate is green the branch lands. If its first localtime_r is still over the bound: the fault map
+   (run 4's recipe, ~/work/LIBM-DIRECTED-INPLACE-4/fmap.sh on keke) of the merged head against next, then stop.
 2. Booked timing of exp/exp_upward/expf_upward on Ivy Bridge (nico or kotori) and N100 (target <= 2x glibc).
 3. Then log, sin, pow with the same recipe (a direction-dependent constant is a const generic picked by a
    branch, never data from MXCSR; for log decline x = 1, two-sided monotone rounding test, Fast2Sum error terms per
