@@ -740,11 +740,11 @@ fn k_getenv_many_answers_as_getenv_bounded() {
     // Clauses: s1_3_c_1, s7_1_c_0 (SETLOCALE-3): the one-walk lookup setlocale(cat, "") uses gives
     // each name getenv_bounded's answer: the first entry for it, entries without `=`, names that
     // are prefixes of others, a leading `=`, the empty name, duplicates, and found names before or
-    // after the others; `out` past the names (and names past `out` or past the 64th) untouched.
+    // after the others, a name holding a `=` (SETLOCALE-CTYPE-ENV-2); `out` past the names (and names past `out` or past the 64th) untouched.
     let mut m = Mem::new();
-    let entries = ["", "=v", "LANG=x", "LANGUAGE=de", "LC_ALL", "L=1", "LC_ALL=a", "LC_ALL=b", "LANG=y", "XLC_CTYPE=z", "LC_CTYPE=c", "LC_CTYPE="];
+    let entries = ["", "=v", "LANG=x", "LANGUAGE=de", "LC_ALL", "L=1", "LC_ALL=a", "LC_ALL=b", "LANG=y", "XLC_CTYPE=z", "LC_CTYPE=c", "LC_CTYPE=", "LC=x=1"];
     let env = m.env(&entries);
-    let names: [&[u8]; 9] = [b"LC_ALL", b"LANG", b"LC_CTYPE", b"LANGUAGE", b"L", b"", b"LANGUAGES", b"X", b"LC_ALL"];
+    let names: [&[u8]; 10] = [b"LC_ALL", b"LANG", b"LC_CTYPE", b"LANGUAGE", b"L", b"", b"LANGUAGES", b"X", b"LC_ALL", b"LC=x"];
     for cells in [EnvCells::new(env), EnvCells::new(0)] {
         let st = cells.st();
         for n in 0..=names.len() {

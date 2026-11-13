@@ -127,8 +127,13 @@ pub fn getenv_many(st: &EnvState<'_>, names: &[&[u8]], out: &mut [Option<usize>]
     let mut all = 0u64;
     // Bytes of an entry that decide every name: the longest name and its `=`.
     let mut reach = 0usize;
+    // Bit k: names[k] holds a `=` (only such a name can match an entry whose `=` comes earlier).
+    let mut with_eq = 0u64;
     for (k, name) in names.iter().enumerate() {
         all |= bit(k);
+        if name.contains(&b'=') {
+            with_eq |= bit(k);
+        }
         reach = reach.max(name.len().saturating_add(1));
         match name.first() {
             Some(&b) => {
@@ -158,10 +163,11 @@ pub fn getenv_many(st: &EnvState<'_>, names: &[&[u8]], out: &mut [Option<usize>]
             if done & mine != 0 || name.first().is_some_and(|&f| Some(f) != first) {
                 continue;
             }
-            // `eq < name.len()`: only a name holding a `=` can match; compare it in full.
+            // `eq < name.len()`: only a name holding a `=` can match; compare it in full
+            // (SETLOCALE-CTYPE-ENV-2: compared for every longer name, `LANG=` cost twelve compares).
             let hit = match eq {
                 Some(e) if e == name.len() => t.get(..e) == Some(*name),
-                Some(e) => e < name.len() && matches(t, name),
+                Some(e) => with_eq & mine != 0 && e < name.len() && matches(t, name),
                 None => false,
             };
             if hit {

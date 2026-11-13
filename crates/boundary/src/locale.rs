@@ -517,7 +517,8 @@ pub fn uselocale(loc: usize) -> usize {
 }
 
 /// The variables `setlocale(cat, "")` reads (`global_locale::setlocale`: `LC_ALL`, the
-/// category's own, `LANG`), in [`crate::startup_names`] (STARTUP-READ-CONSTANTS).
+/// category's own, `LANG`), in [`crate::startup_names`] (STARTUP-READ-CONSTANTS). Their order is
+/// `gl::ENV_LC_ALL`'s numbering: `LC_ALL`, the categories in `Cat::ALL` order, `LANG`.
 const ENV_KEYS: [&[u8]; 14] = {
     use crate::startup_names as n;
     [
@@ -573,11 +574,12 @@ fn setlocale_env(cat: Option<Cat>) -> Option<&'static [u8]> {
             *v = all;
         }
     }
-    let getenv = |k: &[u8]| -> Option<&'static [u8]> {
-        match ENV_KEYS.get(..known).unwrap_or_default().iter().position(|&n| n == k) {
-            Some(i) => found.get(i).copied().flatten(),
-            None => process::getenv(k).map(strz::env_value),
+    // Variable `k` in `gl::ENV_LC_ALL`'s numbering, which is `ENV_KEYS`' order.
+    let getenv = |k: usize| -> Option<&'static [u8]> {
+        if k < known {
+            return found.get(k).copied().flatten();
         }
+        process::getenv(ENV_KEYS.get(k)?).map(strz::env_value)
     };
     let req = gl::Request::Environment(&getenv);
     let before = gl::global_handle();
