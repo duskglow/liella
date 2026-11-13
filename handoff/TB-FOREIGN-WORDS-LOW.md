@@ -1,55 +1,59 @@
 # TB-FOREIGN-WORDS-LOW: errno, TID, dtor, heap and node words (0x80-0x9b) in a block Liella did not make
 
-State: branch `task/tb-foreign-words-low-5` (stacks on -4, next merged in at 3dc8d485a). HEAD: this handoff commit
-(code head dedbe2223). Decisions in force: D-X.58, D-X.60 (records/decisions/D-X/D-X.60.toml), rulings #4835 (FOREIGN
-bit, OwnPages, errno in tp.S), #4849, #4851, #4779 (<= +2 per access vs next), #4889 (judge on Release), #5325
-(a branch that moves hot functions regenerates the start-up lists). Older report: handoff/TB-FOREIGN-WORDS-LOW-report.md.
+State: branch `task/tb-foreign-words-low-6` (stacks on -5; next merged at 3dc8d485a, merge base 68e72ab32). Code head
+1a2693c4b; HEAD = the handoff commit after it. Decisions in force: D-X.58, D-X.60, rulings #4835, #4849, #4851,
+#4779 (<= +2 per access vs next), #4889 (judge on Release), #5325, #5378 (no full regeneration committed on this
+branch). Older reports: handoff/TB-FOREIGN-WORDS-LOW-report.md (-1..-4), git history of this file (-5).
 
-## What -5 did (the three FULL-gate reds of -4)
-- **Merge of origin/next** (3dc8d485a): ld.rs kept both STARTED_HERE (D-X.58) and next's rseq exports; the
-  generated lists took next's copy and were then regenerated (below).
-- **Start-up state list** (75181c245): next's hand-written startup-state.list (D-X.64) named `thread::OWNED`, now an
-  alias of the assembly byte, so `cargo xtask so` stopped. It now names `thread::OWNED_HERE` and
-  `symbol liella_machine_owned`; that byte got a section of its own in machine/points.S (it shared the aio flag's).
-  The stale fast `hot-text.absent` line for `Sys::wait4` was removed.
-- **errno tests** (875c56a37): s2_1_c_0 and sym___errno_location assert the case they run in (test process: not
-  started by the runtime; `__errno_location` = the registry word, outside the block, stable). They use new selftest
-  hooks `runtime_started()` and `foreign_errno_word()`. s2_1_c_0 also links oracle/errno_owned.c statically against the
-  products and checks the started case: tp + 0x80 in the initial thread and in a created one. Conformance
-  s01_startup also runs on the host library, so it cannot check the offset.
-- **Heap fault** (646371012): a perf page-fault map of
-  heap_meta_faults (tools/hottext/faultmap.py) put the 10th fault on the text page of
-  `Heap::alloc_slow::<CSysImpl<false>, OwnPages>`. That second copy sat beside the KernelPages copy start-up runs,
-  and a new class's first allocation touched its page. The slow paths (alloc_slow, free_slow, resize_held) take
-  KernelPages again, and the fast paths keep OwnPages. 10 -> 9 (bound 9), with next's lists and with regenerated ones.
-- **Lists** (dedbe2223): `tools/hottext/regen.sh . --both --allow-drop`. The first regen (before the heap fix)
-  dropped iconv::codec_named (fast) plus locale::publish_global, regex ThreadScratch::table, `__errno_location` (now
-  the label of liella_machine_errno_location, which is listed) and nscache::passwd_from_files (release). The final
-  regen dropped nothing.
+## What -6 did
+- **ca7208ce9**: hot-text.list, startup-text.keys, probe-text.keys, startup-data.keys back to origin/next's
+  versions (unchanged between the merge base and next's tip), per #5378. The pin on locale::name::candidates
+  (cebb4c756) existed only for a regen key and is undone (name.rs = next's). hot-text.absent (07c81c2b3) and
+  startup-state.list (75181c245) keep this chain's own edits.
+- **1a2693c4b**: two hand-added keys (the list says "generated", but #5378 rules out the regen; the brief asks
+  for exactly the keys a moved function needs):
+  - `thread::after_fork_child` (fork tier) + `#[inline(never)]`. A perf minor-fault map of the second fork child
+    (fast products, no randomisation) put fault 7 on after_fork_child alone at 0x731000; the rest of the child sat
+    in the hot group. This chain's D-X.58 body change (owned()) left it out of line, outside the keyed
+    fork::child_reset. -5's regen produced the same key. Fork child 7 -> 6 (bound 6).
+  - `liella_machine_errno_location` (tool tier) in place of next's `__errno_location`, which is now a label of
+    that assembly section (machine/tp.S) and was a dead key (so warning).
 
-## Results (kanon:~/w/kn1)
-- lint0 (inherited 483a29c2a): clippy + static green.
-- m3/m4 (probe jobs): s2_1_c_0 and sym___errno_location pass. heap_meta_products is 10 without the fix and 9 with
-  it (both lists).
-- lint1 (dedbe2223) and lint2 (cebb4c756, code head): clippy (workspace, all targets, all features) GREEN; `cargo
-  xtask static` RED in `hottext` check_pinned. The regenerated lists add locale-tier keys on functions that are not
-  #[inline(never)], and the check names one per run: lint1 `locale::name::candidates` (pinned in cebb4c756), lint2
-  `text::builtin_charset` (crates/core/src/text.rs). hot-text.unpinned only shrinks (rulings #4997, #5024).
-- NOT RUN (budget): the FULL gate, plants (handoff/TB-FOREIGN-WORDS-LOW-5-plants.txt, 4 plants, written, never run),
-  and per-call counts (#4779). The fast paths did not change; the slow paths now carry the owned test (a few
-  instructions per slab refill, not counted).
+## Results (keke:~/w/n2)
+- lint0 (inherited 2c065b6f5): clippy green, static RED (hottext check_pinned: 18 unpinned regen keys). Fixed by ca7208ce9.
+- step2 (ca7208ce9): clippy + static GREEN; hot_text_products (fast) 22/24: fork child 7 > 6, data clusters.
+- step2b (1a2693c4b): clippy + static GREEN; hot_text_products (fast) 23/24: `init_data_clusters_hold_at_every_text_phase`
+  fails only on "tool: fault count moves with the text phase": 53 at `cold 0x800`, 52 at the other 9 pads.
+  Fork child 6 at every pad. heap_meta_products did not run in that job (script stopped at the failure); it passed
+  in the release job.
+- nextphase (merge base 68e72ab32, fast, RAM copy): same test passes; tool 53 at all 10 pads, fork 5, true 11.
+  So the branch's tool count is <= next's at every pad (52-53 vs 53); fork child is +1 over next (6 vs 5, bound 6).
+- rel (1a2693c4b, LIELLA_FULL_PROFILE=1 products): hot_text_products 24/24 and heap_meta_products 2/2 GREEN.
+- plants (1a2693c4b, handoff/TB-FOREIGN-WORDS-LOW-6-plants.txt): 4 plants, 0 SURVIVED. errno-foreign-block and
+  slow-path-own-copy CAUGHT with their message. errno-owned-offset and errno-owned-to-registry: WARN-NO-MSG, both
+  caught by s2_1_c_0 through its first step, the conformance program s01_startup on the mutant products (exit
+  status 71). The errno_owned.c check after it never runs, so the message the plants file names was absent. A real
+  catch, not a build failure. Next run: msg `s01_startup: status [0-9]+, expected 0|errno in a started process is not tp \+ 0x80`.
+- percall2 (1a2693c4b, Release, base 68e72ab32): errno_location 9.0 -> 11.0 (+2, #4779 limit), malloc_free 115.2
+  -> 115.2, calloc_free 162.9 -> 162.9 (glibc 10.0 / 144.1 / 281.4).
+- NOT RUN: the FULL tier. It would be red on the fast data-phase test above.
+
+## Open question (RULING NEEDED)
+The fast data-phase test fails on constancy, not on a bound: the branch reads 52 at 9 pads and 53 at one, next
+reads 53 at all. That looks like the layout jitter in #4347 (one data object sharing or not sharing a page as the
+data classes move). The `cold` pads move only the data classes. The chain added `thread::SPARE` (one
+BLOCK_SIZE, zero, address only in a started process) and the owned bytes (in .data1 already). Recommendation:
+treat it as LAYOUT-JITTER (the branch is at or below next's tool count at every pad), or have a continuation map the
+tool run at cold 0x800 vs 0x2000 (below).
 
 ## Next step
-1. List EVERY key check_pinned rejects in one pass (the new keys of dedbe2223's hot-text.list against next's: `git
-   diff 3dc8d485a dedbe2223 -- crates/libc-so/hot-text.list`, each Rust key's function checked for
-   #[inline(never)]), then pin them all in one commit (#[inline(never)] where a call is free, e.g. builtin_charset,
-   or #[inline(always)] into a keyed caller and drop the key). If the regen keeps adding unpinnable keys, that is
-   a RULING NEEDED for regen.sh (it should not emit keys static refuses).
-2. Then on kanon:~/w/kn1: ~/work/TB-FOREIGN-WORDS-LOW-5/lint.sh (clippy, static, release `so`, fast `so`), the
-   plants file through `cargo xtask plants` (RAM dir under /mnt/zram/claude/), and the FULL tier
-   (`cargo xtask affected --run --base origin/next --tier full`) as the brief asks.
-3. Optional: the foreign-loader probe (D-22.10 harness) for errno; not started.
+1. If not jitter: map `page_faults tool` faults at the `cold 0x800` and `cold 0x2000` pads. The test deletes its
+   padded links, and a kept TMPDIR did not keep them (toolmap job, ~/work/TB-FOREIGN-WORDS-LOW-6/toolmap.sh),
+   so build the padded crt1 the way `padded_crt1` in hot_text_products.rs does and run tools/hottext/faultmap.py
+   on both. The extra page names the object to declare in startup-state.list (hand-written) if it is this chain's.
+2. Then the FULL tier (`cargo xtask affected --run --base origin/next --tier full`) and the plants rerun with the msg above.
+3. Fork child +1 over next (6 vs 5): optional, map it the same way (~/work/TB-FOREIGN-WORDS-LOW-6/forkmap.sh).
 
 ## Not to redo
--1's 0x80-0x9b audit table; the registry/FOREIGN/OwnPages/asm design; -4's five-key analysis; the fault map above
-(the slow-path copy, not metadata, held the extra fault).
+-1's 0x80-0x9b audit; the registry/FOREIGN/OwnPages/asm design; the heap slow-path KernelPages fix (-5); no
+full regeneration of the lists (#5378); the fork map above (after_fork_child was the 7th fault).
