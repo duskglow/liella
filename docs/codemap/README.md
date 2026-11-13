@@ -33,7 +33,7 @@ exactly which tests a change reaches.
 | 24 | Resource limits, scheduling and system information | crates/boundary/src/posix/s24_system.rs | abi::ctypes, boundary::conv, boundary::netaddr, boundary::nr, boundary::process, boundary::raw, boundary::ret, boundary::strz, boundary::sys, kernel::errno, kernel::sys, kernel::uapi, legacy::sys_compat, legacy::sysconf_table | s24_system_symbols.rs, crates/core/tests/s24_system_clauses.rs | s24_hostname_chk.c, s24_variadic.c | plan/07-decisions/s24-resources-and-system-information.md | compat.md, noproc.md |
 | 25 | Inter-process communication | crates/boundary/src/posix/s25_ipc.rs | abi::ctypes, boundary::cancel, boundary::conv, boundary::mqueue, boundary::raw, boundary::ret, boundary::strz, boundary::sys, boundary::timer, kernel::sys, kernel::uapi, legacy::ipc_compat | s25_ipc_symbols.rs, crates/core/tests/s25_ipc_clauses.rs | s25_mqueue.c, s25_semctl.c | plan/07-decisions/s25-ipc.md | posixipc.md |
 | 26 | System logging | crates/boundary/src/posix/s26_syslog.rs | abi::ctypes, boundary::conv, boundary::strz, boundary::syslog, legacy::log_compat | s26_syslog_symbols.rs, crates/core/tests/s26_syslog_clauses.rs |  | plan/07-decisions/s26-29.md | syslog.md |
-| 27 | Dynamic linking and loading | crates/boundary/src/posix/s27_dynlink.rs | abi::ctypes, abi::layout, boundary::conv, boundary::process, boundary::sys, boundary::tb, kernel::auxv, kernel::uapi, rt::cpu | s27_dynlink_symbols.rs, crates/core/tests/s27_dynlink_clauses.rs | s27_cpuid_feature_leaf.c, s27_dl_find_object.c, s27_dl_iterate_phdr.c, s27_dynlink_helper_dlsym.c, s27_static_pie_load_offset.c |  | dynlink-secure.md, dynlink.md |
+| 27 | Dynamic linking and loading | crates/boundary/src/posix/s27_dynlink.rs | abi::ctypes, abi::layout, boundary::conv, boundary::dlerr, boundary::ffi, boundary::process, boundary::strz, boundary::sys, boundary::tb, kernel::auxv, kernel::uapi, rt::cpu | s27_dynlink_symbols.rs, crates/core/tests/s27_dynlink_clauses.rs | s27_cpuid_feature_leaf.c, s27_dl_find_object.c, s27_dl_iterate_phdr.c, s27_dlopen_failures.c, s27_dlsym_handles.c, s27_dynlink_helper_dlsym.c, s27_static_pie_load_offset.c |  | dynlink-secure.md, dynlink.md |
 | 28 | Profiling and instrumentation | crates/boundary/src/posix/s28_profiling.rs | abi::ctypes, boundary::ffi, boundary::process, boundary::raw, boundary::ret, boundary::strz, boundary::sys, kernel::errno, kernel::fd, kernel::sys, kernel::uapi, legacy::signal_compat | s28_profiling_symbols.rs, crates/core/tests/s28_profiling_clauses.rs |  |  |  |
 | 29 | Legacy and compatibility subsystems | crates/boundary/src/posix/s29_legacy.rs, crates/boundary/src/posix/s29_rpc_auth.rs, crates/boundary/src/posix/s29_rpc_clnt.rs, crates/boundary/src/posix/s29_rpc_svc.rs, crates/boundary/src/posix/s29_xdr_streams.rs | abi::ctypes, abi::layout, boundary::errno, boundary::heap, boundary::report, boundary::ret, boundary::rpc_text, boundary::sys, boundary::users, kernel::sys, kernel::uapi, legacy::stubs, legacy::sunrpc, legacy::sunrpc_rec | s29_legacy_symbols.rs, crates/core/tests/s29_legacy_clauses.rs, s29_rpc_auth_stubs.rs, s29_rpc_clnt_svc_stubs.rs |  |  | compat-objects.md, compat.md, regexp-h.md |
 | 30 | Catalogue of historical accidents and path dependencies |  |  |  |  |  |  |
@@ -55,7 +55,7 @@ Other crates: abi, boundary, core, kernel, ld, ld-so, legacy, libc-so, libm-so, 
 | `/dev/shm/` | crates/boundary/src/mqueue.rs:370, crates/boundary/src/nscache.rs:54 |
 | `/dev/shm/sem.` | crates/boundary/src/sync.rs:851 |
 | `/dev/shm/sem.liella-` | crates/boundary/src/sync.rs:903 |
-| `/dev/tty` | crates/boundary/src/stdio.rs:2138, crates/boundary/src/users.rs:893, crates/core/src/term.rs:503, crates/core/src/term.rs:505 |
+| `/dev/tty` | crates/boundary/src/stdio.rs:2140, crates/boundary/src/users.rs:893, crates/core/src/term.rs:503, crates/core/src/term.rs:505 |
 | `/dev/ttyS` | crates/core/src/term.rs:504 |
 | `/etc/.pwd.lock` | crates/legacy/src/accounting.rs:42 |
 | `/etc/aliases` | crates/legacy/src/nss.rs:93 |
@@ -88,25 +88,25 @@ Other crates: abi, boundary, core, kernel, ld, ld-so, legacy, libc-so, libm-so, 
 | `/proc/self/loginuid` | crates/legacy/src/accounting.rs:48 |
 | `/proc/self/maps` | crates/boundary/src/pthread.rs:299, crates/mathtools/src/check_cache.rs:192 |
 | `/proc/self/mountinfo` | crates/core/src/system.rs:592 |
-| `/proc/self/ns/user` | crates/legacy/src/nscache.rs:317 |
+| `/proc/self/ns/user` | crates/legacy/src/nscache.rs:319 |
 | `/proc/self/pagemap` | crates/boundary/src/classed.rs:132 |
 | `/proc/self/status` | crates/legacy/src/cred_compat.rs:55 |
 | `/proc/self/task/` | crates/legacy/src/pthread_compat.rs:345 |
 | `/proc/self/task/4321/comm` | crates/legacy/src/pthread_compat.rs:436 |
 | `/proc/stat` | crates/core/src/system.rs:321 |
 | `/proc/sys/kernel/ngroups_max` | crates/core/src/system.rs:492 |
-| `/proc/sys/kernel/random/boot_id` | crates/legacy/src/nscache.rs:345 |
+| `/proc/sys/kernel/random/boot_id` | crates/legacy/src/nscache.rs:347 |
 | `/proc/sys/vm/mmap_min_addr` | crates/boundary/src/dispatch.rs:340 |
 | `/proc/thread-self/status` | crates/core/src/system.rs:228 |
 | `/sys/devices/system/cpu` | crates/core/src/system.rs:351 |
 | `/sys/devices/system/cpu/online` | crates/core/src/system.rs:331 |
 | `/usr/` | crates/core/src/catalog/xopen.rs:197 |
-| `/usr/bin/ls` | crates/rt/src/start.rs:485 |
+| `/usr/bin/ls` | crates/rt/src/start.rs:508 |
 | `/usr/bin/prog` | crates/legacy/src/argp.rs:72 |
-| `/usr/lib` | crates/ld/src/arch.rs:305 |
+| `/usr/lib` | crates/ld/src/arch.rs:317 |
 | `/usr/lib/locale` | crates/core/src/locale/mod.rs:533 |
 | `/usr/lib/locale/locale-archive` | crates/core/src/locale/mod.rs:535 |
-| `/usr/lib/x86_64-linux-gnu` | crates/ld/src/arch.rs:305 |
+| `/usr/lib/x86_64-linux-gnu` | crates/ld/src/arch.rs:317 |
 | `/usr/share/i18n/charmaps/` | crates/legacy/src/global_locale.rs:96 |
 | `/usr/share/locale` | crates/legacy/src/intl.rs:62 |
 | `/usr/share/locale-langpack` | crates/legacy/src/intl.rs:66 |

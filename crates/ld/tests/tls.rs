@@ -81,7 +81,9 @@ fn tls_layout_variant_ii_offsets_alignment_and_surplus() {
 }
 
 /// no spec clause (x86-64 psABI §4.4.1): `TPOFF64` is S + A + the block's (negative) offset from TP,
-/// `DTPOFF64` is S + A, `DTPMOD64` the module ID; `TLSDESC` has no arithmetic here.
+/// `DTPOFF64` is S + A, `DTPMOD64` the module ID; `TLSDESC` has no single field: its descriptor
+/// (DL-15; Oliva, "Thread-Local Storage Descriptors for IA32 and AMD64/EM64T") is the function, then
+/// the `TPOFF64` value as its argument.
 #[test]
 fn tls_relocation_arithmetic_from_the_table() {
     let o = TlsOperands { s: 0x10, a: 4, module: 3, tp_offset: -0x80 };
@@ -90,6 +92,7 @@ fn tls_relocation_arithmetic_from_the_table() {
     assert_eq!(v(RelocKind::DtpOff), Ok((0x14, 8)));
     assert_eq!(v(RelocKind::DtpMod), Ok((3, 8)));
     assert!(v(RelocKind::TlsDesc).is_err() && v(RelocKind::Abs64).is_err());
+    assert_eq!(Native::tls_descriptor(0xabc0, o), Ok([0xabc0, (-0x80i64 + 0x14) as u64]));
     assert_eq!((Native::STACK_GUARD_SLOT, Native::POINTER_GUARD_SLOT, Native::DTV_SLOT), (Some(0x28), Some(0x30), 0x08));
 }
 

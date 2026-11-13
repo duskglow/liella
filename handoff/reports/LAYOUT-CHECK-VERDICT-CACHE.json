@@ -1,0 +1,18 @@
+{"task": "LAYOUT-CHECK-VERDICT-CACHE", "model": "opus", "tokens": null,
+ "result": "Layout check: JCC-HOT-ASM disassembles only its 47 sections (226 s -> <0.1 s) and a pass is served from a verdict cache keyed by every input; no-change fast xtask so 448/442 s -> 197-211 s (hit), release ~455 s derived -> 394/399 s (4-core slot)",
+ "branch": "task/layout-check-verdict-cache", "head": null,
+ "gate": {"affected": "lcvc-gate2 on keke (clippy, static, affected --run --base origin/next): see hand-back", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The rest of a no-change xtask so (about 195 s fast, 390 s release on a 4-core slot) is outside the layout check and was not profiled; next target for #5085-style work.", "Release 'before' is derived (cache-off 409.2 s - 4.8 s check + 50.0 s whole-archive objdump), not measured on base code.", "First gate lcvc-gate failed in static lab-names (host name in the pending record); fixed in 11ef1e58a."],
+ "refused": [],
+ "impact": [
+  {"kind": "tooling", "what": "no-change cargo xtask so, fast, 4-core slot, cache hit", "before": 445, "after": 204, "unit": "s wall (mean of 2 runs each)", "measured": true},
+  {"kind": "tooling", "what": "no-change cargo xtask so, release, 4-core slot, cache hit", "before": 455, "after": 396, "unit": "s wall (before derived)", "measured": false},
+  {"kind": "tooling", "what": "layout contract check, fast products, full (CI train)", "before": 241, "after": 14.8, "unit": "s wall", "measured": true},
+  {"kind": "coverage", "what": "tests added (3 layout_verdict, 1 jcc) and plants (9 CAUGHT)", "before": 0, "after": 9, "unit": "plants", "measured": true}
+ ],
+ "jobs": ["keke:lcvc-gate2", "keke:lcvc-plants", "keke:lcvc-timing", "keke:lcvc-prof1", "keke:lcvc-prof2"],
+ "improvement": "Print each step's time in xtask so (as the layout check now does) so the next 'why is so slow' needs no profiling job; the remaining ~195 s of a no-change fast so is unexplained.",
+ "next_step": "Optional: profile the non-layout steps of a no-change xtask so.",
+ "report_file": "handoff/LAYOUT-CHECK-VERDICT-CACHE.md"}

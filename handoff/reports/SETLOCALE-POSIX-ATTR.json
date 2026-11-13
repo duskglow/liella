@@ -1,0 +1,87 @@
+{
+ "task": "SETLOCALE-POSIX-ATTR",
+ "model": "opus",
+ "tokens": null,
+ "result": "Cause: a repeated setlocale(cat, \"POSIX\") missed the no-change fast path (requested name compared as given with the reported \"C\") and rebuilt/compared/copied whole Locale values under the lock; the memmove share follows stack alignment, hence the address-dependent +170. Fixed: setlocale_ctype_posix 2488.8 -> 197.3 (sd 0.09), setlocale_all_posix 11940 -> 191.6; cost +1..+2.6 on the other setlocale rows",
+ "branch": "task/setlocale-posix-attr",
+ "head": "a451e735f",
+ "gate": {
+  "affected": "running at hand-back (setlocale-posix-attr-gate, mei)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "setlocale_ctype_c / setlocale_all_c +2.0, setlocale_query +1.0, setlocale_ctype_empty +2.6 instr/call vs next a5636ce6b (codegen of global_locale::setlocale; the \"C\" name is compared first, so not the added compare itself), against -2292 on setlocale_ctype_posix and -11749 on setlocale_all_posix",
+   "recommendation": "land; a follow-up removes the +1/+2 (try the POSIX alias check out of line on the miss path, or in the boundary before the call) with percall on the four rows"
+  }
+ ],
+ "informational": [
+  "brief base 38e278e6f does not build in the release profile on mei (xtask so: dead hot-text key stdio_compat::with_list<Glue, flush_all closure>); attribution used ee529a28d (next just before the LAYOUT-HOTKEY-INLINE-STABLE merge)",
+  "on mei (Skylake-SP) the pre-merge base measured 2517.8 and next 2488.8 on setlocale_ctype_posix: the +170 seen on Zen 1 is the same address-dependent slow path moving the other way",
+  "the setlocale change inlined find_cached/attach_charmap (Files<Glue>) in the fast profile: hottext-repair dropped their two fast-only keys; their hot-text.unpinned lines removed",
+  "setlocale(LC_CTYPE, \"\") repeated: 8262 vs glibc 2551 (re-resolved from the environment each call); not in scope",
+  "decision record is pending: records/pending/SETLOCALE-POSIX-ATTR-1.toml (D-NEW, series D-X)",
+  "superseded/evidence: setlocale-posix-attr-percall-base (red: base 38e278e6f release build fails), -percall-base2 and -trace-head (next, evidence), -lint1/-lint3 and -percall-after/-percall-final (older heads), -lint2 (stale tree, stopped)",
+  "plants 2 CAUGHT 0 SURVIVED 0 WARN; count test on final tree: LC_CTYPE C 197 POSIX 210, LC_ALL C 192 POSIX 205 (incl. loop)"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "perf",
+   "what": "setlocale_ctype_posix per call (wl_percall, release, Skylake-SP)",
+   "before": 2488.8,
+   "after": 197.3,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "perf",
+   "what": "setlocale_all_posix per call",
+   "before": 11940.2,
+   "after": 191.6,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "cost",
+   "what": "setlocale_ctype_c per call (setlocale_all_c same +2)",
+   "before": 180.3,
+   "after": 182.3,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "cost",
+   "what": "setlocale_query per call",
+   "before": 93.0,
+   "after": 94.0,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "cost",
+   "what": "setlocale_ctype_empty per call",
+   "before": 8259.4,
+   "after": 8262.0,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "count test setlocale_posix_repeat + 2 plants",
+   "before": 0,
+   "after": 1,
+   "unit": "tests",
+   "measured": true
+  }
+ ],
+ "jobs": [
+  "setlocale-posix-attr-gate",
+  "setlocale-posix-attr-plants",
+  "setlocale-posix-attr-percall-final2"
+ ],
+ "improvement": "wl_percall --base with a sha whose release build fails costs a full build cycle; wl_prime_base could try `xtask so` once and say so before a job is queued",
+ "next_step": "coordinator assigns the D-X id and lands; follow-up to recover the +1/+2 on the other setlocale rows",
+ "report_file": "handoff/SETLOCALE-POSIX-ATTR.md"
+}

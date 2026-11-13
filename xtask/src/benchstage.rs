@@ -20,6 +20,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use crate::sha256::{sha256_files, sha256_text};
+
 /// The manifest's name, at the root of the staged tree.
 pub(crate) const MANIFEST: &str = "bench-stage.manifest";
 /// The xtask binary's name in the staged tree.
@@ -66,35 +68,6 @@ impl Manifest {
         }
         Ok(m)
     }
-}
-
-/// The sha256 of each file (paths relative to `root`), in order, from `sha256sum` (coreutils, on every host).
-fn sha256_files(root: &Path, rel: &[String]) -> Result<Vec<String>, String> {
-    let mut out = Vec::with_capacity(rel.len());
-    for chunk in rel.chunks(512) {
-        if let Some(p) = chunk.iter().find(|p| !root.join(p).is_file()) {
-            return Err(format!("{}: missing", root.join(p).display()));
-        }
-        let o = Command::new("sha256sum").arg("--").args(chunk).current_dir(root).output().map_err(|e| format!("sha256sum: {e}"))?;
-        if !o.status.success() {
-            return Err(format!("sha256sum failed: {}", String::from_utf8_lossy(&o.stderr)));
-        }
-        let text = String::from_utf8_lossy(&o.stdout);
-        let hashes: Vec<String> = text.lines().filter_map(|l| l.get(..64).map(str::to_string)).collect();
-        if hashes.len() != chunk.len() {
-            return Err(format!("sha256sum: {} hashes for {} files", hashes.len(), chunk.len()));
-        }
-        out.extend(hashes);
-    }
-    Ok(out)
-}
-
-fn sha256_text(text: &str) -> Result<String, String> {
-    use std::io::Write;
-    let mut c = Command::new("sha256sum").stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().map_err(|e| format!("sha256sum: {e}"))?;
-    c.stdin.take().ok_or("sha256sum: no stdin")?.write_all(text.as_bytes()).map_err(|e| format!("sha256sum: {e}"))?;
-    let o = c.wait_with_output().map_err(|e| format!("sha256sum: {e}"))?;
-    String::from_utf8_lossy(&o.stdout).get(..64).map(str::to_string).ok_or_else(|| "sha256sum: no output".into())
 }
 
 /// The files below `root/dir` (relative to `root`, sorted), skipping `target`, `.git` and `skip` (relative to `root`).

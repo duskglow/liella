@@ -230,8 +230,12 @@ pub fn global(objs: &impl Objects) -> &'static Locale {
 struct Files<'a, M: Mapper> {
     m: &'a M,
     /// `m.locpath()`, read at the first need and kept for the selection (SETLOCALE-3: read
-    /// once per category before).
-    locpath: core::cell::OnceCell<Option<&'a [u8]>>,
+    /// once per category before). `None` until then. A plain `Cell`, not a `OnceCell`
+    /// (HOTTEXT-TIME-CLUSTER-STABLE-2): `OnceCell::get_or_init` runs its first fill in an
+    /// out-of-line cold generic with no hot-text key, which `setlocale(LC_ALL, "")` touches in cold
+    /// text, where its distance from other cold code (and so its page-fault count) followed the
+    /// codegen-unit partition of unrelated code.
+    locpath: core::cell::Cell<Option<Option<&'a [u8]>>>,
 }
 
 /// Record file slot `i`: the mapping, its identity, checked in `generation`. The caller holds
@@ -312,7 +316,12 @@ impl<M: Mapper> Source for Files<'_, M> {
     }
 
     fn locpath(&self) -> Option<&[u8]> {
-        *self.locpath.get_or_init(|| self.m.locpath())
+        if let Some(p) = self.locpath.get() {
+            return p;
+        }
+        let p = self.m.locpath();
+        self.locpath.set(Some(p));
+        p
     }
 
     fn charmap(&self, name: &[u8]) -> Option<&'static Charmap> {
@@ -473,7 +482,7 @@ pub fn codec<S: Sys, M: Mapper>(sys: &S, m: &M, name: &[u8]) -> Option<Codec> {
         return Some(c);
     }
     let _g = LOCK.lock(sys);
-    Files { m, locpath: core::cell::OnceCell::new() }.charmap(name).map(|c| Codec::Charmap(CharmapRef(c)))
+    Files { m, locpath: core::cell::Cell::new(None) }.charmap(name).map(|c| Codec::Charmap(CharmapRef(c)))
 }
 
 /// The name `setlocale(cat, "")` takes for `cat`: `LC_ALL`, then `LC_<cat>`, then `LANG`
@@ -496,7 +505,7 @@ pub enum Request<'a> {
 /// `base` with the categories in `cats` replaced by the locales `names` gives them (indexed
 /// like [`Cat::ALL`]). The caller holds [`LOCK`].
 fn replace<M: Mapper>(m: &M, base: Locale, cats: &[Cat], names: &[&[u8]; 12]) -> Option<Locale> {
-    let src = Files { m, locpath: core::cell::OnceCell::new() };
+    let src = Files { m, locpath: core::cell::Cell::new(None) };
     let mut l = base;
     // The alias and the archive search are shared by the categories of one name.
     let mut cache = locale::FindCache::default();
@@ -581,9 +590,32 @@ fn query_record(handle: usize, cat: Option<Cat>, slot: usize) {
     }
 }
 
+/// `a == b` for two locale names, compared here eight bytes at a time rather than through a
+/// library call: names are short, and the call made the fast path of [`setlocale`] save and
+/// restore six registers and keep a frame, so its miss could not jump straight to
+/// [`setlocale_locked`] (SETLOCALE-C-ROWS).
+#[inline(always)]
+fn same_name(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let word = |c: &[u8]| <[u8; 8]>::try_from(c).ok().map(u64::from_ne_bytes);
+    let (mut a8, mut b8) = (a.chunks_exact(8), b.chunks_exact(8));
+    for (x, y) in a8.by_ref().zip(b8.by_ref()) {
+        if word(x) != word(y) {
+            return false;
+        }
+    }
+    a8.remainder().iter().zip(b8.remainder()).all(|(x, y)| x == y)
+}
+
 /// `setlocale(cat, …)` (`cat` `None` is `LC_ALL`). Returns the category's name or the
 /// composite name (`'static`, followed by a NUL), or `None` if a name is unknown, in which
 /// case nothing changes. A query is answered from the query cache when it can be.
+///
+/// Only the lock-free answers are here; the rest is [`setlocale_locked`], kept out of line so
+/// that a call answered here does not set up that function's frame (several kilobytes of stack
+/// buffers, six saved registers): SETLOCALE-C-ROWS.
 pub fn setlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: Request<'_>) -> Option<&'static [u8]> {
     match req {
         Request::Query => {
@@ -592,19 +624,33 @@ pub fn setlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: Reque
             }
         }
         // The name the query would answer (for `LC_ALL`: the single or composite name) names
-        // every category asked as it is: nothing to look up (s7_2_c_4), no lock.
+        // every category asked as it is: nothing to look up (s7_2_c_4), no lock. `"POSIX"` is
+        // compared as the `"C"` it reports: otherwise every repeated setlocale(cat, "POSIX")
+        // missed here and rebuilt, compared and copied whole locales under the lock (~2,300
+        // instructions, partly memmove whose count follows stack alignment).
         Request::Name(n) => {
-            if let Some(s) = query_cached(m, cat).filter(|&s| s == n) {
+            // The name as given first: "C" and every file name match there at no extra cost.
+            if let Some(s) = query_cached(m, cat).filter(|&s| same_name(s, n) || same_name(s, locale::reported(n))) {
                 return Some(s);
             }
         }
         Request::Environment(_) => {}
     }
+    setlocale_locked(sys, m, cat, &req)
+}
+
+/// [`setlocale`] when the query cache did not answer, under [`LOCK`]; also called directly for a
+/// [`Request::Environment`], which the cache never answers. A caller that calls this itself puts
+/// its stack buffers right below its own frame, where they were when this was part of
+/// `setlocale`: `setlocale(cat, "")` copies whole locales there and its memmove count follows
+/// their alignment (+6 to +8 per call when reached through [`setlocale`]; SETLOCALE-C-ROWS).
+#[inline(never)]
+pub fn setlocale_locked<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: &Request<'_>) -> Option<&'static [u8]> {
     let _g = LOCK.lock(sys);
     let current = *global(m);
     let one = [cat.unwrap_or(Cat::Ctype)];
     let cats: &[Cat] = if cat.is_some() { &one } else { &Cat::ALL };
-    let next = match req {
+    let next = match *req {
         Request::Query => current,
         Request::Name(n) => {
             let names = match (cat, name::parse_composite(n)) {

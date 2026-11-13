@@ -11,7 +11,9 @@
 
 pub(crate) mod example_exp;
 pub(crate) mod example_sin;
+pub(crate) mod fast32_asin;
 pub(crate) mod fast32_atan;
+pub(crate) mod fast32_atan32;
 pub(crate) mod fast32_cos;
 pub(crate) mod fast32_erf;
 pub(crate) mod fast32_erfcx0;

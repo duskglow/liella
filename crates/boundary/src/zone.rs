@@ -31,6 +31,9 @@ static GMT: &[u8] = b"GMT\0";
 struct Glue;
 
 impl ZoneObjects for Glue {
+    // Always inlined into `time_compat::select`'s lock-free path (HOTTEXT-TIME-CLUSTER-STABLE): an
+    // out-of-line copy would have no hot-text key and land in cold text.
+    #[inline(always)]
     fn entry_at(&self, addr: usize) -> &'static Entry {
         tb::zone_entry_at(addr)
     }

@@ -14,8 +14,6 @@
 use spectest::{family, symbol};
 
 mod products;
-#[path = "../../core/tests/support/skip_note.rs"]
-mod skip_note;
 #[path = "../../math/tests/support/hypot_pairs.rs"]
 mod hypot_pairs;
 
@@ -1492,11 +1490,10 @@ fn sym___fpu_control() {
     let line = products::dynsym_line("__fpu_control");
     assert!(line.contains(" 2 OBJECT  GLOBAL DEFAULT"), "__fpu_control in libc.so.6: {line:?}");
     // Statically linked on Liella (the program's own definition links and is ignored), then the
-    // same programs linked dynamically on glibc (the oracle). Their run on Liella's libc.so.6
-    // waits for Liella's ld.so (phase 14, #814): a reported skip, never a silent pass.
+    // same programs linked dynamically, on glibc (the oracle) and on Liella's libc.so.6 under
+    // Liella's ld.so (#814, D-27.24): a program's own value applies.
     products::conformance(&["fpu_control_default", "fpu_control_own"]);
     products::conformance_dynamic(&["fpu_control_default", "fpu_control_own"]);
-    skip_note::skipped("skipped: fpu_control_default/fpu_control_own dynamic on Liella wait for Liella's ld.so (phase 14, #814); only the glibc oracle run checked");
 }
 symbol!(sym___gamma_r_finite, "__gamma_r_finite", "10", "2.15", r##""##);
 symbol!(sym___gammaf128_r_finite, "__gammaf128_r_finite", "10", "2.26", r##""##);
@@ -2464,7 +2461,10 @@ fn math_expf_onepass_entries_match_the_envelope() {
     // D-10.72 adds exp10f's range edges (±37.9) and exact powers (1, 9, 10; 11 and 1.125 are not
     // exact), and the log family's: 1 and its neighbours, the m split at 0.75 and 1.5, the least
     // normal and the largest finite operand, -1, and the 10^n operands log10 refuses (10, 10^10).
-    let edges: [u32; 44] = [
+    // LIBM-TINY-FASTPATHS (D-10.108): the exp family's tiny-operand path below 2^-27 (0x3200_0000)
+    // on both sides of its bound and of the least normal (0x0080_0000, 0x0080_0001 above).
+    let edges: [u32; 54] = [
+        0x31ff_ffff, 0x3200_0000, 0xb1ff_ffff, 0xb200_0000,
         0x0000_0000, 0x8000_0000, 0x0000_0001, 0x807f_ffff, 0x327f_ffff, 0x3280_0000, 0xb280_0000, 0x42ae_a8f5,
         0x42ae_a8f6, 0xc2ae_a8f6, 0x42fb_ffff, 0x42fc_0000, 0xc2fc_0000, 0x4040_0000, 0xc0e0_0000, 0x7f80_0000,
         0xff80_0000, 0x7fc0_0000, 0x7f80_0001, 0xffa0_0005, 0x4217_9999, 0x4217_999a, 0xc217_999a, 0x3f80_0000,
@@ -2473,6 +2473,9 @@ fn math_expf_onepass_entries_match_the_envelope() {
         // D-10.82 (asinf, acosf, atanf): the one-pass ranges' edges (|x| < 1, the least and the
         // largest normal), the index split at s = 1/64 and 1/8, and 1 - 2^-24 on both sides.
         0x3f7f_ffff, 0xbf7f_ffff, 0x3c80_0000, 0x3c7f_ffff, 0x3e00_0000, 0x0080_0001, 0x807f_ffff, 0xff7f_ffff,
+        // D-10.103: asinf/acosf's split at |x| = 1/2 on both sides, atanf's table at 32 (its end)
+        // and 2 (a reduced argument of exactly 0).
+        0x3eff_ffff, 0x3f00_0000, 0xbf00_0000, 0x41ff_ffff, 0x4200_0000, 0x4000_0000,
     ];
     for p in &ONEPASS {
         for ctl in [0u32, 0x8000, 0x0040, 0x8040] {
