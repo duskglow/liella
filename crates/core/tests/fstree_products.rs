@@ -169,8 +169,9 @@ fn without(text: &str, list: &[(&str, &str, &str)], who: &str) -> Vec<String> {
 }
 
 /// The probe's stat chain line (`... chains l0..l<N> resolve; first failure l<K> stat <ERRNO>`, with
-/// ` (retried: <answer>)` after an errno other than ELOOP) must name the first failure's chain index
-/// and errno, so a run whose chain stops early says why (FSTREE-STAT-ERRNO). Returns the line's fault.
+/// ` (retried: <errno>)` when the failure came before l40 and persisted through the probe's retries)
+/// must name the first failure's chain index and errno, and must stop at the kernel's limit, so a run
+/// whose chain stops early says why (FSTREE-STAT-ERRNO). Returns the line's fault.
 fn stat_chain_fault(who: &str, out: &str) -> Option<String> {
     const HEAD: &str = "stat (the kernel's limit, for comparison): chains l0..l";
     let Some(line) = out.lines().find(|l| l.starts_with(HEAD)) else {
@@ -187,11 +188,12 @@ fn stat_chain_fault(who: &str, out: &str) -> Option<String> {
     };
     match shape() {
         None => Some(format!("{who}: the stat chain line does not name the first failure's index and errno: {line:?}")),
-        // ELOOP is the limit itself: never retried.
-        Some((last, fail, "ELOOP")) if fail == last + 1 && line.ends_with(" stat ELOOP") => None,
+        // The kernel's limit: 40 links (path_resolution(7)), so l40 (41 links) is the first ELOOP, and
+        // the probe retries only failures before it.
+        Some((39, 40, "ELOOP")) if line.ends_with(" stat ELOOP") => None,
         Some(_) => Some(format!(
-            "{who}: the stat chain stopped before the kernel's link limit (a fault in this run, not a difference; \
-             the errno and the retry's answer say which): {line:?}"
+            "{who}: the stat chain does not stop at the kernel's link limit (l40, ELOOP), even after the probe's \
+             retries (a fault in this run, not a difference; the errno and the retry's answer say which): {line:?}"
         )),
     }
 }

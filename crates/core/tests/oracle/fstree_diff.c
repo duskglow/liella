@@ -2834,30 +2834,40 @@ static void sec_realpath(void)
         free(r);
     }
     printf("realpath: chains l0..l%d resolve (l%d is %d links); first failure l%d %s\n", lastok, lastok, lastok + 1, firstfail, en(ferr));
-    /* The first failure is printed with its errno (the kernel's limit gives ELOOP at l40); any other
-       errno is a fault in the run, so it is retried once and the retry's answer printed too: a
-       failure the retry does not repeat was transient, one it repeats is a property of the tree. */
-    int slast = -1, sfail = -1, serr = 0, sretry = -1;
+    /* The first failure is printed with its errno: the kernel's limit (40 links, path_resolution(7))
+       gives ELOOP at l40. Under memory-cgroup reclaim the kernel's walk can also answer ELOOP for a
+       shorter chain, now and then (FSTREE-STAT-ERRNO reproduced it at an 82M limit: about 1 walk in
+       5000); a retry resolves it. So a failure before l40 is retried up to 3 times; one that a
+       retry resolves is counted on stderr (not compared), one that persists is printed with the
+       last retry's answer. */
+    int slast = -1, sfail = -1, serr = 0, sretry = -1, transient = 0;
     for (int k = 0; k <= 45; k++) {
         char p[32];
         struct stat st;
         snprintf(p, sizeof p, "rp/ch/l%d", k);
         errno = 0;
         int rc = stat(p, &st);
+        int e = errno, retry = -1;
+        for (int t = 0; rc != 0 && k < 40 && t < 3; t++) {
+            errno = 0;
+            rc = stat(p, &st);
+            retry = rc == 0 ? 0 : errno;
+        }
+        if (rc == 0 && retry == 0)
+            transient++;
         if (rc == 0 && slast == k - 1)
             slast = k;
         if (rc != 0 && sfail < 0) {
             sfail = k;
-            serr = errno;
-            if (serr != ELOOP) {
-                errno = 0;
-                sretry = stat(p, &st) == 0 ? 0 : errno;
-            }
+            serr = e;
+            sretry = retry;
         }
     }
+    if (transient)
+        fprintf(stderr, "stat chain: %d early failure(s) resolved on retry\n", transient);
     printf("stat (the kernel's limit, for comparison): chains l0..l%d resolve; first failure l%d stat %s", slast, sfail, en(serr));
-    if (sretry >= 0)
-        printf(" (retried: %s)", sretry == 0 ? "resolves" : en(sretry));
+    if (sretry > 0)
+        printf(" (retried: %s)", en(sretry));
     printf("\n");
     /* A chain within one path: l<k> as an intermediate directory component. */
     mkd("rp/dch", 0755);
