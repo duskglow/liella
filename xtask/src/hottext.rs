@@ -22,6 +22,7 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use crate::hotlists::Layout;
 use crate::so::OWN_PREFIX;
 
 /// HOTTEXT-REGEN-UNBLOCK: `cargo xtask so --hottext-regen` builds the products with the dead-key
@@ -94,7 +95,7 @@ pub fn recheck_cmd(root: &Path, args: &[String]) -> Result<(), String> {
         }
         let copy = dir.join("hot-text.recheck.a");
         fs::copy(&saved, &copy).map_err(|e| format!("hottext-recheck: copy {}: {e}", saved.display()))?;
-        let r = group(&ar, &copy, &list, &inputs, &dir.join("recheck-work"), Some(p.name()));
+        let r = group(&ar, &copy, &list, &inputs, &dir.join("recheck-work"), Some(p.name()), Layout::Committed);
         let _ = fs::remove_file(&copy);
         let (hot, keys) = r.map_err(|e| format!("hottext-recheck: {}: {e}", p.name()))?;
         println!("hottext-recheck: {}: {hot} function sections grouped, {keys} keys, dead-key check done", p.name());
@@ -673,7 +674,7 @@ fn unmatched_error(dead: &[&Entry], stale: &[String], profile: &str) -> Option<S
             msg.push_str(&format!("\n  {} ({}, {traced})", e.key, e.tier));
         }
         msg.push_str(&format!(
-            "\nrenamed, now generic or inlined: run tools/hottext/regen.sh . --build (in each profile); a key gone from every build: \
+            "\nrenamed, now generic or inlined: run tools/hottext/regen.sh . --both (both profiles); a key gone from every build: \
              tools/hottext/prune.py; a key absent from this profile by design: a line in crates/libc-so/{ABSENT_LIST} with its reason"
         ));
     }
@@ -1159,19 +1160,37 @@ fn is_startup_names(section: &str) -> bool {
 /// ([`dead_key_verdict`]); a stale [`ABSENT_LIST`] line fails; prints the count of the allowed
 /// unmatched keys. Returns (hot sections in the result, keys in the list). `inputs`: the directory of the
 /// hand-written inputs ([`CLUSTER_LIST`], [`ABSENT_LIST`]); `list` may be a train-owned copy elsewhere (hotlists.rs).
-pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, profile: Option<&str>) -> Result<(usize, usize), String> {
-    let text = fs::read_to_string(list).map_err(|e| format!("{}: {e}", list.display()))?;
+/// `layout` (LAYOUT-TRACE-AT-BUILD): [`Layout::Traced`]: `list` is a trace of this archive's own build, so
+/// [`ABSENT_LIST`] (history of committed keys) does not apply and a cluster or [`FIRST_WINDOW_LIST`] key the
+/// trace lacks (or places elsewhere) is named as such; [`Layout::Ungrouped`]: `list` is not read, nothing is
+/// grouped, no first-window key moved and no cluster aligned (the start-up names
+/// section is still placed).
+pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, profile: Option<&str>, layout: Layout) -> Result<(usize, usize), String> {
+    let text = match layout {
+        Layout::Ungrouped => String::new(),
+        _ => fs::read_to_string(list).map_err(|e| format!("{}: {e}", list.display()))?,
+    };
     let entries = parse_list(&text)?;
     let clusters_path = inputs.join(CLUSTER_LIST);
     let clusters_text = fs::read_to_string(&clusters_path).map_err(|e| format!("{}: {e}", clusters_path.display()));
+    // LT-1: the hand-kept inputs name functions of the committed list; under Traced they are checked
+    // against this build's own trace instead (LT-2 removes the class).
+    let traced = |e: String| match layout {
+        Layout::Traced => format!("trace-at-build: {e}: this build's trace does not reach that function (inlined, renamed or no longer run) or places it elsewhere; {CLUSTER_LIST} and {FIRST_WINDOW_LIST} name internal functions until LT-2 (clusters by probe phase)"),
+        _ => e,
+    };
     // LAYOUT-FIRST-WINDOW: link positions, the first-window keys right after the start-up tier.
-    let keys = match first_window_positions(inputs, &entries, clusters_text.as_deref().ok()) {
-        Ok(k) => k,
-        Err(e) if REGEN.load(Ordering::Relaxed) => {
-            println!("so: {REGEN_FLAG}: {FIRST_WINDOW_LIST} NOT applied for this regen build: {e}");
-            positions(&entries)
-        }
-        Err(e) => return Err(e),
+    // Ungrouped: no list, so nothing is placed and no first-window key applies.
+    let keys = match layout {
+        Layout::Ungrouped => positions(&entries),
+        _ => match first_window_positions(inputs, &entries, clusters_text.as_deref().ok()) {
+            Ok(k) => k,
+            Err(e) if REGEN.load(Ordering::Relaxed) => {
+                println!("so: {REGEN_FLAG}: {FIRST_WINDOW_LIST} NOT applied for this regen build: {e}");
+                positions(&entries)
+            }
+            Err(e) => return Err(traced(e)),
+        },
     };
     let mut matched = BTreeSet::new();
     let _ = fs::remove_dir_all(work);
@@ -1184,9 +1203,10 @@ pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, 
     }
     crate::so::run(Command::new(ar).current_dir(work).arg("x").arg(&archive))?;
     let objcopy = std::env::var("OBJCOPY").unwrap_or_else(|_| "objcopy".into());
-    let clusters = match &clusters_text {
-        Ok(t) => parse_clusters(t, &keys).and_then(|c| Ok((c, clusters_at_end(t)?))),
-        Err(e) => Err(e.clone()),
+    let clusters = match (layout, &clusters_text) {
+        (Layout::Ungrouped, _) => Ok((Vec::new(), false)),
+        (_, Ok(t)) => parse_clusters(t, &keys).and_then(|c| Ok((c, clusters_at_end(t)?))).map_err(traced),
+        (_, Err(e)) => Err(e.clone()),
     };
     // A regen build must not be blocked by a cluster key the old list lacks (D-X.56).
     let (clusters, at_end) = match clusters {
@@ -1288,6 +1308,8 @@ pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, 
     }
     let absent_path = inputs.join(ABSENT_LIST);
     let absent = match fs::read_to_string(&absent_path) {
+        // A traced list holds only keys this archive's own build ran: nothing is absent by history.
+        Ok(_) if layout != Layout::Committed => BTreeSet::new(),
         Ok(t) => parse_absent(&t)?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => BTreeSet::new(),
         Err(e) => return Err(format!("{}: {e}", absent_path.display())),
@@ -2037,6 +2059,57 @@ mod tests {
     }
 
     #[test]
+    fn trace_writes_the_names_at_one_address_in_byte_order() {
+        // LAYOUT-TRACE-HOST-CANONICAL-3 (no spec clause: build tooling): trace_gdb.py writes every
+        // name at a hit address (aliases such as bcmp / __memcmpeq / liella_machine_equal), and the
+        // list keeps that order. nm sorts by the caller's locale (en_US ignores underscores), so a
+        // Zen 1 host's job under en_US.UTF-8 and a gated job in C gave the same keys in two orders.
+        // The tracer must run nm in the C locale and sort each address's names itself.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let py = std::fs::read_to_string(root.join("tools/hottext/trace_gdb.py")).unwrap();
+        let nm = py.find("subprocess.run([\"nm\", \"--defined-only\", binp]").expect("trace_gdb.py: no nm call");
+        let nm_line = py[nm..].lines().next().unwrap();
+        assert!(nm_line.contains("env=nm_env") && py.contains("nm_env = dict(os.environ, LC_ALL=\"C\")"), "trace_gdb.py runs nm in the caller's locale");
+        let sorted = py.find("names = {a: sorted(ns) for a, ns in names.items()}").expect("trace_gdb.py does not sort the names at one address");
+        let written = py.find("for n in names.get(addr, []):").expect("trace_gdb.py: no names output");
+        assert!(nm < sorted && sorted < written, "trace_gdb.py sorts the names after it writes them");
+    }
+
+    #[test]
+    fn regen_replace_drops_the_allow_list_lines_of_keys_it_drops() {
+        // LAYOUT-TRACE-HOST-CANONICAL-3 (no spec clause: build tooling): `regen.sh --replace` keeps
+        // only the keys a trace hit, so an ABSENT_LIST line whose key left the list is stale by
+        // `unmatched`'s rule and the next release build (a later `--both`) refused it.
+        // prune.py --absent drops exactly those lines (comments and listed keys stay, in order) and
+        // regen.sh runs it on the --replace path only, after it writes the list.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let tmp = root.join(format!("target/xtask-absent-prune-test-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("list"), "# list\nkept\tstartup\tfast\nfast_only\tlocale\tfast\n").unwrap();
+        let absent = "# allow-list\nkept\trelease\tinlined in release\ngone\trelease\tinlined in release\n# tail\nfast_only\trelease\tinlined\n";
+        std::fs::write(tmp.join("absent"), absent).unwrap();
+        let o = std::process::Command::new("python3")
+            .arg("-I")
+            .arg(root.join("tools/hottext/prune.py"))
+            .arg("--absent")
+            .arg(tmp.join("list"))
+            .arg(tmp.join("absent"))
+            .output()
+            .expect("python3 runs tools/hottext/prune.py");
+        std::fs::remove_dir_all(&tmp).unwrap();
+        let (out, err) = (String::from_utf8(o.stdout).unwrap(), String::from_utf8_lossy(&o.stderr).into_owned());
+        assert!(o.status.success(), "prune.py --absent: {err}");
+        assert_eq!(out, "# allow-list\nkept\trelease\tinlined in release\n# tail\nfast_only\trelease\tinlined\n", "prune.py --absent kept a stale line or lost a live one");
+        assert!(err.contains("absent: dropped gone\trelease"), "prune.py --absent does not name the line it drops: {err}");
+        assert_eq!(parse_absent(&out).unwrap().len(), 2, "prune.py --absent output is not an allow-list");
+        let sh = std::fs::read_to_string(root.join("tools/hottext/regen.sh")).unwrap();
+        let written = sh.find("put_changed \"$work/list.merged\" \"$list\"").expect("regen.sh: no list write");
+        let guard = sh.find("if [ $replace = 1 ] && [ -f \"$absent\" ]; then").expect("regen.sh: no --replace allow-list prune");
+        let call = sh.find("\"$here/prune.py\" --absent \"$list\" \"$absent\"").expect("regen.sh: prune.py --absent not run");
+        assert!(written < guard && guard < call, "regen.sh prunes the allow-list before it writes the list, or outside --replace");
+    }
+
+    #[test]
     fn a_startup_label_brings_its_section_to_the_head() {
         // LAYOUT-TEXT-PIN-6, #4467 (no spec clause: build tooling, D-X.63): keys.py --aliases maps a
         // label inside a function section (an assembly entry label, an alias) to the section's key,
@@ -2206,7 +2279,9 @@ mod tests {
         // traces of the run have started, so a runner that runs them one at a time fails here
         // (iteration budget, a hang guard only). The tagged file names every trace in start order,
         // each trace writes its own names file with its own environment, a failed trace fails the
-        // wait, and put_changed leaves a file whose bytes did not change untouched.
+        // wait, and put_changed leaves a file whose bytes did not change untouched. The fake prints
+        // the program's environment as trace_gdb.py builds it (LAYOUT-TRACE-HOST-CANONICAL: exactly
+        // the HOT_TEXT_ENV_<NAME> variables, sorted), so the caller's own LANG must not reach it.
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let runner = root.join("tools/hottext/runner.sh");
         let tmp = root.join(format!("target/xtask-runner-test-{}", std::process::id()));
@@ -2225,7 +2300,8 @@ while [ "$(ls BARRIER | wc -l)" -lt COUNT ]; do
     sleep 0.01
 done
 if [ "$1" = fail ]; then exit 3; fi
-printf '%s\n' "$@" "LANG=$LANG" > "$HOT_TEXT_OUT"
+printf '%s\n' "$@" > "$HOT_TEXT_OUT"
+env | sed -n 's/^HOT_TEXT_ENV_//p' | LC_ALL=C sort >> "$HOT_TEXT_OUT"
 "#
             .replace("BARRIER", &barrier.to_string_lossy())
             .replace("COUNT", &progs.len().to_string());
@@ -2247,6 +2323,8 @@ traces_wait
                 .arg(runner.parent().unwrap())
                 .args(progs)
                 .env("HOTTEXT_GDB", format!("bash {}", fake_path.display()))
+                .env("LANG", "caller-lang")
+                .env("TZ", "caller-tz")
                 .env("HOTTEXT_JOBS", progs.len().to_string())
                 .output()
                 .expect("bash runs tools/hottext/runner.sh");

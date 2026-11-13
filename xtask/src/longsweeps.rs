@@ -142,6 +142,7 @@ pub const SWEEPS: &[Sweep] = &[
     lib("crates/math/src/wide_int/quad/arc.rs", "wide_int::quad::arc::tests::arc_sine_agrees_with_the_wide_route_long", Group::Long),
     lib("crates/math/src/complex_fast_tests.rs", "complex_fast::tests::cexp_quick_tier_sweep", Group::Long),
     lib("crates/math/src/complex_fast_ls_tests.rs", "complex_fast::ls_tests::clog_csqrt_quick_tier_sweep", Group::Long),
+    lib("crates/math/src/complex_fast_sinh_tests.rs", "complex_fast::sinh::tests::csinh_quick_tier_sweep", Group::Long),
     lib("crates/math/src/complex_fast_pow_tests.rs", "complex_fast::pow::tests::cpow_decline_rates", Group::Long),
     it("crates/math/tests/fast_bessel_n.rs", "fast_bessel_n", "bessel_n_tier_sweep", Group::Long).env(&[("LIELLA_BESSEL_N_SWEEP", "10000000")]),
     // The double special-function fast tiers against their 384-bit paths at 10^5 operands per function and mode
@@ -184,6 +185,9 @@ pub const SWEEPS: &[Sweep] = &[
     it("crates/math/tests/complex_f128_products.rs", "complex_f128_products", "accuracy_suite_retry_count", Group::Count),
     // liella-boundary (TEST-LONG-SWEEPS-BOUNDARY, #4752)
     it("crates/boundary/tests/exp_quick.rs", "exp_quick", "exp_quick_accuracy_job", Group::Long).env(&[("EXP_QUICK_N", "100000000")]).secs(5),
+    // The directed-rounding quick phase of exp (LIBM-DIRECTED-INPLACE, D-10.94): 10^7 operands per distribution,
+    // direction and build.
+    it("crates/boundary/tests/exp_quick.rs", "exp_quick", "exp_directed_accuracy_job", Group::Long).env(&[("EXP_DIR_N", "10000000")]).secs(3),
     it("crates/boundary/tests/trig_quick.rs", "trig_quick", "trig_quick_accuracy_job", Group::Long).env(&[("TRIG_QUICK_N", "100000000")]).secs(58),
     it("crates/boundary/tests/hyperb_quick.rs", "hyperb_quick", "hyperb_quick_both_builds_round_correctly", Group::Long)
         .env(&[("LIELLA_HYPERB_N", "1000000")]).secs(23),

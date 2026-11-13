@@ -268,6 +268,11 @@ pub mod private {
     /// `__liella_libc_early_init(const StartInfo *)`: libc's start steps 3 and 4, called by `ld.so`
     /// after relocation and before any constructor (`.preinit_array` included).
     pub const EARLY_INIT: &[u8] = b"__liella_libc_early_init";
+    /// `size_t __liella_thread_walk(size_t (*cb)(size_t ctx, size_t tp), size_t ctx)`: under the
+    /// C library's thread-list lock, `cb(ctx, tp)` per live thread, then `cb(ctx, 0)` (DL-16d:
+    /// `dlopen` gives a new module's static TLS block to every thread). Looked up only by a
+    /// `dlopen` that loads an object with `PT_TLS`.
+    pub const THREAD_WALK: &[u8] = b"__liella_thread_walk";
     /// `__liella_build_tag`: [`TAG_LEN`] bytes, [`TAG_PREFIX`] then the build's identity.
     pub const BUILD_TAG: &[u8] = b"__liella_build_tag";
     /// The tag's first bytes (a test finds the tag in a file by them).
@@ -347,6 +352,9 @@ pub mod private {
         /// `extern "C" fn(tp) -> usize`: the thread at `tp` is ending (its last call into the
         /// loader); the area itself goes with the thread's mapping.
         pub tls_release: usize,
+        /// The loader's `dlopen` entry (DL-16a, plan/ph14/dl-16-dlopen.md §1): `(file, mode, caller)`
+        /// to a handle or NULL, the failure text set in the calling thread's dlerror record; 0: none.
+        pub dlopen: usize,
     }
 
     #[cfg(test)]

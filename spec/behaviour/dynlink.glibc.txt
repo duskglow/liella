@@ -706,3 +706,25 @@ elf64=681 static=1 dynamic_bind_now=666 dynamic_lazy=14 type_dyn(pie)=667
    libc by name libc.so.6, NOLOAD: same handle as the start-time one, l_name "/lib/x86_64-linux-gnu/libc.so.6"
    libc by its real path: same handle as the start-time one, l_name "/lib/x86_64-linux-gnu/libc.so.6"
    libc as /lib/x86_64-linux-gnu/../x86_64-linux-gnu/libc.so.6: same handle as the start-time one, l_name "/lib/x86_64-linux-gnu/libc.so.6"
+== gaps
+libok.so: ok
+text64.txt: invalid ELF header
+text4096.txt: invalid ELF header
+text65536.txt: invalid ELF header
+zero4096.bin: invalid ELF header
+class0.so: wrong ELF class: ELFCLASS32
+class3.so: wrong ELF class: ELFCLASS32
+class255.so: wrong ELF class: ELFCLASS32
+identver0.so: ELF file version ident does not match current one
+ever0.so: ELF file version does not match current one
+phentsize32.so: ELF file's phentsize not the expected size
+phnum0.so: object file has no loadable segments
+ehsize0.so: ok
+nodyn.so: object file has no dynamic section
+noload.so: object file has no loadable segments
+misalign.so: ELF load command address/offset not page-aligned
+align3.so: ok
+== noload-pending
+fail then NOLOAD miss: handle NULL, dlerror NULL
+fail then successful open: handle non-NULL, dlerror NULL
+fail then NOLOAD hit: handle non-NULL, dlerror NULL

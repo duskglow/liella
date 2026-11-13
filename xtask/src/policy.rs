@@ -441,7 +441,7 @@ pub fn unsafe_audit(root: &Path) -> Result<(), String> {
                     // module, one directory since LIBM-HOT-PER-FAMILY).
                     ("hot-kernel", &["src/hot/"])
                 } else if l.contains("unsafe fn") || l.contains("unsafe {") {
-                    ("slice", &["src/conv.rs", "src/strz.rs", "src/heap.rs", "src/tb.rs", "src/runtime.rs", "src/bootstrap.rs", "src/ld.rs", "src/posix/", "src/native/", "src/selftest/failalloc.rs"])
+                    ("slice", &["src/conv.rs", "src/strz.rs", "src/heap.rs", "src/tb.rs", "src/runtime.rs", "src/bootstrap.rs", "src/ld.rs", "src/ld/", "src/dlerr.rs", "src/posix/", "src/native/", "src/selftest/failalloc.rs"])
                 } else {
                     errors.push(format!("{}:{}: `unsafe` form not in any permitted category", f.display(), n + 1));
                     continue;

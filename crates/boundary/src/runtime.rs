@@ -359,6 +359,8 @@ pub fn early_init(info: usize) {
     // The loader's per-thread TLS interface: new threads get every initially loaded module's
     // block from it (DL-15, design §7).
     crate::thread::set_loader_tls(info.tls_size, info.tls_align, info.tls_init, info.tls_release);
+    // The loader's `dlopen` entry (DL-16a): `dlopen` calls it; without one it fails with a text.
+    crate::posix::s27_dynlink::LOADER_DLOPEN.store(info.dlopen, Release);
     // The tunables without diagnostics (`ld.so` read the string already).
     let secure = aux.get(AT_SECURE).is_some_and(|v| v != 0);
     // Secure mode's standard descriptors, before any constructor can open a file in their place

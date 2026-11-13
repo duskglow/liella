@@ -15,6 +15,28 @@ pub(crate) fn exp_nearest(x: f64) -> Option<f64> {
     liella_math::fast64::quick::exp_tiered(x)
 }
 
+/// The `double` `exp` quick phase in the caller's directed rounding direction (D-10.94) in its
+/// build chosen at startup (as [`exp_nearest`]): `e^x` rounded in `mode`, or `None` (the entry then
+/// switches). `mode` is the caller's direction, never round to nearest. The direction picks an
+/// instance by a branch (predicted: the mode rarely changes), so the arithmetic depends on the
+/// MXCSR read by control only; as data (`h` selected from it) it waited for that read, and the
+/// read for the caller's earlier arithmetic, which serialised successive calls (D-10.94).
+#[inline(always)]
+pub(crate) fn exp_directed(x: f64, mode: liella_math::Rounding) -> Option<f64> {
+    if matches!(mode, liella_math::Rounding::Up) { exp_directed_in::<true>(x) } else { exp_directed_in::<false>(x) }
+}
+
+/// [`exp_directed`] for one direction class (`UP`: upward; else downward or toward zero).
+#[inline(always)]
+fn exp_directed_in<const UP: bool>(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::quick::fused::exp_directed::<UP>(x) };
+    }
+    liella_math::fast64::quick::exp_directed::<UP>(x)
+}
+
 /// The `double` `exp` quick phase alone (LIBM-F64-EXP-QUICK, D-10.51) in its build chosen at
 /// startup (as [`exp_nearest`]): the correctly rounded result, or `None` when the rounding test
 /// fails (bound and count tests).

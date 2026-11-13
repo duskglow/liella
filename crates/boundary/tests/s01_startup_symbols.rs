@@ -512,6 +512,17 @@ fn s1_1_c_0_dynamic_start_conformance() {
     ]);
 }
 
+/// s1_2_c_5, s1_2_c_3, s1_2_c_1 (D-27.28): Liella's `libc_nonshared.a` and installed `libc.so`.
+/// Code built against them takes `atexit`, `at_quick_exit` and `pthread_atfork` from the archive,
+/// tagged with its own module's `__dso_handle`, and needs only versions the reference exports: a
+/// shared object built against Liella, unloaded by the reference's `dlclose`, has its exit
+/// handler run then and its quick-exit and atfork handlers dropped.
+#[test]
+fn s1_2_c_5_nonshared_archive_two_way() {
+    // s1_2_c_5: `__cxa_finalize(dso)` runs the object's handlers when it is unloaded.
+    products::nonshared_two_way();
+}
+
 #[test]
 fn sym___environ() {
     // A data object of the products' runtime: checked from C (conformance/c/s01_startup.c).
