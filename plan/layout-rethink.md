@@ -4,7 +4,7 @@ LAYOUT-RETHINK (2026-11-13), planning story, no product change. Proposal; the ow
 implementation story is briefed. Pending record: `records/pending/LAYOUT-RETHINK-1.toml` (series D-X).
 Reads with: D-X.20, D-X.47, D-X.53, D-X.56, D-X.63, D-X.77, D-X.78, `handoff/layout-stability-rethink.md`,
 `handoff/HOTLIST-TRAIN-REGEN-2.md` (on its branch). Measurements: section 3; scripts and logs in the story's
-scratch (shiki `~/work/LAYOUT-RETHINK/`, outputs `/mnt/zram/claude/LAYOUT-RETHINK/out/`).
+scratch on the Haswell-EP build host (`~/work/LAYOUT-RETHINK/`, results in `out-summary/` there).
 
 ## 1. Frame
 
@@ -59,7 +59,7 @@ contracts are what really protect the counts. Section 3.3 measures this with a d
 ## 2. Options
 
 Each: mechanism; what it depends on; failure mode; cost. Licences and availability on our build hosts
-(checked on shiki, Haswell-EP, Ubuntu 24.04, GNU ld 2.42: gdb, perf, ld.gold present; no llvm-bolt, no system
+(checked on the Haswell-EP build host, Ubuntu 24.04, GNU ld 2.42: gdb, perf, ld.gold present; no llvm-bolt, no system
 lld, no valgrind, no llvm-profdata; `rust-lld` ships in the rustup toolchain).
 
 **(a) Keys only on things that cannot disappear.**
@@ -136,7 +136,7 @@ prototyped.
 
 ## 3. Measurements
 
-Host shiki (Haswell-EP, 26 threads, Linux 6.8.0-147, GNU ld 2.42); a scratch copy of the branch base
+Haswell-EP build host (26 threads, Linux 6.8.0-147, GNU ld 2.42); a scratch copy of the branch base
 b31418181 (next when the branch was cut). `page_faults.c` linked exactly as `hot_text_products.rs` links it,
 each mode through `relay <mode>` from a fixed-length path, `ADDR_NO_RANDOMIZE`, argv0 `page_faults`, cwd `/`,
 `LANG` only; one warm-up and five runs: **every run identical in every variant**. `puts` and `cat` are
@@ -213,7 +213,7 @@ fault counts were taken. Rejected.
 
 ### 3.4 Cost and determinism
 
-| option | added build time (shiki) | determinism |
+| option | added build time (Haswell-EP host) | determinism |
 |---|---|---|
 | (d) next | none (`so`: fast 215 s, release 359 s, full products) | a function of the tree |
 | (e) as prototyped (gdb tracer) | tracing the built products: fast 59 s, release 26 s (all probes in parallel); no second compile, because the list no longer feeds the build tag (the regen path's second build, 396 / 736 s in all, comes from the list living in `crates/`) | a re-trace of the same products gave a byte-identical list, both profiles (fixed point); with that list, a second plain `cargo xtask so` passed every build check and gave a `libc.a` byte-identical to the first build, both profiles; on it `cargo xtask layout-check` (all 12 contracts, STARTUP-TEXT / DATA-WINDOWS included) and `hot_text_products` (every bound, the 0-fault and pad tests) passed, both profiles |
