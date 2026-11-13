@@ -1,0 +1,16 @@
+{"task": "LAYOUT-CHECK-VERDICT-CACHE-2", "model": "opus", "tokens": null,
+ "result": "lcvc-gate2's red fixed at the cause: layout_verdict (product path) imported sha256 helpers from the benchstage tool module; they now live in xtask/src/sha256.rs. FULL gate green, 10/10 plants caught",
+ "branch": "task/layout-check-verdict-cache-2", "head": "b2c37d82b",
+ "gate": {"affected": "11661 passed / 0 failed (escalated to FULL, 32 suites)", "peak": "16G (page cache included) oom_kill=0"},
+ "accepted_first_attempt": null,
+ "rulings": [], "informational": ["The no-change xtask so timings in handoff/LAYOUT-CHECK-VERDICT-CACHE.md are the first run's (keke); this run moved two functions only and did not re-time."],
+ "refused": [],
+ "impact": [
+  {"kind": "perf", "what": "no-change fast cargo xtask so wall time, 4-core slot (first run's measurement, unchanged code path)", "before": 445, "after": 200, "unit": "s", "measured": false},
+  {"kind": "correctness", "what": "the layout verdict cache's sha256 helpers no longer sit in a tool module, so a change to them escalates the gate to FULL (tool_modules_stay_off_the_product_path green)", "before": null, "after": null, "unit": null, "measured": true},
+  {"kind": "coverage", "what": "plants: verdict-uses-tool-module added (10 plants, all CAUGHT)", "before": 9, "after": 10, "unit": "plants", "measured": true}
+ ],
+ "improvement": "The test that caught this runs in 1 s as a unit test, but the red surfaced only after a 64 min FULL gate: running `cargo test -p xtask --bin xtask` before the gate on xtask-only stories would catch it in 2 min.",
+ "next_step": "Land. Optional follow-up from the first run: profile the non-layout part of a no-change xtask so (~195 s fast).",
+ "report_file": "handoff/LAYOUT-CHECK-VERDICT-CACHE.md",
+ "jobs": ["shiki:layout-check-verdict-cache-2-gate", "shiki:layout-check-verdict-cache-2-plants", "shiki:layout-check-verdict-cache-2-lint", "shiki:layout-check-verdict-cache-2-xtask-unit"]}

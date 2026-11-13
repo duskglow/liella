@@ -29,6 +29,7 @@ dropped when no profile is left.
 A host where perf cannot record (perf_event_paranoid > 2, no perf) fails: the operand scan alone
 misses objects reached through pointers.
 """
+import filecmp
 import os
 import re
 import subprocess
@@ -176,7 +177,11 @@ def main():
         for k in sorted(merged):
             kind, profs = merged[k]
             f.write(f"{k}\t{kind}\t{','.join(p for p in PROFILES if p in profs)}\n")
-    os.replace(out_path + ".tmp", out_path)
+    # HOTLIST-REGEN-CHEAP-2: rewrite the tracked file only when its bytes change.
+    if os.path.exists(out_path) and filecmp.cmp(out_path + ".tmp", out_path, shallow=False):
+        os.remove(out_path + ".tmp")
+    else:
+        os.replace(out_path + ".tmp", out_path)
     n = sum(1 for v in traced.values())
     print(f"startup-data: {n} objects traced ({profile}: {sum(v == 'ro' for v in traced.values())} ro), {len(merged)} in {out_path}")
 

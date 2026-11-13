@@ -1,0 +1,2 @@
+ls-unmap | xtask/src/affected.rs | lit:    ("longsweeps", "the long sweep ==>    ("zz_longsweeps", "the long sweep | cargo test -p xtask a_long_sweep_registration_selects | msg:longsweeps.rs escalated to FULL
+fc-unmap | xtask/src/affected.rs | lit:    ("float_casts", "the float cast ==>    ("zz_float_casts", "the float cast | cargo test -p xtask a_long_sweep_registration_selects | msg:float_casts.rs escalated to FULL

@@ -1,0 +1,5 @@
+drop-row | xtask/src/longsweeps.rs | perl:s/rows\.iter\(\)\.map\(\|s\| format!\("\{\}\\n", s\.test\)\)/rows.iter().skip(1).map(|s| format!("{}\\n", s.test))/ | cargo test -p xtask list_prints_the_groups | msg:the list differs from the group's rows|list_prints_the_groups.*FAILED|panicked
+header-line | xtask/src/longsweeps.rs | perl:s/rows\.iter\(\)\.map\(\|s\| format!\("\{\}\\n", s\.test\)\)\.collect\(\)/std::iter::once("rows:\\n".to_string()).chain(rows.iter().map(|s| format!("{}\\n", s.test))).collect()/ | cargo test -p xtask list_prints_the_groups | msg:the list differs from the group's rows|list_prints_the_groups.*FAILED|panicked
+# cargo xtask plants results (2 plants: 2 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# drop-row: CAUGHT, caught by xtask longsweeps::tests::list_prints_the_groups_rows_and_only_accepts_each
+# header-line: CAUGHT, caught by xtask longsweeps::tests::list_prints_the_groups_rows_and_only_accepts_each

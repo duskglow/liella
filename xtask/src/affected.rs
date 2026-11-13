@@ -1745,6 +1745,12 @@ const XTASK_TOOLS: &[(&str, &str)] = &[
     ("sweep", "`cargo xtask sweep`, not a gate step"),
     ("repro", "`cargo xtask repro`, not a gate step"),
     ("symcov", "`cargo xtask symcov`, a report, not a gate step"),
+    // XTASK-AFFECTED-LONGSWEEPS (#5145): the registration table of the long sweeps. Its unit tests check the rows
+    // against each other, and `static` (long-sweeps) checks them against the tests of `crates/*/{src,tests}`: every
+    // ignored or environment-scaled test is a row or a NOT_SWEEPS entry, every row names a test that exists and a
+    // package that builds it. The nightly run of the sweeps themselves is not a step of the ordinary gate.
+    ("longsweeps", "the long sweep registration (static: long-sweeps); the sweeps run only in the nightly and release runs"),
+    ("float_casts", "the float cast source check (static: float-casts)"),
 ];
 
 /// XTASK-AFFECTED-XTASK: the uses of an [`XTASK_TOOLS`] module from a module that escalates to FULL, each a call that
@@ -5070,6 +5076,19 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
                 let stem = m.trim_start_matches("xtask/src/").trim_end_matches(".rs");
                 assert!(!text.contains(&format!("{stem}::")), "{rel} uses the audit module {stem}: it is no longer a leaf, take it out of XTASK_AUDITS");
             }
+        }
+    }
+
+    #[test]
+    fn a_long_sweep_registration_selects_the_xtask_checks_not_full() {
+        // no spec clause: XTASK-AFFECTED-LONGSWEEPS (#5145). A diff touching only the long-sweep table runs the xtask
+        // unit tests (the table's own tests), its clippy and `cargo xtask static` (the long-sweeps check against the
+        // tests of the workspace), and selects no product test and no FULL.
+        for f in ["xtask/src/longsweeps.rs", "xtask/src/float_casts.rs"] {
+            let (_, s) = sel(&[f]);
+            assert!(s.full.is_empty(), "{f} escalated to FULL: {:?}", s.full);
+            assert!(s.xtask_tests && s.xtask_cmds.contains("static") && s.tests.is_empty() && s.conf.is_empty(), "{f}: {s:?}");
+            assert!(s.clippy.len() == 1 && s.clippy.contains_key("xtask"), "{f}: only the xtask clippy: {s:?}");
         }
     }
 
