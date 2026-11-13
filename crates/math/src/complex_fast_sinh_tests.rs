@@ -159,6 +159,27 @@ fn csinh_tier_answers_overflowing_parts_as_the_route() {
     assert!(overflowed * 2 >= total, "overflows answered {overflowed} of {total}");
 }
 
+/// The overflow step's threshold is `2^1024` itself, not the top binade: a part whose every value
+/// within `eps` lies in `[2^1023, 2^1024)` is finite and goes on to the middle tier (`None`), one
+/// whose every value is above `2^1024` is `±∞` in nearest. The random inputs above rarely see a
+/// quick decline inside the top binade, so the boundary is pinned here directly.
+#[test]
+fn csinh_overflow_step_threshold_is_two_to_the_1024() {
+    // Clauses: s10_5_c_0, s10_0_f_0.
+    let eps = f64::from_bits(0x3970_0000_0000_0000); // 2^-104
+    for m in [OVF_M, 1021, 1023] {
+        let unit = dd::pow2(1024 - m); // P = unit is 2^1024 at scale m
+        for s in [1.0, -1.0] {
+            for f in [0.5, 0.75, 1.0 - 2f64.powi(-40)] {
+                let p = Dd { hi: s * f * unit, lo: 0.0 };
+                assert_eq!(overflow(p, eps, m, Rounding::Nearest), None, "{f}·2^1024 at m = {m}: finite");
+            }
+            let p = Dd { hi: s * (1.0 + 2f64.powi(-30)) * unit, lo: 0.0 };
+            assert_eq!(overflow(p, eps, m, Rounding::Nearest), Some(s * f64::INFINITY), "above 2^1024 at m = {m}");
+        }
+    }
+}
+
 /// The middle tier against the 384-bit arithmetic over the sweep's regimes: the trig factor
 /// within `2^-99·|T.hi| + 2^-137` (next to multiples of `π/2` too), the hyperbolic factors within
 /// `2^-96.8` relative, each part within its `eps`; and its answers, forced for every part, are
