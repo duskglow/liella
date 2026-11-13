@@ -1,8 +1,8 @@
 # DL-LIBC-START: the dynamic path of `__libc_start_main` (phase 14 DL-14)
 
-**State:** branch `task/dl-libc-start-9` (DL-LIBC-START-9 on -8's head e55b7c412; code head a45de8a07). Role
-shiki:~/w/sh2. Report: handoff/DL-LIBC-START-9-report.md; json handoff/reports/DL-LIBC-START-9.json. Plants:
-handoff/DL-LIBC-START-9-plants.txt (1, CAUGHT). Earlier: -6/-7/-8 reports and plants.
+**State:** branch `task/dl-libc-start-10` (-9's head f9200d008 + merge of origin/next 5e5ec2a57 + one fix; code
+head 84fb8d645). Role keke:~/w/n3. Report: handoff/DL-LIBC-START-10-report.md; json
+handoff/reports/DL-LIBC-START-10.json. Plants: handoff/DL-LIBC-START-10-plants.txt. Earlier: -6..-9 reports and plants.
 
 **Decisions in force:** D-27.24, D-27.22, D-27.20 (ld.so exports; R14-12 (a) placement), D-27.19, D-27.11 (amended
 by D-27.27), D-27.17, D-27.26 (DL-LIBC-EARLY: rseq, loader exports), D-10.5 (amended by D-10.100), D-X.10, D-X.22. Plan rows:
@@ -30,13 +30,19 @@ plan/06-phases/17-phase-14-dynamic-linking.md DL-14; plan/ph14/design.md §14; R
   `runtime::EARLY_DONE` (1 byte, this branch's dynamic-path flag, in startup-data.keys since -8's regen) was not in the
   hand-written crates/libc-so/startup-state.list, so it stayed in `.bss.<name>`. Declared in the every-start tier;
   all 23 hot_text_products tests pass. Ruling #5171's five keys were already absent from hot-text.list/.unpinned.
+- -10: merged origin/next 5e5ec2a57. hot-text.list, .unpinned, .absent and probe-text.keys are next's unchanged
+  (the branch's edits there were -8's dead-key drops and regen lines for functions it does not touch; next has since
+  moved those keys itself). The branch's start-up keys (startup-data.keys, startup-state.list: EARLY_DONE) kept.
+  After the merge the fast build's first mktime after localtime_r took 1 fault (next: 0). A page-fault trace of both
+  builds showed that the branch emitted `TscGate::fresh` (time zone instantiation) out of line, in cold text, where
+  next inlines it. Fixed with `#[inline(always)]` (crates/legacy/src/recheck.rs). Fast: 23/23.
 
 ## Do not redo
--4's host probes; -5's cause hunt for the link/oracle failures; -6's two binding probes; -8's merge and regen (the
-hot-text.list is next's minus three dead keys; do not re-add the five generic keys without pinning them by count).
+-4's host probes; -5's cause hunt for the link/oracle failures; -6's two binding probes; -8's merge and regen;
+-10's merge and the mktime fault trace (cause above). Do not re-add the five generic #5171 keys.
 
 ## Next step
-1. If dl-libc-start-9-gate (FULL, shiki) is red, fix that first (failing suite only).
+1. If dl-libc-start-10-gate (keke) is red, fix that first (failing suite only).
 2. Land. (Ruling #5171 resolved: merge.py skips refused keys, HOTLIST-TRAIN-REGEN-3.)
 3. DL-LIBC-NONSHARED (#4807, accepted) ships Liella's own libc_nonshared.a + libc.so script.
 4. s23_timefmt check 75 fails on the reference: a stdio/time story finds whether the program or the spec is wrong.
