@@ -63,7 +63,8 @@ fn build(d: &Path, out: &str, src: &str, flags: &[&str]) -> PathBuf {
 /// does then and what `_dl_find_object` says. KIND 2 (`libca`): the constructor corpus. KIND 3
 /// (`libslow`): a constructor that waits on a pipe the program names. KIND 4 (`libplain*`): a
 /// constructor that counts. KIND 5 (`libthrough`): calls back the program (the C++ case). KIND 6
-/// (`libtls`): a `PT_TLS` object whose constructor records the caller's address of its variable.
+/// (`libtls`): a `PT_TLS` object (initial-exec) whose constructor records the caller's address of
+/// its variable.
 const LIB: &str = r#"#define _GNU_SOURCE
 #include <dlfcn.h>
 #include <link.h>
@@ -115,7 +116,9 @@ void through(void (*f)(void)) { through_calls++; f(); __asm__ volatile("" ::: "m
 __attribute__((constructor)) static void c(void) { through_fn = through; }
 #elif KIND == 6
 extern void *tls_addr;
-__thread int tls_v = 6;
+/* initial-exec: placed in the static surplus (DL-16d) and reached without `__tls_get_addr`, which
+   this -nostdlib object could only bind through a scope holding ld.so */
+__attribute__((tls_model("initial-exec"))) __thread int tls_v = 6;
 __attribute__((constructor)) static void c(void) { tls_addr = &tls_v; }
 #endif
 "#;
