@@ -1,7 +1,7 @@
 {"task": "TB-FOREIGN-SAFETY-9", "model": "opus", "tokens": null,
  "result": "setlocale + printf fault count back within its bound (52 -> 51, bound 51, next 50): each_block<publish_global closure>, outlined by D-X.58's gated words(), placed in the locale hot-text tier (named hand edit, ruling #4849)",
  "branch": "task/tb-foreign-safety-9", "head": "da75b81fe",
- "gate": {"affected": "see mei tb-foreign-safety-9-gate-1", "peak": null}, "accepted_first_attempt": null,
+ "gate": {"affected": "11640 passed / 0 failed (32 suites, mei tb-foreign-safety-9-gate-1; init_short_programs_stay_within_their_page_fault_bounds PASS)", "peak": "16G"}, "accepted_first_attempt": null,
  "rulings": [],
  "informational": ["The remaining +1 locale fault against next is locale::name::candidates (find_named's archive closure), inlined on next and outlined on this branch with its source unchanged; its v0 name does not parse in the hot-text key walker, so no build-stable key exists for it yet (follow-up: extend keys.py / hottext.rs key to closures nested in generic paths).",
                    "#[inline] hints on each_block and candidates were tried and dropped: they moved find_cached, time::load and after_fork_in_child out of the hot group (localtime 21 > bound 20)."],
