@@ -113,14 +113,46 @@ fn root() -> PathBuf {
 }
 
 /// A generated start-up list (`hot-text.list`, `startup-data.keys`, ...) as the products were grouped from it: the
-/// committed copy in `crates/libc-so`, or, for products built under `LIELLA_LAYOUT_TRACE` (LAYOUT-TRACE-AT-BUILD),
-/// the directory their `target/liella/.hot-lists` marker names (`target/product/<profile>`, written by the build's
-/// own trace). The hand-written inputs (`hot-text.clusters`, `startup-state.list`) are always the committed ones.
+/// directory the products' `target/liella/.hot-lists` marker names (`target/product/<profile>`, written by the
+/// build's own trace: the default since LAYOUT-TRACE-DEFAULT), or the committed copy in `crates/libc-so` for
+/// products built with `LIELLA_LAYOUT_TRACE=0`. The hand-written inputs (`hot-text.clusters`, `startup-state.list`) are always the committed ones.
 fn generated_list(name: &str) -> PathBuf {
     match std::fs::read_to_string(root().join("target/liella/.hot-lists")) {
         Ok(m) => PathBuf::from(m.lines().next().expect("target/liella/.hot-lists: empty marker")).join(name),
         Err(_) => root().join("crates/libc-so").join(name),
     }
+}
+
+/// LAYOUT-TRACE-DEFAULT (rulings #5190-#5194): a product build traces its own start-up layout by default, so the
+/// products under test carry the `target/liella/.hot-lists` marker, and every generated list it names is the one
+/// the build grouped from (its FNV-1a hash as the marker records it) and holds keys (an ungrouped product's lists
+/// are empty). Products from the committed lists (`LIELLA_LAYOUT_TRACE=0`, list tooling until LT-5) or the
+/// ungrouped opt-out are not what ships. No spec clause (layout of the products).
+#[test]
+fn init_products_are_grouped_from_a_trace_of_their_own_build() {
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let marker = std::fs::read_to_string(r.join("target/liella/.hot-lists")).unwrap_or_else(|e| {
+        panic!("TRACE-AT-BUILD: target/liella/.hot-lists: {e}: the products were grouped from the committed lists (LIELLA_LAYOUT_TRACE=0?); a product build traces its own layout by default")
+    });
+    let mut lines = marker.lines();
+    let dir = PathBuf::from(lines.next().expect("TRACE-AT-BUILD: empty marker"));
+    let mut named = 0;
+    for l in lines {
+        let (name, want) = l.split_once(' ').unwrap_or_else(|| panic!("TRACE-AT-BUILD: marker line {l:?}"));
+        let bytes = std::fs::read(dir.join(name)).unwrap_or_else(|e| panic!("TRACE-AT-BUILD: {}: {e}", dir.join(name).display()));
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for &b in &bytes {
+            h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+        }
+        assert_eq!(format!("{h:016x}"), want, "TRACE-AT-BUILD: {} changed after the build that grouped from it", dir.join(name).display());
+        let keys = String::from_utf8_lossy(&bytes).lines().filter(|k| !k.trim().is_empty() && !k.starts_with('#')).count();
+        if name == "hot-text.list" || name == "startup-text.keys" {
+            assert!(keys > 0, "TRACE-AT-BUILD: {} holds no key: an ungrouped product (LIELLA_LAYOUT_TRACE=ungrouped)", dir.join(name).display());
+        }
+        named += 1;
+    }
+    assert_eq!(named, 4, "TRACE-AT-BUILD: the marker names {named} lists, want the 4 generated ones");
 }
 
 fn build(out: &Path) {
