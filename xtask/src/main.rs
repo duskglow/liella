@@ -37,6 +37,7 @@
 //! | `so`           | Build the products: `libc.a`, `libc.so.6` (version script from Appendix C.3 and the native C ABI's nodes, D-X.10) and `liella-crt1.o` in `target/liella` (never on Cargo's library path). Built with `[profile.fast]` (thin LTO, 16 codegen units; TOOL-PROFILE) for tests and iteration; `LIELLA_FULL_PROFILE=1` uses the shipped `release` profile (fat LTO). `bench` always builds `release` and refuses fast products (`target/liella/.profile` records which). |
 //! | `hottext-repair` | HOTTEXT-DEAD-KEY-REPAIR: repair dead hot-text keys on a tree with `next` merged in, without tracing: builds both profiles' processed archives (`target/liella` untouched), drops the keys of `crates/libc-so/hot-text.list` no profile matches, records a key one profile no longer matches in `hot-text.absent` ("inlined in <profile> at <rev>"; `--at <rev>`, default `origin/next`), removes stale `hot-text.absent` lines, prints what changed, and fails when the dead-key check still fails. Never adds or reorders keys (a real regen: tools/hottext/regen.sh). |
 //! | `hottext-recheck` | HOTLIST-REGEN-CHEAP: the check a cheap regen (`tools/hottext/regen.sh . --both`) ends with: reruns the hot-text grouping and its dead-key check (enforced) on each profile's saved pre-grouping archive with the rewritten list, instead of a second full `so`. |
+//! | `hot-lists`    | HOTLIST-TRAIN-REGEN: regenerate the train-owned start-up lists (`hot-text.list`, `startup-text.keys`, `probe-text.keys`, `startup-data.keys` of `crates/libc-so/`) for both profiles (`tools/hottext/regen.sh . --both --allow-drop`, merge mode) into `target/hot-lists/` with a stamp of the tree state; the build, the layout check and static read that copy while the stamp matches (one info line). `--in-place` or `LIELLA_TRAIN=1` rewrites the tracked lists (the train); there a tracked list that differs from a stamped regeneration is fatal (`hotlists.rs`). |
 //! | `repro`        | The products must not depend on the build directory (ruling #713): builds them in two fresh source copies under `target/repro` (`--dir <base>` elsewhere; not `/dev/shm` under `~/bin/gate`, #714) with the `fast` profile (`--release`: the shipped one) and compares every file of `target/liella`: whole files, then ELF sections (archive members too), accepting differences in `.symtab`/`.strtab` only. Fails naming the first differing file, member and section (`repro.rs`). A nightly job, not part of the gate. |
 //! | `native`       | The native Rust interface (D-X.10): `liella-native` with each feature on its own (clippy, unit tests); its static example built against `libc.a` and run, its dynamic example built against `libc.so.6` and checked with `readelf`. |
 //! | `fuzz`         | The fuzz harnesses of `fuzz/` (a workspace of its own, nightly, libFuzzer through `cargo fuzz`): `--list`; `<target> --time <minutes>` (or `--all`) runs in chunks resuming from the corpus outside the repository (`~/liella-fuzz-corpus`); `--repro`, `--tmin <file>`, `--cmin` for triage (implementation-plan.md §4.5). |
@@ -78,6 +79,7 @@ mod copies;
 mod csys;
 mod fuzz;
 mod hottext;
+mod hotlists;
 mod langinfo;
 mod math;
 mod native;
@@ -166,6 +168,7 @@ fn main() -> ExitCode {
         "hottext-check" => hottext::static_check(&root),
         "hottext-repair" => hottext::repair_cmd(&root, &args[1..]),
         "hottext-recheck" => hottext::recheck_cmd(&root, &args[1..]),
+        "hot-lists" => hotlists::cmd(&root, &args[1..]),
         "private-paths" => privpaths::check(&root),
         "csys-gen" => csys::run(&root, args.iter().any(|a| a == "--check")),
         "abi-gen" => abi::run(&root, args.iter().any(|a| a == "--check")),

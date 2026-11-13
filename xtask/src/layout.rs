@@ -714,7 +714,7 @@ fn check_startup_windows(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Pr
         g => return Err(one(format!("layout: {}: grouped={g}: want error or warn", c.id))),
     };
     let path = param(p, c, "keys").map_err(one)?;
-    let text = std::fs::read_to_string(pr.root.join(path)).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
+    let text = std::fs::read_to_string(crate::hotlists::rel(pr.root, path).map_err(one)?).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     let keys = startup_keys(&text, &profile).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     if keys.is_empty() {
         return Err(one(format!("layout: {}: {path}: no start-up key traced in profile {profile} (run tools/hottext/regen.sh)", c.id)));
@@ -934,7 +934,7 @@ fn check_startup_data(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Produ
     let ro_budget = param_num(p, c, &format!("ro-budget-{profile}")).map_err(one)?;
     let rw_budget = param_num(p, c, &format!("rw-budget-{profile}")).map_err(one)?;
     let path = param(p, c, "keys").map_err(one)?;
-    let text = std::fs::read_to_string(pr.root.join(path)).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
+    let text = std::fs::read_to_string(crate::hotlists::rel(pr.root, path).map_err(one)?).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     let keys = startup_keys(&text, &profile).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     if keys.is_empty() {
         return Err(one(format!("layout: {}: {path}: no start-up object traced in profile {profile} (run tools/hottext/startup_data.sh)", c.id)));
@@ -943,7 +943,7 @@ fn check_startup_data(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Produ
         pr.file(f).map_err(|e| one(c.broken(f, &e)))?;
     }
     let tpath = param(p, c, "text-keys").map_err(one)?;
-    let ttext = std::fs::read_to_string(pr.root.join(tpath)).map_err(|e| one(format!("layout: {}: {tpath}: {e}", c.id)))?;
+    let ttext = std::fs::read_to_string(crate::hotlists::rel(pr.root, tpath).map_err(one)?).map_err(|e| one(format!("layout: {}: {tpath}: {e}", c.id)))?;
     let fns: BTreeSet<String> = startup_keys(&ttext, &profile).map_err(|e| one(format!("layout: {}: {tpath}: {e}", c.id)))?.into_iter().collect();
     let probe = link_startup_probe(pr, true).map_err(|e| one(format!("layout: {}: {e}", c.id)))?;
     let secs = parse_exe_sections(&probe.sections);

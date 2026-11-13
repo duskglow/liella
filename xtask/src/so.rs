@@ -915,7 +915,7 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
         fs::copy(&archive, &saved).map_err(|e| format!("copy {}: {e}", saved.display()))?;
     }
     // The functions short programs run, grouped into `.text.hot.*` (PAGEFAULTS-2: fewer text faults).
-    let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &root.join("crates/libc-so/hot-text.list"), &product.join("hot-work"), rustflags.is_none().then(|| profile.name()))?;
+    let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &crate::hotlists::path(root, "hot-text.list")?, &root.join(crate::hotlists::TRACKED), &product.join("hot-work"), rustflags.is_none().then(|| profile.name()))?;
     println!("so: {hot} function sections grouped as hot text");
     // The read-only data start-up reads, after the grouping (it places STARTUP_NAMES), in one aligned section (D-X.62).
     let (ro, ro_bytes) = crate::startup_ro::place(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, root, &product.join("startup-ro-work"))?;

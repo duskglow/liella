@@ -84,7 +84,8 @@ pub fn recheck_cmd(root: &Path, args: &[String]) -> Result<(), String> {
     }
     let ar = std::env::var("AR").unwrap_or_else(|_| "ar".into());
     let product = root.join("target/product");
-    let list = root.join("crates/libc-so/hot-text.list");
+    let list = crate::hotlists::path(root, "hot-text.list")?;
+    let inputs = root.join(crate::hotlists::TRACKED);
     for p in [crate::so::Profile::Fast, crate::so::Profile::Release] {
         let dir = product.join(p.name());
         let saved = dir.join(PRE_GROUP_ARCHIVE);
@@ -93,7 +94,7 @@ pub fn recheck_cmd(root: &Path, args: &[String]) -> Result<(), String> {
         }
         let copy = dir.join("hot-text.recheck.a");
         fs::copy(&saved, &copy).map_err(|e| format!("hottext-recheck: copy {}: {e}", saved.display()))?;
-        let r = group(&ar, &copy, &list, &dir.join("recheck-work"), Some(p.name()));
+        let r = group(&ar, &copy, &list, &inputs, &dir.join("recheck-work"), Some(p.name()));
         let _ = fs::remove_file(&copy);
         let (hot, keys) = r.map_err(|e| format!("hottext-recheck: {}: {e}", p.name()))?;
         println!("hottext-recheck: {}: {hot} function sections grouped, {keys} keys, dead-key check passed", p.name());
@@ -726,7 +727,7 @@ pub fn repair_cmd(root: &Path, args: &[String]) -> Result<(), String> {
         sets.push(text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string).collect::<BTreeSet<String>>());
     }
     let matched: Vec<(&str, &BTreeSet<String>)> = profiles.iter().map(|p| p.name()).zip(sets.iter()).collect();
-    let (list_path, absent_path) = (root.join("crates/libc-so/hot-text.list"), root.join("crates/libc-so").join(ABSENT_LIST));
+    let (list_path, absent_path) = (crate::hotlists::path(root, "hot-text.list")?, root.join(crate::hotlists::TRACKED).join(ABSENT_LIST));
     let read = |p: &Path| fs::read_to_string(p).map_err(|e| format!("hottext-repair: {}: {e}", p.display()));
     let (list, absent) = (read(&list_path)?, read(&absent_path)?);
     let r = repair_lists(&list, &absent, &matched, &at)?;
@@ -1075,8 +1076,9 @@ fn is_startup_names(section: &str) -> bool {
 /// already ran on, with another list. `work` is a scratch directory. `profile`: the profile the
 /// archive was built with (`fast`, `release`), `None` for other flags (see [`unmatched`]). Fails when
 /// a start-up or fork key traced in `profile` matches no function section; prints the count of the
-/// other unmatched keys. Returns (hot sections in the result, keys in the list).
-pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option<&str>) -> Result<(usize, usize), String> {
+/// other unmatched keys. Returns (hot sections in the result, keys in the list). `inputs`: the directory of the
+/// hand-written inputs ([`CLUSTER_LIST`], [`ABSENT_LIST`]); `list` may be a train-owned copy elsewhere (hotlists.rs).
+pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, profile: Option<&str>) -> Result<(usize, usize), String> {
     let text = fs::read_to_string(list).map_err(|e| format!("{}: {e}", list.display()))?;
     let entries = parse_list(&text)?;
     let keys = positions(&entries);
@@ -1091,7 +1093,7 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     }
     crate::so::run(Command::new(ar).current_dir(work).arg("x").arg(&archive))?;
     let objcopy = std::env::var("OBJCOPY").unwrap_or_else(|_| "objcopy".into());
-    let clusters_path = list.with_file_name(CLUSTER_LIST);
+    let clusters_path = inputs.join(CLUSTER_LIST);
     let clusters = match fs::read_to_string(&clusters_path) {
         Ok(t) => parse_clusters(&t, &keys).and_then(|c| Ok((c, clusters_at_end(&t)?))),
         Err(e) => Err(format!("{}: {e}", clusters_path.display())),
@@ -1194,7 +1196,7 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     if startup != 1 {
         return Err(format!("{}: {startup} start-up names sections (STARTUP_NAMES), want 1", archive.display()));
     }
-    let absent_path = list.with_file_name(ABSENT_LIST);
+    let absent_path = inputs.join(ABSENT_LIST);
     let absent = match fs::read_to_string(&absent_path) {
         Ok(t) => parse_absent(&t)?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => BTreeSet::new(),
@@ -1398,7 +1400,7 @@ pub fn static_check(root: &Path) -> Result<(), String> {
             errs.push(format!("{p}: names {REGEN_FLAG}; only tools/hottext/regen.sh may build with the dead-key check off"));
         }
     }
-    let list = root.join("crates/libc-so/hot-text.list");
+    let list = crate::hotlists::path(root, "hot-text.list")?;
     let entries = parse_list(&fs::read_to_string(&list).map_err(|e| format!("{}: {e}", list.display()))?)?;
     let unpinned = parse_unpinned(&fs::read_to_string(root.join(UNPINNED_LIST)).map_err(|e| format!("{UNPINNED_LIST}: {e}"))?)?;
     errs.extend(check_pinned(root, &entries, &unpinned));
