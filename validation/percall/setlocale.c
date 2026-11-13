@@ -55,3 +55,14 @@ CASE(setlocale_all_empty_lang, 10000, 1) {
     PC_CHECKING pc_check("%s", setlocale(LC_ALL, ""));
     setenv("LC_ALL", lang, 1);
 }
+/* LC_ALL set but empty, which selects as if unset (POSIX), with LANG holding the locale. */
+CASE(setlocale_all_empty_lcall_empty, 10000, 1) {
+    char *l = getenv("LC_ALL"), lang[64];
+    snprintf(lang, sizeof lang, "%s", l ? l : "C");
+    setenv("LC_ALL", "", 1);
+    setenv("LANG", lang, 1);
+    setlocale(LC_ALL, "");
+    for (long i = 0; i < n; i++) pc_sink += (long)setlocale(LC_ALL, "");
+    PC_CHECKING pc_check("%s", setlocale(LC_ALL, ""));
+    setenv("LC_ALL", lang, 1);
+}

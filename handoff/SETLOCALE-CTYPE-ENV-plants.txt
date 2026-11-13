@@ -1,4 +1,4 @@
 # SETLOCALE-CTYPE-ENV plants: the repeated setlocale(cat, "") no-change path and the environment walk.
 # The count test builds its own static program against the products, so each plant rebuilds them first.
 env-not-reread | crates/legacy/src/global_locale.rs | lit:if !(same_name(s, n) || same_name(s, locale::reported(n))) { ==> if false && !(same_name(s, n) || same_name(s, locale::reported(n))) { | cargo xtask so && cargo test -p liella-boundary --test setlocale_env_repeat | msg:setlocale_env_repeat: check [0-9]+ failed
-walk-length-only | crates/legacy/src/environ.rs | lit:Some(e) if e == name.len() => t.get(..e) == Some(*name), ==> Some(e) if e == name.len() => true, | cargo test -p liella-core --test s01_startup_clauses k_getenv_many | msg:k_getenv_many_answers_as_getenv_bounded.*(FAILED|panicked)|assertion .*failed
+walk-length-only | crates/legacy/src/environ.rs | lit:Some(e) if e == name.len() => t.get(..e) == Some(*name), ==> Some(e) if e == name.len() => true, | cargo test -p liella --test s01_startup_clauses k_getenv_many | msg:k_getenv_many_answers_as_getenv_bounded.*(FAILED|panicked)|assertion .*failed
