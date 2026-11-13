@@ -236,7 +236,7 @@ pub fn cmd(root: &Path, args: &[String]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{differing, rel_in, resolve, tree_hash, Mode, GENERATED, OUT, STAMP, TRACKED};
+    use super::{differing, dir, rel_in, resolve, tree_hash, Mode, GENERATED, OUT, STAMP, TRACKED};
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -322,5 +322,18 @@ mod tests {
         let over = root.join("over");
         assert_eq!(resolve(&root, &Mode { over: Some(over.clone()), train: true }).unwrap(), (over, None));
         let _ = fs::remove_dir_all(&root);
+    }
+
+    /// HOTLIST-TRAIN-REGEN (no spec clause): the process-wide [`dir`] answers each root for itself, never with the
+    /// first root's cached directory. It compares with [`resolve`] under the same process mode, so it holds whatever
+    /// `LIELLA_TRAIN` or `LIELLA_HOT_LISTS` the caller set (neither tree has a stamp, so neither mode can fail).
+    #[test]
+    fn the_cached_directory_belongs_to_its_root() {
+        let (a, b) = (tree("cache-a"), tree("cache-b"));
+        let _ = (fs::remove_dir_all(a.join(OUT)), fs::remove_dir_all(b.join(OUT)));
+        for root in [&a, &b, &a] {
+            assert_eq!(dir(root).unwrap(), resolve(root, &Mode::from_env()).unwrap().0, "{}", root.display());
+        }
+        let _ = (fs::remove_dir_all(&a), fs::remove_dir_all(&b));
     }
 }
