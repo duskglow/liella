@@ -74,7 +74,7 @@ fn s27_1_f_0_check_order_and_malformed_headers() {
 /// s27_1_f_0 (probe P-1): an unknown bit is refused before the binding mode is looked at, so a mode
 /// with an unknown bit and no binding bit gets `invalid mode parameter`, not the binding text.
 #[test]
-fn s27_1_f_0_unknown_mode_bit_outranks_a_missing_binding() {
+fn s27_1_f_0_unknown_mode_bit_refused_before_binding() {
     for bit in 0..32 {
         let m = (1u32 << bit) as i32;
         if m & KNOWN == 0 {
