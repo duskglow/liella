@@ -531,10 +531,9 @@ fn take_mapping(lay: &Layout) -> KResult<usize> {
                 let base = d.map_base.load(Relaxed);
                 // The parts above the stack start clean; the stack itself need not.
                 let span = KEYS.span();
-                // The loader's `tls_init` rewrites every block and the dtv below TP; the rest of
-                // its area (the surplus) is not cleared here.
-                let clean = if LOADER_INIT.load(Relaxed) != 0 { lay.tp } else { lay.tls };
-                conv::zero_mapped(base + clean, lay.keys - clean);
+                // Under Liella's `ld.so` this clears its whole area too (the surplus as in a fresh
+                // mapping), before its `tls_init` rewrites the blocks and the dtv.
+                conv::zero_mapped(base + lay.tls, lay.keys - lay.tls);
                 conv::zero_mapped(base + lay.keys, (span * 16).min(KEY_AREA));
                 return Ok(base);
             }
@@ -658,11 +657,16 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
         }
     };
     let tp = base + lay.tp;
-    // The TLS block: the image, then zeros (fresh or cleared memory). The loader's area is filled
-    // below, once the thread block exists.
-    let loader = img.is_some_and(|t| t.addr == 0);
-    if let Some(t) = img.filter(|_| !loader) {
-        conv::copy_mapped(t.addr, base + lay.tls, t.filesz);
+    // The TLS block: the image, then zeros (fresh or cleared memory). The loader's area (address
+    // 0): its `tls_init` writes the images, zeros to each block's end, the dtv and the block's dtv
+    // word (a reused mapping held an earlier thread's bytes there); no other store below touches
+    // that word.
+    if let Some(t) = img {
+        if t.addr == 0 {
+            let _ = ffi::liella_machine_call3(LOADER_INIT.load(Acquire), i64::from_ne_bytes(tp.to_ne_bytes()), 0, 0);
+        } else {
+            conv::copy_mapped(t.addr, base + lay.tls, t.filesz);
+        }
     }
     let me = tb::current();
     let b = tb::fresh(tp);
@@ -678,11 +682,6 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
     b.locale.store(0, Relaxed);
     let daddr = base + lay.desc;
     b.thread.store(daddr, Release);
-    if loader {
-        // The images, zeros to each block's end, the dtv and the block's dtv word (a reused
-        // mapping holds an earlier thread's bytes there).
-        let _ = ffi::liella_machine_call3(LOADER_INIT.load(Acquire), i64::from_ne_bytes(tp.to_ne_bytes()), 0, 0);
-    }
     let d = tb::desc_at(daddr);
     d.init_robust(addr_of(&d.robust));
     let mut flags = DESC_CREATED;

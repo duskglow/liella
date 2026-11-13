@@ -1,0 +1,12 @@
+id = "D-NEW"
+series = "D-27"
+section = "s26-29"
+spec = "§22.1, §27.3"
+ann = "—"
+status = "active"
+amends = []
+story = "DL-TLS-THREADS-COST"
+date = "2026-11-13"
+body = '''
+**The loader's per-thread TLS area rides on the static TLS image word (DL-TLS-THREADS-COST, fix forward of ruling #5285).** `set_loader_tls` stores the area Liella's `ld.so` reserves below TP as the thread TLS image with address 0 (`TLS_IMAGE`), and its `tls_init` / `tls_release` in two words of their own. `pthread_create` reads one image (size word first: a program without TLS reads one word), copies it only when its address is not 0, and calls `tls_init` only when it is; the exit path reads the one `tls_release` word. A static program therefore pays no extra loader check on the create, mapping-reuse and exit paths that DL-TLS-THREADS added (+28.9 instructions per `pthread_create` + `pthread_join`, keke). Measured with `validation/wl_percall.sh` (static, instructions:u) against the pre-DL-TLS-THREADS base and against DL-TLS-THREADS' head; the dynamic thread tests (`crates/boundary/tests/dl_tls_threads.rs`) are unchanged and green. Local, testable detail; no interface change.
+'''
