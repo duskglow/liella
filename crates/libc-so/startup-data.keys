@@ -47,13 +47,14 @@ _RNvNtC15liella_boundary5stdio4FREE.0	rw	fast,release
 _RNvNtC15liella_boundary5stdio5SLOTS	rw	fast,release
 _RNvNtC15liella_boundary6thread10LOCK_ALONE	rw	fast
 _RNvNtC15liella_boundary6thread10LOCK_ALONE.0	rw	release
+_RNvNtC15liella_boundary6thread10OWNED_HERE	rw	fast
+_RNvNtC15liella_boundary6thread10OWNED_HERE.0	rw	release
 _RNvNtC15liella_boundary6thread10RSEQ_OWNED	rw	fast
 _RNvNtC15liella_boundary6thread10RSEQ_OWNED.0	rw	release
 _RNvNtC15liella_boundary6thread4HEAD.0	rw	fast,release
 _RNvNtC15liella_boundary6thread4LIST	rw	fast,release
 _RNvNtC15liella_boundary6thread4LIVE	rw	fast,release
-_RNvNtC15liella_boundary6thread5OWNED	rw	fast
-_RNvNtC15liella_boundary6thread5OWNED.0	rw	release
+_RNvNtC15liella_boundary6thread5SPARE	rw	fast,release
 _RNvNtC15liella_boundary6thread9FORBIDDEN.0	rw	fast,release
 _RNvNtC15liella_boundary6thread9TLS_IMAGE.0	rw	fast,release
 _RNvNtC15liella_boundary6thread9TLS_IMAGE.1	rw	fast,release
@@ -92,6 +93,7 @@ liella_machine_cmp_mid	rw	fast,release
 liella_machine_cmp_sse	rw	fast,release
 liella_machine_cmp_sse_null	rw	fast,release
 liella_machine_cmp_wide	rw	fast,release
+liella_machine_owned	rw	fast,release
 liella_machine_rshort_mask	rw	fast,release
 liella_machine_scan_level	rw	fast,release
 liella_machine_short_lim	rw	fast,release
