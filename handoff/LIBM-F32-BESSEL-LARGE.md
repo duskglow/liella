@@ -1,45 +1,47 @@
-# LIBM-F32-BESSEL-LARGE handoff (run 4, LIBM-F32-BESSEL-LARGE-4: PENDING JOBS)
+# LIBM-F32-BESSEL-LARGE handoff (run 5, LIBM-F32-BESSEL-LARGE-5: INCOMPLETE: LAYOUT-JITTER)
 
-State: branch `task/libm-f32-bessel-large-4` = run 3's branch (`task/libm-f32-bessel-large-3`, 7e4cbc7ce) merged with
-next d1b3a596c (merge commit 3cf2ccf6c); role kanon:~/w/kn1. Decision in force: D-10.109
-(records/decisions/D-10/D-10.109.toml, unchanged in run 4). Spec: ~/state/briefs/LIBM-F32-BESSEL-LARGE.md "The change".
+State: branch `task/libm-f32-bessel-large-5` = run 4's branch (`task/libm-f32-bessel-large-4`, 5840b50c1) merged with
+next 51af84e06 (merge commit 8ebbe6c89); jobs ran on 42c5541ce (merge + plants file; later commits are handoff/
+only). Role mei:~/w/s4 (Skylake-SP). Decision in force: D-10.109 (records/decisions/D-10/D-10.109.toml, unchanged
+since run 3). Spec: ~/state/briefs/LIBM-F32-BESSEL-LARGE.md "The change".
 
-## Done in run 4 (the merge; no product code changed)
-- Step 0: clippy and static green on the inherited head 7e4cbc7ce (job lint0).
-- Merged origin/next (57 commits). One conflict, crates/math/src/fast32/tests.rs `agree_oracle`: next gave it a getter
-  `get` and added `exhaustive_oracle_by` (erff/erfcf tiny paths, D-10.107); run 3 had made it call `fast` (eval, then
-  the Bessel large band). Resolved: next's `agree_oracle` and `exhaustive_oracle_by` as they are; run 3's eval -> fast
-  change now sits in the getter `exhaustive_oracle` passes (its only callers are the four Bessel sweeps; `fast` is
-  `eval` for every other function). Both sides' tests kept; fast32.rs auto-merged; nothing else changed by hand.
-- Merged head: `cargo xtask clippy`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`,
-  `cargo xtask static`: rc 0 (lint1).
-- Layout (job layout: `cargo xtask so`, then hot_text_products --nocapture, fast profile): 23/23 pass;
-  `init_data_clusters_hold_at_every_text_phase` reads `tool` 52 at all 10 phases (uniform, so run 3's .rodata table
-  fix holds). 52, not run 3's 54: next's LAYOUT-STARTUP-STATE-LOCALE records tool 54 -> 52 (fast profile) in its
-  handoff. Next alone was not measured on kanon in this run.
-- Plants (handoff/LIBM-F32-BESSEL-LARGE-4-plants.txt, with the tool's results): run 3's five plus sweepband (the band
-  core's answer negated; caught by a LIELLA_SWEEP_STRIDE=65537 j0f sweep, so the sweeps reach the band through the
-  merged getter; with next's `eval` getter it would survive): 6 CAUGHT, 0 SURVIVED, 0 WARN.
-- Gate (direct tier, --base origin/next): 32 suites ok; 11656 passed, 0 failed, 1270 ignored; conformance 125/125;
-  `gate: peak memory 16G (page cache included; reclaimed under the limit) oom_kill=0 rc=0`.
-- Percall (percall2, kanon, instructions per call, glibc / base next d1b3a596c / head c3b6a032d): large j0f
-  296.2/176646.3/405.5, j1f 291.7/179299.4/407.0, y0f 302.1/176650.3/420.0, y1f 317.8/179312.4/423.5 (1.33-1.40x
-  glibc); mid j0f 286.5/217.3/217.3, y1f 299.3/254.7/254.7; tiny j0f 54.3/94.0/94.0, j1f 67.8/119.7/119.7, y0f
-  98.2/340.9/340.9, y1f 64.5/313.6/313.6 (mid and tiny equal to next). Value checks: base and head give the same
-  value on every row; 6 rows print MISMATCH against glibc on next and the head alike (not from this branch).
+## Done in run 5 (the merge; no product code changed)
+- Step 0: clippy (`cargo xtask clippy` and the all-features workspace clippy) and static green on the inherited head
+  5840b50c1 (job lint0).
+- Merged origin/next. One conflict, xtask/src/longsweeps.rs `SWEEPS`: next gave the fast32 asinf/acosf/atanf
+  exhaustive rows `.env(STRIDE1)`; this chain had added the `bessel_large_table_is_the_refused_set` row (group long)
+  just above them. Resolved by keeping both (next's three rows with STRIDE1, this chain's row and comment). Nothing
+  else needed a hand merge.
+- Merged head: clippy, all-features clippy and static (which runs the long-sweeps check) rc 0 (lint1).
+- Plants (handoff/LIBM-F32-BESSEL-LARGE-5-plants.txt, run 4's six unchanged, the tool's results in its header):
+  6 CAUGHT, 0 SURVIVED, 0 WARN.
+- Percall (mei, instructions per call, glibc / base next 51af84e06 / head 42c5541ce): large j0f
+  296.2/175440.4/405.5, j1f 291.7/178324.1/406.0, y0f 302.1/175430.4/408.0, y1f 317.8/178328.1/417.5 (1.31-1.39x
+  glibc); mid j0f 286.5/233.3/233.3, y1f 299.3/265.7/265.7; tiny j0f 54.3/109.0/109.0, j1f 67.8/134.3/134.3, y0f
+  98.2/345.7/345.7 (mid and tiny equal to next). Base and head give the same value on every row; the MISMATCH lines against glibc are on next too.
+- Run 4's exhaustive sweeps job (kanon, libm-f32-bessel-large-4-sweeps) ended rc 0 (table check 34 s, the four
+  sweeps 851-3406 s); the band's product code has not changed since.
 
-## Jobs on the final head (kanon)
-lint1, layout, plants, gate, percall2, sweeps (bessel_large_table_is_the_refused_set and the four exhaustive sweeps,
-release; about 2 h in run 3; still running at hand-back). Superseded: percall (rc 2 at once: its base, next
-d1b3a596c, was not primed on kanon; primed with validation/wl_prime_base.sh, then percall2). Scripts on kanon:
-~/work/LIBM-F32-BESSEL-LARGE-4/final.sh (stopped by PID after it started the gate) and final2.sh (gate, percall2, sweeps).
+## Why INCOMPLETE: LAYOUT-JITTER (owner ruling #4347)
+Gate (direct tier, base origin/next): liella-math, liella-boundary, xtask unit tests, fuzz-check and static ok;
+1601 passed, 2 failed, 256 ignored. Both failures are one test,
+`hot_text_products::init_data_clusters_hold_at_every_text_phase` (in `test -p liella` and in its exports-interposed
+pass): `tool` reads 54 at nine phases and 55 at `cold 0x8000` (cold 0x800/0x2000/0xf000, lbss 0x800/0x2000, data
+0x800/0x1000/0x2000/0x3000: 54). The same test on next 51af84e06 (job nextlayout, a RAM copy of the primed base
+source, `cargo xtask so` then the test): 54 at all 10 phases, rc 0. This branch changes no start-up code (the f32
+Bessel band in liella-math, one xtask sweep row). Its code and table shift the layout of the linked probe, and one
+`cold` phase then puts a start-up page across a boundary. handoff/layout-stability-rethink.md section 2 measured
+`tool` 55-58 over the `cold` pads on next from padding alone. Per the ruling: not chased (no section moves, no bound
+change, no regen). The story waits until the layout fix lands, then is re-gated.
 
-## Run 3's design and levels (kept)
-The band runs from bessel_core's refusal through one out-of-line call `bessel32_rest(n, name, x, mode)` in
-special::{j0,j1,y0,y1} for `float`; table `static LG_ALL: [u64; 202]` of plain words (.rodata) with LG_OFF offsets.
+## Jobs (mei)
+lint0 (inherited head), lint1, plants, gate (rc 1: the test above), percall, nextlayout (next's measurement).
+Scripts: ~/work/LIBM-F32-BESSEL-LARGE-5/{lint,final,nextlayout}.sh.
 
 ## Open / next
-- jnf(0|1, x) for |x| >= 2^19 still takes the accurate path (as on next): fast_bessel_n::jnf calls fast32::eval only
-  (ynf not checked). Follow-up: give its refusal the same one-call rest path (measure the jnf rows first).
-- If the sweeps job is red: read ~/logs/libm-f32-bessel-large-4-sweeps.log on kanon; fix with new commits; rerun only it.
-Not to redo: the table enumeration (current for LG_B = 8), the design, run 3's dispatch experiments, the merge.
+- Once the layout fix (LAYOUT-TEXT-PIN / LAYOUT-DATA-CLUSTERS follow-up) is on next: merge next, rerun the direct
+  gate only. If init_data_clusters still moves there, find which page the extra `tool` fault is in (perf
+  page-faults -d at cold 0x8000 against cold 0x2000), which is layout work, not this story.
+- jnf(0|1, x) for |x| >= 2^19 still takes the accurate path (as on next). Follow-up: give its refusal the same
+  one-call rest path (measure the jnf rows first).
+Not to redo: the table enumeration (current for LG_B = 8), the design, run 3's dispatch experiments, the merges.
