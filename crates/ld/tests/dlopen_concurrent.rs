@@ -221,6 +221,7 @@ static int forking(void) {
     if (read(in[0], &b, 1) != 1) FAIL(42, "the slow constructor did not start");
     pid_t pid = fork();
     if (pid == 0) {
+        alarm(60); /* a child does not inherit the parent's alarm: its own hang guard */
         struct walk w = walk(); int listed = 0;
         for (int k = 0; k < w.n && k < 64; k++) listed |= strstr(w.names[k], "/libslow.so") != NULL;
         n_log = 0;
