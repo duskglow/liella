@@ -1,10 +1,24 @@
 # LIBM-CPLX-SINCOS handoff: csinh/csin (double, float) quick tier, overflow step and middle tier
 
-State: branch task/libm-cplx-sincos-5 = -4's head 722ba663c + 50bb860cf "Allow the catalog::textdomain hot-text key to be
-absent in the fast profile" + merge of origin/next 5e5ec2a57 (cb1918d3f, no conflicts) + e5dc20754 "Pin the csinh
-overflow step's threshold at 2^1024" (test only) + this handoff/report. Role kanon:~/w/kn1.
+State: branch task/libm-cplx-sincos-6 = -5's head 399f1a6e0 + merge of origin/next e30374455 (5fdcb8d0c, no
+conflicts; brings HOTTEXT-TIME-CLUSTER-STABLE-3) + this handoff/report. Role mei:~/w/s2.
+(-5's branch: -4's head 722ba663c + 50bb860cf "Allow the catalog::textdomain hot-text key to be absent in the fast
+profile" + merge of origin/next 5e5ec2a57 + e5dc20754 "Pin the csinh overflow step's threshold at 2^1024".)
 Decisions in force: D-10.53 (tier structure), D-10.25 (FMA builds), D-10.99 (cexp's middle tier, reused).
 Pending: records/pending/LIBM-CPLX-SINCOS-2-1.toml (D-NEW, series D-10; body covers runs 2-4; the coordinator assigns).
+
+## Run 6: released after HOTTEXT-TIME-CLUSTER-STABLE-3 landed; next merged; gate green
+
+* Step 0 (inherited head 399f1a6e0): libm-cplx-sincos-6-check0 rc 0 (xtask clippy, static).
+* Merged origin/next e30374455 (no conflicts). The textdomain absent lines (#5183) still apply: hot-text.list keeps the
+  `extra` key.
+* Gate libm-cplx-sincos-6-gate on 5fdcb8d0c (`affected --run --base origin/next`, escalated to FULL by the
+  hot-text.absent change): rc 0, 32 suites, 11717 passed, 0 failed, 1269 ignored; conformance 132 passed;
+  peak 17G. The three start-up fault tests that failed in run 5 (hot_text_products: mktime after localtime_r,
+  localtime_r+mktime bound, zero-fault calls at every pad) pass: the run-5 failure was the TscGate::fresh
+  outlining fixed on next, not this branch.
+* No code changed since run 5, so its plants (kanon libm-cplx-sincos-5-plants2, 16 CAUGHT on e5dc20754) still
+  cover the code; not rerun, per the brief.
 
 ## Run 5 (no new math work, per the brief): blocked on LAYOUT-JITTER (ruling #4347)
 
@@ -38,8 +52,7 @@ Pending: records/pending/LIBM-CPLX-SINCOS-2-1.toml (D-NEW, series D-10; body cov
 
 ## Next steps (in order)
 
-1. When the layout fix lands (LAYOUT-TEXT-PIN / LAYOUT-DATA-CLUSTERS, or whatever the coordinator names), merge next
-   and rerun the gate. Nothing else is left for landing.
+1. Done in run 6 (next merged, gate green): the branch is ready to land. A continuation starts at step 2.
 2. Percall validation/percall/cplx_sin.c against next and glibc (only cold code was added in run 4; not measured yet).
 3. ccos/ccosh on the shared kernel (ccos(z) = ccosh(iz)); abs(t) < 2^-30 and >= 2^20 in the tier; FMA build.
 
