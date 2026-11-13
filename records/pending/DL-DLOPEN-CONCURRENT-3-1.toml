@@ -1,0 +1,17 @@
+id = "COMPAT-NEW"
+behaviour = "`dl_iterate_phdr` callbacks and the loader lock (§27.1, `s27_1_c_8`; D-27.1, rulings #5394/#5418)"
+glibc = "The spec says the loader lock is held during the callback, so a `dlopen` in another thread waits until the callback returns (cross-thread waiting not probed); a callback's own `dlopen` returns and the running walk visits the new object (probe R-2)"
+liella = "The callback runs with no loader lock held: a `dlopen` in another thread proceeds meanwhile, and the running walk lists each object once its `dlopen` publishes it (after relocation and IFUNC resolution, before its constructors); a callback's own `dlopen` returns, as in the reference"
+restore = "A tunable read at startup that makes `dl_iterate_phdr` hold the loader's writer lock (re-entrant) across the whole walk, callbacks included, so a `dlopen` in another thread waits until the walk returns"
+cost = "none (the flag does not exist; implemented, it would be one test of startup state per `dl_iterate_phdr` call, a reader path, and the lock only when set)"
+status = "registered"
+decisions = ["D-27.1"]
+story = "DL-DLOPEN-CONCURRENT-3"
+date = "2026-11-13"
+body = '''
+Registered, not implemented (rulings #5394/#5418): DL-16c's readers (`crates/boundary/src/ld/readers.rs`) take no
+loader lock, so the walk never waits for a `dlopen` and a callback that waits for another thread's `dlopen` cannot
+deadlock. Holding the writer lock across callbacks would bring back that wait; the flag exists for a program that
+relies on no object being added during a walk. Tests of the default: `crates/ld/tests/dlopen_concurrent.rs`
+(`s27_1_c_8_readers_see_published_objects_only` check 22, a callback's `dlopen`; `s27_1_c_8_concurrent_dlopen_and_walk`).
+'''
