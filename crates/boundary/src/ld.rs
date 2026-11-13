@@ -52,15 +52,6 @@ static OWN_BASE: AtomicUsize = AtomicUsize::new(0);
 /// module with TLS after start (DL-15/DL-16) moves it on. 0 for the initially loaded objects.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 
-/// `__libc_stack_end` (spec §1.1, `GLIBC_2.2.5` of `ld.so` in versions.tsv, R14-12): the initial
-/// stack pointer, set before any object is relocated (a program's copy relocation reads it).
-/// `libc.a` keeps its own definition for static programs (D-27.26).
-// UNSAFE(export): an exported data object of the ld.so product.
-#[unsafe(no_mangle)]
-#[allow(unsafe_code)]
-#[allow(non_upper_case_globals)]
-pub static __libc_stack_end: AtomicUsize = AtomicUsize::new(0);
-
 /// `__rseq_offset` (§22.9, `GLIBC_2.35` of `ld.so`): the rseq area's offset from the thread pointer
 /// (`liella_rt::tls::RSEQ_OFFSET`, the same in every thread), published with [`__rseq_size`].
 // UNSAFE(export): an exported data object of the ld.so product.
@@ -517,10 +508,11 @@ fn install_tls(mods: &[Option<Module>], biases: &[u64], placed: &[Option<Placed>
 }
 
 /// `__libc_stack_end` (spec §1.1, §27.4; exported by `ld.so` at `GLIBC_2.2.5`, R14-12, D-27.20):
-/// the initial stack pointer, stored by [`link`] before any object is relocated, so a program's COPY
-/// relocation of it carries the value. `libc.so.6` keeps its own local copy, which its start
-/// publishes from the same stack pointer (`StartInfo::stack_end`). Unmangled only in the `ld.so`
-/// product: a build with `runtime` takes the C library's definition (`adapter/runtime.c`).
+/// the initial stack pointer, stored by [`link`] with the rseq objects before any object is
+/// relocated, so a program's COPY relocation of it carries the value (D-27.26). `libc.so.6` keeps its
+/// own local copy, which its start publishes from the same stack pointer (`StartInfo::stack_end`);
+/// `libc.a` keeps its own definition for static programs. Unmangled only in the `ld.so` product: a
+/// build with `runtime` takes the C library's definition (`adapter/runtime.c`).
 // UNSAFE(export): a C data symbol needs an unmangled name; the loader defines it once.
 #[cfg_attr(not(feature = "runtime"), unsafe(no_mangle))]
 #[allow(unsafe_code)]
@@ -783,8 +775,6 @@ fn own_object(name: &'static [u8], maps: &mut [(usize, usize)]) -> liella_ld::re
 #[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
 fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8], sp: usize) -> usize {
     use liella_ld::reloc::{self, Obj, Objects};
-    // Before any relocation: a program's COPY relocation of `__libc_stack_end` copies this value.
-    __libc_stack_end.store(sp, Relaxed);
     let mut maps = [(0usize, 0usize); OBJECTS_MAX];
     // The scratch mappings of the two image views: the program's, then the interpreter's own.
     let mut views = [(0usize, 0usize); 6];
