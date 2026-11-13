@@ -2,8 +2,9 @@
 //! `csinh(x + iy) = sinh x·cos y + i·cosh x·sin y`, and `csin(x + iy) = sin x·cosh y + i·cos x·sinh
 //! y` is `csinh(y + ix)` with its parts swapped (no sign changes, so every rounding mode carries
 //! over). Each part is a double-double with a proved bound, rounded by the `cexp` tier's test
-//! ([`super::round`]: `near`, else `settle`). A part that test declines, and every operand outside
-//! the ranges below (zeros, infinities, NaNs, the axes, `|y| < 2^-30` or `>= 2^20`, `|x| < 2^-60`
+//! ([`super::round`]: `near`, else `settle`). A part that test declines is answered as an overflow
+//! or by the middle tier when it can be (below the quick tier's code); what remains, and every
+//! operand outside the ranges below (zeros, infinities, NaNs, the axes, `|y| < 2^-30` or `>= 2^20`, `|x| < 2^-60`
 //! or `> 746`), takes the 384-bit route unchanged, so C Annex G's special values stay the route's.
 //!
 //! **Hyperbolic factors**, `a = |x|`, both in units of `2^(m−1)`:
@@ -40,7 +41,7 @@
 //! combinations of `e^(±x±iy)`, distinct algebraic exponents, so Lindemann–Weierstrass excludes a
 //! rational value (as for `cexp`).
 
-use super::{fast32, fast64, kernel, round, t, tier_any, trig, Dd, PROD, WIDEN, Y_MAX, Y_MIN};
+use super::{fast32, fast64, kernel, middle_round, round, sin_or_cos, t, tier_any, trig, Dd, Part, PROD, WIDEN, Y_MAX, Y_MIN};
 use crate::dd;
 use crate::float::Float;
 use crate::status::{Flags, Rounding, Status};
@@ -134,6 +135,149 @@ fn both(x: f64, y: f64, swap: bool, mode: Rounding) -> Option<(f64, f64)> {
     Some((round(re, er, m, mode)?, round(im, ei, m, mode)?))
 }
 
+// ---------------------------------------------------------------------------------------------
+// After a quick decline (LIBM-CPLX-SINCOS-4). Only the envelope's tier ([`csinh`], [`csin`]) runs
+// this cold code; the in-place `*_nearest` entries still decline such a part (they raise inexact
+// only), and the boundary's cold fallback then runs the envelope's tier, as for `cexp` (D-10.99).
+//
+// **Overflow.** A part whose every value within `eps` of `P·2^m` has magnitude `>= 2^1024`
+// rounds, in every mode, to `±∞` or `±DBL_MAX` by its sign and the mode (C Annex F; the result
+// overflows, so `FE_OVERFLOW`, `FE_INEXACT` and `ERANGE`). The lower bound `(|P.hi| − |P.lo| −
+// eps)·(1 − 2^-50)` absorbs the two roundings of its own evaluation. A part between `DBL_MAX` and
+// `2^1024` still declines.
+//
+// **The middle tier** (the method of `cexp`'s, D-10.99): `P = H ⊗ T` near `2^-96`.
+// * `T` = [`sin_or_cos`]. Its documented bound is `2^-100` absolute; next to a multiple of `π/2`
+//   `|T|` can be `2^-62` (Muller 2016 §11.3), so the bound is used relative: the three
+//   double-double additions of the reduction err by at most `2^-104.4` of their partial sums
+//   (Joldes, Muller, Popescu, ACM TOMS 44(2), 2017), the first of which exceeds `|r|` by at most
+//   `|n·P2| < 2^-34.5`; with `RN(n·P3)` (`2^-142`) and `n·δ` (`2^-143`): `|r̃ − r| <= 2^-102.8·|r|
+//   + 2^-138.5`. The sine branch `r̃·S(z)` is within `2^-101` of `sin r̃` relative (`S >= 0.9`),
+//   and `|sin r| >= 0.9·|r|` for `|r| <= π/4 + 2^-31`; the cosine branch, `>= 0.70`, is within
+//   `2^-101.4` absolute. So `|T − t| <= 2^-99·|T.hi| + 2^-137` (`T_REL`, `T_ABS`; the tests check
+//   it against the 384-bit arithmetic next to `kπ/2`).
+// * `H` for `a >= 2^-3`: `e^a = V·2^s` and `e^-a = W·2^s'` from [`crate::wide_dd::exp_dd`], each
+//   within `2^-100` relative (`|x| < 2^14`), `Q = W·2^(s'−s)` (exact; dropped above `40`, `e^-2a <
+//   2^-115`); `cosh a = (V + Q)·2^(s−1)`, `sinh a = (V − Q)·2^(s−1)` by [`Dd::add`] (`2^-104.4` of
+//   the result): relative to `sinh a` the inputs' errors grow by `coth a <= coth 2^-3 < 8.05`, so
+//   `|H − h| <= 2^-96.8·|H|` for both.
+// * `H` for `a < 2^-3` (units `2^0`): `sinh a = a·Σ z^k/(2k+1)!`, `cosh a = Σ z^k/(2k)!`, `z =
+//   two_prod(a, a)` exact, by [`dd::horner`] with `cexp`'s coefficient tables, the signs of odd `k`
+//   flipped (exact): every term positive, `z < 2^-6`, so the sums are within `2^-102` relative and
+//   the product with `a` within `2^-101.5`.
+// * `|H·T − h·t| <= eH·|t| + |H|·eT + 2^-102.6·A·B` (`A = |H.hi|`, `B = |T.hi|`) `<= 2^-96.3·A·B
+//   + 2^-136.9·A`, so `eps = A·(B + 2^-40)·2^-96` ([`MID_EPS`], [`T_ABS`]) with room for its own
+//   evaluation; [`super::middle_round`] decides or declines (also any overflow or underflow of the
+//   scaled result). Every intermediate stays normal (`a >= 2^-60`, `|T| >= 2^-63`).
+
+/// `2^-96`: the middle part's bound per unit of `A·(B + 2^-40)`.
+const MID_EPS: f64 = f64::from_bits(0x39f0_0000_0000_0000);
+/// `2^-40`: the trig factor's absolute term `2^-136`, as a share of `2^-96`.
+const T_ABS: f64 = f64::from_bits(0x3d70_0000_0000_0000);
+/// `1 − 2^-50`: the overflow test's lower bound against its own roundings.
+const LOWER: f64 = f64::from_bits(0x3fef_ffff_ffff_fffc);
+/// Below this scale no part can reach `2^1024` (`|P| < 2^3`).
+const OVF_M: i32 = 64;
+
+/// `c` with the signs of its odd-`k` entries flipped (both words; a zero word stays `+0`).
+const fn unsigned(c: [[u64; 2]; 14]) -> [[u64; 2]; 14] {
+    let mut out = c;
+    let mut k = 1;
+    while k < 14 {
+        let lo = if c[k][1] == 0 { 0 } else { c[k][1] ^ (1 << 63) };
+        out[k] = [c[k][0] ^ (1 << 63), lo];
+        k += 2;
+    }
+    out
+}
+
+/// `1/(2k+1)!` and `1/(2k)!`, `k = 0..=13`, as double-doubles.
+const SINH_DD: [[u64; 2]; 14] = unsigned(super::SIN_DD);
+const COSH_DD: [[u64; 2]; 14] = unsigned(super::COS_DD);
+
+/// `±∞` or `±DBL_MAX` by the sign and `mode` when every value within `eps` of `P·2^m` has
+/// magnitude `>= 2^1024`, else `None`.
+fn overflow(p: Dd, eps: f64, m: i32, mode: Rounding) -> Option<f64> {
+    if m < OVF_M {
+        return None;
+    }
+    let low = (dd::abs(p.hi) - dd::abs(p.lo) - eps) * LOWER;
+    if low < dd::pow2(1024 - m) {
+        return None;
+    }
+    let neg = p.hi < 0.0;
+    let inf = matches!((mode, neg), (Rounding::Nearest, _) | (Rounding::Up, false) | (Rounding::Down, true));
+    let v = if inf { f64::INFINITY } else { f64::MAX };
+    Some(if neg { -v } else { v })
+}
+
+/// `sinh a` and `cosh a` for the middle tier in units of `2^s`, `(S, C, s)`, within `2^-96.8` of
+/// each (see above), or `None` outside `2^-60 <= a <= 746`.
+fn mid_hyp(a: f64) -> Option<(Dd, Dd, i32)> {
+    if !(A_MIN..=A_MAX).contains(&a) {
+        return None;
+    }
+    if a < SERIES_MAX {
+        let z = dd::two_prod(a, a);
+        return Some((Dd::from(a).mul(dd::horner(z, &SINH_DD, 8)), dd::horner(z, &COSH_DD, 9), 0));
+    }
+    let (v, s) = crate::wide_dd::exp_dd(&crate::float::decode(a))?;
+    let q = if a <= Q_MAX {
+        let (w, s2) = crate::wide_dd::exp_dd(&crate::float::decode(-a))?;
+        w.scale(dd::pow2(s2 - s))
+    } else {
+        Dd { hi: 0.0, lo: 0.0 }
+    };
+    Some((v.add(q.neg()), v.add(q), s - 1))
+}
+
+/// The middle tier's part: `sinh h·cos t` (`Part::Re`) or `cosh h·sin t` (`Part::Im`) `≈ P·2^s`
+/// within `eps`, `(P, eps, s)`, or `None`.
+fn mid_part(h: f64, t: f64, part: Part) -> Option<(Dd, f64, i32)> {
+    let (sh, ch, s) = mid_hyp(dd::abs(h))?;
+    let f = match part {
+        Part::Re if h < 0.0 => sh.neg(),
+        Part::Re => sh,
+        Part::Im => ch,
+    };
+    let v = sin_or_cos(t, part);
+    let a = dd::abs(f.hi);
+    Some((f.mul(v), a * (dd::abs(v.hi) + T_ABS) * MID_EPS, s))
+}
+
+/// A part the quick test declined (`(P, eps)` at scale `m`): the overflow value, else the middle
+/// tier; `(value, overflowed)`, or `None` for the 384-bit route.
+#[cold]
+#[inline(never)]
+fn rescue(p: (Dd, f64), m: i32, h: f64, t: f64, part: Part, mode: Rounding) -> Option<(f64, bool)> {
+    if let Some(v) = overflow(p.0, p.1, m, mode) {
+        return Some((v, true));
+    }
+    let (q, eps, s) = mid_part(h, t, part)?;
+    Some((middle_round(q, eps, s, mode)?, false))
+}
+
+/// Both parts in `mode` for the envelope's tier: the quick test, then [`rescue`]; swapped for
+/// csin (`swap`), with the status (overflow when a part overflowed).
+#[inline(always)]
+fn full(h: f64, t: f64, swap: bool, mode: Rounding) -> Option<((f64, f64), Status)> {
+    let ([p0, p1], m) = parts(h, t)?;
+    let (re, o0) = match round(p0.0, p0.1, m, mode) {
+        Some(v) => (v, false),
+        None => rescue(p0, m, h, t, Part::Re, mode)?,
+    };
+    let (im, o1) = match round(p1.0, p1.1, m, mode) {
+        Some(v) => (v, false),
+        None => rescue(p1, m, h, t, Part::Im, mode)?,
+    };
+    let st = if o0 || o1 {
+        Status::flags(Flags::OVERFLOW.union(Flags::INEXACT)).overflow_errno()
+    } else {
+        Status::flags(Flags::INEXACT)
+    };
+    Some((if swap { (im, re) } else { (re, im) }, st))
+}
+
 /// `csinh(x + iy)` to nearest for the boundary's in-place entry (as `cexp_nearest`: each part's
 /// test raises inexact itself, nothing else can arise; a decline goes to the cold fallback).
 #[inline(always)]
@@ -147,16 +291,16 @@ pub fn csin_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
     both(y, x, true, Rounding::Nearest)
 }
 
-/// `csinh(x + iy)` in `mode` by the quick tier, or `None`.
+/// `csinh(x + iy)` in `mode` by the quick tier and its middle tier, or `None`.
 #[inline(always)]
 pub fn csinh(x: f64, y: f64, mode: Rounding) -> Option<((f64, f64), Status)> {
-    Some((both(x, y, false, mode)?, Status::flags(Flags::INEXACT)))
+    full(x, y, false, mode)
 }
 
-/// `csin(x + iy)` in `mode` by the quick tier, or `None`.
+/// `csin(x + iy)` in `mode` by the quick tier and its middle tier, or `None`.
 #[inline(always)]
 pub fn csin(x: f64, y: f64, mode: Rounding) -> Option<((f64, f64), Status)> {
-    Some((both(y, x, true, mode)?, Status::flags(Flags::INEXACT)))
+    full(y, x, true, mode)
 }
 
 /// The `csinh` quick tier for any format.

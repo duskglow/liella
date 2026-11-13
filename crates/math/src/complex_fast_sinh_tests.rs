@@ -41,13 +41,17 @@ fn compare((f, route, nearest, swap): Fns, n: usize, seed: u64) -> [usize; 5] {
             let (h, t) = operand(&mut st, regime);
             let (x, y) = if swap { (t, h) } else { (h, t) };
             for mode in MODES {
-                let Some(((a, b), _)) = f(x, y, mode) else { continue };
+                let Some(((a, b), st)) = f(x, y, mode) else { continue };
                 let ((ra, rb), rs) = route(x, y, mode);
                 assert_eq!((a.to_bits(), b.to_bits()), (ra.to_bits(), rb.to_bits()), "({x:e}, {y:e}) {mode:?}: tier ({a:e}, {b:e}) route ({ra:e}, {rb:e})");
-                assert_eq!(rs, Status::flags(Flags::INEXACT), "({x:e}, {y:e}) {mode:?}");
+                assert_eq!(st, rs, "({x:e}, {y:e}) {mode:?}: the status");
                 if mode == Rounding::Nearest {
                     *o += 1;
-                    assert_eq!(nearest(x, y), Some((a, b)), "({x:e}, {y:e}): the in-place entry");
+                    // The in-place entry answers what its quick test decides and declines the rest
+                    // (overflows and middle-tier parts go through the cold fallback).
+                    if let Some(v) = nearest(x, y) {
+                        assert_eq!((v.0.to_bits(), v.1.to_bits()), (a.to_bits(), b.to_bits()), "({x:e}, {y:e}): the in-place entry");
+                    }
                 }
             }
         }
@@ -105,9 +109,10 @@ fn csinh_quick_tier_hard_cases() {
             for mode in MODES {
                 for (f, route, _, swap) in FNS {
                     let (a, b) = if swap { (y, x) } else { (x, y) };
-                    if let Some((v, _)) = f(a, b, mode) {
-                        let (r, _) = route(a, b, mode);
+                    if let Some((v, st)) = f(a, b, mode) {
+                        let (r, rs) = route(a, b, mode);
                         assert_eq!((v.0.to_bits(), v.1.to_bits()), (r.0.to_bits(), r.1.to_bits()), "({a:e}, {b:e}) {mode:?}");
+                        assert_eq!(st, rs, "({a:e}, {b:e}) {mode:?}: the status");
                     }
                 }
             }
@@ -119,6 +124,88 @@ fn csinh_quick_tier_hard_cases() {
     assert!(r.is_some(), "the finite product is answered by the tier");
     let Some(((re, im), _)) = r else { return };
     assert!(re.is_finite() && im.is_finite() && re > 1e308 && im > 1e308, "{re:e} {im:e}");
+}
+
+/// Overflowing parts: `|x|` in `[709, 746]` (the results cross `2^1023` and `2^1024` there), trig
+/// factors from `2^-20` to `1`, both signs, every mode: where the tier answers, its values and
+/// status (overflow, inexact, `ERANGE`) are the route's; a value between `DBL_MAX` and `2^1024` in
+/// nearest must not become `∞`, nor a finite one above `2^1023`.
+#[test]
+fn csinh_tier_answers_overflowing_parts_as_the_route() {
+    // Clauses: s10_5_c_0, s10_0_f_0.
+    let mut st = 0x0bad_cafe_u64;
+    let (mut answered, mut overflowed, mut total) = (0, 0, 0);
+    for i in 0..300 {
+        let x = uniform(&mut st, 709.0, 746.0) * if i % 2 == 0 { 1.0 } else { -1.0 };
+        let y = match i % 3 {
+            0 => uniform(&mut st, -20.0, 0.0).exp2(),
+            1 => -uniform(&mut st, 0.0, 1.5),
+            _ => uniform(&mut st, 1.6, 3.1),
+        };
+        for mode in MODES {
+            for (f, route, _, swap) in FNS {
+                let (a, b) = if swap { (y, x) } else { (x, y) };
+                total += 1;
+                let Some((v, stat)) = f(a, b, mode) else { continue };
+                let (r, rs) = route(a, b, mode);
+                assert_eq!((v.0.to_bits(), v.1.to_bits()), (r.0.to_bits(), r.1.to_bits()), "({a:e}, {b:e}) {mode:?}");
+                assert_eq!(stat, rs, "({a:e}, {b:e}) {mode:?}: the status");
+                answered += 1;
+                overflowed += usize::from(stat.flags.any(Flags::OVERFLOW));
+            }
+        }
+    }
+    assert!(answered * 100 >= total * 99, "answered {answered} of {total}");
+    assert!(overflowed * 2 >= total, "overflows answered {overflowed} of {total}");
+}
+
+/// The middle tier against the 384-bit arithmetic over the sweep's regimes: the trig factor
+/// within `2^-99·|T.hi| + 2^-137` (next to multiples of `π/2` too), the hyperbolic factors within
+/// `2^-96.8` relative, each part within its `eps`; and its answers, forced for every part, are
+/// the route's in every mode (a decline only for a result that is not a normal `double`).
+#[test]
+fn csinh_middle_tier_bounds_and_answers() {
+    // Clauses: s10_5_c_0, s10_0_f_0.
+    use crate::mp::{self, Mp};
+    let of = |d: Dd| Mp::from_f64(d.hi).add(Mp::from_f64(d.lo));
+    let (rel_t, abs_t, rel_h) = ((-99f64).exp2(), (-137f64).exp2(), (-96.8f64).exp2());
+    let mut st = 0x5151_u64;
+    let (mut answered, mut total, mut tight) = (0, 0, 0);
+    for i in 0..1000 {
+        let (h, t) = operand(&mut st, i % 5);
+        let Some((sh, ch, s)) = mid_hyp(h.abs()) else { continue };
+        let (rsh, rch) = mp::sinh_cosh(Mp::from_f64(h.abs()));
+        for (v, r, name) in [(sh, rsh, "sinh"), (ch, rch, "cosh")] {
+            let d = r.ldexp(-i64::from(s)).sub(of(v)).to_f64().abs();
+            assert!(d <= rel_h * v.hi, "{name} {h:e}: error {d:e} above 2^-96.8 of {:e}", v.hi);
+        }
+        let (rs, rc) = mp::sin_cos_f64(t);
+        let rsh = if h < 0.0 { rsh.neg() } else { rsh };
+        for (part, hv, tv) in [(Part::Re, rsh, rc), (Part::Im, rch, rs)] {
+            let v = sin_or_cos(t, part);
+            let terr = tv.sub(of(v)).to_f64().abs();
+            assert!(terr <= rel_t * v.hi.abs() + abs_t, "t = {t:e} {part:?}: trig error {terr:e} for {:e}", v.hi);
+            let Some((p, eps, m)) = mid_part(h, t, part) else { continue };
+            let exact = hv.mul(tv).ldexp(-i64::from(m));
+            let err = exact.sub(of(p)).to_f64().abs();
+            assert!(err <= eps, "({h:e}, {t:e}) {part:?}: error {err:e} above the bound {eps:e}");
+            tight += usize::from(err > eps / 65536.0);
+            for mode in MODES {
+                let (r, _) = csinh_route::<f64>(h, t, mode);
+                let want = if part == Part::Re { r.0 } else { r.1 };
+                if !want.is_normal() {
+                    continue;
+                }
+                total += 1;
+                if let Some(got) = middle_round(p, eps, m, mode) {
+                    assert_eq!(got.to_bits(), want.to_bits(), "({h:e}, {t:e}) {part:?} {mode:?}: middle {got:e} route {want:e}");
+                    answered += 1;
+                }
+            }
+        }
+    }
+    assert!(answered + total / 1000 >= total, "the middle tier answered {answered} of {total}");
+    assert!(tight > 0, "every middle error far below its bound");
 }
 
 /// `sinh a`, `cosh a` within `2^-100`: the even and odd Taylor series of `a/2^j` (`a/2^j <= 0.7`,
