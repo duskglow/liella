@@ -1,0 +1,10 @@
+id = "D-10.87"
+section = "s10"
+spec = "§10.0, §10.3"
+ann = "—"
+status = "active"
+story = "LIBM-F32-REST-NEXT"
+date = "2026-11-12"
+body = '''
+**`lgammaf` beside lnΓ's negative zeros and for tiny operands: the `double` tier's double-double kernel, cold, with a margin computed from its bound** (LIBM-F32-REST-NEXT; extends LIBM-F32-GAMMA's fast path under D-10.13's rounding test). The `float` pieces refuse \|lnΓ(x)\| < 2^-8 (their absolute bound, up to 7260 ulp of y in the band above, is too wide there) and \|x\| < 2^-20 (`gamma_core`'s domain); those operands used to take the 384-bit path (one cbench_libm operand, x = -3.14382577, cost about 500k instructions, against ≤ 355 for each of the row's other 255). A `#[cold]` `lgamma_edge` now answers them: for x in `fast_gamma::domain` (2^-60 ≤ \|x\| < 16, not a pole) by `fast_gamma::lgamma_kernel` (Y with a proved absolute bound ε), v = RN(Y.hi + Y.lo), margin ⌊ε/ulp(v)⌋ + 2 ulp of v (strictly above ε/ulp + 1/2; refused at 2^26, below round's 2^27 limit); for 0 < \|x\| < 2^-60 by y = -ln\|x\| (lnΓ(x) = -ln\|x\| - γx + O(x²), the dropped terms < 0.001 ulp of y ≥ 41.5; ln64 ≤ 2.03 ulp), margin 72. No `float` below -16 other than a pole lies in the 2^-8 window of a zero (the windows shrink like 1/n!). Edge results keep `Status::hw` = all bits (the `double` tier's choice for the same kernel), so the in-place envelope always writes MXCSR after them: no claim about the kernel's intermediates is needed, and the cost is on the cold path only. `eval(Fast::Lgamma)` returns `eval_lgamma`'s value so the exhaustive sweep checks the exported path. Method: Ziv's strategy (A. Ziv, "Fast evaluation of elementary mathematical functions with correctly rounded last bit", ACM TOMS 17(3), 1991): a cheaper evaluation with a proved error bound and a rounding test, falling back to the 384-bit path only when the test refuses. Proof: `lgammaf_fast_path_agrees_exhaustively` (every `float` × 4 modes against the tiered oracle). Tests: `lgammaf_beside_the_negative_zeros_takes_the_fast_path`, `gamma_cores_are_within_their_bounds` (edge margins).
+'''
