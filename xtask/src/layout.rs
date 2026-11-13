@@ -1013,7 +1013,7 @@ fn decision_change(changed: &[String]) -> bool {
     changed.iter().any(|f| DECISION_DIRS.iter().any(|d| f.starts_with(d)) || f.starts_with(PENDING_DIR))
 }
 
-/// Whether a pending record's text is a decision record: its `id` names a D-id (`D-NEW` or a reserved one), not
+/// Whether a pending record's text is a decision record: its `id` names a D-id (the placeholder or a reserved one), not
 /// a compatibility flag or a saturation claim.
 fn pending_is_decision(text: &str) -> bool {
     text.lines().any(|l| {
@@ -1246,15 +1246,15 @@ mod tests {
     #[test]
     fn only_a_pending_decision_record_counts_as_a_decision_change() {
         // no spec clause: tooling (D-X.48 rule d with D-X.55's pending records).
-        assert!(pending_is_decision("id = \"D-NEW\"\nseries = \"D-X\"\n"));
+        assert!(pending_is_decision("id = \"D-X.91\"\nseries = \"D-X\"\n"));
         assert!(pending_is_decision("id=\"D-X.90\"\n"));
-        assert!(!pending_is_decision("id = \"COMPAT-NEW\"\ndecisions = [\"D-X.48\"]\n"), "a compatibility flag");
-        assert!(!pending_is_decision("id = \"SR-NEW\"\n"), "a saturation claim");
-        assert!(!pending_is_decision("ids = \"D-NEW\"\n"), "another key");
-        assert!(!pending_is_decision("id = \"SR-NEW\"\nbody = '''\n  id = \"D-NEW\" quoted\n'''\n"), "an indented line of the body");
+        assert!(!pending_is_decision("id = \"COMPAT-7\"\ndecisions = [\"D-X.48\"]\n"), "a compatibility flag");
+        assert!(!pending_is_decision("id = \"SR-4.2\"\n"), "a saturation claim");
+        assert!(!pending_is_decision("ids = \"D-X.91\"\n"), "another key");
+        assert!(!pending_is_decision("id = \"SR-4.2\"\nbody = '''\n  id = \"D-X.91\" quoted\n'''\n"), "an indented line of the body");
         let read = |f: &str| match f {
-            "records/pending/A-1.toml" => Some("id = \"D-NEW\"\n".to_string()),
-            "records/pending/A-2.toml" => Some("id = \"COMPAT-NEW\"\n".to_string()),
+            "records/pending/A-1.toml" => Some("id = \"D-X.91\"\n".to_string()),
+            "records/pending/A-2.toml" => Some("id = \"COMPAT-7\"\n".to_string()),
             _ => None,
         };
         let changed = ["layout/contracts.tsv", "records/pending/A-1.toml", "records/pending/A-2.toml", "records/pending/gone.toml"];
