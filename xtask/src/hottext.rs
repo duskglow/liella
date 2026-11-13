@@ -600,7 +600,7 @@ fn unmatched_error(dead: &[&Entry], stale: &[String], profile: &str) -> Option<S
             msg.push_str(&format!("\n  {} ({}, {traced})", e.key, e.tier));
         }
         msg.push_str(&format!(
-            "\nrenamed, now generic or inlined: run tools/hottext/regen.sh . --build (in each profile); a key gone from every build: \
+            "\nrenamed, now generic or inlined: run tools/hottext/regen.sh . --both (both profiles); a key gone from every build: \
              tools/hottext/prune.py; a key absent from this profile by design: a line in crates/libc-so/{ABSENT_LIST} with its reason"
         ));
     }

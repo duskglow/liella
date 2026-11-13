@@ -1,12 +1,13 @@
 #!/bin/bash
 # Regenerate the hot-text list (PAGEFAULTS-2, crates/libc-so/hot-text.list) on a Linux host with gdb.
 # usage: tools/hottext/regen.sh <tree with built products> [--replace] [--build] [--allow-drop] ['<static program> <args>'...]
+#        tools/hottext/regen.sh . --both [--allow-drop]   (both profiles: the path to use; see --both below)
 #   Traces the startup / stdio / setlocale+printf probes, the `locale` and `tool` modes of
 #   crates/core/tests/oracle/page_faults.c (always: LAYOUT-TEXT-PIN-9), and any extra static programs linked
 #   against <tree>/target/liella/libc.a) with trace_gdb.py, keeps the names that are function
 #   sections of libc.a, and merges their keys into the list (--replace: start from an empty list).
-#   Run it once per profile (`cargo xtask so` = fast, LIELLA_FULL_PROFILE=1 = release): inlining
-#   differs, and the list is the union. Liella binaries only; never trace a glibc-linked program.
+#   It covers both profiles (`cargo xtask so` = fast, LIELLA_FULL_PROFILE=1 = release): inlining
+#   differs, and the list is the union; `regen.sh . --both` regenerates both in one run. Liella binaries only; never trace a glibc-linked program.
 #   HOTTEXT-STARTUP-COMPLETE: each line is `<key>\t<tier>\t<profiles>`: the tier of the first probe
 #   that touched it (startup p_true, fork p_fork, stdio p_puts/p_cat/p_fmt, strings p_str, locale
 #   p_loc, tool p_locuse/p_nss and the extra programs, extra anything else) and the profiles whose
@@ -22,7 +23,10 @@
 #   profile LIELLA_FULL_PROFILE selects, with `cargo xtask so --hottext-regen`: the dead-key check is
 #   reported, not enforced, so a stale key no longer blocks its own repair. After rewriting the list it
 #   rebuilds with plain `cargo xtask so`, which must pass the check. Nothing else may pass that flag
-#   (`cargo xtask static`). Both profiles: `regen.sh . --build` then `LIELLA_FULL_PROFILE=1 regen.sh . --build`.
+#   (`cargo xtask static`). --build is one profile; both profiles: `regen.sh . --both` (ruling #5241). A
+#   release `--build` after a fast `--replace` fails in its own product build: the fast-only lists hold no
+#   release keys, so the release layout contracts (STARTUP-TEXT-WINDOWS, STARTUP-DATA-WINDOWS) refuse the
+#   release products before any trace, and they get no relief here (a contract is never loosened for a tool).
 #   HOTLIST-REGEN-CHEAP: the traces of one run go in parallel (HOTTEXT_JOBS at once, default nproc), and
 #   each trace keeps its number, so the merge reads them in the order above. --both (needs --build's tree)
 #   is the cheap regen of both profiles: `cargo xtask so --hottext-regen --libc-only` builds only what the
