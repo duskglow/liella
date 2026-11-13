@@ -1,0 +1,34 @@
+# LIBM-CPLX-SINCOS-5: the -2 quick-tier plants and the -4 overflow/middle-tier plants of csinh/csin, one run on the merged head
+sinh-recip-lo | crates/math/src/complex_fast_sinh.rs | perl:s/\(\(1\.0 - p\.hi\) - p\.lo\) - e\.lo \* r0;/((1.0 - p.hi) - p.lo);/ | cargo test -p liella-math --lib complex_fast::sinh | msg:(hyperbolic_factors_are_within_their_bounds|csinh_quick_tier_[a-z_0-9]+) \.\.\. FAILED
+sinh-series-t2 | crates/math/src/complex_fast_sinh.rs | perl:s/u\.lo \+ \(t1\.lo \+ t2\)/u.lo + t1.lo/ | cargo test -p liella-math --lib complex_fast::sinh | msg:(hyperbolic_factors_are_within_their_bounds|csinh_quick_tier_[a-z_0-9]+) \.\.\. FAILED
+sinh-q-cut | crates/math/src/complex_fast_sinh.rs | perl:s/let \(q, eq\) = if a <= Q_MAX \{/let (q, eq) = if a <= 20.0 {/ | cargo test -p liella-math --lib complex_fast::sinh | msg:hyperbolic_factors_are_within_their_bounds \.\.\. FAILED
+sinh-sign | crates/math/src/complex_fast_sinh.rs | perl:s/if x < 0\.0 \{ sh\.neg\(\) \} else \{ sh \}/sh/ | cargo test -p liella-math --lib complex_fast::sinh | msg:csinh_quick_tier_[a-z_0-9]+ \.\.\. FAILED
+sinh-swap | crates/math/src/complex_fast_sinh.rs | perl:s/if swap \{ \(p1, p0\) \}/if swap { (p0, p1) }/ | cargo test -p liella-math --lib complex_fast::sinh | msg:csinh_quick_tier_[a-z_0-9]+ \.\.\. FAILED
+sinh-nearest-args | crates/math/src/complex_fast_sinh.rs | perl:s/both\(y, x, true, Rounding::Nearest\)/both(x, y, true, Rounding::Nearest)/ | cargo test -p liella-math --lib complex_fast::sinh | msg:csinh_quick_tier_matches_the_384_bit_route_in_every_mode \.\.\. FAILED
+sinhf-cosh-core | crates/math/src/fast32/csinh.rs | perl:s/let sh = sinh_core\(x\)\?;/let sh = cosh_core(x)?;/ | cargo test -p liella-math --lib complex_fast::sinh | msg:csinhf_quick_tier_matches_the_route_in_every_mode \.\.\. FAILED
+mid-series-signs | crates/math/src/complex_fast_sinh.rs | perl:s/\[c0, flip\(c1\), c2,/[c0, c1, c2,/ | cargo test --release -p liella-math --lib complex_fast::sinh | msg:csinh_middle_tier_bounds_and_answers \.\.\. FAILED
+mid-q-sign | crates/math/src/complex_fast_sinh.rs | perl:s/Some\(\(v\.add\(q\.neg\(\)\), v\.add\(q\), s - 1\)\)/Some((v.add(q), v.add(q), s - 1))/ | cargo test --release -p liella-math --lib complex_fast::sinh | msg:csinh_middle_tier_bounds_and_answers \.\.\. FAILED
+mid-scale | crates/math/src/complex_fast_sinh.rs | perl:s/v\.add\(q\), s - 1\)\)/v.add(q), s))/ | cargo test --release -p liella-math --lib complex_fast::sinh | msg:csinh_middle_tier_bounds_and_answers \.\.\. FAILED
+mid-part-sign | crates/math/src/complex_fast_sinh.rs | perl:s/Part::Re if h < 0\.0 => sh\.neg\(\),/Part::Re if h < 0.0 => sh,/ | cargo test --release -p liella-math --lib complex_fast::sinh | msg:csinh_middle_tier_bounds_and_answers \.\.\. FAILED
+mid-eps | crates/math/src/complex_fast_sinh.rs | perl:s/const MID_EPS: f64 = f64::from_bits\(0x39f0_0000_0000_0000\);/const MID_EPS: f64 = f64::from_bits(0x3910_0000_0000_0000);/ | cargo test --release -p liella-math --lib complex_fast::sinh | msg:csinh_middle_tier_bounds_and_answers \.\.\. FAILED
+rescue-part | crates/math/src/complex_fast_sinh.rs | perl:s/None => rescue\(p1, m, h, t, Part::Im, mode\)\?,/None => rescue(p1, m, h, t, Part::Re, mode)?,/ | cargo test --release -p liella-math --lib complex_fast::sinh | msg:csinh_(quick_tier_matches_the_384_bit_route_in_every_mode|tier_answers_overflowing_parts_as_the_route) \.\.\. FAILED
+ovf-mode | crates/math/src/complex_fast_sinh.rs | perl:s/\(Rounding::Up, false\)/(Rounding::Up, true)/ | cargo test --release -p liella-math --lib complex_fast::sinh | msg:csinh_tier_answers_overflowing_parts_as_the_route \.\.\. FAILED
+ovf-threshold | crates/math/src/complex_fast_sinh.rs | perl:s/dd::pow2\(1024 - m\)/dd::pow2(1023 - m)/ | cargo test --release -p liella-math --lib complex_fast::sinh | msg:csinh_overflow_step_threshold_is_two_to_the_1024 \.\.\. FAILED
+ovf-errno | crates/math/src/complex_fast_sinh.rs | perl:s/\(true, true\) => Status::flags\(Flags::OVERFLOW\.union\(Flags::INEXACT\)\)\.overflow_errno\(\),/(true, true) => Status::flags(Flags::OVERFLOW.union(Flags::INEXACT)),/ | cargo test --release -p liella-math --lib complex_fast::sinh | msg:csinh_tier_answers_overflowing_parts_as_the_route \.\.\. FAILED
+# cargo xtask plants results (16 plants: 16 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# sinh-recip-lo: CAUGHT, caught by liella_math complex_fast::sinh::tests::csinh_quick_tier_matches_the_384_bit_route_in_every_mode
+# sinh-series-t2: CAUGHT, caught by liella_math complex_fast::sinh::tests::hyperbolic_factors_are_within_their_bounds
+# sinh-q-cut: CAUGHT, caught by liella_math complex_fast::sinh::tests::hyperbolic_factors_are_within_their_bounds
+# sinh-sign: CAUGHT, caught by liella_math complex_fast::sinh::tests::csinh_quick_tier_matches_the_384_bit_route_in_every_mode
+# sinh-swap: CAUGHT, caught by liella_math complex_fast::sinh::tests::csinh_quick_tier_matches_the_384_bit_route_in_every_mode
+# sinh-nearest-args: CAUGHT, caught by liella_math complex_fast::sinh::tests::csinh_quick_tier_matches_the_384_bit_route_in_every_mode
+# sinhf-cosh-core: CAUGHT, caught by liella_math complex_fast::sinh::tests::csinhf_quick_tier_matches_the_route_in_every_mode
+# mid-series-signs: CAUGHT, caught by liella_math complex_fast::sinh::tests::csinh_middle_tier_bounds_and_answers
+# mid-q-sign: CAUGHT, caught by liella_math complex_fast::sinh::tests::csinh_middle_tier_bounds_and_answers
+# mid-scale: CAUGHT, caught by liella_math complex_fast::sinh::tests::csinh_middle_tier_bounds_and_answers
+# mid-part-sign: CAUGHT, caught by liella_math complex_fast::sinh::tests::csinh_middle_tier_bounds_and_answers
+# mid-eps: CAUGHT, caught by liella_math complex_fast::sinh::tests::csinh_middle_tier_bounds_and_answers
+# rescue-part: CAUGHT, caught by liella_math complex_fast::sinh::tests::csinh_quick_tier_hard_cases
+# ovf-mode: CAUGHT, caught by liella_math complex_fast::sinh::tests::csinh_tier_answers_overflowing_parts_as_the_route
+# ovf-threshold: CAUGHT, caught by liella_math complex_fast::sinh::tests::csinh_overflow_step_threshold_is_two_to_the_1024
+# ovf-errno: CAUGHT, caught by liella_math complex_fast::sinh::tests::csinh_tier_answers_overflowing_parts_as_the_route

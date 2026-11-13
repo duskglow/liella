@@ -1,60 +1,45 @@
 # LIBM-CPLX-SINCOS handoff: csinh/csin (double, float) quick tier, overflow step and middle tier
 
-State: branch task/libm-cplx-sincos-6 = -5's head 399f1a6e0 + merge of origin/next e30374455 (5fdcb8d0c, no
-conflicts; brings HOTTEXT-TIME-CLUSTER-STABLE-3) + this handoff/report. Role mei:~/w/s2.
+State: branch task/libm-cplx-sincos-7 = -6's head 288a2788e + merge of origin/next 1700e1798 (1dd7bc84c; brings
+LIBM-CPLX-POW-6) + 69f3c3967 (stale fast textdomain absent line dropped) + this handoff/report. Role mei:~/w/s1.
+(-6's branch: -5's head 399f1a6e0 + merge of origin/next e30374455, HOTTEXT-TIME-CLUSTER-STABLE-3.)
 (-5's branch: -4's head 722ba663c + 50bb860cf "Allow the catalog::textdomain hot-text key to be absent in the fast
 profile" + merge of origin/next 5e5ec2a57 + e5dc20754 "Pin the csinh overflow step's threshold at 2^1024".)
 Decisions in force: D-10.53 (tier structure), D-10.25 (FMA builds), D-10.99 (cexp's middle tier, reused).
-Pending: records/pending/LIBM-CPLX-SINCOS-2-1.toml (D-NEW, series D-10; body covers runs 2-4; the coordinator assigns).
+The runs 2-4 record (pending in -6) now has the reserved id D-10.119 (288a2788e).
 
-## Run 6: released after HOTTEXT-TIME-CLUSTER-STABLE-3 landed; next merged; gate green
+## Run 7: merge only (LIBM-CPLX-POW-6 landed in complex_fast.rs)
 
-* Step 0 (inherited head 399f1a6e0): libm-cplx-sincos-6-check0 rc 0 (xtask clippy, static).
-* Merged origin/next e30374455 (no conflicts). The textdomain absent lines (#5183) still apply: hot-text.list keeps the
-  `extra` key.
-* Gate libm-cplx-sincos-6-gate on 5fdcb8d0c (`affected --run --base origin/next`, escalated to FULL by the
-  hot-text.absent change): rc 0, 32 suites, 11717 passed, 0 failed, 1269 ignored; conformance 132 passed;
-  peak 17G. The three start-up fault tests that failed in run 5 (hot_text_products: mktime after localtime_r,
-  localtime_r+mktime bound, zero-fault calls at every pad) pass: the run-5 failure was the TscGate::fresh
-  outlining fixed on next, not this branch.
-* No code changed since run 5, so its plants (kanon libm-cplx-sincos-5-plants2, 16 CAUGHT on e5dc20754) still
-  cover the code; not rerun, per the brief.
+* Step 0 (inherited head 288a2788e): libm-cplx-sincos-7-check0 rc 0 (xtask clippy, static).
+* Merged origin/next 1700e1798. Two conflicts, both additive: complex_fast.rs keeps `mod sinh` (+ its re-export)
+  and POW-6's `mod pow`; xtask/src/longsweeps.rs keeps both long sweeps (csinh_quick_tier_sweep, cpow_decline_rates).
+  complex.rs auto-merged (csinh/csin and cpow call disjoint tiers).
+* First gate and plants on the merge (libm-cplx-sincos-7-gate rc 1, -plants rc 2) both stopped in `xtask so`:
+  "hot-text.absent: 1 stale fast line": with next merged, catalog::textdomain is a function section in the fast
+  archive again, so run 5's fast line (#5183) no longer applies. Dropped it (69f3c3967); hot-text.absent now equals
+  next's. This is the layout-jitter class (ruling #4347); only our own exemption was removed, no bound changed.
+* libm-cplx-sincos-7-lint (full clippy -D warnings, xtask clippy, static on 1dd7bc84c) rc 0; -lint2 (xtask clippy,
+  static on 69f3c3967) rc 0.
+* Gate libm-cplx-sincos-7-gate2 and plants libm-cplx-sincos-7-plants2 (the -5 plants file, unchanged: no plant
+  target is in a merged file) on 69f3c3967: gate rc 0, direct tier, 9 suites, 2645 passed, 0 failed, 561 ignored, conformance 19 passed, peak 3.8G; rc 0, 16 CAUGHT, 0 SURVIVED, 0 WARN (handoff/LIBM-CPLX-SINCOS-7-plants.txt).
 
-## Run 5 (no new math work, per the brief): blocked on LAYOUT-JITTER (ruling #4347)
+## Runs 5-6 (no new math; full notes in handoff/reports/LIBM-CPLX-SINCOS-5.json and -6.json)
 
-* Step 0 (inherited head 722ba663c): libm-cplx-sincos-5-check0 rc 0 (xtask clippy, static).
-* Ruling #5183 applied in crates/libc-so/hot-text.absent: `_RNvNtC15liella_boundary7catalog10textdomain` may be
-  absent in both profiles. The file takes ONE profile per line (`parse_absent`, xtask/src/hottext.rs, accepts `fast`
-  or `release` only), so "fast,release" is two lines, each citing #5183. The key stays in hot-text.list and .unpinned.
-* libm-cplx-sincos-5-so2 rc 0 (merged head): `LIELLA_FULL_PROFILE=1 cargo xtask so` then `cargo xtask so`; the
-  12 layout contracts hold. The textdomain blocker is gone.
-* Gate libm-cplx-sincos-5-gate2 (final code head e5dc20754, `affected --run --base origin/next`): rc 1, 6492 passed,
-  3 failed, all in crates/core/tests/hot_text_products.rs (start-up page faults):
-  - init_first_localtime_r_and_mktime_stay_within_their_combined_page_fault_bound: 21 page faults > 20
-  - init_first_mktime_after_localtime_r_takes_no_fault: 1 page fault (want 0)
-  - init_zero_fault_calls_hold_at_every_text_phase: mktime 1 fault at every pre and cold pad (want 0)
-  Deterministic: rerun alone (libm-cplx-sincos-5-brfaults, rc 101) gives the same numbers.
-  On origin/next 5e5ec2a57 (the merged next, exported to a RAM copy on kanon and built with the fast profile:
-  libm-cplx-sincos-5-nextfaults, rc 0) all three PASS (<= 20, and 0 for mktime).
-  This branch touches no start-up code (cold csinh/csin code in liella-math, a test, the absent lines), so per
-  ruling #4347 nothing was chased: no regen, no section moves, no bound change. Since the build no longer has
-  catalog::textdomain as a function in the fast profile either, its caller's inlining changed with libm's growth.
-  That fits the "unrelated code growth moves the layout" class, but it was not measured.
-* Plants libm-cplx-sincos-5-plants2 (final code head): 16 CAUGHT, 0 SURVIVED, 0 WARN
-  (handoff/LIBM-CPLX-SINCOS-5-plants.txt = the -2 file + the -4 file, with results). Two changes against those files:
-  `sinh-q-cut` now matched two sites (the middle tier added `if a <= Q_MAX {` in `mid_hyp`), so it is anchored to
-  `let (q, eq) = if a <= Q_MAX {` in `hyp`, its original target. `ovf-threshold` (2^1024 -> 2^1023) SURVIVED the
-  first run (libm-cplx-sincos-5-plants): the random overflow test rarely sees a quick decline inside the top binade.
-  The new test `csinh_overflow_step_threshold_is_two_to_the_1024` calls `overflow` on both sides of 2^1024 and
-  catches it.
+* Run 5: ruling #5183 absent lines for catalog::textdomain (run 7 dropped the fast one again, see above); gate held
+  by 3 start-up fault tests (hot_text_products) that were next's TscGate::fresh outlining, not this branch.
+  `sinh-q-cut` anchored to `let (q, eq) = if a <= Q_MAX {` in `hyp`; new test
+  `csinh_overflow_step_threshold_is_two_to_the_1024` catches the `ovf-threshold` plant. Plants 16 CAUGHT.
+* Run 6: next e30374455 merged (HOTTEXT-TIME-CLUSTER-STABLE-3); gate 11717 passed / 0 failed.
 
 ## Decline rates (run 4, code unchanged since): 0 of 10^6 declines in every sweep regime, csinh and csin
 
 ## Next steps (in order)
 
-1. Done in run 6 (next merged, gate green): the branch is ready to land. A continuation starts at step 2.
+1. Done in run 7 (next with POW-6 merged, gate and plants on that head): the branch is ready to land. A continuation
+   starts at step 2.
 2. Percall validation/percall/cplx_sin.c against next and glibc (only cold code was added in run 4; not measured yet).
 3. ccos/ccosh on the shared kernel (ccos(z) = ccosh(iz)); abs(t) < 2^-30 and >= 2^20 in the tier; FMA build.
 
-Do not redo: the quick-tier design and its bounds, the middle tier and overflow step, run 3's diagnosis, the
-textdomain absent lines, the next-vs-branch fault measurement above.
+Do not redo: the quick-tier design and its bounds, the middle tier and overflow step, run 3's diagnosis, run 5's
+next-vs-branch fault measurement. The textdomain absent lines follow the layout: `xtask so` names a missing or stale
+line; this branch has no lines of its own left in hot-text.absent.
