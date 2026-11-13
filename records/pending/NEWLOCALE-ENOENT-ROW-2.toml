@@ -1,0 +1,12 @@
+id = "COMPAT-NEW"
+behaviour = "`newlocale` returning `NULL` for an unknown locale name (§7.3, `s7_3_f_0`; D-7.17, NEWLOCALE-ENOENT-ROW, ruling #5424)"
+glibc = "`NULL` is returned with `errno` left 0 in some rows: an unknown name loaded into a base, and `\"\"` with an environment naming an unknown locale (probe rows in `spec/behaviour/newlocale-mask.md`, `newlocale-mask.glibc.txt`)"
+liella = "`NULL` with `errno` set to `ENOENT` in every such row (POSIX `newlocale`: `ENOENT` when the locale data is not available)"
+restore = "A tunable (name to be chosen when designed) read at startup makes `newlocale` leave `errno` unchanged on the unknown-name failure path; not implemented"
+cost = "none expected: the choice is on the failure return only"
+status = "registered"
+decisions = ["D-NEW"]
+story = "NEWLOCALE-ENOENT-ROW"
+date = "2026-11-13"
+body = '''
+'''
