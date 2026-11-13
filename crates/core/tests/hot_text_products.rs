@@ -961,6 +961,8 @@ fn padded_start(dir: &Path, region: &str, pad: u64, start: &Path) -> PathBuf {
         "pre" => format!(".section .text.unlikely.liella_pad,\"ax\",@progbits\n.fill {pad},1,0xcc\n"),
         // Shifts every `.lbss` object by `pad` against the page grid, as another emission order would.
         "lbss" => format!(".section .lbss.liella_pad,\"aw\",@nobits\n.zero {pad}\n"),
+        // A program's own relro inputs, which the linker takes ahead of the library's start-up relro cluster.
+        "relro" => format!(".section .data.rel.ro.local.liella_pad,\"aw\",@progbits\n.fill {pad},1,0\n"),
         _ => format!(".text\n.fill {pad},1,0xcc\n"),
     };
     let (s, o, crt1) = (dir.join("pad.s"), dir.join("pad.o"), dir.join("crt1pad.o"));
@@ -1178,6 +1180,72 @@ fn init_data_clusters_hold_at_every_text_phase() {
         }
     }
     assert!(bad.is_empty(), "data phase: {bad:#?}");
+}
+
+/// The input sections of a link map whose name starts with `prefix`: (name, address, size). GNU ld prints a
+/// long name on a line of its own and the address and size on the next.
+fn map_inputs(map: &str, prefix: &str) -> Vec<(String, u64, u64)> {
+    let lines: Vec<&str> = map.lines().collect();
+    let hex = |s: &str| s.strip_prefix("0x").and_then(|h| u64::from_str_radix(h, 16).ok());
+    let mut out = Vec::new();
+    for (i, l) in lines.iter().enumerate() {
+        let mut f = l.split_whitespace();
+        let Some(name) = f.next().filter(|n| l.starts_with(' ') && n.starts_with(prefix)) else { continue };
+        let mut rest: Vec<&str> = f.collect();
+        if rest.is_empty() {
+            rest = lines.get(i + 1).map(|n| n.split_whitespace().collect()).unwrap_or_default();
+        }
+        if let (Some(a), Some(s)) = (rest.first().and_then(|a| hex(a)), rest.get(1).and_then(|s| hex(s))) {
+            out.push((name.to_string(), a, s));
+        }
+    }
+    out
+}
+
+/// STARTUP-DATA-PAGE-ALIGN (pending record STARTUP-DATA-PAGE-ALIGN-1, series D-X): the written start-up data takes
+/// the same pages whatever lies ahead of it. The probe linked with a start file padded by 0x4d0, 0x800, 0xc18 and
+/// 0x14d0 bytes of `.data.rel.ro.local` (`relro`: a program's own relro inputs, which the linker takes first, as an
+/// unrelated change ahead of the cluster would; LIBM-F32-BESSEL-LARGE-6 moved the start-up relro objects by 0x4d0
+/// bytes and two pages) and of `.lbss` (`lbss`): the start-up relro cluster (`.data.rel.ro.local.liella_startup*`,
+/// xtask/src/startup_ro.rs) starts on a page boundary and spans the same number of pages at every pad and unpadded,
+/// and `heap::RESERVE_MEM` starts on a page boundary (its head is the start-up part). No spec clause (layout of the
+/// products).
+#[test]
+fn init_startup_data_pages_hold_at_every_data_phase() {
+    let base = std::env::temp_dir().join(format!("liella-startup-pages-{}", std::process::id()));
+    let (mut bad, mut spans) = (Vec::new(), Vec::new());
+    for (region, pad) in [("none", 0_u64), ("relro", 0x4d0), ("relro", 0x800), ("relro", 0xc18), ("relro", 0x14d0), ("lbss", 0x4d0), ("lbss", 0xc18)] {
+        let dir = base.join(format!("{region}-{pad:x}"));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let crt1 = if pad == 0 { root().join("target/liella/liella-crt1.o") } else { padded_crt1(&dir, region, pad) };
+        let map = link_map(&dir, &crt1);
+        let cluster = map_inputs(&map, ".data.rel.ro.local.liella_startup");
+        let (lo, hi) = cluster.iter().filter(|c| c.2 > 0).fold((u64::MAX, 0), |(lo, hi), c| (lo.min(c.1), hi.max(c.1 + c.2)));
+        if lo >= hi {
+            bad.push(format!("{region} {pad:#x}: no start-up relro cluster in the link"));
+            continue;
+        }
+        let pages = ((hi - 1) >> 12) - (lo >> 12) + 1;
+        eprintln!("startup pages {region} {pad:#x}: relro cluster {lo:#x}..{hi:#x}, {pages} pages, {} sections", cluster.len());
+        if lo % 4096 != 0 {
+            bad.push(format!("{region} {pad:#x}: relro cluster starts at {lo:#x}, not on a page boundary"));
+        }
+        spans.push((format!("{region} {pad:#x}"), pages));
+        let reserve: Vec<(String, u64, u64)> = map_inputs(&map, ".lbss").into_iter().filter(|s| s.0.ends_with("4heap11RESERVE_MEM")).collect();
+        if reserve.is_empty() {
+            bad.push(format!("{region} {pad:#x}: heap::RESERVE_MEM not found in .lbss"));
+        }
+        for (name, a, _) in reserve {
+            if a % 4096 != 0 {
+                bad.push(format!("{region} {pad:#x}: {name} at {a:#x}, not on a page boundary"));
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(&base);
+    if spans.iter().any(|(_, n)| *n != spans[0].1) {
+        bad.push(format!("the start-up relro cluster's page count moves with the data phase: {spans:?}"));
+    }
+    assert!(bad.is_empty(), "startup data pages: {bad:#?}");
 }
 
 /// The default linker script (`ld --verbose`) with every input section of `.data`, `.bss` and `.lbss` on

@@ -1,0 +1,8 @@
+# STARTUP-DATA-PAGE-ALIGN plants: the start-up relro cluster starts on a page boundary and RESERVE_MEM is page-aligned.
+# Product plants rebuild the products in the plants copy and run the padded-probe test of hot_text_products.
+# The head's page alignment dropped: the cluster starts wherever the padding ends.
+sdpa-relro-align | xtask/src/startup_ro.rs | lit:format!("{RELRO_HEAD}={PAGE}") ==> format!("{RELRO_HEAD}=8") | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_data_pages_hold_at_every_data_phase | msg:relro cluster starts at 0x[0-9a-f]+, not on a page boundary
+# RESERVE_MEM's alignment dropped.
+sdpa-reserve-align | crates/boundary/src/heap.rs | lit:#[repr(C, align(4096))] ==> #[repr(C, align(8))] | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_data_pages_hold_at_every_data_phase | msg:RESERVE_MEM at 0x[0-9a-f]+, not on a page boundary
+# The head chosen as the LAST section of the member: the cluster no longer starts with it (unit test).
+sdpa-head-last | xtask/src/startup_ro.rs | lit:m.secs.iter().find(|(_, s)| names.contains(&s.name)) ==> m.secs.iter().rev().find(|(_, s)| names.contains(&s.name)) | cargo test -p xtask startup_relro_sections_form_one_group_headed_by_the_first | msg:assertion `left == right` failed

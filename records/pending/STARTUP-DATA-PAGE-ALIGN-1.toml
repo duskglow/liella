@@ -1,0 +1,25 @@
+id = "D-NEW"
+series = "D-X"
+section = "x"
+status = "active"
+amends = ["D-X.62", "D-X.67"]
+story = "STARTUP-DATA-PAGE-ALIGN"
+date = "2026-11-13"
+body = '''
+**The written start-up data takes the same pages whatever precedes it** (STARTUP-DATA-PAGE-ALIGN; amends D-X.62 and
+D-X.67). The STARTUP-DATA-WINDOWS contract counts, as written start-up pages, the relro (`.data.rel.ro*`, `.got`)
+bytes the start-up functions address, the `.data1` cluster (D-X.64) and the head of `heap::RESERVE_MEM`. The
+relro bytes sat where rustc emitted them: a libm-only branch (LIBM-F32-BESSEL-LARGE-6) moved them by 0x4d0 bytes
+and the count from 11 to 13 pages, and `RESERVE_MEM` started 0xc18 into a page (two pages).
+(1) `cargo xtask so` (`xtask/src/startup_ro.rs` `relro_plan`, in `place`) renames every `.data.rel.ro*` section the
+start-up functions' relocations reach (the same reach as the read-only cluster, D-X.62), and the relro sections of
+the `rw` keys of `startup-data.keys`, to `.data.rel.ro.local.liella_startup`; the one first in its member's section
+table becomes `.data.rel.ro.local.liella_startup_head`, aligned to 4096. GNU ld's default script takes
+`*(.data.rel.ro.local*)` before `*(.data.rel.ro .data.rel.ro.*)`, so the group sits at the head of the relro
+output section after only the program's own `.data.rel.ro.local*` inputs, starting on a page boundary. Order inside
+the group: section-table order of the member (no object of a page or more is among them).
+(2) `heap::RESERVE_MEM` is `#[repr(C, align(4096))]`: its head takes one page.
+Cost: up to 4095 bytes of relro padding (file and memory) and up to 4095 bytes of `.lbss` address space.
+Checked by `init_startup_data_pages_hold_at_every_data_phase` (hot_text_products: relro pads 0x4d0-0x14d0, `.lbss`
+pads) and `startup_relro_sections_form_one_group_headed_by_the_first` (xtask unit test).
+'''
