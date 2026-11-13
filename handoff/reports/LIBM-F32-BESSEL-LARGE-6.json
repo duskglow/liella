@@ -1,0 +1,33 @@
+{
+ "task": "LIBM-F32-BESSEL-LARGE-6",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: LAYOUT-JITTER: merged next d53c0d551 (clean); lint green; direct gate tests all pass (1637/0) and run 5's init_data_clusters red is gone, but layout contract STARTUP-DATA-WINDOWS counts 13 written start-up pages against rw-budget-fast 12 (next: 11 on the same host): the same objects sit ~0x4d0 higher and cover 2 more pages, placement only",
+ "branch": "task/libm-f32-bessel-large-6",
+ "head": null,
+ "gate": {
+  "affected": "1637 passed / 0 failed; steps red: products (layout contract STARTUP-DATA-WINDOWS 13 > 12) and static (private-paths on an untracked tools/hottext/__pycache__/*.pyc in the role tree)",
+  "peak": "gate: peak memory 1.6G (page cache included; reclaimed under the limit) oom_kill=0 rc=1"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "STARTUP-DATA-WINDOWS on keke (fast): next d53c0d551 11 pages (0x853,855-858,85a,874-876,886-887), merged head 957b3ab03 13 pages (0x853-858,85a-85b,878-87a,8a2-8a3); same objects, shifted ~0x4d0; RESERVE_MEM straddles two pages and text_only::C sits alone on both trees; LT-2 data clustering is the named fix (handoff/LAYOUT-TRACE-DEFAULT.md). Not chased per ruling #4347",
+  "tooling on next: in a role tree without .git, labnames::walk (used by private-paths) scans tools/hottext/__pycache__/keys.cpython-312.pyc, which trace-at-build leaves behind, and it holds a home path, so `cargo xtask static` after `cargo xtask so` fails in every role-tree gate; recommend skipping __pycache__ in walk or running keys.py with python3 -B",
+  "superseded: libm-f32-bessel-large-6-gate (rc 1: the layout contract and the pycache private-paths hit above; every test passed; the evidence for this hand-back, not a final-head pass); libm-f32-bessel-large-6-lint0 (inherited head)"
+ ],
+ "refused": [],
+ "impact": [
+  {"kind": "perf", "what": "j0f large (|x| >= 2^19) per call (run 5 measurement, code unchanged)", "before": 175440.4, "after": 405.5, "unit": "instr/call", "measured": false},
+  {"kind": "perf", "what": "y1f large per call (run 5 measurement, code unchanged)", "before": 178328.1, "after": 417.5, "unit": "instr/call", "measured": false},
+  {"kind": "cost", "what": "written start-up data pages (STARTUP-DATA-WINDOWS fast, keke) from placement; held for LT-2", "before": 11, "after": 13, "unit": "pages", "measured": true}
+ ],
+ "improvement": "role-tree gates run static after so, so any untracked build artifact (here python bytecode) reaches the private-paths walk; walk should honour .gitignore'd build dirs, or the build should write no bytecode",
+ "next_step": "after LT-2 (data clustering) lands or the rw budget has room for placement: merge next, rerun the direct gate only, then land; separately fix the __pycache__ walk",
+ "report_file": "handoff/LIBM-F32-BESSEL-LARGE.md",
+ "jobs": [
+  "libm-f32-bessel-large-6-lint1",
+  "libm-f32-bessel-large-6-nextlayout",
+  "libm-f32-bessel-large-6-nextpages"
+ ]
+}
