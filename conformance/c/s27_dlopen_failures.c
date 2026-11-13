@@ -10,7 +10,6 @@
 /* HELPER-FLAGS: dlf_ver -Wl,-soname,libdlf_ver.so -Wl,--version-script=dlf_v1.map */
 /* HELPER-FLAGS: dlf_ver2 -Wl,-soname,libdlf_ver.so -Wl,--version-script=dlf_v2.map */
 /* HELPER-FLAGS: dlf_w -ldlf_ver2 */
-/* PENDING-LIELLA: DL-16a (DL-DLOPEN-LOAD) */
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <fcntl.h>
