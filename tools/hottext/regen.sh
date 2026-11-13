@@ -254,6 +254,16 @@ put_changed "$work/startup.merged" "$skeys"
 echo "startup-text: $(wc -l < "$work/startup.keys") keys traced ($profile), $(grep -vc '^#' "$skeys") in $skeys"
 put_changed "$work/list.merged" "$list"
 echo "hot-text: $(wc -l < "$work/new.keys") keys traced ($profile), $(grep -vc '^#' "$list") in $list"
+# LAYOUT-TRACE-HOST-CANONICAL-3: --replace drops every key no trace of this profile hit (keys no trace
+# names, profiles `-`, included); the allow-list lines of keys that left the list are stale by its own
+# rule, and the next build of either profile (the release step of a later --both) refuses them, so
+# they go with their keys (named on stderr). Only --replace: a merge (the train's `--both --allow-drop`
+# included) leaves the hand-written allow-list alone, and its recheck names any line left stale.
+absent=$here/../../crates/libc-so/hot-text.absent
+if [ $replace = 1 ] && [ -f "$absent" ]; then
+    python3 "$here/prune.py" --absent "$list" "$absent" > "$work/absent.pruned"
+    put_changed "$work/absent.pruned" "$absent"
+fi
 # D-X.62: the functions of the other fault-bounded probe modes that no hot-text tier covers, into
 # crates/libc-so/probe-text.keys (the start-up read-only group takes their read-only data).
 pr=; [ $replace = 1 ] && pr=--replace

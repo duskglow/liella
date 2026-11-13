@@ -1827,6 +1827,40 @@ mod tests {
     }
 
     #[test]
+    fn regen_replace_drops_the_allow_list_lines_of_keys_it_drops() {
+        // LAYOUT-TRACE-HOST-CANONICAL-3 (no spec clause: build tooling): `regen.sh --replace` keeps
+        // only the keys a trace hit, so an ABSENT_LIST line whose key left the list is stale by
+        // `unmatched`'s rule and the next release build (a later `--both`) refused it.
+        // prune.py --absent drops exactly those lines (comments and listed keys stay, in order) and
+        // regen.sh runs it on the --replace path only, after it writes the list.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let tmp = root.join(format!("target/xtask-absent-prune-test-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("list"), "# list\nkept\tstartup\tfast\nfast_only\tlocale\tfast\n").unwrap();
+        let absent = "# allow-list\nkept\trelease\tinlined in release\ngone\trelease\tinlined in release\n# tail\nfast_only\trelease\tinlined\n";
+        std::fs::write(tmp.join("absent"), absent).unwrap();
+        let o = std::process::Command::new("python3")
+            .arg("-I")
+            .arg(root.join("tools/hottext/prune.py"))
+            .arg("--absent")
+            .arg(tmp.join("list"))
+            .arg(tmp.join("absent"))
+            .output()
+            .expect("python3 runs tools/hottext/prune.py");
+        std::fs::remove_dir_all(&tmp).unwrap();
+        let (out, err) = (String::from_utf8(o.stdout).unwrap(), String::from_utf8_lossy(&o.stderr).into_owned());
+        assert!(o.status.success(), "prune.py --absent: {err}");
+        assert_eq!(out, "# allow-list\nkept\trelease\tinlined in release\n# tail\nfast_only\trelease\tinlined\n", "prune.py --absent kept a stale line or lost a live one");
+        assert!(err.contains("absent: dropped gone\trelease"), "prune.py --absent does not name the line it drops: {err}");
+        assert_eq!(parse_absent(&out).unwrap().len(), 2, "prune.py --absent output is not an allow-list");
+        let sh = std::fs::read_to_string(root.join("tools/hottext/regen.sh")).unwrap();
+        let written = sh.find("put_changed \"$work/list.merged\" \"$list\"").expect("regen.sh: no list write");
+        let guard = sh.find("if [ $replace = 1 ] && [ -f \"$absent\" ]; then").expect("regen.sh: no --replace allow-list prune");
+        let call = sh.find("\"$here/prune.py\" --absent \"$list\" \"$absent\"").expect("regen.sh: prune.py --absent not run");
+        assert!(written < guard && guard < call, "regen.sh prunes the allow-list before it writes the list, or outside --replace");
+    }
+
+    #[test]
     fn a_startup_label_brings_its_section_to_the_head() {
         // LAYOUT-TEXT-PIN-6, #4467 (no spec clause: build tooling, D-X.63): keys.py --aliases maps a
         // label inside a function section (an assembly entry label, an alias) to the section's key,
