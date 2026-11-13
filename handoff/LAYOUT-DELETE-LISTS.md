@@ -36,10 +36,15 @@ records/pending/LAYOUT-DELETE-LISTS-2-1.toml (D-NEW, series D-X; amends D-X.92/.
 * clippy (cargo xtask clippy): green (layout-delete-lists-2-clippy2). static: green (layout-delete-lists-2-static3).
 * xtask unit tests hottext/hotlists/bench v3/layout/startup_ro: 41 passed (layout-delete-lists-2-xtests).
 * Gate: `affected --run --base origin/next` escalates to FULL (xtask + crates/libc-so + cpuid.S):
-  layout-delete-lists-2-gate (see the report json for its verdict).
-* Plants (handoff/LAYOUT-DELETE-LISTS-2-plants.txt, 7 plants, xtask unit tests): plants-1 REFUSED (a `lit:`
-  plant held " | "; fixed as perl:), plants2 BASELINE FAILED: the copy's fresh `cargo xtask so` ran past the
-  600 s limit while the FULL gate built in parallel on the same host (no plant applied). Rerun after the gate.
+  layout-delete-lists-2-gate rc 0 (32 suites ok, 11734 passed / 0 failed, conformance 134/0, peak 16G,
+  oom_kill 0; hot_text_products and the layout contracts on the traced fast-profile products) on the head before
+  the last test-only commit; layout-delete-lists-2-gate2 re-runs it on the final head (left running at hand-back).
+* Plants (handoff/LAYOUT-DELETE-LISTS-2-plants.txt, 7 plants, xtask unit tests): layout-delete-lists-2-plants5
+  7/7 CAUGHT, no WARN. Earlier: plants-1 REFUSED (a `lit:` plant held " | "), plants2/plants3 BASELINE FAILED
+  (the copy's `cargo xtask so` now traces: compile ~2.5 min + trace > 8 min > the 600 s per-step limit; the tool
+  left the gdb traces running, killed by PID), plants4 2 SURVIVED (the test iterated RETIRED itself; the
+  filter `retired` missed the static test): fixed in 6cc6d642b. plants4/5 ran with LIELLA_LAYOUT_TRACE=ungrouped
+  (no plant command uses the products).
 
 ## Not done (exact next steps)
 
