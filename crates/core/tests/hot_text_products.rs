@@ -88,8 +88,15 @@ use liella_kernel::uapi::{ADDR_NO_RANDOMIZE, PERSONALITY_QUERY};
 /// LAYOUT-DATA-CLUSTERS-11 (`_nl_msg_cat_cntr` declared: after next's merge it was the first setlocale's
 /// only write on the last `.bss` page): Skylake-SP host, fast products, every run identical: startup only
 /// 11, setlocale + printf 50, tool 54. LOCALE_BOUND 52 -> 51.
-const TRUE_BOUND: u64 = 17;
-const LOCALE_BOUND: u64 = 51;
+/// LAYOUT-TRACE-DEFAULT (trace-at-build is the default: every build groups from a trace of itself, so a
+/// change that adds no start-up code no longer moves these counts; the bounds now sit at the highest
+/// measured count, no margin). Skylake-SP and Zen 1 hosts, both profiles, next and next plus an unrelated
+/// libm change, every run identical (warm-up + 5, twice), fast / release: startup only 11 / 10,
+/// setlocale + printf 46 / 47, tool 50 / 49, fork child 5 / 5, localtime and localtime + mktime 17 / 18,
+/// float 3 / 3. TRUE_BOUND 17 -> 11, LOCALE_BOUND 51 -> 47, TOOL_BOUND 56 -> 50, FORK_BOUND 6 -> 5,
+/// LOCALTIME_BOUND and LOCALTIME_MKTIME_BOUND 20 -> 18, FLOAT_BOUND 5 -> 3.
+const TRUE_BOUND: u64 = 11;
+const LOCALE_BOUND: u64 = 47;
 /// "tool" mode: a coreutils-shaped program (setlocale, bindtextdomain, atexit, getenv, strtoimax,
 /// printf), see `init_coreutils_shaped_program_stays_within_its_page_fault_bound`.
 /// PERF-READDIR-ENTRY-4 (layout-only delta, owner rule): CI read tool 69 (bound 68) for the readdir
@@ -100,7 +107,8 @@ const LOCALE_BOUND: u64 = 51;
 /// list and adds no startup code; next already sits one under the bound, and the branch adds one fault in
 /// both bases. TOOL_BOUND 68 -> 71 (rule above: the highest count, 69, plus 2); LOCALE_BOUND stays 68
 /// (66 plus 2), TRUE_BOUND stays 23. STARTUP-FAULTS-RESTORE-5: 60 -> 58 (see TRUE_BOUND).
-const TOOL_BOUND: u64 = 56;
+/// LAYOUT-TRACE-DEFAULT: 56 -> 50 (see TRUE_BOUND).
+const TOOL_BOUND: u64 = 50;
 const RUNS: usize = 5;
 /// Every mode of `page_faults.c` whose first-call state is start-up state (the bounds below count each).
 const STARTUP_PROBE_MODES: [&str; 10] = ["true", "locale", "tool", "fork", "mktime", "localtime", "localtime_mktime", "float", "strings", "rebind"];
@@ -332,7 +340,8 @@ fn init_first_mktime_after_localtime_r_takes_no_fault() {
 /// the same 64 KiB window: Zen 1 host role, every run identical, 18 (the mktime block back behind
 /// strftime's functions: 19; the rule-years table four times longer: 21). LOCALTIME_BOUND 22 -> 20
 /// (18 plus 2).
-const LOCALTIME_BOUND: u64 = 20;
+/// LAYOUT-TRACE-DEFAULT: 20 -> 18, the highest count of both hosts and profiles (see TRUE_BOUND).
+const LOCALTIME_BOUND: u64 = 18;
 
 /// The first `localtime_r` (zone load included) and the first `mktime` after it, counted
 /// together (PERF-ZONE-LOAD-FAULTS-2): a fault that moves from one call to its neighbour (the
@@ -343,7 +352,8 @@ const LOCALTIME_BOUND: u64 = 20;
 /// Bound = 20 plus 2, as for LOCALTIME_BOUND.
 /// PERF-ZONE-LOAD-FAULTS-3 (merge of next, see LOCALTIME_BOUND): Zen 1 host role, every run
 /// identical, 18. Bound 22 -> 20 (18 plus 2).
-const LOCALTIME_MKTIME_BOUND: u64 = 20;
+/// LAYOUT-TRACE-DEFAULT: 20 -> 18, the highest count of both hosts and profiles (see TRUE_BOUND).
+const LOCALTIME_MKTIME_BOUND: u64 = 18;
 
 #[test]
 fn init_first_localtime_r_and_mktime_stay_within_their_combined_page_fault_bound() {
@@ -385,7 +395,8 @@ fn init_first_localtime_r_stays_within_its_page_fault_bound() {
 /// Haswell-EP host role, after the change: 4 in every run (text and the first stack page); bound
 /// = that plus 2 for layout-only deltas, below the six stack faults alone of the inlined frame.
 /// STARTUP-FAULTS-RESTORE-4: fast 2, release 4 (Haswell-EP host, relay harness); FLOAT_BOUND 6 -> 5.
-const FLOAT_BOUND: u64 = 5;
+/// LAYOUT-TRACE-DEFAULT: 3 in both profiles on both hosts (see TRUE_BOUND); FLOAT_BOUND 5 -> 3.
+const FLOAT_BOUND: u64 = 3;
 
 #[test]
 fn init_first_float_conversion_stays_within_its_page_fault_bound() {
@@ -435,7 +446,8 @@ fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
 /// LAYOUT-DATA-CLUSTERS-7 (D-X.70): 5 in both profiles at every `data` pad (Haswell-EP host, every run
 /// identical; next read 6 release and 7 fast) once the state the child reads joined the `.data1` cluster,
 /// whose pages start-up touches, so the bound is 6.
-const FORK_BOUND: u64 = 6;
+/// LAYOUT-TRACE-DEFAULT: 5 in both profiles on both hosts (see TRUE_BOUND); FORK_BOUND 6 -> 5.
+const FORK_BOUND: u64 = 5;
 
 #[test]
 fn init_fork_child_stays_within_its_page_fault_bound() {
