@@ -3,6 +3,18 @@
 **State.** Branch `task/dl-libc-nonshared-2` (continuation of `task/dl-libc-nonshared`, from `origin/next`). The head
 is in the hand-back and in handoff/reports/DL-LIBC-NONSHARED-2.json. Decision **D-27.28** (records/decisions/D-27/D-27.28.toml).
 
+**DL-LIBC-NONSHARED-3 (mei, role `~/w/s2`, branch `task/dl-libc-nonshared-3`).** The -2 branch hit a CI merge
+conflict in `crates/boundary/tests/products/mod.rs`: next (DL-TLS-THREADS / CONF-DYN-HELPERS) factored the dynamic link
+script into `products::liella_link_script`, which named the host compiler's `libc_nonshared.a`. Merged origin/next
+(a0c020ee9) keeping both: `liella_link_script` now writes the script with Liella's `target/liella/libc_nonshared.a`
+(`liella_nonshared()`), so `dl_tls_threads` links through Liella's archive too; `conformance_dynamic` uses the helper
+and still checks each link map. A fourth plant (`ns-link-script-host`, handoff/DL-LIBC-NONSHARED-3-plants.txt) proves the
+dynamic subset test catches a script naming the host's archive. Jobs on mei: `dl-libc-nonshared-3-lint-1` (clippy,
+static, so: rc 0), `dl-libc-nonshared-3-plants-1`, `dl-libc-nonshared-3-gate-1` (affected vs origin/next; escalates
+to FULL for `csys/nonshared/*.c` and `xtask/src/so.rs`). Results: handoff/reports/DL-LIBC-NONSHARED-3.json.
+Not changed: `conformance/run.sh` `dyn_setup` (from next) still puts the host's `libc_nonshared.a` in its dynamic
+script; switching it to Liella's archive is a small follow-up (outside this merge-only brief).
+
 **DL-LIBC-NONSHARED-2 (keke, role `~/w/n2`).** The first run went red only because its hand-back named a gate job
 (`dl-libc-nonshared-gate-2`) that was never started; its `gate-3` attempt on mei left a log but no jobs.tsv row
 (it did not finish under jobrun). No code fault: clippy, `cargo xtask so` and `cargo xtask static` passed on the

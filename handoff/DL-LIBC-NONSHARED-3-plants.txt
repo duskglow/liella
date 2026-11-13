@@ -4,3 +4,8 @@ ns-atexit-null | csys/nonshared/atexit.c | lit:(void *)0, __dso_handle); ==> (vo
 ns-script-no-archive | xtask/src/so.rs | lit:GROUP ( libc.so.6 libc_nonshared.a AS_NEEDED ==> GROUP ( libc.so.6 AS_NEEDED | cargo test -p liella-boundary --test s01_startup_symbols s1_2_c_5_nonshared_archive_two_way | msg:libc_nonshared.a is not on the link line|the link against Liella.s libc.so failed
 ns-liella-version | csys/nonshared/at_quick_exit.c | lit:__asm__("__cxa_at_quick_exit") ==> __asm__("liella_heap_alloc") | cargo test -p liella-boundary --test s01_startup_symbols s1_2_c_5_nonshared_archive_two_way | msg:references a version the reference does not export
 ns-link-script-host | crates/boundary/tests/products/mod.rs | lit:libc_by_path(dir).display(), liella_nonshared().display() ==> libc_by_path(dir).display(), "/usr/lib/x86_64-linux-gnu/libc_nonshared.a" | cargo test -p liella-boundary --test s01_startup_symbols s1_1_c_0_dynamic_start_conformance | msg:libc_nonshared.a is not on the link line|a host C library file is on the link line
+# cargo xtask plants results (4 plants: 4 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# ns-atexit-null: CAUGHT, caught by s01_startup_symbols s1_2_c_5_nonshared_archive_two_way
+# ns-script-no-archive: CAUGHT, caught by s01_startup_symbols s1_2_c_5_nonshared_archive_two_way
+# ns-liella-version: CAUGHT, caught by s01_startup_symbols s1_2_c_5_nonshared_archive_two_way
+# ns-link-script-host: CAUGHT, caught by s01_startup_symbols s1_1_c_0_dynamic_start_conformance
