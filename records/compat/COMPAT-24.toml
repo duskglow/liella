@@ -1,4 +1,4 @@
-id = "COMPAT-NEW"
+id = "COMPAT-24"
 behaviour = "`dlopen` of `ld.so` by a path other than its start-time name (§27, `s27_1_c_1`; probe P-13, ruling #5126)"
 glibc = "`ld.so` opened by its name or by `/lib64/ld-linux-x86-64.so.2` gives the start-time handle; opened by its real path (`/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2` on the probe host) it gives a different handle, a second object with that `l_name` (probe P-13)"
 liella = "Every path to the start-time `ld.so` gives its start-time handle: a found file is the same object when its `(st_dev, st_ino)` matches (D-27.34 item 2), and the loader never maps a second copy of itself"

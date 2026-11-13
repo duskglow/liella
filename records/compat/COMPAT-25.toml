@@ -1,4 +1,4 @@
-id = "COMPAT-NEW"
+id = "COMPAT-25"
 behaviour = "Objects whose `e_ehsize` is not the ELF64 header size, 64 (§27, `s27_1_f_0`; reader rule D-27.7, ruling #5294)"
 glibc = "An object with `e_ehsize` 0 loads (gaps probe, `tools/probe/dl/gaps`, ruling #5266); other values were not probed"
 liella = "Refused as malformed: `dlopen` fails with the dlerror text `<file>: malformed ELF object` and maps nothing; a program or startup dependency with such a header is refused at startup (the one ELF reader, D-27.7)"
