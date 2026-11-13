@@ -356,6 +356,9 @@ pub fn early_init(info: usize) {
     // The loader registered the initial thread's rseq area (it honoured `glibc.pthread.rseq`):
     // threads this library creates register theirs at the same offset (D-27.26).
     crate::thread::set_loader_rseq(info.rseq_size != 0);
+    // The loader's per-thread TLS interface: new threads get every initially loaded module's
+    // block from it (DL-15, design §7).
+    crate::thread::set_loader_tls(info.tls_size, info.tls_align, info.tls_init, info.tls_release);
     // The loader's `dlopen` entry (DL-16a): `dlopen` calls it; without one it fails with a text.
     crate::posix::s27_dynlink::LOADER_DLOPEN.store(info.dlopen, Release);
     // The tunables without diagnostics (`ld.so` read the string already).
@@ -401,8 +404,10 @@ fn start_under_liella_ld(main: Option<Main>, argc: c_int, argv_addr: usize, init
     if let Ok(tid) = CSys.set_tid_address(&t.tid) {
         t.tid.store(u32::try_from(tid).unwrap_or(0), Relaxed);
     }
-    // Threads need the loader's TLS interface (DL-15); until then, as under another loader.
-    crate::thread::forbid();
+    // Threads need the loader's TLS interface (DL-15): without it, as under another loader.
+    if !crate::thread::loader_tls_ready() {
+        crate::thread::forbid();
+    }
     // The program's start-up x87 control word (D-10.5), before any of its code runs from here.
     let cw = ffi::liella_link_fpu_control();
     // ARCH(x86_64): x87 control word reset at start-up; FPCR on aarch64 (A-9)
