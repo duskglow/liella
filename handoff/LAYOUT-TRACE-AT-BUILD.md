@@ -106,6 +106,22 @@ release: 24 passed each; fast 101/482/152 startup/hot/probe keys, release 102/43
 mode; FULL by escalation: 32 suites, 11714 passed, 0 failed, conformance 132/0, peak 12G, rc 0). Superseded: ltab4-so and ltab4-plants (rc 101 / 2:
 the first-window test above, before the fix).
 
+Second merge in the same run (next moved during the gate): LAYOUT-TRACE-HOST-CANONICAL(-3) landed (LT-4's
+host-canonical tracing). Conflict in `tools/hottext/regen.sh` `trace()`: keep this branch's `$work/traced` record,
+call next's `trace_tagged` form (LANG, optional `tz=`). Next's `--replace` step prunes the COMMITTED
+`crates/libc-so/hot-text.absent` against the rewritten list; trace-at-build (`--all-modes`, list under target/,
+Traced ignores the allow-list) now skips it (`if [ $all_modes = 1 ]; then absent=; fi`; next's guard line is
+unchanged because its unit test pins the text). New guard in `so.rs` `trace_layout`: the files of crates/libc-so
+are recorded before the trace; any the trace changed are put back and the build fails naming them
+(`tracked_files` / `restore_tracked`; plant ltab-prune-committed-absent).
+
+Jobs on the final code head 9237acb84 (keke, n3): ltab4-so3 (clippy, static, xtask hottext tests 26 passed; trace
+mode fast 103/510/155 and release 104/455/156 startup/hot/probe keys, hot_text_products 24 passed each, no tracked
+file changed; rc 0); ltab4-plants3 (5 plants, trace mode, fast: 5 CAUGHT, 0 WARN, rc 0); ltab4-gate2 (affected
+--run --base origin/next, FULL by escalation, ~77 min; running at hand-back). The jobs of the first merge
+(ltab4-so2, ltab4-plants2, ltab4-gate) ran on 7635ff45e and are superseded by these. The head merges cleanly with
+next as of 12:15Z (62 commits ahead).
+
 ## Jobs, LAYOUT-TRACE-AT-BUILD-2 (mei, role s1)
 
 ltab2-lint0 (clippy + static on the inherited head: rc 0); ltab2-plants (4 plants, trace mode, fast: 4 CAUGHT,
