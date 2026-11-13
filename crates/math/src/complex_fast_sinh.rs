@@ -142,7 +142,7 @@ fn both(x: f64, y: f64, swap: bool, mode: Rounding) -> Option<(f64, f64)> {
 //
 // **Overflow.** A part whose every value within `eps` of `P·2^m` has magnitude `>= 2^1024`
 // rounds, in every mode, to `±∞` or `±DBL_MAX` by its sign and the mode (C Annex F; the result
-// overflows, so `FE_OVERFLOW`, `FE_INEXACT` and `ERANGE`). The lower bound `(|P.hi| − |P.lo| −
+// overflows, so `FE_OVERFLOW` and `FE_INEXACT`, and `ERANGE` with an infinite part, as the route). The lower bound `(|P.hi| − |P.lo| −
 // eps)·(1 − 2^-50)` absorbs the two roundings of its own evaluation. A part between `DBL_MAX` and
 // `2^1024` still declines.
 //
@@ -268,10 +268,12 @@ fn full(h: f64, t: f64, swap: bool, mode: Rounding) -> Option<((f64, f64), Statu
         Some(v) => (v, false),
         None => rescue(p1, m, h, t, Part::Im, mode)?,
     };
-    let st = if o0 || o1 {
-        Status::flags(Flags::OVERFLOW.union(Flags::INEXACT)).overflow_errno()
-    } else {
-        Status::flags(Flags::INEXACT)
+    // An overflow raises its flags; `ERANGE` goes with an infinite part (a directed mode's
+    // `±DBL_MAX` keeps `errno`), as the route reports.
+    let st = match (o0 || o1, re.is_infinite() || im.is_infinite()) {
+        (false, _) => Status::flags(Flags::INEXACT),
+        (true, false) => Status::flags(Flags::OVERFLOW.union(Flags::INEXACT)),
+        (true, true) => Status::flags(Flags::OVERFLOW.union(Flags::INEXACT)).overflow_errno(),
     };
     Some((if swap { (im, re) } else { (re, im) }, st))
 }

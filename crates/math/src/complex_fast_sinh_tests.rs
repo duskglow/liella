@@ -171,6 +171,7 @@ fn csinh_middle_tier_bounds_and_answers() {
     let (rel_t, abs_t, rel_h) = ((-99f64).exp2(), (-137f64).exp2(), (-96.8f64).exp2());
     let mut st = 0x5151_u64;
     let (mut answered, mut total, mut tight) = (0, 0, 0);
+    let mut declined = Vec::new();
     for i in 0..1000 {
         let (h, t) = operand(&mut st, i % 5);
         let Some((sh, ch, s)) = mid_hyp(h.abs()) else { continue };
@@ -193,18 +194,21 @@ fn csinh_middle_tier_bounds_and_answers() {
             for mode in MODES {
                 let (r, _) = csinh_route::<f64>(h, t, mode);
                 let want = if part == Part::Re { r.0 } else { r.1 };
-                if !want.is_normal() {
+                // Overflowing parts (`±DBL_MAX` in a directed mode too) are the overflow step's.
+                if !want.is_normal() || want.abs() == f64::MAX {
                     continue;
                 }
                 total += 1;
                 if let Some(got) = middle_round(p, eps, m, mode) {
                     assert_eq!(got.to_bits(), want.to_bits(), "({h:e}, {t:e}) {part:?} {mode:?}: middle {got:e} route {want:e}");
                     answered += 1;
+                } else if declined.len() < 6 {
+                    declined.push((h, t, part, mode, p.hi, eps, m));
                 }
             }
         }
     }
-    assert!(answered + total / 1000 >= total, "the middle tier answered {answered} of {total}");
+    assert!(answered + total / 1000 >= total, "the middle tier answered {answered} of {total}; declined {declined:?}");
     assert!(tight > 0, "every middle error far below its bound");
 }
 
