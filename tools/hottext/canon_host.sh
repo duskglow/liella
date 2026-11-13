@@ -21,7 +21,7 @@ D=$1
 mkdir -p "$D/root/usr/lib/locale"
 D=$(cd "$D" && pwd)
 u=$(id -u) g=$(id -g)
-printf 'root:x:0:0:root:/root:/bin/sh\nliella:x:%s:%s:Liella trace:/home/liella:/bin/sh\n' "$u" "$g" > "$D/passwd"
+printf 'root:x:0:0:root:/root:/bin/sh\nliella:x:%s:%s:Liella trace:/nonexistent:/bin/sh\n' "$u" "$g" > "$D/passwd"
 printf 'root:x:0:\nliella:x:%s:\n' "$g" > "$D/group"
 cp "$here/hostdata/nsswitch.conf" "$D/nsswitch.conf"
 a=$D/root/usr/lib/locale/locale-archive
