@@ -22,7 +22,7 @@ zlib_test() { make test; }
 xz_utils_src=xz-utils
 xz_utils_kind=automake
 xz_utils_build() { ./configure --disable-shared --disable-nls --disable-doc && make -j"$J"; }
-xz_utils_test() { make -j"$J" check; }
+xz_utils_test() { make -k -j"$J" check; }
 
 # sqlite3: the Tcl test suite needs the Tcl development files (not on the host); the suite that runs without
 # them is fuzzcheck over the fuzz databases in test/ (`make fuzztest` also builds sessionfuzz, which needs
@@ -39,22 +39,22 @@ sqlite3_test() { ./fuzzcheck test/fuzzdata*.db; }
 grep_src=grep
 grep_kind=automake
 grep_build() { ./configure --disable-nls --disable-perl-regexp && make -j"$J"; }
-grep_test() { make -j"$J" check; }
+grep_test() { make -k -j"$J" check; }
 
 sed_src=sed
 sed_kind=automake
 sed_build() { ./configure --disable-nls --without-selinux --disable-acl && make -j"$J"; }
-sed_test() { make -j"$J" check; }
+sed_test() { make -k -j"$J" check; }
 
 diffutils_src=diffutils
 diffutils_kind=automake
 diffutils_build() { ./configure --disable-nls && make -j"$J"; }
-diffutils_test() { make -j"$J" check; }
+diffutils_test() { make -k -j"$J" check; }
 
 findutils_src=findutils
 findutils_kind=automake
 findutils_build() { ./configure --disable-nls --without-selinux && make -j"$J"; }
-findutils_test() { make -j"$J" check; }
+findutils_test() { make -k -j"$J" check; }
 
 coreutils_src=coreutils
 coreutils_kind=automake
@@ -62,16 +62,27 @@ coreutils_build() {
     ./configure --disable-nls --without-selinux --disable-acl --disable-xattr --disable-libcap --without-openssl \
         --without-libgmp && make -j"$J"
 }
-coreutils_test() { make -j"$J" check; }
+coreutils_test() { make -k -j"$J" check; }
 
+# gawk: the interpreter only (SUBDIRS without doc/, whose manual source the Debian package builds from a
+# file it generates, and without extension/: loading extensions needs dlsym, DL-16b).
 gawk_src=gawk
 gawk_kind=gawk
-gawk_build() { ./configure --disable-nls --without-readline --without-mpfr && make -j"$J"; }
-gawk_test() { make check; }
+gawk_build() {
+    ./configure --disable-nls --without-readline --without-mpfr --disable-extensions &&
+        make -j"$J" SUBDIRS="support ."
+}
+gawk_test() { make check SUBDIRS="support ."; }
 
+# make-dfsg: Debian removes doc/ and regenerates configure without it; without autotools on the host the
+# shipped configure still lists doc/Makefile, so the build gives it an empty one (a harness step, not a
+# change to the program).
 make_src=make-dfsg
 make_kind=make
-make_build() { ./configure --disable-nls --without-guile && make -j"$J"; }
+make_build() {
+    [ -f doc/Makefile.in ] || { mkdir -p doc && printf 'all check install clean distclean:\n' > doc/Makefile.in; }
+    ./configure --disable-nls --without-guile && make -j"$J"
+}
 make_test() { make check; }
 
 bash_src=bash
@@ -87,7 +98,8 @@ perl_kind=perl
 perl_build() {
     sh Configure -des -Dcc="$CC" -Dprefix="$PWD/inst" -Dlibswanted="m pthread" -Dusethreads && make -j"$J" miniperl
 }
-perl_test() { make minitest; }
+# `make minitest` reads stdin from /dev/tty, which a job has not got; minitest-notty is the same run without it.
+perl_test() { make minitest-notty; }
 
 # python3.13: every extension module built in (MODULE_BUILDTYPE=static) and the dynamic loader disabled
 # (ac_cv_func_dlopen=no): the import of extension modules needs dlsym (DL-16b). Modules whose libraries the
@@ -111,5 +123,9 @@ python3_test() {
 # liella-c++; libstdc++ is linked statically (no libstdc++.so.6 to search for).
 cppunit_src=cppunit
 cppunit_kind=automake
-cppunit_build() { ./configure --disable-shared --disable-doxygen --disable-html-docs && make -j"$J"; }
-cppunit_test() { make -j"$J" check; }
+# Only the library and its test program (examples/): the plug-in tester DllPlugInTester links dlsym and
+# dlclose, which Liella's libc.so.6 does not export yet (DL-16b, DL-17).
+cppunit_build() {
+    ./configure --disable-shared --disable-doxygen --disable-html-docs && make -j"$J" -C src/cppunit
+}
+cppunit_test() { make -k -j"$J" -C examples check; }

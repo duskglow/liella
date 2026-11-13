@@ -149,7 +149,9 @@ count() {
         bash)
             # A run-* test passes when its section of output is the reference build's; the reference build
             # itself counts its sections as passed (its own diffs are the suite's expected noise on this host).
-            awk '/^run-/ { name = $1; next } name != "" { print name "\t" $0 }' "$log" | sort > "$out.sections"
+            # Process ids and the build directory differ between any two runs; they are not compared.
+            awk '/^run-/ { name = $1; next } name != "" { print name "\t" $0 }' "$log" |
+                sed -e 's#/build/[^/]*/\(glibc\|liella\)/#/build/P/S/#g' -e 's/([0-9][0-9]*)/(N)/g' | sort > "$out.sections"
             t=$(grep -c '^run-' "$log")
             if [ -f "$5" ]; then
                 diff "$5" "$out.sections" | sed -n 's/^[<>] \([^\t]*\)\t.*/\1/p' | sort -u > "$out.failed"
@@ -157,7 +159,7 @@ count() {
             f=$(wc -l < "$out.failed")
             echo "$t $((t - f)) $f 0 0 0" > "$out" ;;
         perl)
-            t=$(sed -n 's/^Files=\([0-9]*\),.*/\1/p' "$log" | tail -1); t=${t:-0}
+            t=$(sed -n 's/.* scripts=\([0-9]*\) .*/\1/p' "$log" | tail -1); t=${t:-0}
             f=$(sed -n 's/^Failed \([0-9]*\) tests* out of.*/\1/p' "$log" | tail -1); f=${f:-0}
             [ "$5" = 0 ] || [ "$f" -gt 0 ] || f=1
             echo "$t $((t - f)) $f 0 0 0" > "$out"
