@@ -1,18 +1,22 @@
 //! The pattern parser: basic, extended and GNU syntaxes, selected by the syntax bits
 //! (`RE_*`, `<regex.h>`), into a tree. Errors are the `regcomp` codes.
-#![allow(clippy::arithmetic_side_effects)] // pattern offsets are bounded by the pattern's length; counts are bounded by RE_DUP_MAX and MAX_DEPTH
+//!
+//! The tree is an arena ([`Parsed::nodes`]) in which every node comes after its children, and
+//! no pass over it recurses (D-14 pending record REGCOMP-DEEP-NESTING-1): the parser keeps its
+//! open groups on an explicit stack, the facts the compiler needs about a node (whether it can
+//! match the empty string, the groups it holds) are computed as the node is added, and the
+//! top-down passes walk with explicit stacks. How deep a pattern nests is bounded by memory
+//! (`REG_ESPACE` when an allocation fails), never by the native stack.
+#![allow(clippy::arithmetic_side_effects)] // pattern offsets are bounded by the pattern's length; node and stack counts by the arena's length
 
 use crate::ctype::{self, WClass};
 use crate::locale::collate::Collation;
 use crate::locale::Locale;
-use crate::mem::{TryBox, TryVec};
+use crate::mem::TryVec;
 
 use super::text::{self, CharSet, Mode, Order, Unit};
 use super::{syntax as s, ReError};
 
-/// A tree deeper than this (nested groups, alternatives and repetitions) is refused with
-/// `REG_ESPACE`, so that the recursive passes over it stay within a small stack.
-const MAX_DEPTH: usize = 256;
 /// `RE_DUP_MAX`.
 pub(crate) const DUP_MAX: u32 = 0x7fff;
 
@@ -37,28 +41,175 @@ pub(crate) enum Assert {
     WordEnd,
 }
 
-/// The tree.
-#[derive(Debug)]
+/// A node of the tree. Children are indices into [`Parsed::nodes`], always smaller than the
+/// node's own; a concatenation's or alternation's are `Parsed::kids[start..start + len]`.
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum Node {
     Empty,
     /// One literal byte.
     Byte(u8),
     /// One character of a set.
     Set(u32),
-    Cat(TryVec<Node>),
-    Alt(TryVec<Node>),
-    /// A subexpression (numbered from 1).
-    Group(u32, TryBox<Node>),
-    /// A repetition `{min,max}` (`max` `None`: unbounded).
-    Rep(TryBox<Node>, u32, Option<u32>),
+    /// `(start, len)` in [`Parsed::kids`].
+    Cat(u32, u32),
+    /// `(start, len)` in [`Parsed::kids`].
+    Alt(u32, u32),
+    /// A subexpression (numbered from 1) and its body.
+    Group(u32, u32),
+    /// A repetition of a node `{min,max}` (`max` `None`: unbounded).
+    Rep(u32, u32, Option<u32>),
     Assert(Assert),
     /// A back-reference.
     Backref(u32),
 }
 
+/// The groups of a node that holds none.
+pub(crate) const NO_GROUPS: (u32, u32) = (u32::MAX, 0);
+
+/// A node with what the compiler needs to know about it.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Item {
+    pub(crate) node: Node,
+    /// The node can match the empty string.
+    pub(crate) nullable: bool,
+    /// The first and last group in the node, its hidden group included ([`NO_GROUPS`]: none).
+    pub(crate) groups: (u32, u32),
+    /// The hidden group around the node ([`hide_subpatterns`]; 0: none).
+    pub(crate) wrap: u32,
+}
+
+const EMPTY: Item = Item { node: Node::Empty, nullable: true, groups: NO_GROUPS, wrap: 0 };
+
+fn join(a: (u32, u32), b: (u32, u32)) -> (u32, u32) {
+    (a.0.min(b.0), a.1.max(b.1))
+}
+
+fn at(nodes: &[Item], id: u32) -> Item {
+    usize::try_from(id).ok().and_then(|i| nodes.get(i)).copied().unwrap_or(EMPTY)
+}
+
+fn kids_of<'k>(kids: &'k [u32], start: u32, len: u32) -> &'k [u32] {
+    let s = usize::try_from(start).unwrap_or(usize::MAX);
+    let e = s.saturating_add(usize::try_from(len).unwrap_or(0));
+    kids.get(s..e).unwrap_or(&[])
+}
+
+/// `node` with its facts, from its children's (all in `nodes`).
+fn facts(nodes: &[Item], kids: &[u32], node: Node, wrap: u32) -> Item {
+    let (nullable, mut groups) = match node {
+        Node::Byte(_) | Node::Set(_) => (false, NO_GROUPS),
+        Node::Empty | Node::Assert(_) | Node::Backref(_) => (true, NO_GROUPS),
+        Node::Cat(st, len) | Node::Alt(st, len) => {
+            let all = matches!(node, Node::Cat(..));
+            let mut null = all;
+            let mut g = NO_GROUPS;
+            for &k in kids_of(kids, st, len) {
+                let it = at(nodes, k);
+                null = if all { null && it.nullable } else { null || it.nullable };
+                g = join(g, it.groups);
+            }
+            (null, g)
+        }
+        Node::Group(n, x) => {
+            let it = at(nodes, x);
+            (it.nullable, join((n, n), it.groups))
+        }
+        Node::Rep(x, m, _) => {
+            let it = at(nodes, x);
+            (m == 0 || it.nullable, it.groups)
+        }
+    };
+    if wrap != 0 {
+        groups = join(groups, (wrap, wrap));
+    }
+    Item { node, nullable, groups, wrap }
+}
+
+/// A stack whose first `N` entries live inline: the passes over the tree allocate nothing for
+/// ordinary patterns, and a deep one grows on the heap (`REG_ESPACE` when that fails).
+pub(crate) struct Stack<T: Copy, const N: usize> {
+    inline: [T; N],
+    len: usize,
+    heap: TryVec<T>,
+}
+
+impl<T: Copy, const N: usize> Stack<T, N> {
+    pub(crate) fn new(fill: T) -> Self {
+        Stack { inline: [fill; N], len: 0, heap: TryVec::new() }
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.len
+    }
+
+    pub(crate) fn push(&mut self, v: T) -> Result<(), ReError> {
+        if let Some(slot) = self.inline.get_mut(self.len) {
+            *slot = v;
+        } else {
+            nomem(self.heap.push(v))?;
+        }
+        self.len += 1;
+        Ok(())
+    }
+
+    pub(crate) fn pop(&mut self) -> Option<T> {
+        if self.len == 0 {
+            return None;
+        }
+        self.len -= 1;
+        if self.len < N {
+            self.inline.get(self.len).copied()
+        } else {
+            self.heap.pop()
+        }
+    }
+
+    pub(crate) fn get(&self, i: usize) -> Option<T> {
+        if i >= self.len {
+            None
+        } else if i < N {
+            self.inline.get(i).copied()
+        } else {
+            self.heap.get(i - N).copied()
+        }
+    }
+
+    pub(crate) fn last_mut(&mut self) -> Option<&mut T> {
+        let i = self.len.checked_sub(1)?;
+        if i < N {
+            self.inline.get_mut(i)
+        } else {
+            self.heap.get_mut(i - N)
+        }
+    }
+
+    pub(crate) fn truncate(&mut self, len: usize) {
+        if len < self.len {
+            self.heap.truncate(len.saturating_sub(N));
+            self.len = len;
+        }
+    }
+}
+
+/// An open group while the parser reads its body: the group's number and the state of the
+/// level around it.
+#[derive(Clone, Copy)]
+struct Level {
+    n: u32,
+    /// The visible groups when the enclosing alternation began.
+    level_visible: u32,
+    /// Where the enclosing alternation's branches and its current branch's items begin on
+    /// [`Parser::work`].
+    alts: usize,
+    items: usize,
+}
+
 /// What the parser produces.
 pub(crate) struct Parsed {
-    pub(crate) root: Node,
+    /// The tree; every node after its children.
+    pub(crate) nodes: TryVec<Item>,
+    pub(crate) kids: TryVec<u32>,
+    pub(crate) root: u32,
     pub(crate) sets: TryVec<CharSet>,
     /// The groups of the tree: the subexpressions, then (after [`hide_subpatterns`]) the hidden
     /// groups among them, all numbered in the order of their opening.
@@ -72,12 +223,20 @@ pub(crate) struct Parsed {
     pub(crate) report: TryVec<u32>,
 }
 
-fn nomem<T>(r: crate::error::Result<T>) -> Result<T, ReError> {
-    r.map_err(|_| ReError::ESpace)
+impl Parsed {
+    /// Node `id` with its facts.
+    pub(crate) fn item(&self, id: u32) -> Item {
+        at(&self.nodes, id)
+    }
+
+    /// The children of a concatenation or an alternation.
+    pub(crate) fn kids(&self, start: u32, len: u32) -> &[u32] {
+        kids_of(&self.kids, start, len)
+    }
 }
 
-fn boxed(n: Node) -> Result<TryBox<Node>, ReError> {
-    nomem(TryBox::new(n))
+fn nomem<T>(r: crate::error::Result<T>) -> Result<T, ReError> {
+    r.map_err(|_| ReError::ESpace)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -118,9 +277,12 @@ struct Parser<'a> {
     /// Per open nesting level: the visible groups hidden by an alternation at that level.
     hidden: TryVec<u32>,
     brefs: u32,
-    /// The depth of the subtree the last parsing step produced.
-    last_depth: usize,
     open: usize,
+    nodes: TryVec<Item>,
+    kids: TryVec<u32>,
+    /// The branches of the open alternations and the items of their current branches, the
+    /// innermost on top.
+    work: Stack<u32, 32>,
     /// An interval brace that `RE_INVALID_INTERVAL_ORD` made an ordinary character.
     lit_brace: Option<usize>,
 }
@@ -219,11 +381,40 @@ impl<'a> Parser<'a> {
         if let [b] = bytes {
             return Ok(Node::Byte(*b));
         }
-        let mut items = TryVec::new();
+        let start = u32::try_from(self.kids.len()).map_err(|_| ReError::ESpace)?;
         for &b in bytes {
-            nomem(items.push(Node::Byte(b)))?;
+            let id = self.add(Node::Byte(b))?;
+            nomem(self.kids.push(id))?;
         }
-        Ok(Node::Cat(items))
+        Ok(Node::Cat(start, u32::try_from(bytes.len()).map_err(|_| ReError::ESpace)?))
+    }
+
+    /// Add `node` (its children already added) to the tree.
+    fn add(&mut self, node: Node) -> Result<u32, ReError> {
+        let id = u32::try_from(self.nodes.len()).map_err(|_| ReError::ESpace)?;
+        let it = facts(&self.nodes, &self.kids, node, 0);
+        nomem(self.nodes.push(it))?;
+        Ok(id)
+    }
+
+    /// The items on [`Self::work`] from `base` up as one node (a concatenation or an
+    /// alternation of several, the item itself, or an empty node), popped.
+    fn collect(&mut self, base: usize, alt: bool) -> Result<u32, ReError> {
+        let len = self.work.len().saturating_sub(base);
+        if len == 0 {
+            return self.add(Node::Empty);
+        }
+        if len == 1 {
+            return self.work.pop().ok_or(ReError::ESpace);
+        }
+        let start = u32::try_from(self.kids.len()).map_err(|_| ReError::ESpace)?;
+        nomem(self.kids.reserve(len))?;
+        for i in base..base + len {
+            nomem(self.kids.push(self.work.get(i).unwrap_or(u32::MAX)))?;
+        }
+        self.work.truncate(base);
+        let n = u32::try_from(len).map_err(|_| ReError::ESpace)?;
+        self.add(if alt { Node::Alt(start, n) } else { Node::Cat(start, n) })
     }
 
     fn any(&mut self) -> Result<Node, ReError> {
@@ -471,48 +662,69 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn alternation(&mut self) -> Result<Node, ReError> {
-        let mut branches = TryVec::new();
-        let level_visible = self.visible;
-        let mut deepest = 0;
-        loop {
-            let b = self.branch()?;
-            deepest = deepest.max(self.last_depth);
-            nomem(branches.push(b))?;
-            let (t, j) = self.token_at(self.i)?;
-            if t != Tok::Alt {
-                break;
-            }
-            // Groups closed in this branch are not visible from the next one (GNU: a
-            // back-reference to a group of another alternative is REG_ESUBREG).
-            let hide = self.visible & !level_visible;
-            if let Some(h) = self.hidden.last_mut() {
-                *h |= hide;
-            }
-            self.visible = level_visible;
-            self.i = j;
-        }
-        if branches.len() == 1 {
-            self.last_depth = deepest;
-            return Ok(branches.pop().unwrap_or(Node::Empty));
-        }
-        self.last_depth = deepest + 1;
-        Ok(Node::Alt(branches))
-    }
-
-    fn branch(&mut self) -> Result<Node, ReError> {
-        let mut items: TryVec<Node> = TryVec::new();
-        let mut deepest = 1;
+    /// The whole pattern: alternations of branches of items, groups nesting alternations. No
+    /// recursion: an open group's level waits on `levels`, and the branches and items of every
+    /// open level on [`Self::work`].
+    fn tree(&mut self) -> Result<u32, ReError> {
+        let mut levels: Stack<Level, 16> = Stack::new(Level { n: 0, level_visible: 0, alts: 0, items: 0 });
+        // The innermost level: the visible groups when its alternation began, and where its
+        // branches and its current branch's items begin on `work`.
+        let mut level_visible = self.visible;
+        let mut alts = self.work.len();
+        let mut items = alts;
         // No atom yet in this branch (or only a leading `^`): the repetition operators are
         // context dependent here.
         let mut start = true;
         loop {
             let (t, j) = self.token_at(self.i)?;
-            match t {
-                Tok::End | Tok::Alt => break,
-                Tok::Close if self.open > 0 => break,
+            let ends = match t {
+                Tok::End | Tok::Alt => true,
+                Tok::Close if self.open > 0 => true,
                 Tok::Close if !self.has(s::UNMATCHED_RIGHT_PAREN_ORD) => return Err(ReError::ERParen),
-                _ => {}
+                _ => false,
+            };
+            if ends {
+                // The branch ends: one node on `work` for it.
+                let b = self.collect(items, false)?;
+                self.work.push(b)?;
+                let (t, j) = self.token_at(self.i)?;
+                if t == Tok::Alt {
+                    // Groups closed in this branch are not visible from the next one (GNU: a
+                    // back-reference to a group of another alternative is REG_ESUBREG).
+                    let hide = self.visible & !level_visible;
+                    if let Some(h) = self.hidden.last_mut() {
+                        *h |= hide;
+                    }
+                    self.visible = level_visible;
+                    self.i = j;
+                    items = self.work.len();
+                    start = true;
+                    continue;
+                }
+                // The alternation ends: its level is the whole pattern or a group's body.
+                let body = self.collect(alts, true)?;
+                let Some(lv) = levels.pop() else { return Ok(body) };
+                if t != Tok::Close {
+                    return Err(ReError::EParen);
+                }
+                self.i = j;
+                self.open -= 1;
+                let hidden = self.hidden.pop().unwrap_or(0);
+                // Leaving the group: the groups its alternatives hid are visible again, and the
+                // group itself becomes visible (back-references count groups up to 31; later ones
+                // are never referenced, `\1`-`\9`).
+                self.visible |= hidden;
+                if lv.n < 32 {
+                    self.visible |= 1 << lv.n;
+                }
+                let atom = self.add(Node::Group(lv.n, body))?;
+                level_visible = lv.level_visible;
+                alts = lv.alts;
+                items = lv.items;
+                start = false;
+                let node = self.dups(atom)?;
+                self.work.push(node)?;
+                continue;
             }
             let atom = if Self::is_dup(t) {
                 if start {
@@ -521,23 +733,38 @@ impl<'a> Parser<'a> {
                     }
                     if self.has(s::CONTEXT_INDEP_OPS) {
                         // A repetition of nothing; the operators follow.
-                        Node::Empty
+                        self.add(Node::Empty)?
                     } else {
                         // The operator is an ordinary character.
                         let c = self.p.get(j.saturating_sub(1)).copied().unwrap_or(b'*');
                         self.i = j;
-                        Node::Byte(c)
+                        self.add(Node::Byte(c))?
                     }
-                } else {
+                } else if self.work.len() > items {
                     // After a `^` anchor in the middle of the pattern: it is the operand.
-                    items.pop().unwrap_or(Node::Empty)
+                    self.work.pop().unwrap_or(u32::MAX)
+                } else {
+                    self.add(Node::Empty)?
                 }
             } else {
                 self.i = j;
-                match t {
+                let node = match t {
                     Tok::Caret if self.has(s::CONTEXT_INDEP_ANCHORS) || start => {
-                        nomem(items.push(Node::Assert(Assert::Bol)))?;
+                        let id = self.add(Node::Assert(Assert::Bol))?;
+                        self.work.push(id)?;
                         // A repetition right after a leading `^` is still in a start context.
+                        continue;
+                    }
+                    Tok::Open => {
+                        // A group opens: its body is a new level.
+                        self.ngroups = self.ngroups.checked_add(1).ok_or(ReError::ESpace)?;
+                        self.open += 1;
+                        nomem(self.hidden.push(0))?;
+                        levels.push(Level { n: self.ngroups, level_visible, alts, items })?;
+                        level_visible = self.visible;
+                        alts = self.work.len();
+                        items = alts;
+                        start = true;
                         continue;
                     }
                     Tok::Caret => self.literal_char(b'^')?,
@@ -546,7 +773,6 @@ impl<'a> Parser<'a> {
                     Tok::Lit(a, b, v) => self.literal(a, b, v)?,
                     Tok::Any => self.any()?,
                     Tok::Bracket => self.bracket()?,
-                    Tok::Open => self.group()?,
                     Tok::Close => self.literal_char(b')')?,
                     Tok::Backref(n) => {
                         if n > self.ngroups || self.visible & (1 << n) == 0 {
@@ -558,21 +784,13 @@ impl<'a> Parser<'a> {
                     Tok::Class(k) => self.gnu_class(k)?,
                     Tok::Assert(a) => Node::Assert(a),
                     _ => Node::Empty,
-                }
+                };
+                self.add(node)?
             };
             start = false;
-            // The operand's depth: a group's was measured; a literal of several bytes is two levels.
-            let depth = if t == Tok::Open { self.last_depth } else if matches!(atom, Node::Cat(_)) { 2 } else { 1 };
-            let node = self.dups(atom, depth)?;
-            deepest = deepest.max(self.last_depth);
-            nomem(items.push(node))?;
+            let node = self.dups(atom)?;
+            self.work.push(node)?;
         }
-        if items.len() <= 1 {
-            self.last_depth = deepest;
-            return Ok(items.pop().unwrap_or(Node::Empty));
-        }
-        self.last_depth = deepest + 1;
-        Ok(Node::Cat(items))
     }
 
     /// An ASCII character that the syntax made ordinary.
@@ -587,10 +805,9 @@ impl<'a> Parser<'a> {
     }
 
     /// Apply the repetition operators that follow an operand.
-    fn dups(&mut self, atom: Node, depth: usize) -> Result<Node, ReError> {
+    fn dups(&mut self, atom: u32) -> Result<u32, ReError> {
         let mut node = atom;
         let mut last_dup = false;
-        self.last_depth = depth;
         loop {
             let at = self.i;
             let (t, j) = self.token_at(at)?;
@@ -599,7 +816,7 @@ impl<'a> Parser<'a> {
             }
             // A repetition of an anchor (ERE `^*`, `x$+`, `(^){2}` written `^{2}`) is REG_BADRPT where the
             // syntax rejects repetition operators without an operand (#1783).
-            if matches!(node, Node::Assert(Assert::Bol | Assert::Eol)) && self.has(s::CONTEXT_INVALID_OPS) {
+            if matches!(at(&self.nodes, node).node, Node::Assert(Assert::Bol | Assert::Eol)) && self.has(s::CONTEXT_INVALID_OPS) {
                 return Err(ReError::BadRpt);
             }
             // RE_CONTEXT_INVALID_DUP: `*` or an interval cannot follow another repetition.
@@ -625,61 +842,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn rep(&mut self, atom: Node, lo: u32, hi: Option<u32>) -> Result<Node, ReError> {
-        self.last_depth += 1;
-        if self.last_depth > MAX_DEPTH {
-            return Err(ReError::ESpace);
-        }
-        Ok(Node::Rep(boxed(atom)?, lo, hi))
-    }
-
-    /// The error for a group nested deeper than `MAX_DEPTH` (T30): the depth stays bounded (the
-    /// parser never recurses past it), but a pattern whose groups do not close is `REG_EPAREN`
-    /// and one with an unterminated bracket is `REG_EBRACK`, as glibc reports them (probed at
-    /// 257 to 10,000 levels); a balanced pattern that deep is `REG_ESPACE`. The rest of the
-    /// pattern is only scanned by token, on this error path.
-    fn too_deep(&self) -> ReError {
-        let mut need = self.open + 1;
-        let mut i = self.i;
-        loop {
-            let Ok((t, j)) = self.token_at(i) else { return ReError::ESpace };
-            match t {
-                Tok::End => return if need > 0 { ReError::EParen } else { ReError::ESpace },
-                Tok::Open => need += 1,
-                Tok::Close => need = need.saturating_sub(1),
-                Tok::Bracket => match self.bracket_end(j) {
-                    Some(k) => {
-                        i = k;
-                        continue;
-                    }
-                    None => return ReError::EBrack,
-                },
-                _ => {}
-            }
-            i = j;
-        }
-    }
-
-    /// The position after the `]` closing a bracket expression whose body starts at `i`, or
-    /// `None` when it is unterminated (for [`Self::too_deep`]).
-    fn bracket_end(&self, mut i: usize) -> Option<usize> {
-        if self.p.get(i) == Some(&b'^') {
-            i += 1;
-        }
-        if self.p.get(i) == Some(&b']') {
-            i += 1;
-        }
-        loop {
-            match (self.p.get(i)?, self.p.get(i + 1)) {
-                (b']', _) => return Some(i + 1),
-                (b'[', Some(&d @ (b':' | b'.' | b'='))) => {
-                    let rest = self.p.get(i + 2..)?;
-                    let k = rest.windows(2).position(|w| w == [d, b']'])?;
-                    i += 2 + k + 2;
-                }
-                _ => i += 1,
-            }
-        }
+    fn rep(&mut self, atom: u32, lo: u32, hi: Option<u32>) -> Result<u32, ReError> {
+        self.add(Node::Rep(atom, lo, hi))
     }
 
     /// List character `c` in `cs`; under `RE_ICASE` also its upper case when that does not fold
@@ -694,36 +858,6 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn group(&mut self) -> Result<Node, ReError> {
-        // The parser recurses once per open group: bound it before descending.
-        if self.open >= MAX_DEPTH {
-            return Err(self.too_deep());
-        }
-        self.ngroups = self.ngroups.checked_add(1).ok_or(ReError::ESpace)?;
-        let n = self.ngroups;
-        self.open += 1;
-        nomem(self.hidden.push(0))?;
-        let inner = self.alternation()?;
-        let (t, j) = self.token_at(self.i)?;
-        if t != Tok::Close {
-            return Err(ReError::EParen);
-        }
-        self.i = j;
-        self.open -= 1;
-        let hidden = self.hidden.pop().unwrap_or(0);
-        // Leaving the group: the groups its alternatives hid are visible again, and the group
-        // itself becomes visible (back-references count groups up to 31; later ones are never
-        // referenced, `\1`-`\9`).
-        self.visible |= hidden;
-        if n < 32 {
-            self.visible |= 1 << n;
-        }
-        self.last_depth += 1;
-        if self.last_depth > MAX_DEPTH {
-            return Err(ReError::ESpace);
-        }
-        Ok(Node::Group(n, boxed(inner)?))
-    }
 }
 
 /// Parse `pattern` under `syntax` in `loc`.
@@ -740,17 +874,21 @@ pub(crate) fn parse(pattern: &[u8], syntax: u64, loc: &Locale) -> Result<Parsed,
         visible: 0,
         hidden: TryVec::new(),
         brefs: 0,
-        last_depth: 0,
         open: 0,
+        // A node per pattern byte at most, short of multibyte literals and empty operands.
+        nodes: nomem(TryVec::with_capacity(pattern.len().saturating_add(1)))?,
+        kids: TryVec::new(),
+        work: Stack::new(0),
         lit_brace: None,
     };
-    let root = p.alternation()?;
+    let root = p.tree()?;
     let (t, _) = p.token_at(p.i)?;
     if t != Tok::End {
         // Only an unmatched close parenthesis stops the top level early.
         return Err(ReError::ERParen);
     }
-    let mut parsed = Parsed { root, sets: p.sets, ngroups: p.ngroups, brefs: p.brefs, nsub: p.ngroups, report: TryVec::new() };
+    let mut parsed =
+        Parsed { nodes: p.nodes, kids: p.kids, root, sets: p.sets, ngroups: p.ngroups, brefs: p.brefs, nsub: p.ngroups, report: TryVec::new() };
     hide_subpatterns(&mut parsed)?;
     Ok(parsed)
 }
@@ -779,140 +917,103 @@ fn hide_subpatterns(p: &mut Parsed) -> Result<(), ReError> {
     if p.ngroups == 0 {
         return Ok(());
     }
-    /// Per pre-order position: whether the node holds a group; and the last group's position.
-    fn survey(n: &Node, holds: &mut TryVec<bool>, last: &mut usize) -> Result<bool, ReError> {
-        let me = holds.len();
-        nomem(holds.push(false))?;
-        let has = match n {
-            Node::Group(_, x) => {
-                *last = me;
-                survey(x, holds, last)?;
-                true
-            }
-            Node::Cat(v) | Node::Alt(v) => {
-                let mut any = false;
-                for c in v.iter() {
-                    any |= survey(c, holds, last)?;
-                }
-                any
-            }
-            Node::Rep(x, _, _) => survey(x, holds, last)?,
-            _ => false,
-        };
-        if let Some(h) = holds.get_mut(me) {
-            *h = has;
-        }
-        Ok(has)
-    }
-    struct Plan {
-        /// The pattern has back-references: a repetition holding groups is not weighed on its
-        /// own (a back-reference sees the group as the subexpressions alone select it, the
-        /// owner's ruling of 2026-10-04 and the POSIX reading of `(a*)*\1`).
-        brefs: bool,
-        holds: TryVec<bool>,
-        last: usize,
-        pre: usize,
-        next: u32,
-        /// Per pre-order position: the hidden group wrapping it (0: none).
-        wrap: TryVec<u32>,
-        /// Per subexpression: its group.
-        map: TryVec<u32>,
-    }
-    // Decide, in pre-order, which nodes get a hidden group and every group's number. `body`: `n`
-    // is a group's whole body; `alt`: `n` lies in an alternative (below the nearest group);
-    // `rep`: `n` is a repetition's whole operand.
-    fn plan(n: &Node, body: bool, alt: bool, rep: bool, st: &mut Plan) -> Result<(), ReError> {
-        let me = st.pre;
-        st.pre += 1;
-        let has = st.holds.get(me).copied().unwrap_or(false);
-        let wrap = match n {
+    // The pattern has back-references: a repetition holding groups is not weighed on its own (a
+    // back-reference sees the group as the subexpressions alone select it, the owner's ruling of
+    // 2026-10-04 and the POSIX reading of `(a*)*\1`).
+    let brefs = p.brefs != 0;
+    let ix = |id: u32| usize::try_from(id).unwrap_or(usize::MAX);
+    // Per node: the hidden group wrapping it (0: none). Per subexpression: its group.
+    let mut wrap = TryVec::new();
+    nomem(wrap.resize(p.nodes.len(), 0u32))?;
+    let mut map = TryVec::new();
+    nomem(map.resize(usize::try_from(p.ngroups).unwrap_or(0), 0u32))?;
+    let mut next = 0u32;
+    // The groups met so far in pre-order: a node comes before the opening of some group while
+    // fewer than all of them are met (every group of the pattern is a node of the tree).
+    let mut opened = 0u32;
+    // Decide, in pre-order, which nodes get a hidden group and every group's number. `BODY`: the
+    // node is a group's whole body; `ALT`: it lies in an alternative (below the nearest group);
+    // `REP`: it is a repetition's whole operand.
+    const BODY: u8 = 1;
+    const ALT: u8 = 2;
+    const REP: u8 = 4;
+    let mut stack: Stack<(u32, u8), 32> = Stack::new((0, 0));
+    stack.push((p.root, 0))?;
+    while let Some((id, how)) = stack.pop() {
+        let it = p.item(id);
+        // Whether the node holds a group (nothing is wrapped yet).
+        let has = it.groups != NO_GROUPS;
+        let (body, alt, rep) = (how & BODY != 0, how & ALT != 0, how & REP != 0);
+        let wrapped = match it.node {
             // A group-free repetition that is another repetition's whole operand (`a**`, `a*?*`)
             // is not weighed on its own (FUZZ-REGEX-TIMEOUTS-3, D-14.8): the outer repetition's
             // hidden group fixes the stack's span, and how a group-free stack splits that span
             // into iterations changes no later subexpression. Left unwrapped, the stack's scopes
             // are group-free and share one empty-iteration level (program.rs `chain_shared`).
-            Node::Rep(..) => !(rep && !has) && (!has || !st.brefs),
-            Node::Alt(_) | Node::Backref(_) => !has,
+            Node::Rep(..) => !(rep && !has) && (!has || !brefs),
+            Node::Alt(..) | Node::Backref(_) => !has,
             _ => false,
         };
-        let mut h = 0;
-        if wrap && !body && !alt && me < st.last {
-            st.next = st.next.checked_add(1).ok_or(ReError::ESpace)?;
-            h = st.next;
+        if wrapped && !body && !alt && opened < p.ngroups {
+            next = next.checked_add(1).ok_or(ReError::ESpace)?;
+            if let Some(w) = wrap.get_mut(ix(id)) {
+                *w = next;
+            }
         }
-        nomem(st.wrap.push(h))?;
-        match n {
+        let inherit = if alt { ALT } else { 0 };
+        // The children go on the stack last first, so that they are planned first to last.
+        match it.node {
             Node::Group(g, x) => {
-                st.next = st.next.checked_add(1).ok_or(ReError::ESpace)?;
-                if let Some(m) = st.map.get_mut(usize::try_from(*g).unwrap_or(0).saturating_sub(1)) {
-                    *m = st.next;
+                opened += 1;
+                next = next.checked_add(1).ok_or(ReError::ESpace)?;
+                if let Some(m) = map.get_mut(ix(g).saturating_sub(1)) {
+                    *m = next;
                 }
-                plan(x, true, false, false, st)?;
+                stack.push((x, BODY))?;
             }
-            Node::Cat(v) => {
-                for c in v.iter() {
-                    plan(c, false, alt, false, st)?;
-                }
-            }
-            Node::Alt(v) => {
-                for c in v.iter() {
-                    plan(c, false, true, false, st)?;
+            Node::Cat(s, l) => {
+                for &k in p.kids(s, l).iter().rev() {
+                    stack.push((k, inherit))?;
                 }
             }
-            Node::Rep(x, _, _) => plan(x, false, alt, true, st)?,
+            Node::Alt(s, l) => {
+                for &k in p.kids(s, l).iter().rev() {
+                    stack.push((k, ALT))?;
+                }
+            }
+            Node::Rep(x, _, _) => stack.push((x, inherit | REP))?,
             _ => {}
         }
-        Ok(())
     }
-    // Renumber the groups and back-references and wrap the planned nodes.
-    fn apply(n: &mut Node, pre: &mut usize, st: &Plan) -> Result<(), ReError> {
-        let me = *pre;
-        *pre += 1;
-        let of = |g: u32| st.map.get(usize::try_from(g).unwrap_or(0).saturating_sub(1)).copied().ok_or(ReError::ESubreg);
-        match n {
-            Node::Group(g, x) => {
-                *g = of(*g)?;
-                apply(x, pre, st)?;
-            }
-            Node::Cat(v) | Node::Alt(v) => {
-                for c in v.as_mut_slice() {
-                    apply(c, pre, st)?;
-                }
-            }
-            Node::Rep(x, _, _) => apply(x, pre, st)?,
-            Node::Backref(g) => *g = of(*g)?,
-            _ => {}
-        }
-        let h = st.wrap.get(me).copied().unwrap_or(0);
-        if h != 0 {
-            let inner = core::mem::replace(n, Node::Empty);
-            *n = Node::Group(h, boxed(inner)?);
-        }
-        Ok(())
-    }
-    let mut holds = TryVec::new();
-    let mut last = 0usize;
-    survey(&p.root, &mut holds, &mut last)?;
-    let mut map = TryVec::new();
-    nomem(map.resize(usize::try_from(p.ngroups).unwrap_or(0), 0u32))?;
-    let mut st = Plan { brefs: p.brefs != 0, holds, last, pre: 0, next: 0, wrap: TryVec::new(), map };
-    plan(&p.root, false, false, false, &mut st)?;
-    if st.next == p.ngroups {
+    if next == p.ngroups {
         return Ok(());
     }
-    let mut brefs = 0u32;
+    let mut new_brefs = 0u32;
     for g in 1..=p.ngroups.min(31) {
         if p.brefs & (1 << g) != 0 {
-            let to = st.map.get(usize::try_from(g - 1).unwrap_or(usize::MAX)).copied().unwrap_or(u32::MAX);
+            let to = map.get(usize::try_from(g - 1).unwrap_or(usize::MAX)).copied().unwrap_or(u32::MAX);
             if to > 31 {
                 return Ok(());
             }
-            brefs |= 1 << to;
+            new_brefs |= 1 << to;
         }
     }
-    apply(&mut p.root, &mut 0, &st)?;
-    p.brefs = brefs;
-    p.ngroups = st.next;
-    p.report = st.map;
+    // Renumber the groups and back-references, mark the planned nodes and recompute every
+    // node's facts, children first.
+    let of = |g: u32| map.get(ix(g).saturating_sub(1)).copied().ok_or(ReError::ESubreg);
+    let nodes = p.nodes.as_mut_slice();
+    for i in 0..nodes.len() {
+        let (done, rest) = nodes.split_at_mut(i);
+        let Some(cur) = rest.first_mut() else { break };
+        let node = match cur.node {
+            Node::Group(g, x) => Node::Group(of(g)?, x),
+            Node::Backref(g) => Node::Backref(of(g)?),
+            other => other,
+        };
+        *cur = facts(done, &p.kids, node, wrap.get(i).copied().unwrap_or(0));
+    }
+    p.brefs = new_brefs;
+    p.ngroups = next;
+    p.report = map;
     Ok(())
 }
