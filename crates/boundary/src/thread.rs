@@ -56,6 +56,8 @@ static LOCK_ALONE: AtomicBool = AtomicBool::new(false);
 static FORBIDDEN: AtomicBool = AtomicBool::new(false);
 /// Liella owns the threads' rseq registration (D-22.7).
 pub(crate) static RSEQ_OWNED: AtomicBool = AtomicBool::new(false);
+/// Set by [`set_loader_rseq`]: the loader registered the initial thread's rseq area.
+static LOADER_RSEQ: AtomicBool = AtomicBool::new(false);
 /// The executable's TLS segment: address, file size, memory size, alignment (all 0: none).
 static TLS_IMAGE: [AtomicUsize; 4] = [const { AtomicUsize::new(0) }; 4];
 /// Process-wide defaults (`pthread_setattr_default_np`): 0 means "not decided yet".
@@ -88,9 +90,40 @@ pub(crate) fn set_tls_image(img: Option<TlsImage>) {
     }
 }
 
+/// The TLS block a new thread gets (`None`: none). Its size is read first: a program without TLS
+/// reads one word. Address 0 is the area of Liella's `ld.so` ([`set_loader_tls`]).
 fn tls_image() -> Option<TlsImage> {
-    let w: [usize; 4] = core::array::from_fn(|i| TLS_IMAGE.get(i).map_or(0, |a| a.load(Acquire)));
-    (w[2] != 0).then_some(TlsImage { addr: w[0], filesz: w[1], memsz: w[2], align: w[3] })
+    let word = |i: usize| TLS_IMAGE.get(i).map_or(0, |a| a.load(Acquire));
+    let memsz = word(2);
+    if memsz == 0 {
+        return None;
+    }
+    Some(TlsImage { addr: word(0), filesz: word(1), memsz, align: word(3) })
+}
+
+/// Liella's `ld.so` owns the modules' TLS (DL-15 `DL-TLS-THREADS`, design §7): its `tls_init` and
+/// `tls_release` (`StartInfo`); 0 otherwise. The area itself is [`TLS_IMAGE`] with address 0.
+static LOADER_INIT: AtomicUsize = AtomicUsize::new(0);
+static LOADER_RELEASE: AtomicUsize = AtomicUsize::new(0);
+
+/// The loader's per-thread TLS interface (`__liella_libc_early_init`): the bytes a new thread's
+/// static area needs below its thread pointer, their alignment and the two hooks. Kept only when
+/// usable: an area size, an alignment that is a power of two no larger than a page (a mapping's
+/// base is only page-aligned), and both hooks; otherwise nothing is kept and threads stay refused.
+#[cfg_attr(not(feature = "runtime"), allow(dead_code))]
+pub(crate) fn set_loader_tls(size: usize, align: usize, init: usize, release: usize) {
+    if size == 0 || !align.is_power_of_two() || align > PAGE || init == 0 || release == 0 {
+        return;
+    }
+    set_tls_image(Some(TlsImage { addr: 0, filesz: 0, memsz: size, align }));
+    LOADER_RELEASE.store(release, Release);
+    LOADER_INIT.store(init, Release);
+}
+
+/// Whether Liella's `ld.so` gave its per-thread TLS interface, so threads can be created.
+#[cfg_attr(not(feature = "runtime"), allow(dead_code))]
+pub(crate) fn loader_tls_ready() -> bool {
+    LOADER_INIT.load(Acquire) != 0
 }
 
 /// A dynamically linked program under another `ld.so`: no thread creation (D-22.10).
@@ -175,13 +208,20 @@ pub(crate) fn init_initial(static_program: bool) {
     OWNED.store(true, Release);
     LOCK_ALONE.store(SINGLE_THREADED.load(Acquire) != 0, Release);
     LIVE.store(1, Release);
-    register_kernel_areas(d);
+    register_kernel_areas(d, RSEQ_OWNED.load(Acquire));
     list_insert(d);
 }
 
-fn register_kernel_areas(d: &'static Thread) {
+/// A dynamically linked program under Liella's `ld.so`, which registered the initial thread's rseq
+/// area: the threads created here register theirs (D-27.26).
+#[cfg_attr(not(feature = "runtime"), allow(dead_code))]
+pub(crate) fn set_loader_rseq(on: bool) {
+    LOADER_RSEQ.store(on, Release);
+}
+
+fn register_kernel_areas(d: &'static Thread, rseq: bool) {
     let _ = raw::set_robust_list(addr_of(&d.robust), 24);
-    if RSEQ_OWNED.load(Acquire) && CSys.rseq(rseq_static(d), 0, RSEQ_SIG).is_ok() {
+    if rseq && CSys.rseq(rseq_static(d), 0, RSEQ_SIG).is_ok() {
         d.flags.fetch_or(DESC_RSEQ, AcqRel);
         // Published once registration works (§22.9); 0 means "none" to applications.
         crate::data::__rseq_offset.store(isize::try_from(liella_rt::tls::RSEQ_OFFSET).unwrap_or(0), Release);
@@ -417,6 +457,8 @@ pub(crate) fn serialized<T>(f: impl FnOnce() -> T) -> T {
 /// Visit the thread block of every listed thread, and the calling thread's if it is not listed,
 /// with the thread-list lock held (in a process that certainly has one thread, only the calling
 /// thread's, without the lock): `setlocale` storing the global locale's ctype words (D-5.5).
+/// Out of line: its `publish_global` instance is a hot-text key (LAYOUT-HOTKEY-INLINE-STABLE).
+#[inline(never)]
 pub(crate) fn each_block(mut f: impl FnMut(&'static liella_rt::tls::ThreadBlock)) {
     if alone() {
         return f(tb::current());
@@ -494,6 +536,8 @@ fn take_mapping(lay: &Layout) -> KResult<usize> {
                 let base = d.map_base.load(Relaxed);
                 // The parts above the stack start clean; the stack itself need not.
                 let span = KEYS.span();
+                // Under Liella's `ld.so` this clears its whole area too (the surplus as in a fresh
+                // mapping), before its `tls_init` rewrites the blocks and the dtv.
                 conv::zero_mapped(base + lay.tls, lay.keys - lay.tls);
                 conv::zero_mapped(base + lay.keys, (span * 16).min(KEY_AREA));
                 return Ok(base);
@@ -600,6 +644,8 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
         }
         return Err(Errno::EAGAIN);
     }
+    // Under Liella's `ld.so` the static area below TP is the loader's (every initially loaded
+    // module's block, the surplus and the dtv; address 0): reserved here, filled by its `tls_init`.
     let img = tls_image();
     let stack_size = if a.stack_size == 0 { default_stack() } else { a.stack_size };
     let guard = a.guard.unwrap_or_else(|| DEFAULT_GUARD.load(Relaxed));
@@ -616,9 +662,16 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
         }
     };
     let tp = base + lay.tp;
-    // The TLS block: the image, then zeros (fresh or cleared memory).
+    // The TLS block: the image, then zeros (fresh or cleared memory). The loader's area (address
+    // 0): its `tls_init` writes the images, zeros to each block's end, the dtv and the block's dtv
+    // word (a reused mapping held an earlier thread's bytes there); no other store below touches
+    // that word.
     if let Some(t) = img {
-        conv::copy_mapped(t.addr, base + lay.tls, t.filesz);
+        if t.addr == 0 {
+            let _ = ffi::liella_machine_call3(LOADER_INIT.load(Acquire), i64::from_ne_bytes(tp.to_ne_bytes()), 0, 0);
+        } else {
+            conv::copy_mapped(t.addr, base + lay.tls, t.filesz);
+        }
     }
     let me = tb::current();
     let b = tb::fresh(tp);
@@ -658,7 +711,11 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
     d.keys.store(base + lay.keys, Relaxed);
     d.slots.store(base + lay.keys + KEY_AREA, Relaxed);
     d.tp.store(tp, Relaxed);
-    let creator_mask = CSys.sigprocmask(liella_kernel::uapi::SIG_BLOCK, None).map_or(0, |m| m.0);
+    // The new thread starts with every signal blocked and sets its own mask: the creator blocks
+    // them here, until the clone is made, and the call's old mask is the creator's, the one the
+    // thread inherits unless the attribute names one. One call, not a query and a change.
+    let blocked = CSys.sigprocmask(SIG_SETMASK, Some(&SigSet(!0)));
+    let creator_mask = blocked.as_ref().map_or(0, |m| m.0);
     d.sigmask.store(a.sigmask.unwrap_or(creator_mask), Relaxed);
     let handshake = a.sched.is_some() || a.affinity.is_some();
     if let Some((policy, prio)) = a.sched {
@@ -679,10 +736,11 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
     LOCK_ALONE.store(false, Release);
     list_insert(d);
     LIVE.fetch_add(1, AcqRel);
-    // The new thread starts with every signal blocked and sets its own mask.
-    let all = CSys.sigprocmask(SIG_SETMASK, Some(&SigSet(!0))).unwrap_or(SigSet(creator_mask));
     let r = ffi::liella_machine_clone_thread(CLONE_FLAGS, sp, &b.tid, &b.tid, tp);
-    let _ = CSys.sigprocmask(SIG_SETMASK, Some(&all));
+    // The creator's own mask again (unchanged if blocking failed).
+    if let Ok(old) = blocked {
+        let _ = CSys.sigprocmask(SIG_SETMASK, Some(&old));
+    }
     if r < 0 {
         list_remove(d);
         LIVE.fetch_sub(1, AcqRel);
@@ -720,7 +778,7 @@ fn entry_addr() -> usize {
 /// The new thread's first Rust frame (called by the C layer on its stack).
 extern "C" fn entry(daddr: usize) -> i32 {
     let d = tb::desc_at(daddr);
-    register_kernel_areas(d);
+    register_kernel_areas(d, RSEQ_OWNED.load(Acquire) || LOADER_RSEQ.load(Acquire));
     if d.started.load(Relaxed) == 0 && (d.sched_policy.load(Relaxed) != 0 || d.affinity.load(Relaxed) != 0) {
         let verdict = apply_start_attrs(d).err().map_or(0, |e| u32::try_from(e.get()).unwrap_or(22));
         d.start_error.store(verdict, Release);
@@ -773,6 +831,11 @@ pub(crate) fn finish(result: usize) -> ! {
     // result table or resolver state again, which only these release.
     crate::users::thread_ending();
     crate::resolv::thread_ending();
+    // The loader's last word on this thread (its static area goes with the mapping).
+    let release = LOADER_RELEASE.load(Acquire);
+    if release != 0 {
+        let _ = ffi::liella_machine_call3(release, i64::from_ne_bytes(tb::tp().to_ne_bytes()), 0, 0);
+    }
     crate::heap::HEAP.park(&CSys, &crate::heap::KernelPages);
     if LIVE.fetch_sub(1, AcqRel) == 1 && OWNED.load(Acquire) {
         crate::process::exit(0);

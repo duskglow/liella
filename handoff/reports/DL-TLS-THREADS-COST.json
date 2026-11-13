@@ -1,0 +1,73 @@
+{
+ "task": "DL-TLS-THREADS-COST",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: static pthread_create+join 35986.2 -> 35940.2 instr/call (base 35957.2) measured; plants rc 2 (dead hot-text keys fatal on this pre-LAYOUT-DEADKEY-WARN stack) and hot_text_products CLUSTER-WINDOW red with fresh lists",
+ "branch": "task/dl-tls-threads-cost",
+ "head": null,
+ "gate": {
+  "affected": "not run: gate2 stopped after hot_text_products failed (clippy, static rc 0)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "hot-text lists: coordinator note asks for regen.sh output; CONTRIBUTING HOTLIST-TRAIN-REGEN forbids committing them",
+   "recommendation": "train regenerates at landing; fresh lists (cargo xtask hot-lists) pass the dead-key check in both profiles and lower kanon's tool mode (fast 53->52, release 56->54)"
+  },
+  {
+   "item": "merge origin/next into this stacked branch (brings LAYOUT-DEADKEY-WARN)",
+   "recommendation": "allow it in the continuation brief"
+  }
+ ],
+ "informational": [
+  "dynamic pthread row not measured: wl_percall has no dynamic Liella mode; dl_tls_threads tests cover the behaviour",
+  "the sigprocmask merge is outside the TLS code but on the same row; mask semantics unchanged, block starts before list insertion",
+  "next's own fault counts on kanon not measured"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "perf",
+   "what": "static thread_create_join (wl_percall, kanon) vs DL-TLS-THREADS head",
+   "before": 35986.2,
+   "after": 35940.2,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "perf",
+   "what": "static thread_create_join vs pre-DL-TLS-THREADS base cdafa3d1c",
+   "before": 35957.2,
+   "after": 35940.2,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "plants (2 count, 2 behaviour)",
+   "before": 0,
+   "after": 4,
+   "unit": "plants",
+   "measured": true
+  },
+  {
+   "kind": "correctness",
+   "what": "a reused thread mapping under Liella's ld.so now clears the loader's surplus like a fresh one",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  }
+ ],
+ "improvement": "wl_percall has no dynamic-link mode, so 'dynamic rows' in briefs cannot be measured with the named tool; and briefs asking to commit regen.sh output conflict with HOTLIST-TRAIN-REGEN",
+ "next_step": "merge origin/next (needs allowance), rerun cargo xtask hot-lists, compare CLUSTER-WINDOW against next with fresh lists, then gate and plants",
+ "report_file": "handoff/DL-TLS-THREADS-COST.md",
+ "jobs": [
+  "kanon:dl-tls-threads-cost-percall3",
+  "kanon:dl-tls-threads-cost-percall",
+  "kanon:dl-tls-threads-cost-percall-prev",
+  "kanon:dl-tls-threads-cost-gate2",
+  "kanon:dl-tls-threads-cost-plants"
+ ]
+}

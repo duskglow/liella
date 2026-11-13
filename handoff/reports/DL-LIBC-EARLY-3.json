@@ -1,0 +1,12 @@
+{"task": "DL-LIBC-EARLY-3", "model": "opus", "tokens": null,
+ "result": "ld.so exports __libc_stack_end and __rseq_offset/size/flags (versions.tsv), registers the initial thread's rseq area at RSEQ_OFFSET and publishes all four before relocation; libc.so.6 keeps local copies and registers new threads' areas when told via StartInfo.rseq_size (D-27.26)",
+ "branch": "task/dl-libc-early-3", "head": "see hand-back",
+ "gate": {"affected": "pending: dl-libc-early-3-gate (lint job: clippy, static, records, so, new reloc + s22 rseq + affected-model tests green)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["cbench_startup run against its budgets on the head, not side by side with next; static start code path unchanged by construction", "hot_text_products run on the branch head, not a merged head", "plants run under /dev/shm (WARN-DEV-SHM from the tool)"],
+ "refused": [],
+ "jobs": ["dl-libc-early-3-gate", "dl-libc-early-3-plants", "dl-libc-early-3-startup", "dl-libc-early-3-lint"],
+ "improvement": "a ready-made 'products build + named tests' job template would save writing a lint.sh per story",
+ "next_step": "DL-14: when dynamic threads are allowed, add a thread test that a new thread's rseq area is registered at __rseq_offset",
+ "report_file": "handoff/DL-LIBC-EARLY-3-report.md"}

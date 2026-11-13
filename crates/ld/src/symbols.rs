@@ -95,6 +95,12 @@ pub enum Want<'n> {
     /// exactly that version, hidden or not. A base (index 1) definition never matches a name. In an
     /// object without `versym` every definition matches.
     Version(&'n [u8]),
+    /// A relocation's reference with a version (its `versym` index names one): the definition of exactly
+    /// that version, hidden or not, or else a base (index 1) definition, so an unversioned definition
+    /// earlier in the scope (the program's, a preloaded object's) interposes on a versioned reference
+    /// (probe-settled; spec/behaviour/dynlink.md "Symbol binding"). In an object without `versym` every
+    /// definition matches.
+    Reference(&'n [u8]),
 }
 
 /// One symbol request: a name and the definitions it accepts. The hashes are computed once per request
@@ -225,8 +231,8 @@ impl<'a> Object<'a> {
     }
 
     /// What this object's reference through symbol `sym` accepts: [`Want::Oldest`] without a version,
-    /// else the version its `versym` index names (a requirement's `vna_other`, or one of the object's own
-    /// definitions).
+    /// else [`Want::Reference`] to the version its `versym` index names (a requirement's `vna_other`, or
+    /// one of the object's own definitions).
     ///
     /// # Errors
     ///
@@ -237,17 +243,38 @@ impl<'a> Object<'a> {
         if index <= VER_NDX_GLOBAL {
             return Ok(Want::Oldest);
         }
+        if let Some(name) = self.needed_version_name(index)? {
+            return Ok(Want::Reference(name));
+        }
+        self.version_name(index)?.map(Want::Reference).ok_or(LookupError::UnknownVersion { sym, index })
+    }
+
+    /// The name of version index `index` among this object's requirements (the `vna_other` of a
+    /// `DT_VERNEED` entry), `None` when no requirement has it.
+    fn needed_version_name(&self, index: u16) -> Result<Option<&'a [u8]>, LookupError> {
         if let Some(needs) = self.dynm.verneed()? {
             for n in needs {
                 for a in n?.auxes() {
                     let a = a?;
                     if a.other & !VERSYM_HIDDEN == index {
-                        return Ok(Want::Version(a.name));
+                        return Ok(Some(a.name));
                     }
                 }
             }
         }
-        self.version_name(index)?.map(Want::Version).ok_or(LookupError::UnknownVersion { sym, index })
+        Ok(None)
+    }
+
+    /// The version name of a definition's `versym` index: one of the object's own definitions, else
+    /// a requirement. A program's `COPY` relocation defines the copied symbol in the program with the
+    /// index of the version it needs from the provider, and the provider's own references bind to
+    /// that copy by that version (index space shared by `DT_VERDEF` and `DT_VERNEED`).
+    fn def_version_name(&self, index: u16) -> Result<Option<&'a [u8]>, LookupError> {
+        match self.version_name(index)? {
+            Some(name) => Ok(Some(name)),
+            None if index > VER_NDX_GLOBAL => self.needed_version_name(index),
+            None => Ok(None),
+        }
     }
 
     /// The candidates for `req` in the hash chain, as symbol indices (one error ends the walk).
@@ -325,11 +352,23 @@ impl<'a> Object<'a> {
                     // check (D-27.11).
                     let ok = self.versym.is_none()
                         || (version > VER_NDX_GLOBAL
-                            && self.version_name(version)?.ok_or(LookupError::UnknownVersion { sym: i, index: version })? == name);
+                            && self.def_version_name(version)?.ok_or(LookupError::UnknownVersion { sym: i, index: version })? == name);
                     if ok {
                         best = Some(def);
                     }
                     Ok(ok)
+                }
+                Want::Reference(name) => {
+                    let exact = self.versym.is_none()
+                        || (version > VER_NDX_GLOBAL
+                            && self.def_version_name(version)?.ok_or(LookupError::UnknownVersion { sym: i, index: version })? == name);
+                    if exact {
+                        best = Some(def);
+                    } else if version == VER_NDX_GLOBAL && best.is_none() {
+                        // A base definition matches, but an exact one later in the chain wins.
+                        best = Some(def);
+                    }
+                    Ok(exact)
                 }
             }
         })?;
@@ -419,7 +458,7 @@ pub fn lookup(objects: &[Object<'_>], scope: Scope<'_>, req: &Request<'_>, uniqu
         let Some(def) = obj.lookup(req)? else { continue };
         let found = Found { obj: o, def };
         if def.st.bind() == STB_GNU_UNIQUE {
-            let version = obj.version_name(def.version)?.unwrap_or(&[]);
+            let version = obj.def_version_name(def.version)?.unwrap_or(&[]);
             if let Some(first) = unique.find(req.name, version) {
                 return Ok(Some(first));
             }

@@ -1,0 +1,10 @@
+{"task": "LIBM-RETHINK-ERFC-3", "model": "opus", "tokens": null,
+ "result": "erff/erfcf tiny bands reached only from the entries' refusal arm: typical rows equal base (erff_typ 161.4, erfcf_typ 173.7), tiny rows 11789.2 -> 129.3 and 13151.0 -> 120.0 instructions per call; entries' disassembly identical to base except the refusal callee",
+ "branch": "task/libm-rethink-erfc-3", "head": null,
+ "gate": {"affected": "1570 passed / 0 failed", "peak": "3.2G"}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["#[cold] on the refusal functions changed LLVM's block layout of fast32::erfc (+1 jump on one piece, erfcf_typ +0.2); dropped, recorded in D-10.107"],
+ "refused": [],
+ "improvement": "sync_role marks a tree dirty for an uncommitted handoff file and percall then refuses it after the queue: a pre-job check that names the dirty paths would save a job cycle",
+ "next_step": "f64 erf for |x| < 2^-55 and subnormal x (232 / 265.9 vs 35 / 44.6) by round(c*m) with a 128-bit c (D-10.107's bound), a new story",
+ "report_file": "handoff/LIBM-RETHINK-ERFC.md",
+ "jobs": ["libm-rethink-erfc-3-gate", "libm-rethink-erfc-3-plants", "libm-rethink-erfc-3-sweeps", "libm-rethink-erfc-3-percall3"]}

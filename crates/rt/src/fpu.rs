@@ -180,15 +180,6 @@ pub const fn is_daz(mxcsr: u32) -> bool {
     mxcsr & MX_DAZ != 0
 }
 
-/// Whether `sqrtss`/`sqrtsd` run in place under an MXCSR value (M6-2, D-10.22): every exception
-/// masked, in any rounding direction, with or without FTZ and DAZ. The instruction is correctly
-/// rounded in every direction by definition; FTZ cannot act on it (the square root of a non-zero
-/// finite operand is always normal), and under DAZ it reads a subnormal operand as a zero of its
-/// sign, which is the caller's own choice and honoured (owner ruling 2026-10-23).
-pub const fn is_sqrt_in_place(mxcsr: u32) -> bool {
-    is_default_control(mxcsr & !(MX_RC | MX_FTZ | MX_DAZ))
-}
-
 /// Whether an MXCSR value holds the default control word in some rounding direction: every
 /// exception masked, no FTZ, no DAZ. `hypotf`'s fast entry runs only there (#1541); under FTZ or
 /// DAZ it takes the accurate path, which honours them (owner ruling 2026-10-23).

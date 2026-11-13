@@ -1,0 +1,15 @@
+# LAYOUT-SINGLE-FAULT-TEST plants (cargo xtask plants; docs/plants.md). Fast products (the gate's profile).
+# Each plant leaves one start-up object outside the clusters; the check must name that object, not count faults.
+# ldc11-msg-cat-cntr: LAYOUT-DATA-CLUSTERS-11's plant, EQUIVALENT there (setlocale + printf 50 -> 51, inside the
+# count-plus-1 slack of LOCALE_BOUND): `_nl_msg_cat_cntr` dropped from the list stays in `.bss` of its own.
+# lsft-locale-name-count: a locale first-call object (the first setlocale's global_locale::NAME_COUNT) moved out of
+# the cluster.
+# lsft-heap-over-4k: heap::HEAP (5376 bytes, every start writes it) dropped: over the old 4 KiB cut-off, so only the
+# list's own 8 KiB limit (STATE_DECLARED_MAX) brings it in reach. Undeclared, it is a large `.bss` object and the
+# build puts it in `.lbss.<symbol>` (plants-1 matched `.bss.` only: WARN-NO-MSG, though the object was named).
+# lsft-aio-used-shared: the close flag back in points.S's shared `.data` (its declared section stays, empty): the
+# rebind probe's first close reads it there; named by symbol, not by section.
+ldc11-msg-cat-cntr | crates/libc-so/startup-state.list | perl:s/\nsymbol _nl_msg_cat_cntr\n/\n/ | cargo test -p liella --test hot_text_products -- init_startup_data_accesses_are_in_the_data1_cluster | msg:locale: \.bss\._nl_msg_cat_cntr \([0-9]+ bytes.*outside \.data1
+lsft-locale-name-count | crates/libc-so/startup-state.list | perl:s/\nliella_legacy::global_locale::NAME_COUNT\n/\n/ | cargo test -p liella --test hot_text_products -- init_startup_data_accesses_are_in_the_data1_cluster | msg:locale: \.bss\.[_A-Za-z0-9]+global_locale10NAME_COUNT[.0-9]* \([0-9]+ bytes.*outside \.data1
+lsft-heap-over-4k | crates/libc-so/startup-state.list | perl:s/\nliella_boundary::heap::HEAP\n/\n/ | cargo test -p liella --test hot_text_products -- init_startup_data_accesses_are_in_the_data1_cluster | msg:true: \.l?bss\.[_A-Za-z0-9]+4heap4HEAP[.0-9]* \([0-9]+ bytes.*outside \.data1
+lsft-aio-used-shared | csys/src/machine/points.S | perl:s/(liella_machine_close:.*?)\.globl liella_machine_aio_used\n/$1.data\n\t.globl liella_machine_aio_used\n/s | cargo test -p liella --test hot_text_products -- init_startup_data_accesses_are_in_the_data1_cluster | msg:rebind: liella_machine_aio_used \(1 bytes\) in shared \.data of .*outside \.data1

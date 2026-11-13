@@ -73,6 +73,12 @@ pub trait Image {
     /// Change the protection of `len` bytes at `at` (page multiples) to `prot`.
     #[allow(clippy::result_unit_err)]
     fn protect(&mut self, at: u64, len: u64, prot: i32) -> Result<(), ()>;
+    /// The run-time address of the TLS descriptor function for a block in the static area (the
+    /// loader's `liella_machine_ld_tlsdesc_static`, DL-15); `None` (the default): this image has
+    /// none, and a TLS descriptor relocation is refused ([`RelocError::Tls`]).
+    fn tlsdesc_static(&mut self) -> Option<u64> {
+        None
+    }
 }
 
 /// Why an object could not be relocated.
@@ -80,7 +86,8 @@ pub trait Image {
 pub enum RelocError<'a> {
     /// A relocation type the architecture's table does not handle (the raw `r_type`).
     Unsupported(u32),
-    /// A TLS descriptor relocation (the raw `r_type`; not available in this build).
+    /// A TLS descriptor relocation (the raw `r_type`) in an image without a descriptor function
+    /// ([`Image::tlsdesc_static`]).
     Tls(u32),
     /// A TLS relocation whose defining object has no TLS block (the field's offset).
     TlsModule(u64),
@@ -235,7 +242,8 @@ fn one<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, r: &Rela, deferre
         RelocKind::None => Ok(false),
         RelocKind::Relative if !deferred => put(img, field(r.kind, 0)?, text).map(|()| false),
         RelocKind::Relative => Ok(false),
-        RelocKind::Irelative if !deferred => Ok(true),
+        // Pass 1 checks the field a deferred entry will write, so pass 2 meets no new error.
+        RelocKind::Irelative if !deferred => inside(&o.elf, r.offset, 8, false).then_some(true).ok_or(RelocError::Outside(r.offset)),
         RelocKind::Irelative => {
             let resolver = field(r.kind, 0)?.map_or(0, |f| f.value);
             let v = img.call(resolver);
@@ -249,7 +257,7 @@ fn one<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, r: &Rela, deferre
             match (t.ifunc, deferred) {
                 (false, false) => put(img, field(r.kind, t.s)?, text).map(|()| false),
                 (false, true) => Ok(false),
-                (true, false) => Ok(true),
+                (true, false) => inside(&o.elf, r.offset, 8, false).then_some(true).ok_or(RelocError::Outside(r.offset)),
                 (true, true) => {
                     let s = img.call(t.s);
                     put(img, field(r.kind, s)?, false).map(|()| true)
@@ -270,8 +278,8 @@ fn one<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, r: &Rela, deferre
             img.copy(p, t.s, len);
             Ok(false)
         }
-        RelocKind::DtpMod | RelocKind::DtpOff | RelocKind::TpOff if deferred => Ok(false),
-        RelocKind::DtpMod | RelocKind::DtpOff | RelocKind::TpOff => {
+        RelocKind::DtpMod | RelocKind::DtpOff | RelocKind::TpOff | RelocKind::TlsDesc if deferred => Ok(false),
+        RelocKind::DtpMod | RelocKind::DtpOff | RelocKind::TpOff | RelocKind::TlsDesc => {
             // No symbol: the object's own module (local-dynamic and initial-exec on a local symbol).
             let (s, def) = if r.sym == 0 {
                 (0, Some(i))
@@ -281,10 +289,24 @@ fn one<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, r: &Rela, deferre
             };
             let placed = def.and_then(|d| set.objs.get(d)).and_then(|d| d.tls).ok_or(RelocError::TlsModule(r.offset))?;
             let ops = TlsOperands { s, a: r.addend, module: placed.module, tp_offset: placed.tp_offset };
-            let f = A::apply_tls(r.kind, ops).map_err(|_| RelocError::Unsupported(r.r_type))?;
-            put(img, Some(f), text).map(|()| false)
+            if r.kind != RelocKind::TlsDesc {
+                let f = A::apply_tls(r.kind, ops).map_err(|_| RelocError::Unsupported(r.r_type))?;
+                return put(img, Some(f), text).map(|()| false);
+            }
+            // A descriptor (DL-15): every initially loaded module's block is in the static area, so
+            // its function is the image's static one and its argument the TP offset.
+            let resolver = img.tlsdesc_static().ok_or(RelocError::Tls(r.r_type))?;
+            let words = A::tls_descriptor(resolver, ops).map_err(|_| RelocError::Unsupported(r.r_type))?;
+            if !inside(&o.elf, r.offset, 16, text) {
+                return Err(RelocError::Outside(r.offset));
+            }
+            let mut bytes = [0u8; 16];
+            for (b, w) in bytes.chunks_exact_mut(8).zip(words) {
+                b.copy_from_slice(&if A::EI_DATA == ELFDATA2LSB { w.to_le_bytes() } else { w.to_be_bytes() });
+            }
+            img.store(p, &bytes);
+            Ok(false)
         }
-        RelocKind::TlsDesc => Err(RelocError::Tls(r.r_type)),
         RelocKind::Unsupported(n) => Err(RelocError::Unsupported(n)),
     }
 }
@@ -306,6 +328,20 @@ fn text_segments<I: Image>(o: &Obj<'_>, img: &mut I, page: u64, open: bool) -> R
 ///
 /// The first [`RelocError`] met.
 pub fn relocate<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, img: &mut I, page: u64, unique: &mut dyn UniqueRegistry) -> Result<(), RelocError<'a>> {
+    if relocate_first::<A, I>(set, i, img, page, unique)? {
+        relocate_deferred::<A, I>(set, i, img, unique)?;
+    }
+    Ok(())
+}
+
+/// Pass 1 of object `i` (DL-16a two-pass relocation, plan/ph14/dl-16-dlopen.md §2): every symbol
+/// reference resolved, every field outside the IFUNC entries written, and each IFUNC entry's field
+/// checked; no foreign code runs. Whether any entry was deferred to [`relocate_deferred`].
+///
+/// # Errors
+///
+/// The first [`RelocError`] met.
+pub fn relocate_first<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, img: &mut I, page: u64, unique: &mut dyn UniqueRegistry) -> Result<bool, RelocError<'a>> {
     let o = *set.objs.get(i).ok_or(RelocError::Lookup(LookupError::NoObject(i)))?;
     let text = textrel(&o.dynm);
     if text {
@@ -316,11 +352,22 @@ pub fn relocate<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, img: &mu
         // Restored before any resolver can run, also on failure.
         text_segments(&o, img, page, false).map_err(|()| RelocError::Protect)?;
     }
-    if first? {
-        for table in [o.dynm.rela::<A>(), o.dynm.jmprel::<A>()] {
-            for r in table.map_err(RelocError::Elf)?.into_iter().flatten() {
-                one::<A, I>(set, i, &r, true, text, img, unique)?;
-            }
+    first
+}
+
+/// Pass 2 of object `i`: the IFUNC entries [`relocate_first`] deferred, each calling its resolver.
+/// After a successful pass 1 of the same set it meets no new error (pass 1 resolved the same
+/// symbols and checked the same fields).
+///
+/// # Errors
+///
+/// The first [`RelocError`] met.
+pub fn relocate_deferred<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, img: &mut I, unique: &mut dyn UniqueRegistry) -> Result<(), RelocError<'a>> {
+    let o = *set.objs.get(i).ok_or(RelocError::Lookup(LookupError::NoObject(i)))?;
+    let text = textrel(&o.dynm);
+    for table in [o.dynm.rela::<A>(), o.dynm.jmprel::<A>()] {
+        for r in table.map_err(RelocError::Elf)?.into_iter().flatten() {
+            one::<A, I>(set, i, &r, true, text, img, unique)?;
         }
     }
     Ok(())
@@ -374,10 +421,21 @@ pub fn relro_range(o: &Obj<'_>, page: u64) -> Option<(u64, u64)> {
 /// # Errors
 ///
 /// The index of the object whose protection change failed.
+///
+/// Segment by segment (D-27.25): [`relro_range`] meets each `PT_LOAD`'s pages in one piece
+/// (`liella_rt::start::relro_piece`), so a `PT_GNU_RELRO` that spans two writable segments never
+/// changes the reservation pages between them; one segment gives the one range as before.
 pub fn protect_relro<I: Image>(objs: &[Obj<'_>], img: &mut I, page: u64) -> Result<(), usize> {
+    let word = |v: u64| usize::try_from(v).unwrap_or(usize::MAX);
     for (i, o) in objs.iter().enumerate() {
-        if let Some((at, len)) = relro_range(o, page) {
-            img.protect(at, len, PROT_READ).map_err(|()| i)?;
+        let Some((at, len)) = relro_range(o, page) else { continue };
+        let (from, to) = (word(at), word(at.wrapping_add(len)));
+        for s in o.elf.program_headers().filter(|s| s.p_type == pt::LOAD) {
+            let piece = liella_rt::start::relro_piece(from, to, word(o.bias.wrapping_add(s.vaddr)), word(s.memsz), word(page));
+            if let Some((a, n)) = piece {
+                let (a, n) = (u64::try_from(a).map_err(|_| i)?, u64::try_from(n).map_err(|_| i)?);
+                img.protect(a, n, PROT_READ).map_err(|()| i)?;
+            }
         }
     }
     Ok(())

@@ -22,6 +22,7 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use crate::hotlists::Layout;
 use crate::so::OWN_PREFIX;
 
 /// HOTTEXT-REGEN-UNBLOCK: `cargo xtask so --hottext-regen` builds the products with the dead-key
@@ -32,21 +33,73 @@ use crate::so::OWN_PREFIX;
 pub const REGEN_FLAG: &str = "--hottext-regen";
 static REGEN: AtomicBool = AtomicBool::new(false);
 
+/// HOTLIST-REGEN-CHEAP: `cargo xtask so --hottext-regen --libc-only <dir>` builds only what the regen's
+/// traces link (`libc.a`, `liella-crt1.o` and the `.profile` marker) into `<dir>`, never into
+/// `target/liella`: no libc.so.6, libm, ld.so or layout check (79% of a regen was product builds).
+pub const LIBC_ONLY_FLAG: &str = "--libc-only";
+
 /// The arguments of `cargo xtask so`: [`REGEN_FLAG`] turns the regen mode on; it is refused under
-/// CI (the `CI` variable set) and any other argument is an error.
-pub fn regen_mode(args: &[String]) -> Result<(), String> {
+/// CI (the `CI` variable set). [`LIBC_ONLY_FLAG`] `<dir>` (only with [`REGEN_FLAG`]) returns `<dir>`.
+/// Any other argument is an error.
+pub fn regen_mode(args: &[String]) -> Result<Option<std::path::PathBuf>, String> {
     let mut on = false;
-    for a in args {
+    let mut libc_only = None;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
         if a == REGEN_FLAG {
             on = true;
+        } else if a == LIBC_ONLY_FLAG {
+            let dir = it.next().filter(|d| !d.is_empty()).ok_or_else(|| format!("so: {LIBC_ONLY_FLAG} needs a directory"))?;
+            libc_only = Some(std::path::PathBuf::from(dir));
         } else {
-            return Err(format!("so: unknown argument {a:?} (the only one is {REGEN_FLAG}, for tools/hottext/regen.sh)"));
+            return Err(format!("so: unknown argument {a:?} (the only ones are {REGEN_FLAG} [{LIBC_ONLY_FLAG} <dir>], for tools/hottext/regen.sh)"));
         }
+    }
+    if libc_only.is_some() && !on {
+        return Err(format!("so: {LIBC_ONLY_FLAG} builds regen products only: it needs {REGEN_FLAG}"));
     }
     if on && std::env::var_os("CI").is_some_and(|v| !v.is_empty()) {
         return Err(format!("so: {REGEN_FLAG} is for tools/hottext/regen.sh only, never under CI"));
     }
     REGEN.store(on, Ordering::Relaxed);
+    Ok(libc_only)
+}
+
+/// Whether this run builds in the regen mode ([`REGEN_FLAG`]).
+pub fn regen_on() -> bool {
+    REGEN.load(Ordering::Relaxed)
+}
+
+/// The archive exactly as [`group`] received it in a regen build (`target/product/<profile>/`), kept so
+/// that [`recheck_cmd`] can rerun the grouping alone on the rewritten list.
+pub const PRE_GROUP_ARCHIVE: &str = "hot-text.pre-group.a";
+
+/// `cargo xtask hottext-recheck` (HOTLIST-REGEN-CHEAP): the check a regen ends with, without a second
+/// full `cargo xtask so`. For each profile, [`group`] (the grouping, its cluster check and the
+/// dead-key check of [`dead_key_verdict`]: warnings, failing only under [`PROMOTE_ENV`]) runs again on a copy of [`PRE_GROUP_ARCHIVE`] with the
+/// rewritten `crates/libc-so/hot-text.list`. Fails when a profile has no such archive (run
+/// `regen.sh . --both` first) or when the check fails.
+pub fn recheck_cmd(root: &Path, args: &[String]) -> Result<(), String> {
+    if !args.is_empty() {
+        return Err("usage: cargo xtask hottext-recheck".into());
+    }
+    let ar = std::env::var("AR").unwrap_or_else(|_| "ar".into());
+    let product = root.join("target/product");
+    let list = crate::hotlists::path(root, "hot-text.list")?;
+    let inputs = root.join(crate::hotlists::TRACKED);
+    for p in [crate::so::Profile::Fast, crate::so::Profile::Release] {
+        let dir = product.join(p.name());
+        let saved = dir.join(PRE_GROUP_ARCHIVE);
+        if !saved.is_file() {
+            return Err(format!("hottext-recheck: {} missing (build the {} regen products first: tools/hottext/regen.sh . --both)", saved.display(), p.name()));
+        }
+        let copy = dir.join("hot-text.recheck.a");
+        fs::copy(&saved, &copy).map_err(|e| format!("hottext-recheck: copy {}: {e}", saved.display()))?;
+        let r = group(&ar, &copy, &list, &inputs, &dir.join("recheck-work"), Some(p.name()), Layout::Committed);
+        let _ = fs::remove_file(&copy);
+        let (hot, keys) = r.map_err(|e| format!("hottext-recheck: {}: {e}", p.name()))?;
+        println!("hottext-recheck: {}: {hot} function sections grouped, {keys} keys, dead-key check done", p.name());
+    }
     Ok(())
 }
 
@@ -353,6 +406,49 @@ impl V0<'_> {
             _ => self.path(i, out),
         }
     }
+
+    /// `[s <base-62-number>] <decimal> [_] <bytes>` (not punycode) -> (identifier, end).
+    fn name(&self, mut i: usize) -> Option<(String, usize)> {
+        if self.at(i)? == b's' {
+            i = self.base62(i + 1)?.1;
+        }
+        let (n, mut k) = self.decimal(i)?;
+        if self.at(k) == Some(b'_') {
+            k += 1;
+        }
+        let end = k.checked_add(n)?;
+        Some((std::str::from_utf8(self.b.get(k..end)?).ok()?.to_string(), end))
+    }
+
+    /// The parent of a function's name (see [`fn_site`]): `C` crate, `Nt` module, `M` inherent impl
+    /// or `X` trait impl -> (crate, modules, the self type's name for an impl, end).
+    fn owner(&mut self, i: usize) -> Option<(String, Vec<String>, Option<String>, usize)> {
+        match self.at(i)? {
+            b'C' => self.name(i + 1).map(|(k, e)| (k, Vec::new(), None, e)),
+            b'N' if self.at(i + 1)? == b't' => {
+                let (k, mut mods, None, j) = self.owner(i + 2)? else { return None };
+                let (m, e) = self.name(j)?;
+                mods.push(m);
+                Some((k, mods, None, e))
+            }
+            c @ (b'M' | b'X') => {
+                let j = if self.at(i + 1)? == b's' { self.base62(i + 2)?.1 } else { i + 1 };
+                let (k, mods, None, j) = self.owner(j)? else { return None };
+                let mut e = self.ty(j, &mut String::new())?;
+                let named = if self.at(j)? == b'I' { j + 1 } else { j };
+                if self.at(named)? != b'N' {
+                    return None;
+                }
+                let parent_end = self.path(named + 2, &mut String::new())?;
+                let ty = self.name(parent_end)?.0;
+                if c == b'X' {
+                    e = self.path(e, &mut String::new())?;
+                }
+                Some((k, mods, Some(ty), e))
+            }
+            _ => None,
+        }
+    }
 }
 
 fn strip_crate_hashes(s: &str) -> String {
@@ -442,6 +538,79 @@ fn positions(entries: &[Entry]) -> BTreeMap<String, usize> {
     keys
 }
 
+/// LAYOUT-FIRST-WINDOW (D-X, pending record): hand-kept keys, next to the list, that the link places
+/// right after the start-up tier, in this file's order: `<key> TAB <reason>`, `#` comments. The
+/// kernel maps a file's text in 64 KiB fault-around windows; the first fault of a static program
+/// maps the 16 pages from the start of its text segment, and the start-up tier fills most of them.
+/// A function every short program with stdio or a zone load runs, but the `true` probe does not
+/// (so it is not start-up tier), sat behind keys no fault-bounded probe runs (`puts`), and a
+/// 0x240-byte start-up growth moved it one page past that window (one more fault in four release
+/// probes, #5026). Listed here, it follows the start-up tier whatever the generated order.
+pub const FIRST_WINDOW_LIST: &str = "hot-text.first-window";
+
+/// The keys of [`FIRST_WINDOW_LIST`] in file order. Every line needs a reason. Errors name the line.
+fn parse_first_window(text: &str) -> Result<Vec<String>, String> {
+    let mut out: Vec<String> = Vec::new();
+    for (n, l) in text.lines().enumerate() {
+        if l.trim().is_empty() || l.starts_with('#') {
+            continue;
+        }
+        let Some((k, _)) = l.split_once('\t').filter(|(k, r)| !k.is_empty() && !r.trim().is_empty()) else {
+            return Err(format!("{FIRST_WINDOW_LIST} line {}: {l:?}: want <key>\\t<reason>", n + 1));
+        };
+        if out.iter().any(|o| o == k) {
+            return Err(format!("{FIRST_WINDOW_LIST} line {}: {k} is listed twice", n + 1));
+        }
+        out.push(k.to_string());
+    }
+    Ok(out)
+}
+
+/// The link position of each key (as [`positions`]) with the keys `first` moved, in their order,
+/// right after the start-up tier (the list's leading `startup` entries). A key must be in the list,
+/// outside the start-up tier (a line that a regen made redundant is stale) and outside every
+/// cluster of `clusters` (list positions: a moved key would split its cluster's range).
+fn link_positions(entries: &[Entry], first: &[String], clusters: &[Cluster]) -> Result<BTreeMap<String, usize>, String> {
+    let list = positions(entries);
+    let head = entries.iter().take_while(|e| e.tier == "startup").count();
+    for k in first {
+        let Some(&p) = list.get(k) else {
+            return Err(format!("{FIRST_WINDOW_LIST}: {k} is not in hot-text.list (renamed or dropped by a regen? update the line)"));
+        };
+        if p < head {
+            return Err(format!("{FIRST_WINDOW_LIST}: {k} is in the start-up tier now (position {p}); remove its line"));
+        }
+        if let Some(c) = clusters.iter().find(|c| (c.first..=c.last).contains(&p)) {
+            return Err(format!("{FIRST_WINDOW_LIST}: {k} (position {p}) lies inside cluster {} ({}..={}); a cluster's keys stay together", c.name, c.first, c.last));
+        }
+    }
+    let moved: BTreeSet<&str> = first.iter().map(String::as_str).collect();
+    let order = entries[..head].iter().map(|e| e.key.as_str()).chain(first.iter().map(String::as_str)).chain(entries[head..].iter().map(|e| e.key.as_str()).filter(|k| !moved.contains(k)));
+    let mut keys = BTreeMap::new();
+    for (i, k) in order.enumerate() {
+        keys.entry(k.to_string()).or_insert(i);
+    }
+    Ok(keys)
+}
+
+/// [`link_positions`] for `entries`, with the hand-written [`FIRST_WINDOW_LIST`] in `inputs`
+/// (none: the list's own positions) and the clusters of `clusters_text` ([`CLUSTER_LIST`]).
+/// `inputs` is the hand-written input directory (hotlists' TRACKED), never the directory of a
+/// train-owned list copy.
+fn first_window_positions(inputs: &Path, entries: &[Entry], clusters_text: Option<&str>) -> Result<BTreeMap<String, usize>, String> {
+    let path = inputs.join(FIRST_WINDOW_LIST);
+    let first = match fs::read_to_string(&path) {
+        Ok(t) => parse_first_window(&t)?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
+    let clusters = match clusters_text {
+        Some(t) => parse_clusters(t, &positions(entries))?,
+        None => Vec::new(),
+    };
+    link_positions(entries, &first, &clusters)
+}
+
 /// The lines of [`ABSENT_LIST`]: (key, profile) pairs. Every line needs a reason; `#` comments
 /// and blank lines are skipped. Errors name the line.
 fn parse_absent(text: &str) -> Result<BTreeSet<(String, String)>, String> {
@@ -505,7 +674,7 @@ fn unmatched_error(dead: &[&Entry], stale: &[String], profile: &str) -> Option<S
             msg.push_str(&format!("\n  {} ({}, {traced})", e.key, e.tier));
         }
         msg.push_str(&format!(
-            "\nrenamed, now generic or inlined: run tools/hottext/regen.sh . --build (in each profile); a key gone from every build: \
+            "\nrenamed, now generic or inlined: run tools/hottext/regen.sh . --both (both profiles); a key gone from every build: \
              tools/hottext/prune.py; a key absent from this profile by design: a line in crates/libc-so/{ABSENT_LIST} with its reason"
         ));
     }
@@ -584,17 +753,19 @@ fn repair_lists(list: &str, absent: &str, matched: &[(&str, &BTreeSet<String>)],
 }
 
 /// The dead-key contract of [`unmatched`] for every profile of `matched` on the texts of
-/// `hot-text.list` and [`ABSENT_LIST`]: the errors of [`unmatched_error`], joined.
-fn check_lists(list: &str, absent: &str, matched: &[(&str, &BTreeSet<String>)]) -> Result<(), String> {
+/// `hot-text.list` (read from `file`) and [`ABSENT_LIST`], each profile's verdict of
+/// [`dead_key_verdict`] under `mode`: the errors joined, or every profile's lines to print.
+fn check_lists(list: &str, absent: &str, matched: &[(&str, &BTreeSet<String>)], file: &str, mode: DeadKeys) -> Result<Vec<String>, String> {
     let (entries, allowed) = (parse_list(list)?, parse_absent(absent)?);
-    let errs: Vec<String> = matched
-        .iter()
-        .filter_map(|(p, m)| {
-            let (dead, stale, _) = unmatched(&entries, m, &allowed, Some(p));
-            unmatched_error(&dead, &stale, p)
-        })
-        .collect();
-    if errs.is_empty() { Ok(()) } else { Err(errs.join("\n")) }
+    let (mut errs, mut lines) = (Vec::new(), Vec::new());
+    for (p, m) in matched {
+        let (dead, stale, _) = unmatched(&entries, m, &allowed, Some(p));
+        match dead_key_verdict(&dead, &stale, p, file, mode) {
+            Ok(l) => lines.extend(l),
+            Err(e) => errs.push(e),
+        }
+    }
+    if errs.is_empty() { Ok(lines) } else { Err(errs.join("\n")) }
 }
 
 /// `cargo xtask hottext-repair [--at <rev>]` (HOTTEXT-DEAD-KEY-REPAIR): the mechanical repair of
@@ -632,7 +803,7 @@ pub fn repair_cmd(root: &Path, args: &[String]) -> Result<(), String> {
         sets.push(text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string).collect::<BTreeSet<String>>());
     }
     let matched: Vec<(&str, &BTreeSet<String>)> = profiles.iter().map(|p| p.name()).zip(sets.iter()).collect();
-    let (list_path, absent_path) = (root.join("crates/libc-so/hot-text.list"), root.join("crates/libc-so").join(ABSENT_LIST));
+    let (list_path, absent_path) = (crate::hotlists::path(root, "hot-text.list")?, root.join(crate::hotlists::TRACKED).join(ABSENT_LIST));
     let read = |p: &Path| fs::read_to_string(p).map_err(|e| format!("hottext-repair: {}: {e}", p.display()));
     let (list, absent) = (read(&list_path)?, read(&absent_path)?);
     let r = repair_lists(&list, &absent, &matched, &at)?;
@@ -656,7 +827,12 @@ pub fn repair_cmd(root: &Path, args: &[String]) -> Result<(), String> {
     } else {
         println!("hottext-repair: {} key(s) dropped, {} {ABSENT_LIST} line(s) recorded, {} stale line(s) removed", r.dropped.len(), r.recorded.len(), r.removed.len());
     }
-    check_lists(&r.list, &r.absent, &matched).map_err(|e| format!("hottext-repair: the dead-key check still fails after the repair:\n{e}"))
+    let lines = check_lists(&r.list, &r.absent, &matched, &list_path.display().to_string(), DeadKeys::from_env())
+        .map_err(|e| format!("hottext-repair: the dead-key check still fails after the repair:\n{e}"))?;
+    for l in lines {
+        println!("hottext-repair: {l}");
+    }
+    Ok(())
 }
 
 /// A function section's name without any hot prefix: `.text.sorted.h<n>.<f>`, the older
@@ -979,13 +1155,43 @@ fn is_startup_names(section: &str) -> bool {
 /// `.text.sorted.h<position>.<f>`, in place, and any hot section whose key is not listed (or whose
 /// position changed) back to `.text.<f>` (or its new position): cargo may hand back an archive this
 /// already ran on, with another list. `work` is a scratch directory. `profile`: the profile the
-/// archive was built with (`fast`, `release`), `None` for other flags (see [`unmatched`]). Fails when
-/// a start-up or fork key traced in `profile` matches no function section; prints the count of the
-/// other unmatched keys. Returns (hot sections in the result, keys in the list).
-pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option<&str>) -> Result<(usize, usize), String> {
-    let text = fs::read_to_string(list).map_err(|e| format!("{}: {e}", list.display()))?;
+/// archive was built with (`fast`, `release`), `None` for other flags (see [`unmatched`]). A key traced in
+/// `profile` that matches no function section is a warning, or fails under [`PROMOTE_ENV`]
+/// ([`dead_key_verdict`]); a stale [`ABSENT_LIST`] line fails; prints the count of the allowed
+/// unmatched keys. Returns (hot sections in the result, keys in the list). `inputs`: the directory of the
+/// hand-written inputs ([`CLUSTER_LIST`], [`ABSENT_LIST`]); `list` may be a train-owned copy elsewhere (hotlists.rs).
+/// `layout` (LAYOUT-TRACE-AT-BUILD): [`Layout::Traced`]: `list` is a trace of this archive's own build, so
+/// [`ABSENT_LIST`] (history of committed keys) does not apply and a cluster or [`FIRST_WINDOW_LIST`] key the
+/// trace lacks (or places elsewhere) is named as such; [`Layout::Ungrouped`]: `list` is not read, nothing is
+/// grouped, no first-window key moved and no cluster aligned (the start-up names
+/// section is still placed).
+pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, profile: Option<&str>, layout: Layout) -> Result<(usize, usize), String> {
+    let text = match layout {
+        Layout::Ungrouped => String::new(),
+        _ => fs::read_to_string(list).map_err(|e| format!("{}: {e}", list.display()))?,
+    };
     let entries = parse_list(&text)?;
-    let keys = positions(&entries);
+    let clusters_path = inputs.join(CLUSTER_LIST);
+    let clusters_text = fs::read_to_string(&clusters_path).map_err(|e| format!("{}: {e}", clusters_path.display()));
+    // LT-1: the hand-kept inputs name functions of the committed list; under Traced they are checked
+    // against this build's own trace instead (LT-2 removes the class).
+    let traced = |e: String| match layout {
+        Layout::Traced => format!("trace-at-build: {e}: this build's trace does not reach that function (inlined, renamed or no longer run) or places it elsewhere; {CLUSTER_LIST} and {FIRST_WINDOW_LIST} name internal functions until LT-2 (clusters by probe phase)"),
+        _ => e,
+    };
+    // LAYOUT-FIRST-WINDOW: link positions, the first-window keys right after the start-up tier.
+    // Ungrouped: no list, so nothing is placed and no first-window key applies.
+    let keys = match layout {
+        Layout::Ungrouped => positions(&entries),
+        _ => match first_window_positions(inputs, &entries, clusters_text.as_deref().ok()) {
+            Ok(k) => k,
+            Err(e) if REGEN.load(Ordering::Relaxed) => {
+                println!("so: {REGEN_FLAG}: {FIRST_WINDOW_LIST} NOT applied for this regen build: {e}");
+                positions(&entries)
+            }
+            Err(e) => return Err(traced(e)),
+        },
+    };
     let mut matched = BTreeSet::new();
     let _ = fs::remove_dir_all(work);
     fs::create_dir_all(work).map_err(|e| e.to_string())?;
@@ -997,10 +1203,10 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     }
     crate::so::run(Command::new(ar).current_dir(work).arg("x").arg(&archive))?;
     let objcopy = std::env::var("OBJCOPY").unwrap_or_else(|_| "objcopy".into());
-    let clusters_path = list.with_file_name(CLUSTER_LIST);
-    let clusters = match fs::read_to_string(&clusters_path) {
-        Ok(t) => parse_clusters(&t, &keys).and_then(|c| Ok((c, clusters_at_end(&t)?))),
-        Err(e) => Err(format!("{}: {e}", clusters_path.display())),
+    let clusters = match (layout, &clusters_text) {
+        (Layout::Ungrouped, _) => Ok((Vec::new(), false)),
+        (_, Ok(t)) => parse_clusters(t, &keys).and_then(|c| Ok((c, clusters_at_end(t)?))).map_err(traced),
+        (_, Err(e)) => Err(e.clone()),
     };
     // A regen build must not be blocked by a cluster key the old list lacks (D-X.56).
     let (clusters, at_end) = match clusters {
@@ -1103,8 +1309,10 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     if startup != 1 {
         return Err(format!("{}: {startup} start-up names sections (STARTUP_NAMES), want 1", archive.display()));
     }
-    let absent_path = list.with_file_name(ABSENT_LIST);
+    let absent_path = inputs.join(ABSENT_LIST);
     let absent = match fs::read_to_string(&absent_path) {
+        // A traced list holds only keys this archive's own build ran: nothing is absent by history.
+        Ok(_) if layout != Layout::Committed => BTreeSet::new(),
         Ok(t) => parse_absent(&t)?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => BTreeSet::new(),
         Err(e) => return Err(format!("{}: {e}", absent_path.display())),
@@ -1119,22 +1327,77 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     let mut unref_out: String = unreferenced.iter().map(|k| format!("{k}\n")).collect();
     unref_out.insert_str(0, "# function keys of this archive no relocation or C-level entry reaches (cargo xtask so; tools/hottext/regen.sh reads it)\n");
     fs::write(archive.with_file_name("hot-text.unreferenced"), unref_out).map_err(|e| e.to_string())?;
-    let p = profile.unwrap_or("");
-    let err = [unmatched_error(&dead, &stale, p), profile.and_then(|p| unreferenced_error(&entries, &unreferenced, p))].into_iter().flatten().collect::<Vec<_>>().join("\n");
-    if let Some(e) = dead_key_verdict(Some(err).filter(|e| !e.is_empty()), REGEN.load(Ordering::Relaxed))? {
-        println!("so: {REGEN_FLAG}: dead-key check NOT enforced for this regen build (regen.sh rewrites the list, then rebuilds with it):\n{e}");
+    let mode = DeadKeys::from_env();
+    for l in dead_key_verdict(&dead, &stale, profile.unwrap_or(""), &list.display().to_string(), mode)? {
+        println!("so: {l}");
+    }
+    if let Some(l) = unreferenced_verdict(profile.and_then(|p| unreferenced_error(&entries, &unreferenced, p)), mode)? {
+        println!("so: {l}");
     }
     println!("so: {allowed} hot-text keys match no function section (traced in the other profile only, or in {ABSENT_LIST})");
     Ok((hot, keys.len()))
 }
 
-/// The dead-key check's outcome: the error of [`unmatched_error`] fails the build, except in the
-/// regen mode ([`REGEN_FLAG`]), where it is handed back to be printed.
-fn dead_key_verdict(err: Option<String>, regen: bool) -> Result<Option<String>, String> {
-    match err {
-        None => Ok(None),
-        Some(e) if regen => Ok(Some(e)),
-        Some(e) => Err(e),
+/// LAYOUT-DEADKEY-WARN (owner ruling #5193, amending D-X.53 (2)): the environment variable that makes a
+/// dead hot-text key fail. Only the next->main promotion run sets it (`LIELLA_PROMOTE=1`); everywhere
+/// else (`so`, the gate, the plants baseline, the train, `hottext-recheck`, `hottext-repair`) a dead key
+/// is a warning. Read once, by [`DeadKeys::from_env`]; the tests pass the mode explicitly.
+pub const PROMOTE_ENV: &str = "LIELLA_PROMOTE";
+
+/// How the dead-key check of [`group`] and [`check_lists`] ends (see [`dead_key_verdict`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum DeadKeys {
+    /// [`REGEN_FLAG`]'s build: dead keys and stale allow-list lines are printed, nothing fails.
+    Regen,
+    /// The default: each dead key is a warning line; a stale [`ABSENT_LIST`] line still fails.
+    Warn,
+    /// [`PROMOTE_ENV`] is `1`: a dead key fails, as does a stale allow-list line.
+    Promote,
+}
+
+impl DeadKeys {
+    /// The mode for the regen flag and the value of [`PROMOTE_ENV`] (`None`: unset). Regen wins: a
+    /// regen build is an intermediate step whose rebuild is checked.
+    fn of(regen: bool, promote: Option<&std::ffi::OsStr>) -> DeadKeys {
+        if regen {
+            DeadKeys::Regen
+        } else if promote.is_some_and(|v| v == "1") {
+            DeadKeys::Promote
+        } else {
+            DeadKeys::Warn
+        }
+    }
+
+    /// The mode of this process: the regen flag and the caller's [`PROMOTE_ENV`].
+    fn from_env() -> DeadKeys {
+        DeadKeys::of(REGEN.load(Ordering::Relaxed), std::env::var_os(PROMOTE_ENV).as_deref())
+    }
+}
+
+/// The dead-key check's outcome for `profile` (`file`: the list read): `Err` fails the caller, `Ok`
+/// holds the lines to print. A stale [`ABSENT_LIST`] line fails except in the regen mode; a dead key
+/// fails only under [`DeadKeys::Promote`] and is otherwise one warning line per key (key, file,
+/// profile) and a count line.
+fn dead_key_verdict(dead: &[&Entry], stale: &[String], profile: &str, file: &str, mode: DeadKeys) -> Result<Vec<String>, String> {
+    match mode {
+        DeadKeys::Regen => Ok(unmatched_error(dead, stale, profile).map(|e| format!("{REGEN_FLAG}: dead-key check NOT enforced for this regen build (regen.sh rewrites the list, then rebuilds with it):\n{e}")).into_iter().collect()),
+        DeadKeys::Promote => unmatched_error(dead, stale, profile).map_or(Ok(Vec::new()), |e| Err(format!("{e}\n({PROMOTE_ENV}=1: dead keys fail in the promotion run)"))),
+        DeadKeys::Warn => {
+            if let Some(e) = unmatched_error(&[], stale, profile) {
+                return Err(e);
+            }
+            let mut out: Vec<String> = dead
+                .iter()
+                .map(|e| format!("warning: dead hot-text key {} ({}) in {file}: matches no function section of the {profile}-profile libc.a", e.key, e.tier))
+                .collect();
+            if !dead.is_empty() {
+                out.push(format!(
+                    "warning: {} dead hot-text key(s) in the {profile} profile (not enforced; {PROMOTE_ENV}=1, the promotion run, fails on them; repair: cargo xtask hottext-repair or tools/hottext/regen.sh)",
+                    dead.len()
+                ));
+            }
+            Ok(out)
+        }
     }
 }
 
@@ -1251,6 +1514,19 @@ fn unreferenced_error(entries: &[Entry], unreferenced: &BTreeSet<String>, profil
     Some(msg)
 }
 
+/// How an [`unreferenced_error`] ends under `mode`, as a dead key does in [`dead_key_verdict`]
+/// (owner ruling #5193: an unreferenced key, like a dead one, moves with code growth elsewhere):
+/// `Err` only under [`DeadKeys::Promote`]; otherwise the line to print (a warning, or the regen
+/// note), `None` when no listed key is unreferenced.
+fn unreferenced_verdict(err: Option<String>, mode: DeadKeys) -> Result<Option<String>, String> {
+    match (err, mode) {
+        (None, _) => Ok(None),
+        (Some(e), DeadKeys::Promote) => Err(format!("{e}\n({PROMOTE_ENV}=1: unreferenced keys fail in the promotion run)")),
+        (Some(e), DeadKeys::Regen) => Ok(Some(format!("{REGEN_FLAG}: unreferenced-key check NOT enforced for this regen build (regen.sh rewrites the list, then rebuilds with it):\n{e}"))),
+        (Some(e), DeadKeys::Warn) => Ok(Some(format!("warning: {e}\n(not enforced; {PROMOTE_ENV}=1, the promotion run, fails on it)"))),
+    }
+}
+
 /// Whether tracked file `path` may name [`REGEN_FLAG`]: its definition, its one caller
 /// (`tools/hottext/regen.sh`) and prose (`.md`, and the records under `records/`, which only xtask
 /// reads). A gate, CI script or other tool that passed it
@@ -1260,46 +1536,60 @@ fn may_name_regen_flag(path: &str) -> bool {
         || (path.starts_with("records/") && path.ends_with(".toml"))
 }
 
-/// A key of a non-generic free function in a module path (`_RNvNtC<crate><module>...<fn>`) ->
-/// (crate, modules, function); `None` for generic, impl, closure and C names.
-fn plain_path(key: &str) -> Option<(String, Vec<String>, String)> {
-    let mut s = key.strip_prefix("_RNv")?;
-    let mut depth = 1;
-    while let Some(r) = s.strip_prefix("Nt") {
-        s = r;
-        depth += 1;
-    }
-    s = s.strip_prefix('C')?;
-    let mut idents = Vec::new();
-    for _ in 0..=depth {
-        let n = s.bytes().take_while(u8::is_ascii_digit).count();
-        let len: usize = s.get(..n)?.parse().ok()?;
-        idents.push(s.get(n..n + len)?.to_string());
-        s = &s[n + len..];
-    }
-    if !s.is_empty() {
-        return None;
-    }
-    let f = idents.pop()?;
-    let krate = idents.remove(0);
-    Some((krate, idents, f))
+/// Where the function a v0 key names is defined (LAYOUT-HOTKEY-INLINE-STABLE): crate, module
+/// path, the self type's name for a method of an inherent or trait impl, the function's name.
+#[derive(Debug, PartialEq)]
+struct Site {
+    krate: String,
+    mods: Vec<String>,
+    owner: Option<String>,
+    f: String,
 }
 
-/// Whether every module-level definition of `fn f` in `text` carries `#[inline(never)]` among the
-/// attributes and comments directly above it; `None` when `text` defines no such function.
-fn inline_never(text: &str, f: &str) -> Option<bool> {
+/// The [`Site`] of a key naming a function, generic (`I ... E`) or not: `Nv` over a module path,
+/// an inherent impl (`M`) or a trait impl (`X`). `None` for a closure, a trait's provided method, a
+/// C name and anything that does not parse.
+fn fn_site(key: &str) -> Option<Site> {
+    let mut d = V0 { b: key.strip_prefix("_R")?.as_bytes(), depth: 0 };
+    let i = usize::from(d.at(0)? == b'I');
+    if d.at(i)? != b'N' || d.at(i + 1)? != b'v' {
+        return None;
+    }
+    let (krate, mods, owner, j) = d.owner(i + 2)?;
+    let f = d.name(j)?.0;
+    Some(Site { krate, mods, owner, f })
+}
+
+/// Whether every definition of `fn f` in `text` carries `#[inline(never)]` among the attributes and
+/// comments directly above it: the module-level definitions for a free function (`owner` `None`),
+/// the indented ones inside an `impl` block whose header line names `owner` for a method; `None`
+/// when `text` has no such definition.
+fn inline_never(text: &str, f: &str, owner: Option<&str>) -> Option<bool> {
     let lines: Vec<&str> = text.lines().collect();
-    let mut found = None;
+    let (mut found, mut header) = (None, None);
     for (i, l) in lines.iter().enumerate() {
-        let mut rest = *l;
+        let t = l.trim_start();
+        if t.len() == l.len() && !t.is_empty() && !t.starts_with("#[") && !t.starts_with("//") {
+            header = (t.starts_with("impl") || t.starts_with("unsafe impl")).then_some(t);
+        }
+        let in_place = match owner {
+            None => t.len() == l.len(),
+            Some(o) => t.len() < l.len() && header.is_some_and(|h| h.split(|c: char| !(c.is_alphanumeric() || c == '_')).any(|w| w == o)),
+        };
+        let mut rest = t;
         for q in ["pub(crate) ", "pub(super) ", "pub ", "const ", "unsafe ", "extern \"C\" "] {
             rest = rest.strip_prefix(q).unwrap_or(rest);
         }
         let Some(after) = rest.strip_prefix("fn ").and_then(|r| r.strip_prefix(f)) else { continue };
-        if !after.starts_with('(') && !after.starts_with('<') {
+        if !in_place || (!after.starts_with('(') && !after.starts_with('<')) {
             continue;
         }
-        let marked = lines[..i].iter().rev().take_while(|a| a.starts_with("#[") || a.starts_with("//")).any(|a| a.trim() == "#[inline(never)]");
+        let marked = lines[..i]
+            .iter()
+            .map(|a| a.trim())
+            .rev()
+            .take_while(|a| a.starts_with("#[") || a.starts_with("//"))
+            .any(|a| a == "#[inline(never)]");
         found = Some(found.unwrap_or(true) && marked);
     }
     found
@@ -1316,20 +1606,93 @@ fn module_source(root: &Path, krate: &str, mods: &[String]) -> Option<(String, S
     candidates.into_iter().find_map(|p| fs::read_to_string(&p).ok().map(|t| (p.strip_prefix(root).unwrap_or(&p).display().to_string(), t)))
 }
 
-/// The tiers whose plain functions must be `#[inline(never)]` (HOTTEXT-REGEN-UNBLOCK): the fork
-/// tier only. Marking the start-up tier too cost 3 to 18 user instructions on the start-up rows
-/// (`process::run_thread_dtors` and `locale::refresh_words` stop being inlined), so it waits for
-/// an owner ruling (handoff/hottext-regen-unblock.md); the fork tier's functions are off the
-/// start-up path.
-const INLINE_NEVER_TIERS: [&str; 1] = ["fork"];
+/// The tiers whose keys fail `cargo xtask so` when dead (D-X.47), so whose Rust functions must keep
+/// their symbol in both profiles whatever unrelated code does to LLVM's inlining budget: two libm
+/// merges inlined `spawn::wait4` away (2026-11-07), and on 2026-11-12 two libm changes inlined
+/// `Vdso::lookup_many::<5>` (#4986) and another start-up function (#4991) in the fast archive.
+/// Since D-X.53 a dead key of ANY tier fails `so`, and a dummy libm growth (LAYOUT-HOTKEY-INLINE-STABLE-2)
+/// killed `locale::builtin` (locale), `nscache::real_secs` (tool) and `iconv::load` (extra): every
+/// tier is checked (ruling #5024). Since ruling #5193 (LAYOUT-DEADKEY-WARN) a dead key fails only
+/// the promotion run ([`PROMOTE_ENV`]) and warns elsewhere; the pin check here is unchanged.
+const INLINE_NEVER_TIERS: [&str; 7] = TIERS;
 
-/// `cargo xtask static` (HOTTEXT-REGEN-UNBLOCK): (1) no tracked file but [`may_name_regen_flag`]'s
-/// names [`REGEN_FLAG`], so no gate can build with the dead-key check off; (2) every key of an
-/// [`INLINE_NEVER_TIERS`] tier that names a non-generic function of a workspace crate is
-/// `#[inline(never)]` in the source, so the function keeps its symbol (and its key) in both
-/// profiles whatever unrelated code does to the inliner's budget (two libm merges inlined
-/// `spawn::wait4` away and failed the build on 2026-11-07). Generic, impl and closure keys are
-/// not checked here; the build check of [`group`] still covers them.
+/// The keys of hot-text.list that may name a function without a fixed boundary, one line each:
+/// `<key>\t<tier>\t<reason>` (LAYOUT-HOTKEY-INLINE-STABLE). A key belongs here only when a call
+/// boundary is not free (a hot path, or a measured cost) or no attribute of ours can pin it (a
+/// closure, a function of `core` or `alloc`, a generic shared with hot instantiations). The tier
+/// column is the key's tier when the line was written, a note for readers only: hot-text.list is
+/// generated and train-owned, so a regen may move a key to another tier, and nothing reads the
+/// tier here (every tier is checked alike, [`INLINE_NEVER_TIERS`], and no accepted reason depends
+/// on the tier), so it is not compared (HOTTEXT-UNPINNED-TIER).
+pub const UNPINNED_LIST: &str = "crates/libc-so/hot-text.unpinned";
+
+/// The lines of [`UNPINNED_LIST`]: key -> (tier, reason). `#` comments and blank lines skipped.
+fn parse_unpinned(text: &str) -> Result<BTreeMap<String, (String, String)>, String> {
+    let mut out = BTreeMap::new();
+    for (n, l) in text.lines().enumerate() {
+        if l.trim().is_empty() || l.starts_with('#') {
+            continue;
+        }
+        match l.split('\t').collect::<Vec<_>>()[..] {
+            [k, tier, why] if k.starts_with("_R") && TIERS.contains(&tier) && !why.trim().is_empty() => {
+                if out.insert(k.to_string(), (tier.to_string(), why.to_string())).is_some() {
+                    return Err(format!("{UNPINNED_LIST} line {}: {k} listed twice", n + 1));
+                }
+            }
+            _ => return Err(format!("{UNPINNED_LIST} line {}: {l:?}: want <v0 key>\\t<tier>\\t<reason>", n + 1)),
+        }
+    }
+    Ok(out)
+}
+
+/// Why `key` (a key of an [`INLINE_NEVER_TIERS`] tier) has no fixed boundary, `None` when it has one:
+/// a C name (an exported or assembly symbol always exists), or a workspace function whose every
+/// definition is `#[inline(never)]`.
+fn unpinned_reason(root: &Path, key: &str) -> Option<String> {
+    if !key.starts_with("_R") {
+        return None;
+    }
+    let Some(s) = fn_site(key) else { return Some("a closure or other symbol no attribute of ours can pin".to_string()) };
+    if !s.krate.starts_with("liella") {
+        return Some(format!("a function of crate {} (no attribute of ours can pin it)", s.krate));
+    }
+    let what = format!("fn {}{}", s.owner.as_ref().map_or(String::new(), |o| format!("{o}::")), s.f);
+    match module_source(root, &s.krate, &s.mods) {
+        None => Some(format!("module source of {}::{} not found", s.krate, s.mods.join("::"))),
+        Some((path, text)) => match inline_never(&text, &s.f, s.owner.as_deref()) {
+            Some(true) => None,
+            Some(false) => Some(format!("{path}: {what} is not #[inline(never)]")),
+            None => Some(format!("{path}: no definition of {what} found")),
+        },
+    }
+}
+
+/// The fixed-boundary check of [`static_check`] on the parsed list and unpinned lines: errors.
+fn check_pinned(root: &Path, entries: &[Entry], unpinned: &BTreeMap<String, (String, String)>) -> Vec<String> {
+    let mut errs = Vec::new();
+    let checked = |k: &str| entries.iter().any(|e| e.key == k && INLINE_NEVER_TIERS.contains(&e.tier));
+    for e in entries.iter().filter(|e| INLINE_NEVER_TIERS.contains(&e.tier)) {
+        match (unpinned_reason(root, &e.key), unpinned.get(&e.key)) {
+            (Some(why), None) => errs.push(format!(
+                "hot-text.list: {} ({} key): {why}: unrelated code can make LLVM inline it and kill the key; mark it #[inline(never)] where a call boundary is free, or #[inline(always)] into a keyed caller and drop the key, or list it in {UNPINNED_LIST} with the reason",
+                e.key, e.tier
+            )),
+            (None, Some(_)) if e.key.starts_with("_R") => errs.push(format!("{UNPINNED_LIST}: {} has a fixed boundary now: remove its line", e.key)),
+            _ => {}
+        }
+    }
+    for k in unpinned.keys().filter(|k| !checked(k)) {
+        errs.push(format!("{UNPINNED_LIST}: {k} is no key of hot-text.list: remove its line"));
+    }
+    errs
+}
+
+/// `cargo xtask static` (HOTTEXT-REGEN-UNBLOCK, LAYOUT-HOTKEY-INLINE-STABLE): (1) no tracked file but
+/// [`may_name_regen_flag`]'s names [`REGEN_FLAG`], so no gate can build with the dead-key check off;
+/// (2) every Rust key of an [`INLINE_NEVER_TIERS`] tier names a workspace function that is
+/// `#[inline(never)]` in the source (free, generic, inherent or trait method alike), so it keeps its
+/// symbol (and its key) in both profiles, or is listed in [`UNPINNED_LIST`] with the reason; a line
+/// there that no longer applies is an error too.
 pub fn static_check(root: &Path) -> Result<(), String> {
     let mut errs = Vec::new();
     for p in crate::labnames::tracked_with(root, true)? {
@@ -1340,28 +1703,22 @@ pub fn static_check(root: &Path) -> Result<(), String> {
             errs.push(format!("{p}: names {REGEN_FLAG}; only tools/hottext/regen.sh may build with the dead-key check off"));
         }
     }
-    let list = root.join("crates/libc-so/hot-text.list");
+    let list = crate::hotlists::path(root, "hot-text.list")?;
     let entries = parse_list(&fs::read_to_string(&list).map_err(|e| format!("{}: {e}", list.display()))?)?;
-    for e in entries.iter().filter(|e| INLINE_NEVER_TIERS.contains(&e.tier)) {
-        let Some((krate, mods, f)) = plain_path(&e.key) else { continue };
-        if !krate.starts_with("liella") {
-            continue;
-        }
-        match module_source(root, &krate, &mods) {
-            None => errs.push(format!("hot-text.list: {} ({}): module source of {krate}::{} not found", e.key, e.tier, mods.join("::"))),
-            Some((path, text)) => match inline_never(&text, &f) {
-                Some(true) => {}
-                Some(false) => errs.push(format!("{path}: fn {f} ({} key in hot-text.list) needs #[inline(never)]: inlined, its key goes dead and fails `so`", e.tier)),
-                None => errs.push(format!("{path}: no module-level fn {f} ({} key {} in hot-text.list)", e.tier, e.key)),
-            },
-        }
+    let unpinned = parse_unpinned(&fs::read_to_string(root.join(UNPINNED_LIST)).map_err(|e| format!("{UNPINNED_LIST}: {e}"))?)?;
+    errs.extend(check_pinned(root, &entries, &unpinned));
+    // LAYOUT-FIRST-WINDOW: a stale or misplaced first-window line fails here, before any build.
+    let inputs = root.join(crate::hotlists::TRACKED);
+    let clusters_text = fs::read_to_string(inputs.join(CLUSTER_LIST)).ok();
+    if let Err(e) = first_window_positions(&inputs, &entries, clusters_text.as_deref()) {
+        errs.push(e);
     }
     if errs.is_empty() { Ok(()) } else { Err(errs.join("\n")) }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ar_members, before_group, check_lists, check_renames, cluster_align, head_alignments, cluster_bytes, cluster_section, clusters_at_end, dead_key_verdict, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, repair_lists, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
+    use super::{ar_members, before_group, check_lists, check_renames, cluster_align, head_alignments, cluster_bytes, cluster_section, clusters_at_end, dead_key_verdict, DeadKeys, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, parse_unpinned, check_pinned, fn_site, Site, positions, link_positions, parse_first_window, regen_mode, rename_for, repair_lists, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
     use std::collections::{BTreeMap, BTreeSet};
     use std::sync::atomic::Ordering;
 
@@ -1394,6 +1751,18 @@ mod tests {
         let err = super::unreferenced_error(&list, &unref, "fast").expect("the dead key is reported");
         assert!(err.contains("1 key(s) name only function sections nothing references") && err.contains(&key("_RNvC4test4dead")), "{err}");
         assert_eq!(super::unreferenced_error(&list[..1], &unref, "fast"), None);
+        // LAYOUT-TEXT-PIN-13: a key listed for the other profile only is that profile's to drop; a
+        // bare key (every profile) is this profile's too.
+        assert_eq!(super::unreferenced_error(&list, &unref, "release"), None, "a fast-only key is not the release build's");
+        let bare = parse_list(&format!("{}\tfork\t-\n", key("_RNvC4test4dead"))).unwrap();
+        assert!(super::unreferenced_error(&bare, &unref, "release").is_some(), "a bare key is every profile's");
+        // LAYOUT-TEXT-PIN-14 (ruling #5193): it fails only in the promotion run, as a dead key does.
+        assert!(super::unreferenced_verdict(Some(err.clone()), DeadKeys::Promote).unwrap_err().contains("fail in the promotion run"));
+        assert!(super::unreferenced_verdict(Some(err.clone()), DeadKeys::Warn).unwrap().is_some_and(|l| l.starts_with("warning: ") && l.contains(&key("_RNvC4test4dead"))));
+        assert!(super::unreferenced_verdict(Some(err), DeadKeys::Regen).unwrap().is_some_and(|l| l.contains("NOT enforced")));
+        for m in [DeadKeys::Warn, DeadKeys::Promote, DeadKeys::Regen] {
+            assert_eq!(super::unreferenced_verdict(None, m), Ok(None));
+        }
     }
 
     #[test]
@@ -1410,10 +1779,6 @@ mod tests {
             assert!(r.is_ok() && REGEN.load(Ordering::Relaxed));
         }
         REGEN.store(false, Ordering::Relaxed);
-        // The dead-key error fails the build unless in the regen mode.
-        assert_eq!(dead_key_verdict(Some("dead".to_string()), false), Err("dead".to_string()));
-        assert_eq!(dead_key_verdict(Some("dead".to_string()), true), Ok(Some("dead".to_string())));
-        assert_eq!(dead_key_verdict(None, false), Ok(None));
         assert!(may_name_regen_flag("tools/hottext/regen.sh") && may_name_regen_flag("xtask/src/hottext.rs") && may_name_regen_flag("handoff/x.md"));
         assert!(may_name_regen_flag("records/decisions/D-X/D-X.56.toml") && !may_name_regen_flag("records/views.sh"));
         assert!(!may_name_regen_flag("tools/hottext/merge.py") && !may_name_regen_flag("scripts/ci.sh") && !may_name_regen_flag("xtask/src/affected.rs"));
@@ -1421,23 +1786,111 @@ mod tests {
 
     #[test]
     fn listed_plain_functions_must_be_inline_never() {
-        // HOTTEXT-REGEN-UNBLOCK (no spec clause: build tooling): a start-up/fork key of a plain
-        // function maps to its module, and the definition must carry #[inline(never)].
-        assert_eq!(plain_path("_RNvNtC15liella_boundary5spawn5wait4"), Some(("liella_boundary".to_string(), vec!["spawn".to_string()], "wait4".to_string())));
-        assert_eq!(plain_path("_RNvNtNtC9liella_rt3a_b1c4f_un"), Some(("liella_rt".to_string(), vec!["a_b".to_string(), "c".to_string()], "f_un".to_string())));
-        assert_eq!(plain_path("_RNvC5plain3fun"), Some(("plain".to_string(), vec![], "fun".to_string())));
-        assert_eq!(plain_path("_RINvNtC15liella_boundary7runtime5startKb0_EC15liella_boundary"), None);
-        assert_eq!(plain_path("_RNvMs_NtC9liella_rt4heap4Heap4grow"), None);
-        assert_eq!(plain_path("__waitpid"), None);
-        assert_eq!(plain_path("_RNvNtC15liella_boundary5spawn5wait4x"), None);
+        // HOTTEXT-REGEN-UNBLOCK, LAYOUT-HOTKEY-INLINE-STABLE (no spec clause: build tooling): a
+        // start-up/fork key of a free, generic, inherent or trait-impl function maps to its module
+        // and owner, and the definition must carry #[inline(never)].
+        let site = |k: &str, m: &[&str], o: Option<&str>, f: &str| Some(Site { krate: k.to_string(), mods: m.iter().map(|s| s.to_string()).collect(), owner: o.map(str::to_string), f: f.to_string() });
+        assert_eq!(fn_site("_RNvNtC15liella_boundary5spawn5wait4"), site("liella_boundary", &["spawn"], None, "wait4"));
+        assert_eq!(fn_site("_RNvNtNtC9liella_rt3a_b1c4f_un"), site("liella_rt", &["a_b", "c"], None, "f_un"));
+        assert_eq!(fn_site("_RNvC5plain3fun"), site("plain", &[], None, "fun"));
+        assert_eq!(fn_site("_RINvNtC15liella_boundary7runtime5startKb0_EC15liella_boundary"), site("liella_boundary", &["runtime"], None, "start"));
+        assert_eq!(fn_site("_RNvMs_NtC9liella_rt4heapNtNtC9liella_rt4heap4Heap4grow"), site("liella_rt", &["heap"], Some("Heap"), "grow"));
+        // The key #4986 killed: a const-generic method of an inherent impl.
+        assert_eq!(
+            fn_site("_RINvMNtC13liella_kernel4vdsoNtNtC13liella_kernel4vdso4Vdso11lookup_manyKj5_EC15liella_boundary"),
+            site("liella_kernel", &["vdso"], Some("Vdso"), "lookup_many")
+        );
+        // A trait impl for a generic type: the owner is the self type, not the trait.
+        assert_eq!(
+            fn_site("_RNvXs3_NtC13liella_legacy12stdio_compatINtNtC13liella_legacy12stdio_compat4LiveNtNtC15liella_boundary5stdio4GlueENtNtC6liella6stream7Backing5writeC15liella_boundary"),
+            site("liella_legacy", &["stdio_compat"], Some("Live"), "write")
+        );
+        assert_eq!(fn_site("_RINvMNtC4core6optionINtNtC4core6option6OptionlE6map_orlEC15liella_boundary"), site("core", &["option"], Some("Option"), "map_or"));
+        assert_eq!(fn_site("_RNCNvNtC15liella_boundary6printf8vfprintf0C15liella_boundary"), None);
+        assert_eq!(fn_site("__waitpid"), None);
+        assert_eq!(fn_site("_RNvNtC15liella_boundary5spawn5wai"), None);
         let src = "/// doc\n#[inline(never)]\npub fn wait4(a: i32) {}\n#[cold]\nfn other() {}\nfn wait44() {}\n";
-        assert_eq!(inline_never(src, "wait4"), Some(true));
-        assert_eq!(inline_never(src, "other"), Some(false));
-        assert_eq!(inline_never(src, "missing"), None);
+        assert_eq!(inline_never(src, "wait4", None), Some(true));
+        assert_eq!(inline_never(src, "other", None), Some(false));
+        assert_eq!(inline_never(src, "missing", None), None);
         // An attribute separated by a blank line or an indented (method) definition does not count.
-        assert_eq!(inline_never("#[inline(never)]\n\nfn g() {}\n", "g"), Some(false));
-        assert_eq!(inline_never("impl X {\n    #[inline(never)]\n    fn h() {}\n}\n", "h"), None);
-        assert_eq!(inline_never("#[inline(never)]\npub(crate) extern \"C\" fn k<T>() {}\n", "k"), Some(true));
+        assert_eq!(inline_never("#[inline(never)]\n\nfn g() {}\n", "g", None), Some(false));
+        assert_eq!(inline_never("impl X {\n    #[inline(never)]\n    fn h() {}\n}\n", "h", None), None);
+        assert_eq!(inline_never("#[inline(never)]\npub(crate) extern \"C\" fn k<T>() {}\n", "k", None), Some(true));
+        // A method counts only inside an impl block of its owner.
+        let methods = "impl<'a> Vdso<'a> {\n    /// doc\n    #[inline(never)]\n    pub fn parse(i: &[u8]) {}\n}\nimpl Other {\n    fn parse() {}\n}\nimpl Pages for KernelPages {\n    fn map(&self) {}\n}\n";
+        assert_eq!(inline_never(methods, "parse", Some("Vdso")), Some(true));
+        assert_eq!(inline_never(methods, "parse", Some("Other")), Some(false));
+        assert_eq!(inline_never(methods, "map", Some("KernelPages")), Some(false));
+        assert_eq!(inline_never(methods, "parse", Some("Vds")), None);
+        assert_eq!(inline_never(methods, "parse", None), None);
+        // Unpinned lines: a known tier and one reason per key, no duplicates, Rust keys only.
+        assert_eq!(parse_unpinned("# c\n_Rk\ttool\thot path\n").unwrap().get("_Rk"), Some(&("tool".to_string(), "hot path".to_string())));
+        assert!(parse_unpinned("_Rk\tfork\thot\n_Rk\tfork\tagain\n").unwrap_err().contains("listed twice"));
+        assert!(parse_unpinned("_Rk\n").unwrap_err().contains("want <v0 key>"));
+        assert!(parse_unpinned("_Rk\thot path\n").unwrap_err().contains("want <v0 key>\\t<tier>"));
+        assert!(parse_unpinned("_Rk\tlibm\thot path\n").unwrap_err().contains("want <v0 key>"));
+        assert!(parse_unpinned("malloc\tstartup\tC name\n").unwrap_err().contains("want <v0 key>"));
+    }
+
+    #[test]
+    fn startup_keys_without_a_fixed_boundary_fail_unless_listed() {
+        // LAYOUT-HOTKEY-INLINE-STABLE (no spec clause: build tooling): on a fixture tree, an
+        // unmarked start-up method fails, a listed one passes, a marked one passes and makes its
+        // line stale, a closure or core key needs a line, a C key never does, a line of a key that
+        // is not in the list is stale; every tier is checked (ruling #5024: a libm growth killed
+        // locale, tool and extra keys); a listed key's tier column is not compared (HOTTEXT-UNPINNED-TIER).
+        let root = std::env::temp_dir().join(format!("liella-pinned-{}", std::process::id()));
+        let src = root.join("crates/kernel/src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(root.join("crates/kernel/Cargo.toml"), "[package]\nname = \"liella-kernel\"\n").unwrap();
+        std::fs::write(src.join("vdso.rs"), "impl<'a> Vdso<'a> {\n    #[inline(never)]\n    pub fn parse() {}\n    fn lookup_many<const N: usize>() {}\n}\nfn builtin() {}\n").unwrap();
+        let parse = "_RNvMNtC13liella_kernel4vdsoNtNtC13liella_kernel4vdso4Vdso5parse";
+        let many = "_RINvMNtC13liella_kernel4vdsoNtNtC13liella_kernel4vdso4Vdso11lookup_manyKj5_EC15liella_boundary";
+        let closure = "_RNCNvNtC15liella_boundary6printf8vfprintf0C15liella_boundary";
+        let builtin = "_RNvNtC13liella_kernel4vdso7builtin";
+        let list = format!("_start\tstartup\tfast,release\n{parse}\tstartup\tfast\n{many}\tstartup\tfast\n{closure}\tfork\tfast\n{builtin}\tlocale\tfast\n");
+        let entries = parse_list(&list).unwrap();
+        let errs = check_pinned(&root, &entries, &BTreeMap::new());
+        assert_eq!(errs.len(), 3, "{errs:?}");
+        assert!(errs[0].contains("Vdso::lookup_many is not #[inline(never)]") && errs[0].contains("startup key"), "{errs:?}");
+        assert!(errs[1].contains("a closure") && errs[1].contains("fork key"), "{errs:?}");
+        assert!(errs[2].contains("fn builtin is not #[inline(never)]") && errs[2].contains("locale key"), "{errs:?}");
+        let line = |k: &str, t: &str| (k.to_string(), (t.to_string(), "why".to_string()));
+        let listed: BTreeMap<String, (String, String)> =
+            [line(many, "startup"), line(closure, "fork"), line(parse, "startup"), line(builtin, "extra"), line("_RNvNtC13liella_kernel4vdso1x", "tool")].into_iter().collect();
+        let errs = check_pinned(&root, &entries, &listed);
+        assert_eq!(errs.len(), 2, "{errs:?}");
+        assert!(errs[0].contains(parse) && errs[0].contains("has a fixed boundary now"), "{errs:?}");
+        assert!(errs[1].contains("1x is no key of hot-text.list"), "{errs:?}");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_key_that_moves_tier_in_a_regen_leaves_static_green() {
+        // HOTTEXT-UNPINNED-TIER (no spec clause: build tooling): the train regenerates hot-text.list
+        // (`cargo xtask hot-lists --in-place`) and then runs static; a regen that moves an unpinned
+        // key to another tier (train 654: `catalog::textdomain` extra -> tool) must leave the
+        // hand-written hot-text.unpinned valid, since its tier column is a note nothing reads.
+        let root = std::env::temp_dir().join(format!("liella-unpinned-tier-{}", std::process::id()));
+        let src = root.join("crates/kernel/src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(root.join("crates/kernel/Cargo.toml"), "[package]\nname = \"liella-kernel\"\n").unwrap();
+        std::fs::write(src.join("vdso.rs"), "fn builtin() {}\nfn other() {}\n").unwrap();
+        let builtin = "_RNvNtC13liella_kernel4vdso7builtin";
+        let other = "_RNvNtC13liella_kernel4vdso5other";
+        let unpinned = parse_unpinned(&format!("# c\n{builtin}\textra\tboundary cost not measured yet\n{other}\tlocale\thot path\n")).unwrap();
+        for tiers in [("extra", "locale"), ("tool", "startup"), ("startup", "fork")] {
+            let list = format!("{builtin}\t{}\tfast,release\n{other}\t{}\tfast\n", tiers.0, tiers.1);
+            let errs = check_pinned(&root, &parse_list(&list).unwrap(), &unpinned);
+            assert!(errs.is_empty(), "tiers {tiers:?}: {errs:?}");
+        }
+        // The key itself still has to be listed: a moved key whose line is gone still fails.
+        let list = format!("{builtin}\ttool\tfast\n{other}\tlocale\tfast\n");
+        let only_other: BTreeMap<_, _> = unpinned.iter().filter(|(k, _)| k.as_str() == other).map(|(k, v)| (k.clone(), v.clone())).collect();
+        let errs = check_pinned(&root, &parse_list(&list).unwrap(), &only_other);
+        assert!(errs.len() == 1 && errs[0].contains(builtin) && errs[0].contains("tool key"), "{errs:?}");
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -1487,6 +1940,45 @@ mod tests {
         assert!(parse_list("k\tboot\tfast\n").unwrap_err().contains("line 1"));
         assert!(parse_list("# c\nk\tstartup\tdebug\n").unwrap_err().contains("line 2"));
         assert!(parse_list("k\tstartup\n").is_err());
+    }
+
+    #[test]
+    fn dead_key_warns_and_fails_only_under_the_promotion_flag() {
+        // LAYOUT-DEADKEY-WARN (no spec clause: build tooling; ruling #5193 amending D-X.53 (2)): the
+        // verdict of `so`, the gate, the plants baseline and `hottext-recheck` (all through `group`).
+        // Without LIELLA_PROMOTE=1 each dead key is one warning line naming key, file and profile,
+        // plus a count; with it the key fails; a stale hot-text.absent line fails either way; the
+        // regen build prints both. The mode comes from explicit values, never this process's env.
+        use std::ffi::OsStr;
+        assert_eq!(DeadKeys::of(false, None), DeadKeys::Warn);
+        assert_eq!(DeadKeys::of(false, Some(OsStr::new("1"))), DeadKeys::Promote);
+        assert_eq!(DeadKeys::of(false, Some(OsStr::new("0"))), DeadKeys::Warn);
+        assert_eq!(DeadKeys::of(false, Some(OsStr::new(""))), DeadKeys::Warn);
+        assert_eq!(DeadKeys::of(true, Some(OsStr::new("1"))), DeadKeys::Regen);
+        let e = parse_list("live\tstartup\tfast,release\ngone\tlocale\tfast,release\n").unwrap();
+        let some: BTreeSet<String> = ["live".to_string()].into();
+        let (d, s, _) = unmatched(&e, &some, &BTreeSet::new(), Some("fast"));
+        let w = dead_key_verdict(&d, &s, "fast", "crates/libc-so/hot-text.list", DeadKeys::Warn).unwrap();
+        assert_eq!(w.len(), 2, "{w:?}");
+        assert!(w[0].starts_with("warning: dead hot-text key gone (locale) in crates/libc-so/hot-text.list") && w[0].contains("fast-profile"), "{w:?}");
+        assert!(w[1].contains("1 dead hot-text key(s) in the fast profile") && w[1].contains("LIELLA_PROMOTE=1"), "{w:?}");
+        let err = dead_key_verdict(&d, &s, "fast", "crates/libc-so/hot-text.list", DeadKeys::Promote).unwrap_err();
+        assert!(err.contains("1 key(s) match no function section of the fast-profile") && err.contains("gone (locale"), "{err}");
+        let r = dead_key_verdict(&d, &s, "fast", "x", DeadKeys::Regen).unwrap();
+        assert!(r.len() == 1 && r[0].contains("NOT enforced") && r[0].contains("gone (locale"), "{r:?}");
+        // Nothing dead: nothing printed, in every mode.
+        let (d0, s0, _) = unmatched(&e, &["live".to_string(), "gone".to_string()].into(), &BTreeSet::new(), Some("fast"));
+        for m in [DeadKeys::Warn, DeadKeys::Promote, DeadKeys::Regen] {
+            assert_eq!(dead_key_verdict(&d0, &s0, "fast", "x", m), Ok(Vec::new()));
+        }
+        // A stale allow-list line (hot-text.absent is unchanged by the ruling) still fails without the flag.
+        let stale = ["old".to_string()];
+        assert!(dead_key_verdict(&d, &stale, "fast", "x", DeadKeys::Warn).unwrap_err().contains("hot-text.absent: 1 stale fast line(s)"));
+        // hottext-repair's final check (check_lists) takes the same verdict.
+        let fast: BTreeSet<String> = ["live".to_string()].into();
+        let lines = check_lists("live\tstartup\tfast,release\ngone\tlocale\tfast,release\n", "", &[("fast", &fast)], "hot-text.list", DeadKeys::Warn).unwrap();
+        assert!(lines.len() == 2 && lines[0].contains("dead hot-text key gone"), "{lines:?}");
+        assert!(check_lists("live\tstartup\tfast,release\ngone\tlocale\tfast,release\n", "", &[("fast", &fast)], "hot-text.list", DeadKeys::Promote).is_err());
     }
 
     #[test]
@@ -1542,14 +2034,14 @@ mod tests {
         let fast = set(&["live_both", "inl_rel", "fast_only", "old_listed", "stale_abs", "abs_ok", "other_fn"]);
         let release = set(&["live_both", "old_listed", "stale_abs"]);
         let matched = [("fast", &fast), ("release", &release)];
-        assert!(check_lists(list, absent, &matched).unwrap_err().contains("match no function section of the fast-profile"));
+        assert!(check_lists(list, absent, &matched, "hot-text.list", DeadKeys::Promote).unwrap_err().contains("match no function section of the fast-profile"));
         let r = repair_lists(list, absent, &matched, "abc123").unwrap();
         assert_eq!(r.list, "# head\nlive_both\tstartup\tfast,release\ninl_rel\tstdio\tfast,release\nfast_only\ttool\tfast\nold_listed\nstale_abs\textra\t-\nabs_ok\tlocale\tfast,release\n");
         assert_eq!(r.absent, "# allow\nabs_ok\trelease\twhy\ninl_rel\trelease\tinlined in release at abc123 (cargo xtask hottext-repair)\n");
         assert_eq!(r.dropped, vec!["dead".to_string(), "gone_abs".to_string()]);
         assert_eq!(r.recorded, vec![("inl_rel".to_string(), "release".to_string())]);
         assert_eq!(r.removed, vec![("stale_abs".to_string(), "release".to_string()), ("gone_abs".to_string(), "fast".to_string())]);
-        assert_eq!(check_lists(&r.list, &r.absent, &matched), Ok(()));
+        assert_eq!(check_lists(&r.list, &r.absent, &matched, "hot-text.list", DeadKeys::Promote), Ok(Vec::new()));
         // A repaired (or already clean) pair is left as it is.
         let again = repair_lists(&r.list, &r.absent, &matched, "def456").unwrap();
         assert_eq!((again.list.as_str(), again.absent.as_str()), (r.list.as_str(), r.absent.as_str()));
@@ -1748,6 +2240,57 @@ mod tests {
     }
 
     #[test]
+    fn trace_writes_the_names_at_one_address_in_byte_order() {
+        // LAYOUT-TRACE-HOST-CANONICAL-3 (no spec clause: build tooling): trace_gdb.py writes every
+        // name at a hit address (aliases such as bcmp / __memcmpeq / liella_machine_equal), and the
+        // list keeps that order. nm sorts by the caller's locale (en_US ignores underscores), so a
+        // Zen 1 host's job under en_US.UTF-8 and a gated job in C gave the same keys in two orders.
+        // The tracer must run nm in the C locale and sort each address's names itself.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let py = std::fs::read_to_string(root.join("tools/hottext/trace_gdb.py")).unwrap();
+        let nm = py.find("subprocess.run([\"nm\", \"--defined-only\", binp]").expect("trace_gdb.py: no nm call");
+        let nm_line = py[nm..].lines().next().unwrap();
+        assert!(nm_line.contains("env=nm_env") && py.contains("nm_env = dict(os.environ, LC_ALL=\"C\")"), "trace_gdb.py runs nm in the caller's locale");
+        let sorted = py.find("names = {a: sorted(ns) for a, ns in names.items()}").expect("trace_gdb.py does not sort the names at one address");
+        let written = py.find("for n in names.get(addr, []):").expect("trace_gdb.py: no names output");
+        assert!(nm < sorted && sorted < written, "trace_gdb.py sorts the names after it writes them");
+    }
+
+    #[test]
+    fn regen_replace_drops_the_allow_list_lines_of_keys_it_drops() {
+        // LAYOUT-TRACE-HOST-CANONICAL-3 (no spec clause: build tooling): `regen.sh --replace` keeps
+        // only the keys a trace hit, so an ABSENT_LIST line whose key left the list is stale by
+        // `unmatched`'s rule and the next release build (a later `--both`) refused it.
+        // prune.py --absent drops exactly those lines (comments and listed keys stay, in order) and
+        // regen.sh runs it on the --replace path only, after it writes the list.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let tmp = root.join(format!("target/xtask-absent-prune-test-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("list"), "# list\nkept\tstartup\tfast\nfast_only\tlocale\tfast\n").unwrap();
+        let absent = "# allow-list\nkept\trelease\tinlined in release\ngone\trelease\tinlined in release\n# tail\nfast_only\trelease\tinlined\n";
+        std::fs::write(tmp.join("absent"), absent).unwrap();
+        let o = std::process::Command::new("python3")
+            .arg("-I")
+            .arg(root.join("tools/hottext/prune.py"))
+            .arg("--absent")
+            .arg(tmp.join("list"))
+            .arg(tmp.join("absent"))
+            .output()
+            .expect("python3 runs tools/hottext/prune.py");
+        std::fs::remove_dir_all(&tmp).unwrap();
+        let (out, err) = (String::from_utf8(o.stdout).unwrap(), String::from_utf8_lossy(&o.stderr).into_owned());
+        assert!(o.status.success(), "prune.py --absent: {err}");
+        assert_eq!(out, "# allow-list\nkept\trelease\tinlined in release\n# tail\nfast_only\trelease\tinlined\n", "prune.py --absent kept a stale line or lost a live one");
+        assert!(err.contains("absent: dropped gone\trelease"), "prune.py --absent does not name the line it drops: {err}");
+        assert_eq!(parse_absent(&out).unwrap().len(), 2, "prune.py --absent output is not an allow-list");
+        let sh = std::fs::read_to_string(root.join("tools/hottext/regen.sh")).unwrap();
+        let written = sh.find("put_changed \"$work/list.merged\" \"$list\"").expect("regen.sh: no list write");
+        let guard = sh.find("if [ $replace = 1 ] && [ -f \"$absent\" ]; then").expect("regen.sh: no --replace allow-list prune");
+        let call = sh.find("\"$here/prune.py\" --absent \"$list\" \"$absent\"").expect("regen.sh: prune.py --absent not run");
+        assert!(written < guard && guard < call, "regen.sh prunes the allow-list before it writes the list, or outside --replace");
+    }
+
+    #[test]
     fn a_startup_label_brings_its_section_to_the_head() {
         // LAYOUT-TEXT-PIN-6, #4467 (no spec clause: build tooling, D-X.63): keys.py --aliases maps a
         // label inside a function section (an assembly entry label, an alias) to the section's key,
@@ -1890,8 +2433,120 @@ mod tests {
             assert!(l < extra, "regen.sh traces page_faults {mode} after the extra programs");
         }
         let refuse = sh.find("if [ $allow_drop = 0 ]; then").expect("regen.sh: no --allow-drop guard");
-        for w in ["mv \"$work/startup.merged\" \"$skeys\"", "mv \"$work/list.merged\" \"$list\""] {
+        for w in ["put_changed \"$work/startup.merged\" \"$skeys\"", "put_changed \"$work/list.merged\" \"$list\""] {
             assert!(sh.find(w).is_some_and(|p| p > refuse), "regen.sh writes before the drop guard: {w}");
         }
+    }
+    // LAYOUT-FIRST-WINDOW: first-window keys follow the start-up tier; a stale line fails. No spec clause.
+    #[test]
+    fn first_window_keys_follow_the_startup_tier() {
+        let e = parse_list("a\tstartup\tfast\nb\tstartup\tfast\nputs\tstdio\tfast\nfstat\tstdio\tfast\nc\textra\t-\n").unwrap();
+        let first = parse_first_window("# c\nfstat\tevery stdio program\n").unwrap();
+        let k = link_positions(&e, &first, &[]).unwrap();
+        assert_eq!([k["a"], k["b"], k["fstat"], k["puts"], k["c"]], [0, 1, 2, 3, 4]);
+        assert_eq!(link_positions(&e, &[], &[]).unwrap(), positions(&e));
+        assert!(link_positions(&e, &["b".into()], &[]).unwrap_err().contains("start-up tier"));
+        assert!(link_positions(&e, &["gone".into()], &[]).unwrap_err().contains("not in hot-text.list"));
+        let c = [Cluster { name: "s".into(), first: 2, last: 3 }];
+        assert!(link_positions(&e, &first, &c).unwrap_err().contains("inside cluster s"));
+        assert!(parse_first_window("fstat\n").is_err());
+        assert!(parse_first_window("f\tr\nf\tr\n").unwrap_err().contains("twice"));
+    }
+
+    #[test]
+    fn regen_runner_runs_traces_together_and_keeps_their_order() {
+        // HOTLIST-REGEN-CHEAP (no spec clause: build tooling): tools/hottext/runner.sh, the trace
+        // runner of regen.sh and probe_text.sh. A fake tracer (HOTTEXT_GDB) waits until all four
+        // traces of the run have started, so a runner that runs them one at a time fails here
+        // (iteration budget, a hang guard only). The tagged file names every trace in start order,
+        // each trace writes its own names file with its own environment, a failed trace fails the
+        // wait, and put_changed leaves a file whose bytes did not change untouched. The fake prints
+        // the program's environment as trace_gdb.py builds it (LAYOUT-TRACE-HOST-CANONICAL: exactly
+        // the HOT_TEXT_ENV_<NAME> variables, sorted), so the caller's own LANG must not reach it.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let runner = root.join("tools/hottext/runner.sh");
+        let tmp = root.join(format!("target/xtask-runner-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let run = |name: &str, progs: &[&str]| {
+            let work = tmp.join(name);
+            let barrier = work.join("barrier");
+            std::fs::create_dir_all(&barrier).unwrap();
+            let fake = r#"#!/bin/bash
+while [ "$1" != --args ]; do shift; done; shift
+touch "BARRIER/started.$1"
+i=0
+while [ "$(ls BARRIER | wc -l)" -lt COUNT ]; do
+    i=$((i + 1))
+    if [ $i -gt 3000 ]; then echo "fake tracer: $1 started alone: the traces did not run together" >&2; exit 7; fi
+    sleep 0.01
+done
+if [ "$1" = fail ]; then exit 3; fi
+printf '%s\n' "$@" > "$HOT_TEXT_OUT"
+env | sed -n 's/^HOT_TEXT_ENV_//p' | LC_ALL=C sort >> "$HOT_TEXT_OUT"
+"#
+            .replace("BARRIER", &barrier.to_string_lossy())
+            .replace("COUNT", &progs.len().to_string());
+            let fake_path = work.join("fake-gdb");
+            std::fs::write(&fake_path, fake).unwrap();
+            let driver = r#"set -eu
+work=$1; here=$2; shift 2
+n=0
+: > "$work/tagged"
+. "$here/runner.sh"
+for p in "$@"; do trace_tagged "tier-$p" LANG="lang-$p" -- "$p" arg; done
+traces_wait
+"#;
+            let o = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(driver)
+                .arg("driver")
+                .arg(&work)
+                .arg(runner.parent().unwrap())
+                .args(progs)
+                .env("HOTTEXT_GDB", format!("bash {}", fake_path.display()))
+                .env("LANG", "caller-lang")
+                .env("TZ", "caller-tz")
+                .env("HOTTEXT_JOBS", progs.len().to_string())
+                .output()
+                .expect("bash runs tools/hottext/runner.sh");
+            (work, o.status.success(), String::from_utf8_lossy(&o.stderr).into_owned())
+        };
+        let progs = ["p1", "p2", "p3", "p4"];
+        let (work, ok, err) = run("ok", &progs);
+        assert!(ok, "runner.sh: the four traces did not all run and pass: {err}");
+        let tagged = std::fs::read_to_string(work.join("tagged")).unwrap();
+        let want: String = (1..=progs.len()).map(|i| format!("tier-p{i}={}\n", work.join(format!("names.{i}")).display())).collect();
+        assert_eq!(tagged, want, "runner.sh: tagged does not name every trace in start order");
+        for (i, p) in progs.iter().enumerate() {
+            let names = std::fs::read_to_string(work.join(format!("names.{}", i + 1))).unwrap();
+            assert_eq!(names, format!("{p}\narg\nLANG=lang-{p}\n"), "runner.sh: names.{} is not trace {p}'s output", i + 1);
+        }
+        let (_, ok, err) = run("fail", &["p1", "fail", "p3", "p4"]);
+        assert!(!ok && err.contains("trace failed (rc 3)"), "runner.sh: a failed trace did not fail the wait: {err}");
+        // put_changed: equal bytes keep the tracked file (and its mtime); new bytes replace it.
+        let dir = tmp.join("put");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("tracked"), "a\n").unwrap();
+        let old = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
+        std::fs::File::options().write(true).open(dir.join("tracked")).unwrap().set_modified(old).unwrap();
+        let put = |text: &str| {
+            std::fs::write(dir.join("new"), text).unwrap();
+            let st = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(". \"$1\"; put_changed \"$2/new\" \"$2/tracked\"")
+                .arg("put")
+                .arg(&runner)
+                .arg(&dir)
+                .status()
+                .unwrap();
+            assert!(st.success(), "put_changed failed");
+            assert!(!dir.join("new").exists(), "put_changed left its input behind");
+            (std::fs::read_to_string(dir.join("tracked")).unwrap(), std::fs::metadata(dir.join("tracked")).unwrap().modified().unwrap())
+        };
+        let same = put("a\n");
+        let changed = put("b\n");
+        std::fs::remove_dir_all(&tmp).unwrap();
+        assert_eq!(same, ("a\n".to_string(), old), "put_changed rewrote a file whose bytes did not change");
+        assert_eq!(changed.0, "b\n", "put_changed did not write new bytes");
     }
 }

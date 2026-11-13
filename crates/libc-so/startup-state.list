@@ -1,0 +1,201 @@
+# The written start-up state (and the state every fork child reads): what `cargo xtask so` moves into the `.data1` cluster (xtask/src/coldbss.rs
+# `move_startup_state`; D-X.64, LAYOUT-DATA-CLUSTERS-6). Declared by hand, never generated: placement follows
+# this list, not a trace of the current layout, so it is the same in every profile and every build. The check
+# is a test: hot_text_products `init_startup_data_accesses_are_in_the_data1_cluster` traces `page_faults true`
+# (every writable input section on a 64 KiB boundary of its own) and names any small static start-up touches
+# outside `.data1`; declare it here. `init_written_startup_objects_are_in_the_data1_cluster` checks every entry
+# is defined and in `.data1`.
+# Entries, one per line (text after `#` is a comment):
+#   <crate>::<path>::<STATIC>  a Rust static, and every part LLVM splits it into (`.0`, `.1.llvm.<n>`)
+#   symbol <name>              an object in a section of its own name, `.data.<name>` or `.bss.<name>` (ABI names)
+#   section <name>             an object in a section of another name (C)
+# An entry must name at least one section in every profile, unless it ends with `fast-only` (the release
+# profile's LTO folds it away). A matched section over 8 KiB is refused (the cluster would spread over pages).
+
+# CPU feature detection and the copy/fill thresholds it sets (every start).
+liella_boundary::cpu::DETECTIONS
+liella_boundary::cpu::FEATURES
+liella_boundary::cpu::FEATURES_READY
+liella_boundary::cpu::STATE
+liella_boundary::cpu::AVX2_ERMS_FROM
+liella_boundary::cpu::AVX2_ERMS_TO
+liella_boundary::cpu::ERMS_LARGE_FROM
+liella_boundary::cpu::COPY_MIN
+liella_boundary::cpu::FILL_MIN
+liella_boundary::dispatch::FOLD_RESOLVED
+liella_boundary::dispatch::FOLD_RESOLVING
+liella_boundary::dispatch::FMA  fast-only
+liella_boundary::classed::OUTCOME  fast-only
+# Auxiliary vector, vDSO, arguments, exit handlers (every start).
+liella_boundary::sys::SYSINFO_EHDR
+liella_boundary::sys::VDSO_STATE
+liella_boundary::sys::VDSO_FNS
+liella_boundary::process::AUXV_WORDS
+liella_boundary::process::AUXV_ADDR
+liella_boundary::process::ARGC
+liella_boundary::process::ARGV
+liella_boundary::process::EXIT_HANDLERS
+liella_boundary::runtime::EARLY_DONE  # __libc_start_main's dynamic-path flag: Liella's ld.so sets it, start reads it (D-27.24)
+symbol __libc_stack_end
+symbol program_invocation_name  # and its alias __progname_full
+symbol program_invocation_short_name  # and its alias __progname
+section .bss.environ  # C: environ, __environ, _environ
+# The heap's first allocation (5376 bytes: every process writes its head and tail).
+liella_boundary::heap::HEAP
+liella_boundary::heap::DEBUG
+liella_boundary::heap::RESERVE_TOP
+liella_boundary::heap::RESERVE_LIVE
+liella_boundary::heap::RESERVE_LOCK
+# The initial thread, its TLS image and rseq registration.
+liella_boundary::thread::HEAD
+liella_boundary::thread::LIST
+liella_boundary::thread::LIVE
+liella_boundary::thread::OWNED
+liella_boundary::thread::LOCK_ALONE
+liella_boundary::thread::RSEQ_OWNED
+liella_boundary::thread::FORBIDDEN
+liella_boundary::thread::TLS_IMAGE
+symbol __rseq_offset
+symbol __rseq_size
+symbol __libc_single_threaded
+# The fork child's state: fork::fork and fork::child_reset (with the after_fork_child steps it calls) read
+# these in every child, written or not. fork copies no page-table entry for a page of `.data` or `.bss` the
+# parent never touched, so each such page cost the child a read fault (timer::EPOLL alone: LAYOUT-DATA-CLUSTERS-5;
+# the rest, LAYOUT-DATA-CLUSTERS-7: release fork child 7, and 8 at the `data 0x3000` pad, against 6 on next).
+# On the cluster's pages, which start-up touches, the child reads them without a fault at every pad.
+liella_boundary::timer::EPOLL
+liella_boundary::timer::HEAD
+liella_boundary::timer::LOCK
+liella_boundary::timer::OTHERS
+liella_boundary::timer::RETRYING
+liella_boundary::timer::WAKE
+liella_boundary::fork::ATFORK_LOCK
+liella_boundary::fork::FIRST
+liella_boundary::fork::USED
+liella_boundary::mqueue::FIRST
+liella_boundary::mqueue::LOCK
+liella_boundary::mqueue::SOCKET
+liella_boundary::gai_async::HEAD
+liella_boundary::gai_async::IDLE
+liella_boundary::gai_async::LEN
+liella_boundary::gai_async::LOCK
+liella_boundary::gai_async::WORKERS
+liella_boundary::aio::DEAD
+liella_boundary::aio::ENGINE
+liella_boundary::aio::IDLE
+liella_boundary::aio::INFLIGHT
+liella_boundary::aio::LIST_WAITERS
+liella_boundary::aio::LOCK
+liella_boundary::aio::OWNER
+liella_boundary::aio::PENDING
+liella_boundary::aio::READY
+liella_boundary::aio::RETRIES
+liella_boundary::aio::WAITERS
+liella_boundary::aio::WAITING
+liella_boundary::aio::WORKERS
+liella_boundary::aio::WREADY
+liella_boundary::spawn::POPEN_LOCK
+liella_boundary::spawn::SHELL_LOCK
+liella_boundary::spawn::SHELL_SAVED
+liella_boundary::spawn::SHELL_USERS
+liella_boundary::stacks::COUNT
+liella_boundary::stacks::LOCK
+liella_boundary::stacks::OCCUPANTS
+liella_boundary::stacks::QUEUE_HEAD
+liella_boundary::stacks::QUEUE_TAIL
+liella_boundary::stacks::SERVICE
+liella_boundary::stacks::WORK
+liella_boundary::thread::CACHE
+liella_boundary::thread::CACHE_BYTES
+liella_boundary::thread::DEAD
+liella_boundary::thread::RECYCLE
+liella_boundary::process::ENV_LOCK
+liella_boundary::setxid::SERIAL
+liella_legacy::log_compat::GLOBAL
+liella_legacy::time_compat::LOCK
+# stdio: the standard streams and the stream list (printf, exit flush).
+liella_boundary::stdio::FREE
+liella_boundary::stdio::SLOTS
+liella_legacy::stdio_compat::LIST
+liella_legacy::stdio_compat::FLUSHING
+liella_legacy::printf_registry::ACTIVE
+symbol _IO_2_1_stderr_
+symbol _IO_list_all
+symbol stderr
+# Locale and name-service state every process sets up (the C locale's 2944 bytes included).
+liella_legacy::global_locale::GLOBAL
+liella_legacy::global_locale::LOCK
+liella_legacy::global_locale::C
+liella_legacy::nscache::NSCACHE
+# First-call state (LAYOUT-STARTUP-STATE-LOCALE-3, ruling #4942): what the first setlocale, setenv, localtime_r,
+# mktime and catalog lookups touch, never a process that makes none of those calls. The zero-filled objects go to
+# their own page-aligned cluster in `.lbss`, after `.bss` (xtask/src/coldbss.rs FIRST_CALL_SECTION): in `.data1`
+# they lay between the every-process tier and the C members' start-up words, and the `true` probe touched one page
+# more. Initialised ones (stdout, __tzname, ...) and those of another member than the Rust object stay in `.data1`,
+# after the every-process tier. Every entry after the next line is first-call state; hot_text_products names any
+# the `true` probe touches.
+cluster first-call
+# The first setlocale reads, then writes, the table counters and the secure-mode flag `process::secure`
+# caches. LAYOUT-DATA-CLUSTERS-9: once program_invocation_name is in the cluster, start-up no longer touches
+# the last `.bss` page, and the first of these left there costs setlocale a read and a write fault on it
+# (setlocale + printf and tool +1 against next); declared one at a time, the faults moved to the next one
+# (NAME_COUNT, then SECURE, then GENERATION and MAPS), so the set is declared together.
+liella_legacy::global_locale::MAPS
+liella_legacy::global_locale::COUNT
+liella_legacy::global_locale::NAME_COUNT
+liella_legacy::global_locale::FILE_COUNT
+liella_legacy::global_locale::GENERATION
+liella_legacy::global_locale::QUERY_SEQ
+liella_legacy::global_locale::QUERY_HANDLE
+liella_legacy::global_locale::QUERY_SLOT
+liella_boundary::process::SECURE
+# The catalog change counter the first setlocale bumps (LAYOUT-DATA-CLUSTERS-11): after next's merge it was that
+# call's only write on the last `.bss` page start-up leaves untouched (one fault, setlocale + printf 51 -> 50).
+symbol _nl_msg_cat_cntr
+# The flag every close reads first (csys/src/machine/points.S; LAYOUT-SINGLE-FAULT-TEST): in the assembly member's
+# shared `.data` the first close (the `rebind` probe's) read it on a page whose place followed emission order.
+symbol liella_machine_aio_used
+# The rest of what the first setlocale and the first printf to stdout touch (LAYOUT-STARTUP-STATE-LOCALE, #4915):
+# left in `.bss`/`.data`, their page followed emission order, and setlocale + printf read 50 or 51 and tool 54 to
+# 56 by `.bss` pad. hot_text_products `init_startup_data_accesses_are_in_the_data1_cluster` traces every probe.
+liella::locale::collate::ASCII_KEYS
+liella_legacy::intl::GENERATION
+liella_legacy::intl::SETTINGS
+symbol _IO_2_1_stdout_
+symbol stdout
+# The first zone load (localtime_r, tzset). time_compat's HEAD and CURRENT: the first localtime_r writes both
+# (LAYOUT-DATA-CLUSTERS-8: one fault each on untouched `.bss` pages; release localtime 19 before, 17 after, as next).
+liella::time::zone::NEXT_ID
+liella_legacy::time_compat::HEAD
+liella_legacy::time_compat::CURRENT
+section .data.rel.local.__tzname  # C: __tzname, tzname
+# The rest of what setenv("TZ"), the first localtime_r and the first mktime touch (LAYOUT-STARTUP-STATE-TIME, #4901):
+# left in `.bss`/`.data`, their page followed emission order, and with unrelated code growth the first localtime_r
+# took the read fault of time_compat::GENERATION and the write fault of sys::TSC_STATE on a page start-up leaves
+# untouched (+2). hot_text_products `init_startup_data_accesses_are_in_the_data1_cluster` traces `localtime_mktime`.
+liella_legacy::time_compat::GENERATION
+liella_boundary::sys::TSC_STATE
+symbol __daylight  # C: __daylight, daylight
+symbol __timezone  # C: __timezone, timezone
+# setenv's environment table (the first setenv builds it).
+liella_boundary::process::TABLE_ON
+liella_boundary::process::ENV_OWNED
+liella_boundary::process::ENV_CAP
+liella_boundary::process::ENV_VALUES
+liella_boundary::process::ENV_REPLACED
+# Message catalogs (LAYOUT-STARTUP-STATE-LOCALE, #4915): bindtextdomain/textdomain (tool), then the first
+# lookups and the rebind (rebind). Last, so that their pages are past every other tier's.
+liella_legacy::intl::LOCK
+liella_legacy::intl::DOMAIN
+liella_legacy::intl::STRINGS
+liella_legacy::intl::BINDINGS
+symbol _nl_domain_bindings
+liella_legacy::intl::CATALOGS
+liella_legacy::intl::ALIASES
+liella_legacy::intl::MEMO
+liella_legacy::intl::MEMO_NAME
+liella_legacy::intl::R_LAST
+liella_legacy::intl::R_NEXT
+liella_legacy::intl::R_PREV
+liella_legacy::intl::Host::language::LANGUAGE
+liella_legacy::intl::RESOLVED

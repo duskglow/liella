@@ -1,0 +1,12 @@
+{"task": "LIBM-F64-SPECIAL-QUICK-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: LAYOUT-JITTER: merged head reads true/locale/tool 18/57/60 vs next 17/55/58 (fast, Zen 1, same as CI); no fault on erf code or data; extra faults are liella_boundary codegen-unit churn (.data reorder puts __libc_single_threaded/stdout on a new page; find_cached outlined); next itself reads 17-18/53-56/56-59 over text pads, head 17/55/58 at cold pads 0x800-0x3000",
+ "branch": "task/libm-f64-special-quick-3", "head": "d8099c0f2",
+ "gate": {"affected": "not run (no code change in -3; lint1 clippy+static on merged head rc 0)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "brief premise: the +2/+1 faults come from erf code/data placement", "recommendation": "treat as LAYOUT-JITTER under #4347 (perf attribution and pad sweep in handoff/LIBM-F64-SPECIAL-QUICK.md); hold until LAYOUT-DATA-CLUSTERS/LAYOUT-TEXT-PIN, no bound change"},
+             {"item": "alternative: keep libm entry bodies in liella_math's codegen units (no #[inline]/#[inline(always)] at the boundary-facing entry) so libm size stops reordering liella_boundary", "recommendation": "do not adopt now: one-time reshuffle with no guarantee, and a call per erf in the release build (+2..5 instructions, unmeasured); revisit only if the layout stories do not land"}],
+ "informational": ["the start-up data regen (tools/hottext/startup_data.py) keys objects from perf first-touch addresses, so an object on an already-faulted page (__libc_single_threaded, _IO_2_1_stdout_) never gets a key and moves freely with .data order"],
+ "refused": [],
+ "improvement": "add hot_text_products (or a layout-check attribution) to the direct tier for any change to a crate linked into libc.a, and give the brief writer the pad-sweep tool: CI found this 17 min into a FULL gate, a 16 s pad sweep shows next itself crosses the bounds",
+ "next_step": "hold for LAYOUT-DATA-CLUSTERS / LAYOUT-TEXT-PIN, then re-merge next, rerun hot_text_products, gate, plants, counts",
+ "report_file": "handoff/LIBM-F64-SPECIAL-QUICK.md",
+ "jobs": ["keke:libm-f64-special-quick-3-lint1", "keke:libm-f64-special-quick-3-faults-next", "keke:libm-f64-special-quick-3-faults-head", "keke:libm-f64-special-quick-3-pads"]}

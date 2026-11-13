@@ -221,8 +221,37 @@ pub(crate) fn decompose(x: f64) -> (i32, f64) {
     if m > SQRT2 { (e + 1, m * 0.5) } else { (e, m) }
 }
 
+/// The proved relative error bound of [`log_dd`], `32u²` (`u = 2^-53`; the proof gives `29.8u²`).
+pub(crate) const LOG_DD_REL: f64 = f64::from_bits(0x39a0_0000_0000_0000);
+
 /// `ln x` for a positive double-double `x` (its leading part normal or subnormal, its trailing
-/// part not subnormal unless zero).
+/// part not subnormal unless zero), within [`LOG_DD_REL`] relative when no step underflows.
+///
+/// **Proof** (`u = 2^-53`; two_sum, two_prod and fast_two_sum exact). The primitives, for
+/// normalized operands (`|lo| <= u|hi|`), relative to their exact result: [`Dd::add`] is
+/// Joldes, Muller and Popescu's AccurateDWPlusDW (ACM TOMS 44(2), 2017, Alg. 6): `A2 =
+/// 3u²/(1 − 4u)`; [`Dd::add_f64`] their DWPlusFP (Alg. 4): `F2 = 2u²/(1 − 2u)`. Derived here:
+/// [`Dd::mul_f64`]: the error is `δ2(pl + RN(xl·b)) + δ1·xl·b` with `|pl|, |xl·b| <= u|xh·b|`, so
+/// `M1 = 3u²(1 + 2u)`; [`Dd::mul`]: the dropped `xl·yl` (`u²`), the roundings of `xh·yl`, `xl·yh`
+/// (`u²` each), of their sum (`2u²`) and of `pl + t` (`3u²`): `M2 = 8u²(1 + 2^-50)`; [`Dd::div`]:
+/// `q1 − X/Y`, `q2 − r1/Y`, `q3 − r2/Y` are within `3.01u` relative, so `|r1| <= 3.02u|X|`,
+/// `|r2| <= 9.2u²|X|`; the product `Y·q1` leaves `3u²|Q|`, `add_f64` `2u²`, the rest is `O(u³)`:
+/// `D2 = 5u²(1 + 2^-48)`.
+/// 1. `m·c − 1`: `p.hi ∈ [½, 2]`, so `p.hi − 1` is exact (Sterbenz) and so is the 2Sum with
+///    `p.lo`; `mlo·c` is exact (`lo = 0`); their sum `r` is within `A2` of `x·2^-e·c − 1`.
+/// 2. `|r| <= |m·c_i − 1|` at the bucket's ends: `|s| = |r/(2 + r)| <= 2^-8.4` for every
+///    `LOG_C` entry (checked by the tests). `2 + r` is within `A2`, the quotient within `D2`:
+///    `s` within `εs = A2·(2 + 2^-7) + D2 = 11.05u²`.
+/// 3. `H = Σ_{k<7} x^k/(2k+1)`, `x = s² <= 2^-16.8`: truncation `x^7/15/(1 − x) <= 2^-121`
+///    relative; the `f64` tail `x³(1/7 + ...)` within `2.1u·x³/7 <= 1.82u²` (`x³ <= 2^-50.4`);
+///    the last dd step `A2`, the earlier ones and `s²`'s `M2` scaled by `x`: `0.02u²`. So `εH =
+///    4.88u²` and `lr = 2s·H` within `ε_lr = εs + εH + M2 = 23.95u²` of `ln(1 + r)`.
+/// 4. The sum `e·LN2 + LOG_L[i] + lr` (`LN2`, `LOG_L` within `u²` relative: tests). `e = 0`:
+///    `e·LN2 = 0` and the first sum is exact; at `i = ±1`, the worst bucket, `|ln(1 + r)| <=
+///    1.035|ln x|` (`|r| <= 2^-8 + 2^-13` at the edge next to 1, `|ln m| >= ln(1 + 2^-8)`) and
+///    `|LOG_L[i]| <= 2.04|ln x|`: `2.04u² + 1.035·ε_lr + A2 = 29.8u²`; `i = 0` is `ε_lr`. `e != 0`:
+///    `|ln x| >= |e|·ln2/2`, so `2M1 + 2u²` (`LN2`) `+ u²` (`LOG_L`) `+ 1.02·A2 + A2 + 0.017·ε_lr
+///    = 15.5u²`. The bound is the largest, `29.8u² < LOG_DD_REL`.
 pub(crate) fn log_dd(x: Dd) -> Dd {
     let (e, m) = decompose(x.hi);
     // The trailing part scaled like the leading one (in two steps: 2^-e may not be an f64).

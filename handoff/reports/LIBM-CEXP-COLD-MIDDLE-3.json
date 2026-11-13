@@ -1,0 +1,13 @@
+{"task": "LIBM-CEXP-COLD-MIDDLE-3", "model": "opus", "tokens": null,
+ "result": "COMPLETE: design 1 lands (ruling #4912): cexp 397.0 -> 396.0, cexp_bench 400.4 -> 402.1, cexpf rows unchanged (Zen 1, base 7eaa318c8); design 4 tried once and reverted (its build changed three unrelated libc hot-text keys, so xtask so refused it); new export-level test vs the route",
+ "branch": "task/libm-cexp-cold-middle-3", "head": "see git: the commit that adds this file",
+ "gate": {"affected": "libm-cexp-cold-middle-3-gate2 on mei (direct tier, see hand-back)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["design 4 (in-place retry in a cexp-only cold fallback) changed the code generation of timefmt TmRead::zone, catalog::textdomain and nscache::real_secs; cargo xtask so refused the build until tools/hottext/regen.sh is run in both profiles; reverted per #4912, NEGATIVE result recorded in handoff/libm-cexp-cold-middle.md, not in the saturation register (no SR id reserved)",
+                   "cexp(1, 1e10) (envelope path, as on the base) leaves the MXCSR denormal-operand bit set; not an exception flag, fetestexcept flags match the route"],
+ "refused": [],
+ "improvement": "a design that adds generic code to liella-boundary can trip the libc hot-text key check; a cheap 'cargo xtask so' as the first job after such a change (before counts and plants) would have shown it in one job instead of three",
+ "next_step": "none; optional own story: design 4 plus a hot-text regen in both profiles if cexp_bench's +1.7 matters",
+ "report_file": "handoff/libm-cexp-cold-middle.md",
+ "jobs": ["libm-cexp-cold-middle-3-gate2", "libm-cexp-cold-middle-3-plants2", "libm-cexp-cold-middle-3-percall2", "libm-cexp-cold-middle-3-lint6"]}

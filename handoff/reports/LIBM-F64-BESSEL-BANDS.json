@@ -1,0 +1,11 @@
+{"task": "LIBM-F64-BESSEL-BANDS", "model": "opus", "tokens": null,
+ "result": "tiny band (x < 2^-27) of double j0/j1/y0/y1 answered by the fast tier (D-10.110): y0/y1 tiny 7.3e3/7.7e3 -> 470/550 instructions per call, j0/j1 tiny 481/530 -> 128/152; large-x and near-zero bands not started (target not reached)",
+ "branch": "task/libm-f64-bessel-bands", "head": "198dd501e",
+ "gate": {"affected": "see libm-f64-bessel-bands-gate3 (keke)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["bes_y1_zero self-check MISMATCH (y1(2.0)) is in base and new alike: the table kernel, not this change", "bes_y0_tiny self-check MISMATCH: y0(1e-10) differs from the reference's last place; the tiny-band test checks it against the 384-bit path in all modes", "wl_trace of the 1.4e5-instruction y0 call printed nothing in 40 min (stopped); trace small calls first", "the tiny band's remaining cost is mostly the wrapper (j0 tiny: about 10 instructions of work in 128) and log_dd + settle for y0/y1"],
+ "refused": [],
+ "improvement": "wl_trace on a 1.4e5-instruction call is impractical (gdb single-step); the brief could name wl_percall for slow-path bands and trace only calls under ~1e4 instructions",
+ "next_step": "large-x band (modulus-phase + exact fixed-point reduction reusing trig::poly/assemble), then the near-zero second tier; design notes in handoff/LIBM-F64-BESSEL-BANDS.md",
+ "report_file": "handoff/LIBM-F64-BESSEL-BANDS.md",
+ "jobs": ["libm-f64-bessel-bands-gate3", "libm-f64-bessel-bands-plants3", "libm-f64-bessel-bands-percall3"]}

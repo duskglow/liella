@@ -474,6 +474,8 @@ fn stored_id(rec: &[AtomicUsize]) -> Identity {
 }
 
 /// The catalog record of `path`, made (not yet loaded: absent, of no generation) if there is none.
+/// Out of line: a hot-text key (LAYOUT-HOTKEY-INLINE-STABLE).
+#[inline(never)]
 fn record_for<H: Host>(h: &H, path: &[u8]) -> Option<&'static [AtomicUsize]> {
     if let Some(r) = each(h, &CATALOGS, C_WORDS, |r| (text(h, r, C_PATH) == path).then_some(r)) {
         return Some(r);

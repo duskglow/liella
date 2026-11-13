@@ -1,0 +1,12 @@
+{"task": "LAYOUT-STARTUP-STATE-LOCALE-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: start-up state order now survives objcopy and the ld -r join (order test green, both profiles); locale/tool flat and 2-4 lower; true +1 flat at every pad: structural, needs a ruling on where first-call tiers go",
+ "branch": "task/layout-startup-state-locale-2", "head": "62fa8c2b9",
+ "gate": {"affected": "not run (true +1: branch must not land yet)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "Declared first-call state (setlocale, catalog incl. 4 KiB intl::RESOLVED, time tiers) after the every-process base tier in .data1 costs the true probe a page (+1); next had ~750 bytes of slack", "recommendation": "a second list-ordered cluster for first-call tiers outside the every-process run (e.g. .ldata.liella_state after .bss), the access check accepting either cluster"}],
+ "informational": ["BFD creates a relocation section's target when it reads the relocations: section-table reordering must move relocation sections with their targets"],
+ "refused": [],
+ "improvement": "faultmap.py (perf data-fault pages with the symbols on each page) found the true +1 cause in one job; worth a tools/ home for layout stories",
+ "next_step": "after the ruling, move first-call tiers to their own ordered cluster, rerun branch.sh (WORSE 0), then gate, hot_text_products, plants",
+ "report_file": "handoff/LAYOUT-STARTUP-STATE-LOCALE.md",
+ "jobs": ["lssl2-lint1", "layout-startup-state-locale-2-plants", "lssl2-branch1"]}

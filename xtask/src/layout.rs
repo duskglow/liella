@@ -39,7 +39,7 @@ pub struct Contract {
 
 impl Contract {
     /// The rule's `key=value` pairs (`; `-separated).
-    fn params(&self) -> Result<BTreeMap<String, String>, String> {
+    pub(crate) fn params(&self) -> Result<BTreeMap<String, String>, String> {
         let mut m = BTreeMap::new();
         for p in self.rule.split(';').map(str::trim).filter(|p| !p.is_empty()) {
             let (k, v) = p.split_once('=').ok_or_else(|| format!("layout: {}: rule part `{p}` is not key=value", self.id))?;
@@ -410,14 +410,31 @@ fn check_one(c: &Contract, pr: &mut Products) -> Result<String, Vec<String>> {
 }
 
 /// Check every contract on the products in `dir` (built with `profile`, when known); one line per contract, every
-/// failure listed.
+/// failure listed. A pass already proven for the same products, inputs, tools and checker is served from the verdict
+/// cache (`layout_verdict`), except under the CI train.
 pub fn check_products(root: &Path, dir: &Path, profile: Option<&str>) -> Result<(), String> {
+    crate::layout_verdict::check(root, dir, profile, || check_products_full(root, dir, profile))
+}
+
+/// Every contract checked on the products; on a pass, the lines printed (for the verdict cache).
+fn check_products_full(root: &Path, dir: &Path, profile: Option<&str>) -> Result<Vec<String>, String> {
     let contracts = load(root)?;
     let mut pr = Products { root, dir, profile: profile.map(str::to_string), index: BTreeMap::new() };
     let mut bad = Vec::new();
+    let mut ok = Vec::new();
+    let (all, mut slowest) = (std::time::Instant::now(), (0.0, String::new()));
     for c in &contracts {
-        match check_one(c, &mut pr) {
-            Ok(s) => println!("layout: {} ok: {s} ({})", c.id, c.decision),
+        let t = std::time::Instant::now();
+        let r = check_one(c, &mut pr);
+        let s = t.elapsed().as_secs_f64();
+        if s > slowest.0 {
+            slowest = (s, c.id.clone());
+        }
+        match r {
+            Ok(s) => {
+                ok.push(format!("layout: {} ok: {s} ({})", c.id, c.decision));
+                println!("{}", ok[ok.len() - 1]);
+            }
             Err(lines) => {
                 for l in &lines {
                     eprintln!("{l}");
@@ -427,9 +444,11 @@ pub fn check_products(root: &Path, dir: &Path, profile: Option<&str>) -> Result<
             }
         }
     }
+    println!("layout: {} contracts checked in {:.1} s (slowest {} {:.1} s)", contracts.len(), all.elapsed().as_secs_f64(), slowest.1, slowest.0);
     if bad.is_empty() {
-        println!("layout: all {} contracts of {MANIFEST} hold in {}", contracts.len(), dir.display());
-        Ok(())
+        ok.push(format!("layout: all {} contracts of {MANIFEST} hold in {}", contracts.len(), dir.display()));
+        println!("{}", ok[ok.len() - 1]);
+        Ok(ok)
     } else {
         Err(format!("layout: {} of {} contracts broken: {}", bad.len(), contracts.len(), bad.join(", ")))
     }
@@ -695,7 +714,7 @@ fn check_startup_windows(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Pr
         g => return Err(one(format!("layout: {}: grouped={g}: want error or warn", c.id))),
     };
     let path = param(p, c, "keys").map_err(one)?;
-    let text = std::fs::read_to_string(pr.root.join(path)).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
+    let text = std::fs::read_to_string(crate::hotlists::rel(pr.root, path).map_err(one)?).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     let keys = startup_keys(&text, &profile).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     if keys.is_empty() {
         return Err(one(format!("layout: {}: {path}: no start-up key traced in profile {profile} (run tools/hottext/regen.sh)", c.id)));
@@ -915,7 +934,7 @@ fn check_startup_data(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Produ
     let ro_budget = param_num(p, c, &format!("ro-budget-{profile}")).map_err(one)?;
     let rw_budget = param_num(p, c, &format!("rw-budget-{profile}")).map_err(one)?;
     let path = param(p, c, "keys").map_err(one)?;
-    let text = std::fs::read_to_string(pr.root.join(path)).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
+    let text = std::fs::read_to_string(crate::hotlists::rel(pr.root, path).map_err(one)?).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     let keys = startup_keys(&text, &profile).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     if keys.is_empty() {
         return Err(one(format!("layout: {}: {path}: no start-up object traced in profile {profile} (run tools/hottext/startup_data.sh)", c.id)));
@@ -924,7 +943,7 @@ fn check_startup_data(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Produ
         pr.file(f).map_err(|e| one(c.broken(f, &e)))?;
     }
     let tpath = param(p, c, "text-keys").map_err(one)?;
-    let ttext = std::fs::read_to_string(pr.root.join(tpath)).map_err(|e| one(format!("layout: {}: {tpath}: {e}", c.id)))?;
+    let ttext = std::fs::read_to_string(crate::hotlists::rel(pr.root, tpath).map_err(one)?).map_err(|e| one(format!("layout: {}: {tpath}: {e}", c.id)))?;
     let fns: BTreeSet<String> = startup_keys(&ttext, &profile).map_err(|e| one(format!("layout: {}: {tpath}: {e}", c.id)))?.into_iter().collect();
     let probe = link_startup_probe(pr, true).map_err(|e| one(format!("layout: {}: {e}", c.id)))?;
     let secs = parse_exe_sections(&probe.sections);
@@ -1136,9 +1155,11 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("--static") => static_check(root),
         Some(d) if d.starts_with('-') => Err(format!("layout-check: unknown option {d} (usage: layout-check [--static | <products dir>])")),
-        Some(d) => check_products(root, Path::new(d), marker_profile(Path::new(d)).as_deref()),
+        // LAYOUT-TRACE-AT-BUILD: products grouped from a trace of their own build are checked against those lists.
+        Some(d) => crate::hotlists::follow_products(root, Path::new(d)).and_then(|()| check_products(root, Path::new(d), marker_profile(Path::new(d)).as_deref())),
         None => {
             let d = root.join("target/liella");
+            crate::hotlists::follow_products(root, &d)?;
             check_products(root, &d, marker_profile(&d).as_deref())
         }
     }

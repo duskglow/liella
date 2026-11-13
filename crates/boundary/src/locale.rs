@@ -561,7 +561,11 @@ pub fn setlocale(category: i32, name: Option<&[u8]>) -> Option<&'static [u8]> {
         Some(n) => gl::Request::Name(n),
     };
     let before = gl::global_handle();
-    let r = gl::setlocale(&CSys, &Glue, cat, req);
+    // `""` is never answered from the query cache: straight to the locked path.
+    let r = match req {
+        gl::Request::Environment(_) => gl::setlocale_locked(&CSys, &Glue, cat, &req),
+        _ => gl::setlocale(&CSys, &Glue, cat, req),
+    };
     // A changed category may select other message catalogs (§7.7, `_nl_msg_cat_cntr`).
     if gl::global_handle() != before {
         publish_global();

@@ -12,7 +12,9 @@ use liella::bytes::Unit;
 use liella::error::{Errno, Result};
 use liella::num::first_trailing_one;
 use liella::num::format::{exact, format_float, round_digits, Bounded, Case, Decimal, Sink, Spec, Style};
-use liella::num::parse::{parse_f64_short,parse_float, parse_i64, parse_i64_short, parse_u64, Dialect, FloatRange, ParsedUnsigned, Status};
+use liella::num::parse::{parse_f64_short,parse_float, parse_i64, parse_i64_short, parse_u64, Dialect, FloatRange, ParsedUnsigned, Signals, Status};
+use liella_kernel::machine::Machine;
+use liella_rt::fpu::{self, Flags};
 use liella::num::{Float, Format, Rounding, Value};
 
 use crate::cstring::Dest;
@@ -138,6 +140,27 @@ pub fn rounding(mxcsr: u32) -> Rounding {
     }
 }
 
+/// The caller's rounding mode, read through `m`.
+// ARCH(x86_64): the SSE rounding field of MXCSR; FPCR.RMode on aarch64 (A-9)
+fn mode_of(m: &impl Machine) -> Rounding {
+    rounding(m.mxcsr())
+}
+
+/// Raise the IEEE exceptions a conversion signalled (C Annex F.5; D-8.12), once, in the
+/// caller's environment. Nothing to raise (an exact result) costs one test.
+pub fn raise_signals(m: &impl Machine, s: Signals) {
+    if !(s.inexact | s.overflow | s.underflow) {
+        return;
+    }
+    let mut f = Flags::NONE;
+    for (on, flag) in [(s.overflow, Flags::OVERFLOW), (s.underflow, Flags::UNDERFLOW), (s.inexact, Flags::INEXACT)] {
+        if on {
+            f = Flags(f.0 | flag.0);
+        }
+    }
+    fpu::raise(m, f);
+}
+
 /// Store the end position (`*endptr`) `used` units past the start at `addr`.
 fn end_at<T>(end: Option<impl Cursor>, addr: usize, used: usize) {
     if let Some(mut e) = end {
@@ -204,37 +227,43 @@ pub fn atol<T: Unit>(s: &[T]) -> i64 {
 }
 
 /// The `strtod` family in format `fmt` with the locale's radix `radix` (D-8.3): the value's
-/// bits and the `errno` to report (`ERANGE` on overflow and underflow).
-pub fn strto_float<T: Unit>(s: &[T], addr: usize, end: Option<impl Cursor>, fmt: Format, mode: Rounding, radix: &[T]) -> (u128, Option<Errno>) {
-    let p = parse_float(s, radix, fmt, mode, Dialect::C99);
+/// bits and the `errno` to report (`ERANGE` on overflow and underflow). Rounds in `m`'s
+/// rounding mode and raises the exceptions the rounding signals in `m` (D-8.12).
+pub fn strto_float<T: Unit>(s: &[T], addr: usize, end: Option<impl Cursor>, fmt: Format, m: &impl Machine, radix: &[T]) -> (u128, Option<Errno>) {
+    let p = parse_float(s, radix, fmt, mode_of(m), Dialect::C99);
     end_at::<T>(end, addr, p.used);
+    raise_signals(m, p.signals());
     (p.value.pack(fmt), (p.range != FloatRange::Ok).then_some(Errno::ERANGE))
 }
 
 /// `strtof`.
-pub fn strtof<T: Unit>(s: &[T], addr: usize, end: Option<impl Cursor>, mode: Rounding, radix: &[T]) -> (f32, Option<Errno>) {
-    let (b, e) = strto_float(s, addr, end, Format::F32, mode, radix);
+pub fn strtof<T: Unit>(s: &[T], addr: usize, end: Option<impl Cursor>, m: &impl Machine, radix: &[T]) -> (f32, Option<Errno>) {
+    let (b, e) = strto_float(s, addr, end, Format::F32, m, radix);
     (f32::from_bits(b as u32), e)
 }
 
 /// `strtod`.
-pub fn strtod<T: Unit>(s: &[T], addr: usize, end: Option<impl Cursor>, mode: Rounding, radix: &[T]) -> (f64, Option<Errno>) {
+pub fn strtod<T: Unit>(s: &[T], addr: usize, end: Option<impl Cursor>, m: &impl Machine, radix: &[T]) -> (f64, Option<Errno>) {
     // Short decimals first, in one pass: exact or one correctly rounded IEEE operation, no ERANGE
-    // (WL-HOT-SEQ, STRTOD-FAST).
-    if let Some((x, used)) = parse_f64_short(s, radix, mode) {
+    // (WL-HOT-SEQ, STRTOD-FAST). That operation runs in the caller's environment and raises
+    // inexact itself, exactly when the result is inexact; it cannot overflow or underflow (D-8.12).
+    if let Some((x, used)) = parse_f64_short(s, radix, mode_of(m)) {
         end_at::<T>(end, addr, used);
         return (x, None);
     }
-    let (b, e) = strto_float(s, addr, end, Format::F64, mode, radix);
+    let (b, e) = strto_float(s, addr, end, Format::F64, m, radix);
     (f64::from_bits(b as u64), e)
 }
 
-/// `atof`: `strtod(s, NULL)`.
-pub fn atof<T: Unit>(s: &[T], mode: Rounding, radix: &[T]) -> f64 {
+/// `atof`: `strtod(s, NULL)`, exceptions included.
+pub fn atof<T: Unit>(s: &[T], m: &impl Machine, radix: &[T]) -> f64 {
+    let mode = mode_of(m);
     if let Some((x, _)) = parse_f64_short(s, radix, mode) {
         return x;
     }
-    f64::from_bits(parse_float(s, radix, Format::F64, mode, Dialect::C99).value.pack(Format::F64) as u64)
+    let p = parse_float(s, radix, Format::F64, mode, Dialect::C99);
+    raise_signals(m, p.signals());
+    f64::from_bits(p.value.pack(Format::F64) as u64)
 }
 
 /// A `float` argument as a value.

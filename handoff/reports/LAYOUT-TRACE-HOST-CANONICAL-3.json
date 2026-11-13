@@ -1,0 +1,16 @@
+{"task": "LAYOUT-TRACE-HOST-CANONICAL-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE at context checkpoint: lthc2-gate red explained and fixed (runner test; static already fixed); --both documented (#5241); --replace now prunes stale hot-text.absent lines (the --both proof failed on every host without it); a new host input found and fixed (alias order followed the caller's locale via nm); final-head gate, plants and three-host proof started detached",
+ "branch": "task/layout-trace-host-canonical-3", "head": "1acfdbc",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The -2 proof's matching lists held only because every proof job ran under ~/bin/gate (C locale); under a plain jobrun with LANG=en_US.UTF-8 the same tree gave startup-text.keys and probe-text.keys in another order (fixed in 1acfdbc)."],
+ "refused": [],
+ "impact": [
+   {"kind": "correctness", "what": "hot-text trace: names at one address no longer follow the caller's locale (startup-text.keys/probe-text.keys differed between an en_US.UTF-8 job and a C job on one Zen 1 host)", "before": null, "after": null, "unit": null, "measured": true},
+   {"kind": "tooling", "what": "regen.sh --replace then --both no longer fails the release recheck on 20 stale hot-text.absent lines", "before": null, "after": null, "unit": null, "measured": true},
+   {"kind": "coverage", "what": "unit tests added or fixed (runner env, absent pruning, alias order) and plants", "before": 5, "after": 10, "unit": "plants", "measured": false}
+ ],
+ "jobs": ["lthc3-lint3", "lthc3-gate3", "lthc3-plants3", "lthc3-proof2-keke", "mei:lthc3-proof2-mei", "shiki:lthc3-proof2-shiki"],
+ "improvement": "Run every cross-host proof job the same way the build runs (no gate wrapper difference): the wrapper's C locale hid a host input for a whole run",
+ "next_step": "Collect lthc3-gate3, lthc3-plants3 and the three lthc3-proof2-<host> jobs; compare proof: digests; bounds: lines on keke; update the pending record; hand back",
+ "report_file": "handoff/LAYOUT-TRACE-HOST-CANONICAL.md"}

@@ -1,0 +1,4 @@
+# DL-LIBC-START-7: the dynamic native example's own expected output (the static one without its static-only steps).
+static-only-ignored | xtask/src/native_examples.rs | lit:const STATIC_ONLY: &[&str] = &["kernel types"]; ==> const STATIC_ONLY: &[&str] = &[]; | cargo xtask so && cargo xtask native | msg:native_dynamic: unexpected output
+dynamic-count-wrong | xtask/src/native_examples.rs | lit:let steps = lines.iter() ==> let steps = 1 + lines.iter() | cargo xtask so && cargo xtask native | msg:native_dynamic: unexpected output
+static-derived | xtask/src/native_examples.rs | lit:if linkage == "static" { ==> if linkage == "dynamic" { | cargo xtask so && cargo xtask native | msg:native_static: unexpected output
