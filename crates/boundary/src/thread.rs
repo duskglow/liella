@@ -702,7 +702,10 @@ pub(crate) fn recycle_lock() -> &'static RawMutex {
     &RECYCLE
 }
 
-/// `fork`'s child: only the calling thread exists (D-18.6).
+/// `fork`'s child: only the calling thread exists (D-18.6). Never inlined: a fork-tier hot-text
+/// key (crates/libc-so/hot-text.list), so the child's path stays in the hot group whatever LLVM
+/// decides for `fork::child_reset`; one call per fork.
+#[inline(never)]
 pub(crate) fn after_fork_child() {
     // The lock was taken before the fork by the forking thread, which is this one.
     // Only the words that change are written (D-18.8).
