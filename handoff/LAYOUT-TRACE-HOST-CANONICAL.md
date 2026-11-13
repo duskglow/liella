@@ -1,66 +1,54 @@
-# LAYOUT-TRACE-HOST-CANONICAL (LT-4): handoff (run 1, checkpoint)
+# LAYOUT-TRACE-HOST-CANONICAL (LT-4): handoff (run 2, LAYOUT-TRACE-HOST-CANONICAL-2, context checkpoint)
 
-State: branch `task/layout-trace-host-canonical`, WIP. Role keke:~/w/n2 (Zen 1). Plan: `plan/layout-rethink.md` on
-`task/layout-rethink` sections 2(e), 3, 4 (rulings #5190-#5194, #5191: default switch needs host-canonical traces).
-Stopped at the ~150k context checkpoint (thread_common BUDGET); nothing below is gated yet.
+State: branch `task/layout-trace-host-canonical-2` (on top of run 1's `task/layout-trace-host-canonical`), role mei:~/w/s3
+(Skylake-SP). Spec: `~/state/briefs/LAYOUT-TRACE-HOST-CANONICAL.md` "The change"; plan `plan/layout-rethink.md` (branch
+task/layout-rethink) 2(e), 3, 4; rulings #5191, #5222 (cost: owner 11-13 says correctness first, cost does not gate),
+#5223. Decision: pending record `records/pending/LAYOUT-TRACE-HOST-CANONICAL-2-1.toml` (D-NEW, series D-X; the whole
+design, one place). Code: tools/hottext only (trace_gdb.py, canon_host.sh, hostdata/, runner.sh, regen.sh,
+probe_text.sh); xtask/src/so.rs untouched.
 
-## What the traces showed (measured, same fast products traced on three hosts)
+## Run 2 (this run)
 
-Products: one `cargo xtask so` (fast) on keke at b888f8ff0, copied with the tree to `~/work/LAYOUT-TRACE-HOST-CANONICAL/`
-on keke (Zen 1, EPYC 7551), mei (Skylake-SP, Platinum 8151), shiki (Haswell-EP, E5-2697 v3); `regen.sh --trace-only`.
+1. **p_cold cut short (lthc-canon3-mei, #5226) - fixed.** With the syscall catchpoint on, the first cancellable
+   `openat` stops at the instruction after `syscall`, which is the label `liella_machine_cancel_window_end` carrying a
+   one-shot breakpoint not yet hit; gdb resuming that stop over the breakpoint ended the program (seen: "No frame",
+   trace ends at cancel_window_end). Now: a syscall stop is told by `%orig_rax` (call number; -1 at a breakpoint trap),
+   entry/return toggled per thread; the breakpoint at the stop pc is deleted at entry and its function counted at the
+   return; redirection also applies when the stop pc is a label. p_cold 407 -> 482 names, regen's call check passes.
+   (gdb's `to_string` output does not carry the catchpoint report: do not detect stops from it.)
+2. **#5223 nscache region:** `/dev/shm/liella-nscache-<uid>` -> `@run/nscache`, a fresh file per program run (tracer
+   empties `<stage>/run` before each class run); unlink/unlinkat are redirected too.
+3. **Two self-checks (the plants' catchers):** (a) any path the program opens/stats/unlinks that is neither redirected
+   nor a residual input (HOST_OK: /usr/share/locale, locale-langpack, zoneinfo, /proc, /sys, /dev/null, /dev/urandom,
+   /tmp, the run dir) fails the trace; it found p_nss reading **/etc/resolv.conf, /etc/host.conf, /etc/gai.conf**: the
+   tree now supplies stock copies (tools/hottext/hostdata). (b) an AVX2 class and a non-AVX2 class with identical runs
+   fail (every probe differs at least by `liella_machine_xgetbv0`; measured per class on 6 probes).
+4. **Proof on the intermediate head e30dd53** (before 3; jobs lthc2-proof-<host>): fast `regen.sh . --replace --build`
+   on Skylake-SP and Haswell-EP: **all four lists byte-identical and libc.a 412c17ffe4abfda5..., libc.so.6
+   f55cc779eb7a8c84... identical**; Zen 1 not finished (stopped for the final-head proof). The release step
+   (`LIELLA_FULL_PROFILE=1 regen.sh . --build` after a fast `--replace`) failed in its own product build: release
+   products from fast-only lists break STARTUP-TEXT-WINDOWS and STARTUP-DATA-WINDOWS before any trace. Not the tracer:
+   the one-profile path cannot start release from a fast-only list. The final proof uses `regen.sh . --both` instead.
+   Trace time (fast regen incl. two builds): 492 s Skylake-SP, 895 s Haswell-EP (loaded).
 
-| tracer | trace files byte-identical on all 3 hosts |
-|---|---|
-| next's tracer, host CPU (jobs lthc-disc-<host>) | 8 of 17: 9 differ, all in one family: `liella_machine_fill_erms` (Intel: ERMS) against `fill_avx2`/`fill_avx2_entry`/`fill_u8` order (Zen 1: no ERMS) |
-| next's tracer, `GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2,-ERMS,-FMA` | 15 of 17 (probe_text.sh's `env -i` dropped the mask); unusable anyway: the tunables parser joins the start-up trace |
-| this branch: virtual CPU per class + fixed env (lthc-canon1-<host>) | **17 of 17** (namespace data variant, since replaced, see below) |
+## Jobs started on the final head (read these)
 
-Host data (locale archive, zone file, nsswitch.conf) were byte-identical on the three hosts, so today's differences
-are CPU class only. Trace time: 126 s (mei) to 479 s (keke, loaded) for the fast set: four class runs per probe
-(next's tracer: about 60 s). LT-3 (ptrace tracer) is the place to win it back.
-
-## The design on the branch (tools/hottext only; xtask/src/so.rs untouched)
-
-- `trace_gdb.py`: (a) the program never sees the host CPU: `liella_machine_cpuid` / `liella_machine_xgetbv0` (every
-  CPUID/XCR0 read of the library) are answered from a fixed virtual CPU; each probe runs once per class `v3-erms`,
-  `v3`, `base-erms`, `base` (AVX2 x ERMS, the two decisions that choose code; FMA follows v3) and the runs are
-  merged (first class's order; a function only another class ran goes right after the one that class ran before it).
-  So every candidate is grouped by rule (all classes), not by what the host picked. A v3 class on a host without
-  AVX2/FMA/BMI fails loudly. `HOT_TEXT_CLASSES=host` = old behaviour (diagnosis only).
-  (c) environment = exactly the `HOT_TEXT_ENV_*` variables (sorted), cwd `/`, ASLR off, program copied to
-  `/tmp/liella-trace.XXXXXXXX/p` (fixed-length argv[0]).
-  (b) `HOT_TEXT_REDIRECT`: at syscall entry of open/stat/access-family calls the tracer points the path at the tree's
-  file (new in the last step: **not run yet**; job lthc-canon3-mei started on it).
-- `runner.sh`: non-`HOT_TEXT_*` assignments become the program's whole environment; `canon_prepare` runs
-  `canon_host.sh` and passes the redirections. `regen.sh` / `probe_text.sh` call it; TZ now passed explicitly
-  (`tz=` in regen.sh), `LC_ALL=` and probe_text's `env -i PATH` dropped.
-- `canon_host.sh <dir>`: writes passwd/group (caller's IDs, name `liella`), `hostdata/nsswitch.conf` (stock host
-  database lines), an en_US.UTF-8-only archive (host `localedef --prefix`), prints residual host-input digests.
-
-Things not to redo:
-- **No user/mount namespace for the data**: `crates/legacy/src/nscache.rs` keeps a private table in any non-initial
-  user namespace, so the namespace trace lost the shared-region path (`NsCache::map_region`, `boot_id`) and gained
-  `names::cache::Table` (measured, p_nss / p_cold). Hence syscall-level redirection.
-- Canonical data must model a stock host: a `files`-only nsswitch.conf and an empty `/usr/share/locale` each ran
-  other library paths (`lookup_alias` gone). `/usr/share/locale` stays the host's (alias file, catalogs:
-  distribution data the tree does not carry): residual, digest printed.
+- mei: `lthc2-plants` (handoff/LAYOUT-TRACE-HOST-CANONICAL-2-plants.txt, 5 plants), `lthc2-gate` (affected --run --base
+  origin/next).
+- keke, mei, shiki: `lthc2-proof2-<host>` (`~/work/LAYOUT-TRACE-HOST-CANONICAL-2/proof2.sh`, output out2/, log
+  `~/logs/lthc2-proof2-<host>.log`): `proof:` lines carry the list and product digests.
 
 ## Next step (exact)
 
-1. `lthc-canon3-mei` (redirect variant, output `mei:~/work/LAYOUT-TRACE-HOST-CANONICAL/disc3/`) is RED inside:
-   `regen: p_cold: library functions named in the source never ran: bindtextdomain close dgettext rmdir strcmp
-   unlink write` (regen trace-only rc 1; the job's own rc 0 is disc2.sh's). p_nss (names.10) got its shared-region
-   path back (`map_region` 1). Diagnose p_cold first (`disc3/canon/gdb.<n>.log`; suspects: a redirected stat/open
-   the probe expects to fail or to see the host's metadata, or the scratch write at rsp-4096). Then compare with
-   next's host trace: expected differences = class candidates only (`fill_sse2`, `move_sse2`, `fill_erms`, ...).
-2. Residual host state seen in code, not handled: the nscache region `/dev/shm/liella-nscache-<euid>` (create vs
-   attach; `~/bin/gate` gives a private /dev/shm): decide (recommend: the tracer redirects that path too, to a fresh
-   per-run file, so p_nss always traces create-then-attach), kernel (vDSO, auxv), `vm.mmap_min_addr`.
-3. Proof per brief: same tree on keke, mei, shiki (`~/work/<story>/tree`, a git archive of the head), per profile
-   `regen.sh . --replace --build` (fast; then `LIELLA_FULL_PROFILE=1`), save the four lists + `sha256sum
-   target/liella/libc.a` after each; compare. Then on keke: hot_text_products + layout-check, both profiles.
-4. Plants (`cargo xtask plants`): a class candidate following the host (e.g. `answer()` skipped for cpuid) and the
-   host's archive read (redirect entry dropped), caught by the cross-host compare / a tracer self-check.
-5. Pending record `records/pending/LAYOUT-TRACE-HOST-CANONICAL-1.toml` (series D-X per brief), clippy, static, gate.
+1. Collect the jobs. Compare the `proof:` digest lines of the three hosts (fast lists + fast libc.a/libc.so.6; --both
+   lists + target/product/regen/{fast,release}/libc.a). Identical = the brief's proof; any difference: diff the lists
+   (`out2/<step>/`), then the per-trace names files, and find the input (canon_host digests line).
+2. Bounds and contracts with the canonical list on one host, both profiles: in tree2 after proof2, `cargo xtask so`
+   and `LIELLA_FULL_PROFILE=1 cargo xtask so` (layout contracts) plus `cargo test -p liella --test hot_text_products`.
+   If the lists should land, commit the regenerated lists from tree2 (they are generated: copy, never edit).
+3. Plants: all five must be CAUGHT; list any WARN line.
+4. Open: the release one-profile regen path from a fast-only list (item 4 above): regen.sh `--build` with release
+   could pass `--hottext-regen` contract relief, or the docs should say "use --both"; RULING NEEDED if it matters.
 
-Slip: one python heredoc was used for an edit in this run (rules forbid heredocs); no effect on the result.
+Things not to redo: namespaces for data (nscache private table); `files`-only nsswitch or empty /usr/share/locale (other
+paths); detecting syscall stops from gdb's printed output or from the pc.
