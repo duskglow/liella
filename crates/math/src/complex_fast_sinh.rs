@@ -179,16 +179,14 @@ const LOWER: f64 = f64::from_bits(0x3fef_ffff_ffff_fffc);
 /// Below this scale no part can reach `2^1024` (`|P| < 2^3`).
 const OVF_M: i32 = 64;
 
-/// `c` with the signs of its odd-`k` entries flipped (both words; a zero word stays `+0`).
-const fn unsigned(c: [[u64; 2]; 14]) -> [[u64; 2]; 14] {
-    let mut out = c;
-    let mut k = 1;
-    while k < 14 {
-        let lo = if c[k][1] == 0 { 0 } else { c[k][1] ^ (1 << 63) };
-        out[k] = [c[k][0] ^ (1 << 63), lo];
-        k += 2;
-    }
-    out
+/// A double-double negated (both words; a zero word stays `+0`).
+const fn flip([hi, lo]: [u64; 2]) -> [u64; 2] {
+    [hi ^ (1 << 63), if lo == 0 { 0 } else { lo ^ (1 << 63) }]
+}
+
+/// `c` with its odd-`k` entries negated.
+const fn unsigned([c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13]: [[u64; 2]; 14]) -> [[u64; 2]; 14] {
+    [c0, flip(c1), c2, flip(c3), c4, flip(c5), c6, flip(c7), c8, flip(c9), c10, flip(c11), c12, flip(c13)]
 }
 
 /// `1/(2k+1)!` and `1/(2k)!`, `k = 0..=13`, as double-doubles.
