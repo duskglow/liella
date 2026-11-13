@@ -193,7 +193,13 @@ fn hash_functions_match_the_linker() {
 fn versions_bind_like_the_reference() {
     // s27_1_g_0, s27_1_c_3: spec/behaviour/dynlink.md "Symbol binding", every hash style.
     let Some(c) = corpus() else { return };
-    let rows: [(&str, Want<'_>, &str); 20] = [
+    // A relocation's versioned reference (`Reference`) binds that version, else a base definition
+    // (the probe in "Symbol binding": an unversioned definition interposes on `f@VER_1`).
+    let rows: [(&str, Want<'_>, &str); 24] = [
+        ("f", Want::Reference(b"VER_1"), "VER_1"),
+        ("h", Want::Reference(b"VER_2"), "VER_2"),
+        ("f", Want::Reference(b"VER_9"), "-"),
+        ("b", Want::Reference(b"VER_1"), "<base>"),
         ("f", Want::Oldest, "VER_1"),
         ("h", Want::Oldest, "VER_1"),
         ("b", Want::Oldest, "<base>"),
@@ -268,6 +274,15 @@ fn programs_bind_like_the_reference() {
         let got = bind_program(&c["unver"], &c[lib], &["f", "h", "b", "g", "m"]);
         assert_eq!(got, s(&[("b", "<base>"), ("f", "VER_1"), ("g", "VER_1"), ("h", "VER_1"), ("m", "VER_1")]), "{lib}");
     }
+    // A needed version (verneed) gives a relocation reference, which a base definition earlier in the
+    // scope also satisfies ("Symbol binding": the program's f@VER_1 binds a preloaded unversioned f).
+    let p = obj(&c["ver"], HashStyle::Gnu);
+    let st = p.symtab();
+    let h_wants: Vec<Want<'_>> = (1..st.count().unwrap())
+        .filter(|&i| st.get(i).is_ok_and(|s| s.shndx == 0 && p.dynamic().string(u64::from(s.name)).unwrap() == b"h"))
+        .map(|i| p.reference_want(i).unwrap())
+        .collect();
+    assert_eq!(h_wants, [Want::Reference(b"VER_2")]);
     // The program's own undefined entries are not definitions.
     assert_eq!(found(&obj(&c["ver"], HashStyle::Gnu), "f", Want::Oldest), "-");
     // Nor are a library's: the SysV table indexes undefined entries too (the GNU table does not).

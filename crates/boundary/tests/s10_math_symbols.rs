@@ -14,8 +14,6 @@
 use spectest::{family, symbol};
 
 mod products;
-#[path = "../../core/tests/support/skip_note.rs"]
-mod skip_note;
 
 use liella_abi::ctypes::LdBits;
 use liella_boundary::posix::s10_math_gen as m;
@@ -1457,11 +1455,10 @@ fn sym___fpu_control() {
     let line = products::dynsym_line("__fpu_control");
     assert!(line.contains(" 2 OBJECT  GLOBAL DEFAULT"), "__fpu_control in libc.so.6: {line:?}");
     // Statically linked on Liella (the program's own definition links and is ignored), then the
-    // same programs linked dynamically on glibc (the oracle). Their run on Liella's libc.so.6
-    // waits for Liella's ld.so (phase 14, #814): a reported skip, never a silent pass.
+    // same programs linked dynamically, on glibc (the oracle) and on Liella's libc.so.6 under
+    // Liella's ld.so (#814, D-27.24): a program's own value applies.
     products::conformance(&["fpu_control_default", "fpu_control_own"]);
     products::conformance_dynamic(&["fpu_control_default", "fpu_control_own"]);
-    skip_note::skipped("skipped: fpu_control_default/fpu_control_own dynamic on Liella wait for Liella's ld.so (phase 14, #814); only the glibc oracle run checked");
 }
 symbol!(sym___gamma_r_finite, "__gamma_r_finite", "10", "2.15", r##""##);
 symbol!(sym___gammaf128_r_finite, "__gammaf128_r_finite", "10", "2.26", r##""##);
