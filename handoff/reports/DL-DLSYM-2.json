@@ -1,0 +1,71 @@
+{
+ "task": "DL-DLSYM-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: dlsym/dlvsym (DL-16b) tested and planted (12/12 CAUGHT); dlvsym now refuses objects without version tables; handles.c and s27_dlopen_failures pass; capacity probe P-14 recorded; FULL gate red on one start-up layout test that origin/next passes",
+ "branch": "task/dl-dlsym-2",
+ "head": null,
+ "gate": {
+  "affected": "FULL (self-escalated): 1 failed (hot_text_products init_data_clusters_hold_at_every_text_phase: tool 53 -> 54 faults at pad cold 0x2000; origin/next passes)",
+  "peak": "13G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "start-up layout red (tool row 54 vs 53 at one pad) on this branch, not on origin/next; branch touches start-up code (StartInfo::dlsym; base DL-DLOPEN-LOAD-3 start-time changes)",
+   "recommendation": "measure DL-DLOPEN-LOAD-3+next on the same test first; if only this branch moves it, treat as LAYOUT-JITTER (#4347), else layout fix in a continuation"
+  },
+  {
+   "item": "#5321 process capacity: Liella refuses the 513th object, the reference opened 2000 with no limit (probe P-14)",
+   "recommendation": "a growable object table as its own story (restores the reference's behaviour, so no switch); differences row until then"
+  }
+ ],
+ "informational": [
+  "s27_dlopen_failures became passing through the merge of origin/next; its PENDING-LIELLA mark was removed here",
+  "pin_unique is observable only through dlclose (DL-17): no test or plant reaches it yet",
+  "no instruction-count row covers dlsym; no start-up code changed, so no percall job"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "correctness",
+   "what": "dlvsym of a symbol defined only by an object without version tables now fails with the version text instead of answering the definition",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "conformance programs flipped from pending to passing (s27_dlsym_handles, s27_dlopen_failures)",
+   "before": 0,
+   "after": 2,
+   "unit": "programs",
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "plants on DL-16b (RTLD_NEXT, NULL-handle scope, handles, texts, TLS, IFUNC, unique, DEEPBIND, dlvsym)",
+   "before": 0,
+   "after": 12,
+   "unit": "plants",
+   "measured": true
+  },
+  {
+   "kind": "unblock",
+   "what": "dlsym and dlvsym exported from Liella's libc.so.6/ld.so: dlopen-based programs (plugins, RTLD_NEXT interposers) run; enables DL-16c and DL-17",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  }
+ ],
+ "improvement": "the gate escalates to FULL for any xtask/src change, even a one-line compat table entry; a narrower rule for compat.rs (it only feeds compat-gen) would keep loader stories on the direct tier",
+ "next_step": "run hot_text_products init_data_clusters_hold_at_every_text_phase on DL-DLOPEN-LOAD-3 merged with next to place the layout red; fix or rule; then land",
+ "report_file": "handoff/DL-DLSYM-2-report.md",
+ "jobs": [
+  "dl-dlsym-2-gate",
+  "dl-dlsym-2-plants",
+  "dl-dlsym-2-t5"
+ ]
+}
