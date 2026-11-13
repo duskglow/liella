@@ -4,7 +4,7 @@
  "tokens": null,
  "result": "INCOMPLETE: LAYOUT-JITTER: merged next d53c0d551 (clean); lint green; direct gate tests all pass (1637/0) and run 5's init_data_clusters red is gone, but layout contract STARTUP-DATA-WINDOWS counts 13 written start-up pages against rw-budget-fast 12 (next: 11 on the same host): the same objects sit ~0x4d0 higher and cover 2 more pages, placement only",
  "branch": "task/libm-f32-bessel-large-6",
- "head": null,
+ "head": "76520c9dd",
  "gate": {
   "affected": "1637 passed / 0 failed; steps red: products (layout contract STARTUP-DATA-WINDOWS 13 > 12) and static (private-paths on an untracked tools/hottext/__pycache__/*.pyc in the role tree)",
   "peak": "gate: peak memory 1.6G (page cache included; reclaimed under the limit) oom_kill=0 rc=1"
