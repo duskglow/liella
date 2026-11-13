@@ -142,18 +142,25 @@ def answer(kind, cls):
 
 # HOT_TEXT_REDIRECT (canon_host.sh): `<host path>=<file>` joined by `:`. At the entry of each path
 # system call below the tracer points the path argument at the file (copied below the stack pointer).
+# A file `@run/<name>` is <name> in a directory the tracer empties before every run of the program
+# (ruling #5223: the name-service cache region, so every run creates it, whatever the host's
+# /dev/shm holds).
 redirect = {}
+run_dir = os.path.join(stage, "run")  # same length on every host: stage is mkdtemp's fixed-length name
 for item in filter(None, os.environ.get("HOT_TEXT_REDIRECT", "").split(":")):
     k, _, v = item.partition("=")
+    if v.startswith("@run/"):
+        v = os.path.join(run_dir, v[len("@run/"):])
     redirect[k.encode()] = v.encode() + b"\0"
-PATH_ARG = {2: "rdi", 4: "rdi", 6: "rdi", 21: "rdi", 257: "rsi", 262: "rsi", 269: "rsi", 332: "rsi", 439: "rsi"}
-ENOSYS_ENTRY = (1 << 64) - 38  # %rax at a system call's entry stop
+# open stat lstat access unlink openat newfstatat unlinkat faccessat statx faccessat2: the path argument's
+# register (unlink too, so no failure path removes a host file the redirected open did not create).
+PATH_ARG = {2: "rdi", 4: "rdi", 6: "rdi", 21: "rdi", 87: "rdi", 257: "rsi", 262: "rsi", 263: "rsi", 269: "rsi", 332: "rsi", 439: "rsi"}
+NOT_SYSCALL = (1 << 64) - 1  # %orig_rax at a stop that is not a system call's (a breakpoint's trap)
+CATCH = "catch syscall open stat lstat access unlink openat newfstatat unlinkat faccessat statx faccessat2"
 
 
 def redirect_path():
     """At a path system call's entry stop: point its path at the tree's file when redirected."""
-    if reg("rax") != ENOSYS_ENTRY:
-        return
     r = PATH_ARG.get(reg("orig_rax"))
     if r is None:
         return
@@ -168,30 +175,49 @@ def redirect_path():
 
 def run_one(cls):
     """One run of the program on class `cls`: the function start addresses in first-touch order."""
-    made = []
+    made, once = [], {}
     for addr in names:
         if addr in emul and cls != "host":
             continue
         bp = gdb.Breakpoint("*0x%x" % addr, internal=True, temporary=True)
         bp.silent = True
         made.append(bp)
+        once[addr] = bp
     if cls != "host":
         for addr in emul:
             bp = gdb.Breakpoint("*0x%x" % addr, internal=True)
             bp.silent = True
             made.append(bp)
     if redirect:
-        gdb.execute("catch syscall open stat lstat access openat newfstatat faccessat statx faccessat2", to_string=True)
-    hit, seen = [], set()
+        shutil.rmtree(run_dir, ignore_errors=True)
+        os.mkdir(run_dir)
+        gdb.execute(CATCH, to_string=True)
+    hit, seen, in_call = [], set(), set()
     gdb.execute("run", to_string=True)
     while True:
         try:
             pc = int(gdb.selected_frame().pc())
         except gdb.error:
             break
-        if pc not in names and pc not in emul:
-            redirect_path()  # a system call stop, not a function
-        elif pc not in seen:  # one-shot breakpoints stop once each; the CPU entries stop at every call
+        # A system call stop (the catchpoint) is told from a breakpoint by %orig_rax (the call's number
+        # at a system call stop, -1 at a breakpoint's trap), never by the pc: the instruction after a
+        # `syscall` can be a function's address (a label such as liella_machine_cancel_window_end)
+        # whose one-shot breakpoint has not run yet. Entry and return stops alternate per thread.
+        tid = gdb.selected_thread().ptid
+        if redirect and reg("orig_rax") != NOT_SYSCALL and tid not in in_call:
+            in_call.add(tid)
+            redirect_path()
+            bp = once.pop(pc, None)
+            if bp is not None and bp.is_valid():
+                # gdb cannot resume a system call stop over a breakpoint at its pc (the program ended
+                # there: p_cold's first cancellable open): drop it, count the function at the return.
+                bp.delete()
+        elif redirect and tid in in_call:
+            in_call.discard(tid)
+            if pc in names and pc not in seen and pc not in once:
+                seen.add(pc)
+                hit.append(pc)
+        elif pc in names and pc not in seen:  # one-shot breakpoints stop once each; the CPU entries at every call
             seen.add(pc)
             hit.append(pc)
         if pc in emul and cls != "host":

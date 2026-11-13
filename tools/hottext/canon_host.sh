@@ -10,6 +10,9 @@
 #     /etc/passwd, /etc/group   one entry each for the caller's IDs (name `liella`), and root
 #     /etc/nsswitch.conf        tools/hottext/hostdata/nsswitch.conf (a stock host's database lines)
 #     /usr/lib/locale/locale-archive   an archive holding en_US.UTF-8 only (the probes' LANG)
+#     /dev/shm/liella-nscache-<uid>    a fresh file per run of the program (`@run/`, trace_gdb.py;
+#                               ruling #5223): every run creates the name-service cache region, whether
+#                               or not the host's /dev/shm holds one (a gated job's /dev/shm is private)
 #   The data model a stock host: an empty or bare stand-in runs other library paths than deployed hosts
 #   run. What remains of the host: the archive is compiled by the host's `localedef` from its en_US
 #   source; /usr/share/locale (locale.alias, catalogs: distribution data the tree does not carry), the
@@ -32,4 +35,4 @@ dg() { (sha256sum < "$1" 2>/dev/null || echo missing) | cut -c1-16; }
 z=/usr/share/zoneinfo/America/New_York
 echo "canon_host: host inputs left: kernel $(uname -r); $(localedef --version | head -1); archive $(dg "$a");" \
      "/usr/share/locale/locale.alias $(dg /usr/share/locale/locale.alias); $z $(dg $z)"
-echo "/etc/passwd=$D/passwd:/etc/group=$D/group:/etc/nsswitch.conf=$D/nsswitch.conf:/usr/lib/locale/locale-archive=$a"
+echo "/etc/passwd=$D/passwd:/etc/group=$D/group:/etc/nsswitch.conf=$D/nsswitch.conf:/usr/lib/locale/locale-archive=$a:/dev/shm/liella-nscache-$u=@run/nscache"
