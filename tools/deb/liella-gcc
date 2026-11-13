@@ -1,0 +1,89 @@
+#!/bin/sh
+# liella-gcc / liella-g++: build a program against Liella from the reference packages
+# (docs/install-packages.md; package liella6-dev). Installed as /usr/bin/liella-gcc, with
+# /usr/bin/liella-g++ a link to it; the name picks the language.
+#
+# Compiling (-c, -S, -E, -M, -MM) is the system compiler with the system's C headers, unchanged
+# (Liella has no header set of its own yet; it is ABI-compatible with the glibc 2.39 headers).
+# Linking uses only Liella's start files and libraries from the sysroot /usr/lib/liella (the link
+# editor runs with --sysroot, so the linker scripts there resolve inside it) and sets the program
+# interpreter to Liella's loader, so the program starts on Liella, never on the system's C library:
+#
+#   dynamic (default)  PT_INTERP /usr/lib/liella/lib64/ld-linux-x86-64.so.2, Scrt1.o, libc.so
+#   -static            crt1.o, libc.a (no interpreter)
+#   -shared            a shared object linked against Liella's libc.so (for dlopen or linking)
+#
+# C++ (liella-g++) links libstdc++ and the unwinder statically, so the program's run-time library
+# search never leaves the sysroot. Other libraries (-lz, ...) are the program's choice: the loader's
+# default search is the sysroot only, so a program that needs a system library names its directory
+# (-Wl,-rpath,DIR). Not supported: -static-pie, -pg (no profiling start file is packaged).
+#
+# Environment: LIELLA_REAL_CC (default gcc) and LIELLA_REAL_CXX (default g++) are the compilers;
+# LIELLA_SYSROOT (default /usr/lib/liella) is where the link-time files are read from (to build
+# from an unpacked package tree); the program interpreter is always the installed loader.
+set -eu
+interp=/usr/lib/liella/lib64/ld-linux-x86-64.so.2
+sysroot=${LIELLA_SYSROOT:-/usr/lib/liella}
+lib=$sysroot/usr/lib/x86_64-linux-gnu
+
+case ${0##*/} in
+    *++) cc=${LIELLA_REAL_CXX:-g++}; cxx=yes ;;
+    *) cc=${LIELLA_REAL_CC:-gcc}; cxx=no ;;
+esac
+
+mode=dynamic
+for a in "$@"; do
+    case $a in
+        -c | -S | -E | -M | -MM) exec "$cc" "$@" ;;
+        -static) mode=static ;;
+        -shared) mode=shared ;;
+        -static-pie | -pg)
+            echo "liella-gcc: $a is not supported (docs/install-packages.md)" >&2
+            exit 2 ;;
+    esac
+done
+
+if [ ! -f "$lib/libc.so.6" ]; then
+    echo "liella-gcc: $lib/libc.so.6 is missing (install liella6)" >&2
+    exit 1
+fi
+
+# The compiler's own start and end objects (crtbegin/crtend), as its own link would pick them.
+case $mode in
+    static) begin=$("$cc" -print-file-name=crtbeginT.o); end=$("$cc" -print-file-name=crtend.o) ;;
+    *) begin=$("$cc" -print-file-name=crtbeginS.o); end=$("$cc" -print-file-name=crtendS.o) ;;
+esac
+
+# Drop -static/-shared (given again below); keep everything else in order.
+n=$#
+i=0
+while [ $i -lt $n ]; do
+    a=$1
+    shift
+    i=$((i + 1))
+    case $a in
+        -static | -shared) ;;
+        *) set -- "$@" "$a" ;;
+    esac
+done
+
+if [ $cxx = yes ]; then
+    cxxlibs="-Wl,-Bstatic -lstdc++ -Wl,-Bdynamic -lm"
+    [ $mode = static ] && cxxlibs="-lstdc++ -lm"
+else
+    cxxlibs=""
+fi
+
+# `-x none`: a `-x LANG` among the program's arguments must not make the files added here sources.
+# shellcheck disable=SC2086
+case $mode in
+    dynamic)
+        exec "$cc" -nostartfiles -nodefaultlibs "-Wl,--sysroot=$sysroot" "-Wl,--dynamic-linker=$interp" -L"$lib" \
+            -x none "$lib/Scrt1.o" "$begin" "$@" -x none $cxxlibs -lc -lgcc -lgcc_eh "$end" ;;
+    shared)
+        exec "$cc" -shared -nostartfiles -nodefaultlibs "-Wl,--sysroot=$sysroot" -L"$lib" \
+            -x none "$begin" "$@" -x none $cxxlibs -lc -lgcc "$end" ;;
+    static)
+        exec "$cc" -static -nostdlib "-Wl,--sysroot=$sysroot" -L"$lib" \
+            -x none "$lib/crt1.o" "$begin" "$@" -x none $cxxlibs -Wl,--start-group -lc -lgcc -lgcc_eh -Wl,--end-group "$end" ;;
+esac
