@@ -1,0 +1,14 @@
+# LIBM-DIRECTED-INPLACE-5 plants: the directed exp quick phase (D-10.94) on the head merged with next; run 2's plants that still apply plus run 3's (dir-reduction-sign is superseded by dir3-h-sign)
+dir-nearest-test | crates/math/src/fast64/quick.rs | lit:if lo == zh + (zl + e) { Some(lo * sc) } else { None } ==> if zh + zl * $c == zh && lo == lo { Some(zh * sc) } else { None } | cargo test -p liella-boundary --test exp_quick | msg:exp_directed_declines_at_breakpoints.*FAILED|decided .* next to a rounding boundary
+dir-fallback-skipped | crates/math/src/fast64/quick.rs | lit:if lo == zh + (zl + e) { Some(lo * sc) } else { None } ==> Some(lo * sc) | cargo test -p liella-boundary --test exp_quick | msg:exp_directed_declines_at_breakpoints.*FAILED|decided .* next to a rounding boundary
+dir-entry-switch-skipped | crates/boundary/src/mathret.rs | perl:s/(fn elem_directed<.*?)elem_switched\(x, saved, f\)/$1elem_fast_cold::<0x3f, A, R>(x, saved, f)/s | cargo test -p liella-boundary --test exp_quick | msg:exp_directed_.*FAILED|entry exp\(.*correctly rounded
+dir3-instances-swapped | crates/boundary/src/hot/exp_log.rs | lit:{ exp_directed_in::<true>(x) } else { exp_directed_in::<false>(x) } ==> { exp_directed_in::<false>(x) } else { exp_directed_in::<true>(x) } | cargo test -p liella-boundary --test exp_quick | msg:exp_directed_.*FAILED|correctly rounded
+dir3-down-takes-up | crates/boundary/src/hot/exp_log.rs | lit:else { exp_directed_in::<false>(x) } ==> else { exp_directed_in::<true>(x) } | cargo test -p liella-boundary --test exp_quick | msg:exp_directed_.*FAILED|correctly rounded
+dir3-h-sign | crates/math/src/fast64/quick.rs | lit:let h = if UP { -0.5 } else { 0.5 }; ==> let h = if UP { 0.5 } else { -0.5 }; | cargo test -p liella-boundary --test exp_quick | msg:exp_directed_.*FAILED|correctly rounded
+# cargo xtask plants results (6 plants: 6 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# dir-nearest-test: CAUGHT, caught by exp_quick exp_directed_declines_at_breakpoints_and_the_entry_rounds_them
+# dir-fallback-skipped: CAUGHT, caught by exp_quick exp_directed_declines_at_breakpoints_and_the_entry_rounds_them
+# dir-entry-switch-skipped: CAUGHT, caught by exp_quick exp_directed_rounds_correctly_in_both_builds
+# dir3-instances-swapped: CAUGHT, caught by exp_quick exp_directed_declines_at_breakpoints_and_the_entry_rounds_them
+# dir3-down-takes-up: CAUGHT, caught by exp_quick exp_directed_declines_at_breakpoints_and_the_entry_rounds_them
+# dir3-h-sign: CAUGHT, caught by exp_quick exp_directed_declines_at_breakpoints_and_the_entry_rounds_them

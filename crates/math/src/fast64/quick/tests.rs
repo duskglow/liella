@@ -81,6 +81,37 @@ fn quick_constants_and_bounds() {
     }
 }
 
+/// The directed bounds (module doc, "Directed rounding", D-10.94): `quick_constants_and_bounds`'s
+/// terms with every rounding one ulp (`2^-52`), `|x·128/ln2 − k| <= 1/2 + 2^-34`, `|rl| <= 2^-61`,
+/// `|k| <= 130743`, two inexact Fast2Sum error terms, and the test's own roundings inside the
+/// stated `rho`.
+// s10_0_f_0: exp_directed's interval holds e^x in every direction (no spec clause for the bound itself).
+#[test]
+fn directed_bounds() {
+    let l = mp::ln2().div(Mp::from_f64(128.0));
+    let cw = l.sub(Mp::from_f64(-NL1)).sub(Mp::from_f64(-NL2));
+    let up = 1.0 + two(-40);
+    let u = two(-52);
+    let r = core::f64::consts::LN_2 / 256.0 * (1.0 + two(-33)) * up;
+    let rh = r + two(-61);
+    let qmax = rh * rh * (0.5 + rh / 6.0 + rh * rh / 24.0 + rh * rh * rh / 120.0 + rh.powi(4) / 720.0) * (1.0 + 4.05 * u) * up;
+    let prod = u * rh;
+    let eval = 4.05 * u * qmax;
+    let low = u * (qmax + two(-61)) * up;
+    let rlrh = (two(-61) + two(-78)) * (rh.exp() - 1.0) * up;
+    let tl_term = u * (qmax + two(-61)) * up;
+    let trunc = rh.powi(7) / 5040.0 * rh.exp() * up;
+    let red = (130_743.0 * cw.abs().to_f64() + 2.0 * u * 130_743.0 * dd::abs(-NL2) + u * two(-61)) * rh.exp() * up;
+    let small = two(-105) * rh.exp() + two(-104) + 2.0 * two(-103);
+    let zmin = (-rh).exp() * (1.0 - two(-50)) / up;
+    let fma = (eval + 3.0 * low + rlrh + tl_term + trunc + red + small) / zmin;
+    let sse2 = (prod + eval + 4.0 * low + rlrh + tl_term + trunc + red + small) / zmin;
+    // The test's inner roundings (2^-103·zh) and e's own (2^-52 relative) inside the stated rho.
+    assert!(fma + two(-102) <= RHO_DIR_FMA * (1.0 - two(-51)), "FMA directed bound {fma:e} above RHO_DIR_FMA");
+    assert!(sse2 + two(-102) <= RHO_DIR_SSE2 * (1.0 - two(-51)), "SSE2 directed bound {sse2:e} above RHO_DIR_SSE2");
+    eprintln!("directed bounds: FMA 2^{:.3}, SSE2 2^{:.3}", fma.log2(), sse2.log2());
+}
+
 /// The SSE2 build's `(zh, zl)` within `RHO_SSE2·|zh|` of `e^x/2^m` (exact in Mp), and the
 /// largest relative error seen (printed; the stated bound is 2^-61.476).
 #[test]
