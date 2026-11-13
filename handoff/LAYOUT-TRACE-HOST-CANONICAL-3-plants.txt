@@ -16,3 +16,7 @@ lthc3-syscall-bp | tools/hottext/trace_gdb.py | perl:s/(count the function at th
 # lthc3-runner-env: the runner passes the program's assignments to the tracer's own environment, unprefixed
 # (the program would then get no LANG/TZ from the trace and the caller's environment would reach gdb).
 lthc3-runner-env | tools/hottext/runner.sh | lit:*=*) envs+=("HOT_TEXT_ENV_$1");; ==> *=*) envs+=("$1");; | cargo test -p xtask --bin xtask -- hottext::tests::regen_runner_runs_traces_together_and_keeps_their_order | msg:regen_runner_runs_traces_together_and_keeps_their_order.*(FAILED|panicked)|names\.1 is not trace p1
+# lthc3-absent-keep: prune.py --absent keeps the allow-list line of a key that left the list (a replaced list then fails the release build).
+lthc3-absent-keep | tools/hottext/prune.py | lit:or key in listed: ==> or True: | cargo test -p xtask --bin xtask -- hottext::tests::regen_replace_drops_the_allow_list_lines_of_keys_it_drops | msg:kept a stale line or lost a live one
+# lthc3-absent-guard: regen.sh prunes the allow-list on every merge instead of --replace only (the train's merge would rewrite the hand-written file).
+lthc3-absent-guard | tools/hottext/regen.sh | lit:if [ $replace = 1 ] && [ -f "$absent" ]; then ==> if [ -f "$absent" ]; then | cargo test -p xtask --bin xtask -- hottext::tests::regen_replace_drops_the_allow_list_lines_of_keys_it_drops | msg:no --replace allow-list prune
