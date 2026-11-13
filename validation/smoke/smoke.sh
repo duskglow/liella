@@ -61,12 +61,14 @@ bypath() {
 
 # setup: the link-time directory liella-cc reads (fresh each run, so it always matches the products).
 setup() {
-    for f in libc.so.6 libm.so.6 ld-linux-x86-64.so.2; do
+    for f in libc.so.6 libm.a ld-linux-x86-64.so.2; do
         [ -f "$products/$f" ] || { echo "smoke: $products/$f is missing (cargo xtask so)" >&2; return 1; }
     done
     rm -rf "$sys" && mkdir -p "$sys" "$work/bin" "$work/results" || return 1
     bypath "$products/libc.so.6" "$sys/libc-by-path.so" || { echo "smoke: cannot make the by-path libc" >&2; return 1; }
-    bypath "$products/libm.so.6" "$sys/libm.so" || { echo "smoke: cannot make the by-path libm" >&2; return 1; }
+    # libm: the archive. Liella's libm.so.6 names libc.so.6 by soname, which only a library search resolves
+    # (at link time the system's libc.so.6 would be found; at run time the loader cannot search yet).
+    cp "$products/libm.a" "$sys/libm.a" || return 1
     for a in libpthread libdl librt libutil libanl libresolv; do
         if [ -f "$products/$a.a" ]; then cp "$products/$a.a" "$sys/$a.a"; else ar rc "$sys/$a.a"; fi
     done

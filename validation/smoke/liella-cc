@@ -4,8 +4,9 @@
 #
 # Compiling is the system compiler with the system's headers, unchanged (Liella has no header set; it is
 # ABI-compatible with the glibc 2.39 headers). Linking follows the dynamic link line of conformance/run.sh:
-# the loader does not search for libraries by soname yet, so Liella's libc.so.6 and libm.so.6 are linked by
-# path (copies without DT_SONAME in $LIELLA_SMOKE_SYSROOT, which smoke.sh makes), the program interpreter is
+# the loader does not search for libraries by soname yet, so Liella's libc.so.6 is linked by path (a copy
+# without DT_SONAME in $LIELLA_SMOKE_SYSROOT, which smoke.sh makes) and libm from Liella's libm.a (its
+# libm.so.6 names libc.so.6 by soname, which needs the search), the program interpreter is
 # Liella's loader, and no other C library is named. -L$LIELLA_SMOKE_SYSROOT comes first, so -lm, -lpthread,
 # -ldl, -lrt, -lutil, -lanl and -lresolv resolve to Liella's objects, never to the system's.
 # C++ links libstdc++ and the unwinder statically (no libstdc++.so.6 / libgcc_s.so.1 to search for).
