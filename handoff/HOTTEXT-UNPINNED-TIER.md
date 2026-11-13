@@ -1,7 +1,9 @@
 # HOTTEXT-UNPINNED-TIER: hot-text.unpinned's tier column no longer blocks the train's regen
 
-State: branch `task/hottext-unpinned-tier` from origin/next, code commit `af564205f`; this note and the report are
-the commit on top of it. Role mei:~/w/s3.
+State: code commit `af564205f` (first run, branch `task/hottext-unpinned-tier`, role mei:~/w/s3). The continuation
+HOTTEXT-UNPINNED-TIER-2 (branch `task/hottext-unpinned-tier-2`, same commits plus handoff updates, role keke:~/w/n1)
+changed no code: it re-ran clippy, static, the gate and the plants on its head (see "Continuation" below).
+Pending decision record: `records/pending/HOTTEXT-UNPINNED-TIER-1.toml` (D-NEW, series D-X; the coordinator assigns the id).
 
 ## What changed
 - `xtask/src/hottext.rs::check_pinned` no longer compares the tier column of `crates/libc-so/hot-text.unpinned`
@@ -41,8 +43,11 @@ and removing lines is the ratchet's only edit.
   So brief item 2 (the train's sequence passes) is NOT met. The brief forbids changing which keys are listed or
   pinned, so these were left alone.
 
-## RULING NEEDED
-The train's regen will keep failing static whenever it adds a Rust key without a boundary or drops a key that has an
+## Regen key-set coupling (RULED, #5205)
+Ruling #5205 (coordinator, 11-10): no new story for the 18 boundary-less keys and the 2 dropped-key lines. The
+train's hot-list step is paused (`ci_train_hot_lists=0`) until LT-5 deletes it (owner rulings #5192/#5193,
+plan/layout-rethink.md). hut-train-seq is SUPERSEDED for that reason; the tier change lands on its own.
+The first run's analysis, kept for LT-5: the train's regen will keep failing static whenever it adds a Rust key without a boundary or drops a key that has an
 unpinned line. This is the same coupling between a hand-written input and generated output. Recommendation: open a
 story that (1) has the regen's merge mode report new boundary-less Rust keys and either keep them out of the list or
 write the unpinned line itself with the reason "added by regen, boundary cost not measured yet". The ratchet allows
@@ -53,5 +58,14 @@ above with counts.
 ## Things not to redo
 Rewriting the tier from the regen, and dropping the column, were both considered and rejected (above).
 
+## Continuation (HOTTEXT-UNPINNED-TIER-2, keke:~/w/n1)
+- Step 0 on the inherited head: `cargo xtask clippy` + `cargo xtask static` green (job hottext-unpinned-tier-2-lint).
+- hut-train-seq (mei, rc 1): the 20 key-set errors above; SUPERSEDED by ruling #5205, not a defect of this change.
+- hut-gate (mei): left no jobs.tsv row and an empty log; superseded by the gate below.
+- Gate: job hottext-unpinned-tier-2-gate, `cargo xtask affected --run --base origin/next` (the tool escalates to FULL:
+  xtask and a product linker input changed). Plants: job hottext-unpinned-tier-2-plants, same plants file as the
+  first run. Results in handoff/reports/HOTTEXT-UNPINNED-TIER-2.json and the hand-back.
+
 ## Next step
-Collect hut-gate. Then rule on the regen key-set coupling above. Plan rows: D-X.77, D-X.82, and the pending record.
+None for this story: land it once the gate and plants are green. The key-set coupling goes with LT-5 (#5205).
+Plan rows: D-X.77, D-X.82, the pending record.
