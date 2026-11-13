@@ -35,6 +35,7 @@ liella_boundary::process::AUXV_ADDR
 liella_boundary::process::ARGC
 liella_boundary::process::ARGV
 liella_boundary::process::EXIT_HANDLERS
+liella_boundary::runtime::EARLY_DONE  # __libc_start_main's dynamic-path flag: Liella's ld.so sets it, start reads it (D-27.24)
 symbol __libc_stack_end
 symbol program_invocation_name  # and its alias __progname_full
 symbol program_invocation_short_name  # and its alias __progname
