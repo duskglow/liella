@@ -19,4 +19,5 @@
  "improvement": "a perf page-fault diff (mode vs earlier mode, fault address -> nm symbol) names the culprit of a fault-bound red in one build; worth a ready-made tool next to measure.py",
  "next_step": "coordinator: verify htcs-proof-next-2, htcs-gate-2, htcs-plants-3 on kanon; rule on the two items",
  "report_file": "handoff/HOTTEXT-TIME-CLUSTER-STABLE.md",
- "jobs": ["kanon:htcs-lint-2", "kanon:htcs-proof-next-2", "kanon:htcs-gate-2", "kanon:htcs-plants-3", "kanon:htcs-percall-2", "kanon:htcs-proof-sincos", "kanon:htcs-proof-pow"]}
+ "jobs": ["kanon:htcs-lint-2", "kanon:htcs-proof-next-2", "kanon:htcs-gate-2", "kanon:htcs-plants-3", "kanon:htcs-percall-2", "kanon:htcs-proof-sincos"],
+ "superseded": ["kanon:htcs-proof-pow (rc 1 from verdict.py's own crash reading the run lists; its results.jsonl re-checked with the fixed verdict.py: 0 breaks)"]}
