@@ -750,7 +750,7 @@ fn k_getenv_many_answers_as_getenv_bounded() {
         for n in 0..=names.len() {
             for extra in [0usize, 2] {
                 let mut out = vec![Some(7usize); n + extra];
-                environ::getenv_many(&st, &names[..n], &mut out, &m, &mut Bounded(&m));
+                environ::getenv_many(&st, &names[..n], &mut out, 0, &m, &mut Bounded(&m));
                 for (k, got) in out.iter().enumerate() {
                     let want = names.get(k).filter(|_| k < n).map_or(Some(7), |name| environ::getenv_bounded(&st, name, &m, &mut Bounded(&m)));
                     assert_eq!(*got, want, "names {n}, extra {extra}, k {k}");
@@ -759,15 +759,30 @@ fn k_getenv_many_answers_as_getenv_bounded() {
         }
         // More names than out: the names past it are not looked up and out is filled.
         let mut out = [Some(7usize); 2];
-        environ::getenv_many(&st, &names, &mut out, &m, &mut Bounded(&m));
+        environ::getenv_many(&st, &names, &mut out, 0, &m, &mut Bounded(&m));
         assert_eq!(out[1], environ::getenv_bounded(&st, b"LANG", &m, &mut Bounded(&m)));
     }
+    // A decisive name (SETLOCALE-CTYPE-ENV): the walk stops at its first entry when that entry's
+    // value is not empty; the names after it are left None, those before it are answered. An
+    // empty first value does not stop the walk.
+    let decide = |entries: &[&str], m: &mut Mem| {
+        let env = m.env(entries);
+        let cells = EnvCells::new(env);
+        let mut out = [Some(7usize); 3];
+        let m: &Mem = m;
+        environ::getenv_many(&cells.st(), &[b"LC_ALL", b"LC_CTYPE", b"LANG"], &mut out, 1, m, &mut Bounded(m));
+        out.map(|v| v.map(|a| m.text(a).to_vec()))
+    };
+    let got = decide(&["LANG=l", "LC_ALL=a", "LC_CTYPE=c"], &mut m);
+    assert_eq!(got, [Some(b"a".to_vec()), None, Some(b"l".to_vec())], "stops at a non-empty LC_ALL");
+    let got = decide(&["LC_ALL=", "LC_CTYPE=c", "LC_ALL=b", "LANG=l"], &mut m);
+    assert_eq!(got, [Some(Vec::new()), Some(b"c".to_vec()), Some(b"l".to_vec())], "an empty LC_ALL decides nothing");
     // Past 64 names: the 65th is left alone even when present (the walk keeps 64 answers).
     let st = EnvCells::new(env);
     let mut many: Vec<&[u8]> = vec![b"NOPE"; 64];
     many.push(b"LANG");
     let mut out = vec![Some(7usize); 65];
-    environ::getenv_many(&st.st(), &many, &mut out, &m, &mut Bounded(&m));
+    environ::getenv_many(&st.st(), &many, &mut out, 0, &m, &mut Bounded(&m));
     assert!(out[..64].iter().all(Option::is_none));
     assert_eq!(out[64], Some(7));
     assert!(environ::getenv_bounded(&st.st(), b"LANG", &m, &mut Bounded(&m)).is_some());
