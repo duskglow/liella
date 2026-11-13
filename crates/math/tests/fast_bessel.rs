@@ -143,7 +143,8 @@ fn double_bessel_fast_tier_rounds_correctly_and_rarely_falls_back() {
 fn double_bessel_fast_tier_matches_the_accurate_path() {
     // Clauses: s10_3_c_0 (D-10.13).
     // Where the fast tier settles, result and status are the 384-bit path's in every mode
-    // (`LIELLA_BESSEL_SWEEP` operands per function and mode, default 1500).
+    // (`LIELLA_BESSEL_SWEEP` operands per function and mode, default 1500; `cargo xtask
+    // long-sweeps` runs 10^5).
     let n: u32 = std::env::var("LIELLA_BESSEL_SWEEP").ok().and_then(|s| s.parse().ok()).unwrap_or(1500);
     for (name, fast, _, accurate) in FUNCS {
         let mut rng = Rng(0x3c6e_f372_fe94_f82b ^ name.as_bytes()[1] as u64);

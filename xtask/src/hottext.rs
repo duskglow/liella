@@ -32,21 +32,73 @@ use crate::so::OWN_PREFIX;
 pub const REGEN_FLAG: &str = "--hottext-regen";
 static REGEN: AtomicBool = AtomicBool::new(false);
 
+/// HOTLIST-REGEN-CHEAP: `cargo xtask so --hottext-regen --libc-only <dir>` builds only what the regen's
+/// traces link (`libc.a`, `liella-crt1.o` and the `.profile` marker) into `<dir>`, never into
+/// `target/liella`: no libc.so.6, libm, ld.so or layout check (79% of a regen was product builds).
+pub const LIBC_ONLY_FLAG: &str = "--libc-only";
+
 /// The arguments of `cargo xtask so`: [`REGEN_FLAG`] turns the regen mode on; it is refused under
-/// CI (the `CI` variable set) and any other argument is an error.
-pub fn regen_mode(args: &[String]) -> Result<(), String> {
+/// CI (the `CI` variable set). [`LIBC_ONLY_FLAG`] `<dir>` (only with [`REGEN_FLAG`]) returns `<dir>`.
+/// Any other argument is an error.
+pub fn regen_mode(args: &[String]) -> Result<Option<std::path::PathBuf>, String> {
     let mut on = false;
-    for a in args {
+    let mut libc_only = None;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
         if a == REGEN_FLAG {
             on = true;
+        } else if a == LIBC_ONLY_FLAG {
+            let dir = it.next().filter(|d| !d.is_empty()).ok_or_else(|| format!("so: {LIBC_ONLY_FLAG} needs a directory"))?;
+            libc_only = Some(std::path::PathBuf::from(dir));
         } else {
-            return Err(format!("so: unknown argument {a:?} (the only one is {REGEN_FLAG}, for tools/hottext/regen.sh)"));
+            return Err(format!("so: unknown argument {a:?} (the only ones are {REGEN_FLAG} [{LIBC_ONLY_FLAG} <dir>], for tools/hottext/regen.sh)"));
         }
+    }
+    if libc_only.is_some() && !on {
+        return Err(format!("so: {LIBC_ONLY_FLAG} builds regen products only: it needs {REGEN_FLAG}"));
     }
     if on && std::env::var_os("CI").is_some_and(|v| !v.is_empty()) {
         return Err(format!("so: {REGEN_FLAG} is for tools/hottext/regen.sh only, never under CI"));
     }
     REGEN.store(on, Ordering::Relaxed);
+    Ok(libc_only)
+}
+
+/// Whether this run builds in the regen mode ([`REGEN_FLAG`]).
+pub fn regen_on() -> bool {
+    REGEN.load(Ordering::Relaxed)
+}
+
+/// The archive exactly as [`group`] received it in a regen build (`target/product/<profile>/`), kept so
+/// that [`recheck_cmd`] can rerun the grouping alone on the rewritten list.
+pub const PRE_GROUP_ARCHIVE: &str = "hot-text.pre-group.a";
+
+/// `cargo xtask hottext-recheck` (HOTLIST-REGEN-CHEAP): the check a regen ends with, without a second
+/// full `cargo xtask so`. For each profile, [`group`] (the grouping, its cluster check and the
+/// dead-key check, enforced: not the regen mode) runs again on a copy of [`PRE_GROUP_ARCHIVE`] with the
+/// rewritten `crates/libc-so/hot-text.list`. Fails when a profile has no such archive (run
+/// `regen.sh . --both` first) or when the check fails.
+pub fn recheck_cmd(root: &Path, args: &[String]) -> Result<(), String> {
+    if !args.is_empty() {
+        return Err("usage: cargo xtask hottext-recheck".into());
+    }
+    let ar = std::env::var("AR").unwrap_or_else(|_| "ar".into());
+    let product = root.join("target/product");
+    let list = crate::hotlists::path(root, "hot-text.list")?;
+    let inputs = root.join(crate::hotlists::TRACKED);
+    for p in [crate::so::Profile::Fast, crate::so::Profile::Release] {
+        let dir = product.join(p.name());
+        let saved = dir.join(PRE_GROUP_ARCHIVE);
+        if !saved.is_file() {
+            return Err(format!("hottext-recheck: {} missing (build the {} regen products first: tools/hottext/regen.sh . --both)", saved.display(), p.name()));
+        }
+        let copy = dir.join("hot-text.recheck.a");
+        fs::copy(&saved, &copy).map_err(|e| format!("hottext-recheck: copy {}: {e}", saved.display()))?;
+        let r = group(&ar, &copy, &list, &inputs, &dir.join("recheck-work"), Some(p.name()));
+        let _ = fs::remove_file(&copy);
+        let (hot, keys) = r.map_err(|e| format!("hottext-recheck: {}: {e}", p.name()))?;
+        println!("hottext-recheck: {}: {hot} function sections grouped, {keys} keys, dead-key check passed", p.name());
+    }
     Ok(())
 }
 
@@ -675,7 +727,7 @@ pub fn repair_cmd(root: &Path, args: &[String]) -> Result<(), String> {
         sets.push(text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string).collect::<BTreeSet<String>>());
     }
     let matched: Vec<(&str, &BTreeSet<String>)> = profiles.iter().map(|p| p.name()).zip(sets.iter()).collect();
-    let (list_path, absent_path) = (root.join("crates/libc-so/hot-text.list"), root.join("crates/libc-so").join(ABSENT_LIST));
+    let (list_path, absent_path) = (crate::hotlists::path(root, "hot-text.list")?, root.join(crate::hotlists::TRACKED).join(ABSENT_LIST));
     let read = |p: &Path| fs::read_to_string(p).map_err(|e| format!("hottext-repair: {}: {e}", p.display()));
     let (list, absent) = (read(&list_path)?, read(&absent_path)?);
     let r = repair_lists(&list, &absent, &matched, &at)?;
@@ -1024,8 +1076,9 @@ fn is_startup_names(section: &str) -> bool {
 /// already ran on, with another list. `work` is a scratch directory. `profile`: the profile the
 /// archive was built with (`fast`, `release`), `None` for other flags (see [`unmatched`]). Fails when
 /// a start-up or fork key traced in `profile` matches no function section; prints the count of the
-/// other unmatched keys. Returns (hot sections in the result, keys in the list).
-pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option<&str>) -> Result<(usize, usize), String> {
+/// other unmatched keys. Returns (hot sections in the result, keys in the list). `inputs`: the directory of the
+/// hand-written inputs ([`CLUSTER_LIST`], [`ABSENT_LIST`]); `list` may be a train-owned copy elsewhere (hotlists.rs).
+pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, profile: Option<&str>) -> Result<(usize, usize), String> {
     let text = fs::read_to_string(list).map_err(|e| format!("{}: {e}", list.display()))?;
     let entries = parse_list(&text)?;
     let keys = positions(&entries);
@@ -1040,7 +1093,7 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     }
     crate::so::run(Command::new(ar).current_dir(work).arg("x").arg(&archive))?;
     let objcopy = std::env::var("OBJCOPY").unwrap_or_else(|_| "objcopy".into());
-    let clusters_path = list.with_file_name(CLUSTER_LIST);
+    let clusters_path = inputs.join(CLUSTER_LIST);
     let clusters = match fs::read_to_string(&clusters_path) {
         Ok(t) => parse_clusters(&t, &keys).and_then(|c| Ok((c, clusters_at_end(&t)?))),
         Err(e) => Err(format!("{}: {e}", clusters_path.display())),
@@ -1143,7 +1196,7 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     if startup != 1 {
         return Err(format!("{}: {startup} start-up names sections (STARTUP_NAMES), want 1", archive.display()));
     }
-    let absent_path = list.with_file_name(ABSENT_LIST);
+    let absent_path = inputs.join(ABSENT_LIST);
     let absent = match fs::read_to_string(&absent_path) {
         Ok(t) => parse_absent(&t)?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => BTreeSet::new(),
@@ -1347,7 +1400,7 @@ pub fn static_check(root: &Path) -> Result<(), String> {
             errs.push(format!("{p}: names {REGEN_FLAG}; only tools/hottext/regen.sh may build with the dead-key check off"));
         }
     }
-    let list = root.join("crates/libc-so/hot-text.list");
+    let list = crate::hotlists::path(root, "hot-text.list")?;
     let entries = parse_list(&fs::read_to_string(&list).map_err(|e| format!("{}: {e}", list.display()))?)?;
     let unpinned = parse_unpinned(&fs::read_to_string(root.join(UNPINNED_LIST)).map_err(|e| format!("{UNPINNED_LIST}: {e}"))?)?;
     errs.extend(check_pinned(root, &entries, &unpinned));
@@ -1916,8 +1969,100 @@ mod tests {
             assert!(l < extra, "regen.sh traces page_faults {mode} after the extra programs");
         }
         let refuse = sh.find("if [ $allow_drop = 0 ]; then").expect("regen.sh: no --allow-drop guard");
-        for w in ["mv \"$work/startup.merged\" \"$skeys\"", "mv \"$work/list.merged\" \"$list\""] {
+        for w in ["put_changed \"$work/startup.merged\" \"$skeys\"", "put_changed \"$work/list.merged\" \"$list\""] {
             assert!(sh.find(w).is_some_and(|p| p > refuse), "regen.sh writes before the drop guard: {w}");
         }
+    }
+
+    #[test]
+    fn regen_runner_runs_traces_together_and_keeps_their_order() {
+        // HOTLIST-REGEN-CHEAP (no spec clause: build tooling): tools/hottext/runner.sh, the trace
+        // runner of regen.sh and probe_text.sh. A fake tracer (HOTTEXT_GDB) waits until all four
+        // traces of the run have started, so a runner that runs them one at a time fails here
+        // (iteration budget, a hang guard only). The tagged file names every trace in start order,
+        // each trace writes its own names file with its own environment, a failed trace fails the
+        // wait, and put_changed leaves a file whose bytes did not change untouched.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let runner = root.join("tools/hottext/runner.sh");
+        let tmp = root.join(format!("target/xtask-runner-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let run = |name: &str, progs: &[&str]| {
+            let work = tmp.join(name);
+            let barrier = work.join("barrier");
+            std::fs::create_dir_all(&barrier).unwrap();
+            let fake = r#"#!/bin/bash
+while [ "$1" != --args ]; do shift; done; shift
+touch "BARRIER/started.$1"
+i=0
+while [ "$(ls BARRIER | wc -l)" -lt COUNT ]; do
+    i=$((i + 1))
+    if [ $i -gt 3000 ]; then echo "fake tracer: $1 started alone: the traces did not run together" >&2; exit 7; fi
+    sleep 0.01
+done
+if [ "$1" = fail ]; then exit 3; fi
+printf '%s\n' "$@" "LANG=$LANG" > "$HOT_TEXT_OUT"
+"#
+            .replace("BARRIER", &barrier.to_string_lossy())
+            .replace("COUNT", &progs.len().to_string());
+            let fake_path = work.join("fake-gdb");
+            std::fs::write(&fake_path, fake).unwrap();
+            let driver = r#"set -eu
+work=$1; here=$2; shift 2
+n=0
+: > "$work/tagged"
+. "$here/runner.sh"
+for p in "$@"; do trace_tagged "tier-$p" LANG="lang-$p" -- "$p" arg; done
+traces_wait
+"#;
+            let o = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(driver)
+                .arg("driver")
+                .arg(&work)
+                .arg(runner.parent().unwrap())
+                .args(progs)
+                .env("HOTTEXT_GDB", format!("bash {}", fake_path.display()))
+                .env("HOTTEXT_JOBS", progs.len().to_string())
+                .output()
+                .expect("bash runs tools/hottext/runner.sh");
+            (work, o.status.success(), String::from_utf8_lossy(&o.stderr).into_owned())
+        };
+        let progs = ["p1", "p2", "p3", "p4"];
+        let (work, ok, err) = run("ok", &progs);
+        assert!(ok, "runner.sh: the four traces did not all run and pass: {err}");
+        let tagged = std::fs::read_to_string(work.join("tagged")).unwrap();
+        let want: String = (1..=progs.len()).map(|i| format!("tier-p{i}={}\n", work.join(format!("names.{i}")).display())).collect();
+        assert_eq!(tagged, want, "runner.sh: tagged does not name every trace in start order");
+        for (i, p) in progs.iter().enumerate() {
+            let names = std::fs::read_to_string(work.join(format!("names.{}", i + 1))).unwrap();
+            assert_eq!(names, format!("{p}\narg\nLANG=lang-{p}\n"), "runner.sh: names.{} is not trace {p}'s output", i + 1);
+        }
+        let (_, ok, err) = run("fail", &["p1", "fail", "p3", "p4"]);
+        assert!(!ok && err.contains("trace failed (rc 3)"), "runner.sh: a failed trace did not fail the wait: {err}");
+        // put_changed: equal bytes keep the tracked file (and its mtime); new bytes replace it.
+        let dir = tmp.join("put");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("tracked"), "a\n").unwrap();
+        let old = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
+        std::fs::File::options().write(true).open(dir.join("tracked")).unwrap().set_modified(old).unwrap();
+        let put = |text: &str| {
+            std::fs::write(dir.join("new"), text).unwrap();
+            let st = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(". \"$1\"; put_changed \"$2/new\" \"$2/tracked\"")
+                .arg("put")
+                .arg(&runner)
+                .arg(&dir)
+                .status()
+                .unwrap();
+            assert!(st.success(), "put_changed failed");
+            assert!(!dir.join("new").exists(), "put_changed left its input behind");
+            (std::fs::read_to_string(dir.join("tracked")).unwrap(), std::fs::metadata(dir.join("tracked")).unwrap().modified().unwrap())
+        };
+        let same = put("a\n");
+        let changed = put("b\n");
+        std::fs::remove_dir_all(&tmp).unwrap();
+        assert_eq!(same, ("a\n".to_string(), old), "put_changed rewrote a file whose bytes did not change");
+        assert_eq!(changed.0, "b\n", "put_changed did not write new bytes");
     }
 }

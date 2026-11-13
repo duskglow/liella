@@ -302,7 +302,7 @@ fn cluster_aligns_of(listing: &str) -> Vec<(&'static str, u64)> {
 type Inputs = (BTreeSet<String>, BTreeSet<String>, Vec<(String, Member)>);
 
 fn inputs(archive: &Path, root: &Path) -> Result<Inputs, String> {
-    let read = |p: &str| fs::read_to_string(root.join(p)).map_err(|e| format!("{p}: {e}"));
+    let read = |p: &str| fs::read_to_string(crate::hotlists::rel(root, p)?).map_err(|e| format!("{p}: {e}"));
     let mut text_keys = keys(&read("crates/libc-so/startup-text.keys")?, |_| true);
     text_keys.extend(crate::hottext::parse_list(&read("crates/libc-so/hot-text.list")?)?.into_iter().filter(|e| HOT_TIERS.contains(&e.tier)).map(|e| e.key));
     // The fault-bounded probe modes no tier covers (the first localtime_r, + mktime): traced on their own.
