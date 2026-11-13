@@ -69,7 +69,19 @@ Four-host table (bounded value = lowest of 5 runs; the highest single run equals
 
 So no bound or budget moves in run 3: each already equals the four-host highest, and each is at or below
 next's. No host exceeds next's bound. The record (records/pending/LAYOUT-TRACE-DEFAULT-1.toml) and the
-hot_text_products comments now cite all four host classes.
+hot_text_products comments now cite all four host classes (c071677a5).
+
+Run 3 jobs: `layout-trace-default-3-lint0` (shiki, inherited head bdfe810cf: clippy + static) rc 0. Proofs on
+bdfe810cf (above) rc 0, superseded by the same proofs on the final head c071677a5 in RAM copies
+(`/mnt/zram/claude/LAYOUT-TRACE-DEFAULT-3/proof-2` on each host): shiki `layout-trace-default-3-shiki-proof2`
+(it ran beside the gate, load ~12) and kanon `layout-trace-default-3-kanon-proof2`, both rc 0, the same table
+as above. Release libc.a byte-identical across the two hosts (md5 3245611c...). Fast libc.a differs: shiki's
+`hot-text.list` holds one extra-tier key (`Catalogs::identity`) that kanon's does not (515 vs 516 keys; the
+other three lists are identical). This is the same key and the same effect run 2 noted for builds of identical
+sources; the fault table does not move. On the final head: `layout-trace-default-3-lint1` (xtask clippy, static,
+cargo clippy --all-features -D warnings) rc 0, and `layout-trace-default-3-gate` (`cargo xtask affected --run`, shiki sh1, escalated to FULL by the
+xtask change) rc 0: 11745 passed / 0 failed in 32 suites, conformance 132 / 0, peak 16G, 50 min beside the
+shiki proof.
 
 ## Release check for the CI gate (brief step 5)
 
