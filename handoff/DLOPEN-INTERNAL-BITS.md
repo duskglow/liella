@@ -1,16 +1,16 @@
-# DLOPEN-INTERNAL-BITS
+# DLOPEN-INTERNAL-BITS (and -2)
 
-State: branch task/dlopen-internal-bits; docs-only change, no Liella code touched.
+State: branch task/dlopen-internal-bits-2 (continues task/dlopen-internal-bits); docs and one comment, no Liella behaviour change.
 
-Done:
-- spec/behaviour/dynlink.md row "P-1 unknown bits": the eight high bits are glibc-internal (maintainers, 2026-11-13), unsupported, refused like any unknown bit, excluded from the comparison. Existing raw `.glibc.txt` lines kept; none added.
-- tools/probe/dl/dlopen/probe.c p1: sweep skips 0xff000000 (all eight) with a comment; the "0x80000000 alone" child is dropped.
+Done (run 1):
+- spec/behaviour/dynlink.md row "P-1 unknown bits": the eight high bits `0x01000000`-`0x80000000` are glibc-internal (maintainers, 2026-11-13), refused like any unknown bit, excluded from the comparison. Raw `.glibc.txt` lines kept.
+- tools/probe/dl/dlopen/probe.c p1: sweep skips 0xff000000; the "0x80000000 alone" child is dropped.
 - docs/differences-from-glibc.md: one row (no compat flag, owner ruling).
-- records/pending/DLOPEN-INTERNAL-BITS-1.toml (D-27 series, id D-NEW).
+- records/pending/DLOPEN-INTERNAL-BITS-1.toml (D-27 series, id D-NEW; the coordinator assigns the id).
 
-Checked: no Rust differential test compares dlopen modes with the reference (only the probe does). Liella's refusal tests (crates/ld DL-16a sweep, conformance s27_dlopen_failures) are unchanged and still sweep every undefined bit.
+Done (run 2, owner amendment 2026-11-13): the eight bits are RESERVED FOR LIELLA. Liella owes glibc's internal meaning nothing, refuses them with `invalid mode parameter`, keeps them available for a possible future Liella-defined use (none planned; any use is a new public-interface decision). Said in the dynlink.md row, the differences row, the pending decision record, and a doc comment at `ModeError::Unknown` in crates/ld/src/dlopen.rs naming the range.
 
-Gate: clippy + static + `affected --run --base origin/next` green on shiki:sh1 (jobs dib-static2, dib-gate2). The first pair failed on bare `|` in the pending record; fixed in the second commit.
-Not run: plants (no code), percall (no code), probe re-run on the reference (comment/skip change only; NOT VERIFIED beyond compile in the gate).
+Checked: clippy and static green on the inherited head; no Rust differential test compares dlopen modes with the reference.
+Not run: plants (comment and docs only), percall, probe re-run on the reference.
 
-Next step: none; coordinator assigns the decision id.
+Next step: none.
