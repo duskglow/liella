@@ -57,6 +57,8 @@ pub fn tsc_allow(oldest: u64, at: u64) -> u64 {
 /// Whether the state still holds `tsc` after the counter read `stamp` when `allow` ticks were left
 /// ([`tsc_allow`]) with no clock read. A stamp or counter of 0 (no counter), a counter that went
 /// backwards or wrapped, and a jump of `allow` or more all say no, and the caller reads the clock.
+/// Always inlined, as [`TscGate::fresh`] (HOTTEXT-TIME-CLUSTER-STABLE).
+#[inline(always)]
 pub fn tsc_holds(stamp: u64, allow: u64, tsc: u64) -> bool {
     stamp != 0 && tsc >= stamp && tsc.saturating_sub(stamp) < allow
 }
@@ -92,6 +94,12 @@ impl TscGate {
     /// calling `clock` while the gate holds; else `clock` is read once ([`now`]) and, when no check is due,
     /// the gate restarts from `tsc`. A due check (`false`) leaves the gate as it is: it had already
     /// expired, or the counter went backwards. A forgotten `last` ([`LastCheck::forget`]) is due at once.
+    ///
+    /// Always inlined (HOTTEXT-TIME-CLUSTER-STABLE): the first `mktime` after `localtime_r` runs it
+    /// inside `time_compat::select`, a hot-text key. A copy of it out of line has no key of its own,
+    /// so it lands in cold text and costs that `mktime` a page fault; the fast profile (thin LTO, 16
+    /// codegen units) emitted one when unrelated libm code grew.
+    #[inline(always)]
     pub fn fresh(&self, last: &LastCheck, tsc: u64, clock: impl FnOnce() -> u64) -> bool {
         let at = last.0.load(Relaxed);
         if at != 0 && tsc_holds(self.stamp.load(Acquire), self.allow.load(Relaxed), tsc) {
