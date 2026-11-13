@@ -31,6 +31,8 @@
 #   the one-profile path builds them), and `cargo xtask hottext-recheck` reruns only the grouping and its
 #   dead-key check. A list is rewritten only when its bytes change (runner.sh put_changed).
 #   --products <dir>: trace the products in <dir> (default <tree>/target/liella).
+#   --all-modes (LAYOUT-TRACE-AT-BUILD, `cargo xtask so` under LIELLA_LAYOUT_TRACE=1 with --replace): also trace the
+#   page_faults modes fork, strings, float, mktime and rebind, so every mode the bounds count is in the trace set.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 T=$(cd "$1" && pwd); shift
@@ -42,12 +44,14 @@ list=$L/hot-text.list
 replace=0
 build=0
 allow_drop=0
+all_modes=0
 both=0
 P=$T/target/liella
 phase=all
 pdir=
 while [ $# -gt 0 ]; do
     case $1 in --replace) replace=1; shift;; --build) build=1; shift;; --allow-drop) allow_drop=1; shift;; --both) both=1; shift;;
+        --all-modes) all_modes=1; shift;;
         --products) P=$(cd "$2" && pwd); shift 2;; --trace-only) phase=trace; pdir=$2; shift 2;; --merge-only) phase=merge; pdir=$2; shift 2;;
         *) break;; esac
 done
@@ -176,6 +180,13 @@ if [ -f p_cat.c ]; then trace stdio en_US.UTF-8 ./p_cat; checks="$checks p_cat:$
 # The bound test runs these modes with LANG=en_US.UTF-8 and stdin /dev/null.
 stdin=/dev/null trace locale en_US.UTF-8 ./page_faults locale
 stdin=/dev/null trace tool en_US.UTF-8 ./page_faults tool
+if [ $all_modes = 1 ]; then
+    # LAYOUT-TRACE-AT-BUILD (LT-1): every other mode the bounds of hot_text_products.rs count, so a list traced
+    # from nothing (--replace) holds what they run. After `tool`: the first touches above keep their order and
+    # these add only what no earlier probe ran (tier fork for the child, extra for the rest).
+    stdin=/dev/null follow=child trace fork en_US.UTF-8 ./page_faults fork
+    for m in strings float mktime rebind; do stdin=/dev/null trace extra en_US.UTF-8 ./page_faults "$m"; done
+fi
 for cmd in "$@"; do
     # shellcheck disable=SC2086
     trace tool en_US.UTF-8 $cmd
