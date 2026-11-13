@@ -1,9 +1,9 @@
 # LAYOUT-TRACE-AT-BUILD (LT-1): `cargo xtask so` traces its own build, opt-in
 
-State: branch `task/layout-trace-at-build-2` (LT-1 continuation, stacked on `task/layout-trace-at-build`), cut
-from origin/next (b888f8ff0). Plan: `plan/layout-rethink.md`
-section 4 (on `task/layout-rethink`), rulings #5190-#5194. Decision: `records/pending/LAYOUT-TRACE-AT-BUILD-1.toml`
-(series D-X, pending). Plants: `handoff/LAYOUT-TRACE-AT-BUILD-plants.txt`.
+State: branch `task/layout-trace-at-build-3` (LAYOUT-TRACE-AT-BUILD-2's head 5edb1b197 plus a merge of
+origin/next 8a2711482; HEAD in handoff/reports/LAYOUT-TRACE-AT-BUILD-3.json). Plan: `plan/layout-rethink.md`
+section 4, rulings #5190-#5194. Decision: D-X.88 (`records/decisions/D-X/D-X.88.toml`). Plants:
+`handoff/LAYOUT-TRACE-AT-BUILD-plants.txt`.
 
 ## What it does
 
@@ -65,6 +65,22 @@ Plants (mei, ltab2-plants): ltab-drop-locale-probe, ltab-drop-tool-probe and the
 CAUGHT by that message; ltab-rename-skips-first CAUGHT as before. The tool notes "caught by no test the log
 names" for the first three: they are caught by `so` itself, before the test runs, which is the intent.
 
+## Merge with next (LAYOUT-TRACE-AT-BUILD-3, shiki role sh2)
+
+CI's merge_next stopped on `xtask/src/so.rs`: XTASK-SO-NOCHANGE-PROFILE moved the libc `cargo rustc` call into
+`LIBC_BUILD.command` (one flag set and one `LIELLA_BUILD_TAG` per shared target directory; the interpreter in
+`target/product/ld-pie`). The one conflict was `build_archive_locked`'s signature: it keeps the `layout` parameter
+and takes next's body, so every layout builds through `LIBC_BUILD.command` with the same tag. Both intents hold:
+the trace stays out of the tag (its lists are under `target/product/<profile>`, outside `crates/ csys/ include/`),
+and no xtask step is skipped on an input hash (cargo's fingerprint covers compilation only; the grouping reruns from
+lists rewritten empty, then traced, on every trace-mode build; the layout verdict cache hashes the products and the
+marker carries the lists' hashes). Next's dead-key change (LAYOUT-DEADKEY-WARN) merged without conflict; Traced still
+ignores `hot-text.absent`. On the merged head: ltab3-so (clippy, static, then `LIELLA_LAYOUT_TRACE=1 so` and
+hot_text_products in fast, then release: both 23 passed; every page_faults mode traced in both; fast 101/503/153
+startup/hot/probe keys, release 102/436/154; rc 0), ltab3-plants (4 plants, trace mode, fast: 4 CAUGHT, 0 WARN,
+rc 0), ltab3-gate (affected --run --base origin/next, default mode: 32 suites, 11710 passed, 0 failed, conformance
+132/0, peak 16G, rc 0). Also ltab3-lint0 (clippy + static on the inherited head 5edb1b197: rc 0).
+
 ## Jobs, LAYOUT-TRACE-AT-BUILD-2 (mei, role s1)
 
 ltab2-lint0 (clippy + static on the inherited head: rc 0); ltab2-plants (4 plants, trace mode, fast: 4 CAUGHT,
@@ -86,6 +102,8 @@ Logs and products: `~/work/LAYOUT-TRACE-AT-BUILD/{m1,m2,optout}` on shiki.
 * INFORMATIONAL: next (no switch) fails `init_short_programs_stay_within_their_page_fault_bounds` in the release
   profile on this host: setlocale + printf 53 > 51. With the switch it reads 50.
 * First run's jobs: ltab-gate and ltab-optout rc 0; ltab-plants rc 1 (the two survivors, fixed above).
+* Do not redo the merge: a later conflict in `build_archive_locked` resolves the same way (keep `layout`, take the
+  build call from next).
 * Next step: land; then LT-2 (clusters by probe phase), LT-3 (ptrace tracer), LT-4 (host-canonical, before the
   default changes). A new `page_faults.c` mode now needs a trace in regen.sh (or probe_text.sh MODES) or the
   trace-mode build fails by name. Do not redo: the fast/release tables, determinism, the coverage check.
