@@ -86,12 +86,18 @@ if virtual:
         if missing:
             fail("class %s runs code this host cannot execute (missing %s): trace on an x86-64-v3 host" % (c, " ".join(missing)))
 
+# The names at one address (aliases: `bcmp`, `__memcmpeq`, `liella_machine_equal`) are written in
+# byte order (LAYOUT-TRACE-HOST-CANONICAL-3): nm sorts by the caller's locale (en_US ignores the
+# underscores, C does not), so its order was a host input; nm runs in the C locale and the names are
+# sorted here as well.
 names = {}
-nm = subprocess.run(["nm", "--defined-only", binp], capture_output=True, text=True, check=True).stdout
+nm_env = dict(os.environ, LC_ALL="C")
+nm = subprocess.run(["nm", "--defined-only", binp], capture_output=True, text=True, check=True, env=nm_env).stdout
 for line in nm.splitlines():
     p = line.split()
     if len(p) == 3 and p[1] in "tTwWiI":
         names.setdefault(int(p[0], 16), []).append(p[2])
+names = {a: sorted(ns) for a, ns in names.items()}
 by_name = {n: a for a, ns in names.items() for n in ns}
 emul = {}
 if virtual:

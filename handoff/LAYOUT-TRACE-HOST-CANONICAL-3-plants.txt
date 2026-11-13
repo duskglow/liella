@@ -20,3 +20,7 @@ lthc3-runner-env | tools/hottext/runner.sh | lit:*=*) envs+=("HOT_TEXT_ENV_$1");
 lthc3-absent-keep | tools/hottext/prune.py | lit:or key in listed: ==> or True: | cargo test -p xtask --bin xtask -- hottext::tests::regen_replace_drops_the_allow_list_lines_of_keys_it_drops | msg:kept a stale line or lost a live one
 # lthc3-absent-guard: regen.sh prunes the allow-list on every merge instead of --replace only (the train's merge would rewrite the hand-written file).
 lthc3-absent-guard | tools/hottext/regen.sh | lit:if [ $replace = 1 ] && [ -f "$absent" ]; then ==> if [ -f "$absent" ]; then | cargo test -p xtask --bin xtask -- hottext::tests::regen_replace_drops_the_allow_list_lines_of_keys_it_drops | msg:no --replace allow-list prune
+# lthc3-alias-unsorted: the names at one address keep nm's order (the caller's locale decides it).
+lthc3-alias-unsorted | tools/hottext/trace_gdb.py | lit:names = {a: sorted(ns) for a, ns in names.items()} ==> names = dict(names) | cargo test -p xtask --bin xtask -- hottext::tests::trace_writes_the_names_at_one_address_in_byte_order | msg:does not sort the names at one address
+# lthc3-nm-locale: nm runs in the caller's locale.
+lthc3-nm-locale | tools/hottext/trace_gdb.py | lit:check=True, env=nm_env).stdout ==> check=True).stdout | cargo test -p xtask --bin xtask -- hottext::tests::trace_writes_the_names_at_one_address_in_byte_order | msg:runs nm in the caller.s locale

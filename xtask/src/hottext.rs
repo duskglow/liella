@@ -1827,6 +1827,23 @@ mod tests {
     }
 
     #[test]
+    fn trace_writes_the_names_at_one_address_in_byte_order() {
+        // LAYOUT-TRACE-HOST-CANONICAL-3 (no spec clause: build tooling): trace_gdb.py writes every
+        // name at a hit address (aliases such as bcmp / __memcmpeq / liella_machine_equal), and the
+        // list keeps that order. nm sorts by the caller's locale (en_US ignores underscores), so a
+        // Zen 1 host's job under en_US.UTF-8 and a gated job in C gave the same keys in two orders.
+        // The tracer must run nm in the C locale and sort each address's names itself.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let py = std::fs::read_to_string(root.join("tools/hottext/trace_gdb.py")).unwrap();
+        let nm = py.find("subprocess.run([\"nm\", \"--defined-only\", binp]").expect("trace_gdb.py: no nm call");
+        let nm_line = py[nm..].lines().next().unwrap();
+        assert!(nm_line.contains("env=nm_env") && py.contains("nm_env = dict(os.environ, LC_ALL=\"C\")"), "trace_gdb.py runs nm in the caller's locale");
+        let sorted = py.find("names = {a: sorted(ns) for a, ns in names.items()}").expect("trace_gdb.py does not sort the names at one address");
+        let written = py.find("for n in names.get(addr, []):").expect("trace_gdb.py: no names output");
+        assert!(nm < sorted && sorted < written, "trace_gdb.py sorts the names after it writes them");
+    }
+
+    #[test]
     fn regen_replace_drops_the_allow_list_lines_of_keys_it_drops() {
         // LAYOUT-TRACE-HOST-CANONICAL-3 (no spec clause: build tooling): `regen.sh --replace` keeps
         // only the keys a trace hit, so an ABSENT_LIST line whose key left the list is stale by
