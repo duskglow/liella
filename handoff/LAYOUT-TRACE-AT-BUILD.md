@@ -103,7 +103,7 @@ Jobs (keke, role n3): ltab4-lint0 (clippy + static on the inherited head 3700944
 static, xtask hottext unit tests 24 passed, then `LIELLA_LAYOUT_TRACE=1 so` + hot_text_products in fast, then
 release: 24 passed each; fast 101/482/152 startup/hot/probe keys, release 102/433/153; rc 0); ltab4-plants2
 (4 plants, trace mode, fast: 4 CAUGHT, 0 WARN, rc 0); ltab4-gate (affected --run --base origin/next, default
-mode; result in handoff/reports/LAYOUT-TRACE-AT-BUILD-4.json). Superseded: ltab4-so and ltab4-plants (rc 101 / 2:
+mode; FULL by escalation: 32 suites, 11714 passed, 0 failed, conformance 132/0, peak 12G, rc 0). Superseded: ltab4-so and ltab4-plants (rc 101 / 2:
 the first-window test above, before the fix).
 
 ## Jobs, LAYOUT-TRACE-AT-BUILD-2 (mei, role s1)

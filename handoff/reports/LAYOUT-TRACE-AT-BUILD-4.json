@@ -1,0 +1,60 @@
+{
+ "task": "LAYOUT-TRACE-AT-BUILD-4",
+ "model": "opus",
+ "tokens": null,
+ "result": "merged origin/next (conflict in xtask/src/hottext.rs group(): keep the layout handling, take LAYOUT-FIRST-WINDOW's single read of the hand-kept inputs and first-window positions); next's first-window margin test now reads the products' list (it failed trace mode by counting the committed start-up tier); trace-mode so green in both profiles, 4/4 plants caught",
+ "branch": "task/layout-trace-at-build-4",
+ "head": "7635ff45e",
+ "gate": {
+  "affected": "FULL (escalated: xtask sources) 32 suites, 11714 passed / 0 failed, conformance 132/0 (ltab4-gate, keke)",
+  "peak": "12G (page cache included), oom_kill=0"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "affected --run --base origin/next escalates to the FULL gate for any xtask/src/*.rs change (xtask: its commands are part of the gate); ltab4-gate ran FULL"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "unblock",
+   "what": "LAYOUT-TRACE-AT-BUILD (LT-1) mergeable with next again; enables LT-2, LT-3, LT-4 (plan/layout-rethink.md)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  },
+  {
+   "kind": "correctness",
+   "what": "init_startup_group_ends_inside_the_first_fault_around_window on trace-mode products: counted the committed list's start-up tier (95) instead of the product's (91), reported margin -804 B; the real group ends 0x41798c, inside the 0x408000..0x418000 window (fast)",
+   "before": -804,
+   "after": 1652,
+   "unit": "bytes margin (fast, trace mode, as computed by the test)",
+   "measured": false
+  },
+  {
+   "kind": "tooling",
+   "what": "opt-in LIELLA_LAYOUT_TRACE=1 on the merged head: fast 101/482/152 and release 102/433/153 startup/hot/probe keys traced, hot_text_products 24 passed in both profiles",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "plants on the merged head (trace mode, fast); rename plant retargeted to link_positions",
+   "before": null,
+   "after": 4,
+   "unit": "plants caught",
+   "measured": true
+  }
+ ],
+ "jobs": [
+  "ltab4-so2",
+  "ltab4-plants2",
+  "ltab4-gate"
+ ],
+ "improvement": "a test that reads crates/libc-so/hot-text.list directly passes on next and fails only for trace-mode products; a static check (hot_text_products.rs may read lists only through generated_list) would catch the next one before a merge",
+ "next_step": "land; then LT-2 (clusters by probe phase), LT-3, LT-4",
+ "report_file": "handoff/LAYOUT-TRACE-AT-BUILD.md"
+}
