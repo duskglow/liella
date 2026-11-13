@@ -7,7 +7,7 @@ ldl-retired-fullpath | xtask/src/hottext.rs | lit:.filter(|p| RETIRED.contains(&
 # static passes whatever it found.
 ldl-static-ignores | xtask/src/hottext.rs | lit:if errs.is_empty() { Ok(()) } ==> if errs.len() < 9 { Ok(()) } | cargo test -p xtask retired | msg:test hottext::tests::static_refuses_a_readded_committed_list \.\.\. FAILED
 # LIELLA_LAYOUT_TRACE=0 silently accepted again.
-ldl-trace-zero | xtask/src/hotlists.rs | lit:"" | "1" => Ok(Layout::Traced), ==> "" | "1" | "0" => Ok(Layout::Traced), | cargo test -p xtask layout_switch_defaults_to_the_trace_and_is_strict | msg:test hotlists::tests::layout_switch_defaults_to_the_trace_and_is_strict \.\.\. FAILED
+ldl-trace-zero | xtask/src/hotlists.rs | perl:s/"" \| "1" => Ok\(Layout::Traced\),/""|"1"|"0" => Ok(Layout::Traced),/ | cargo test -p xtask layout_switch_defaults_to_the_trace_and_is_strict | msg:test hotlists::tests::layout_switch_defaults_to_the_trace_and_is_strict \.\.\. FAILED
 # The old crates/libc-so/<list> path read from the tree instead of refused.
 ldl-rel-committed | xtask/src/hotlists.rs | lit:.is_some_and(|n| GENERATED.contains(&n)) ==> .is_some_and(|n| n.is_empty()) | cargo test -p xtask rel_reads_the_traced_lists | msg:test hotlists::tests::rel_reads_the_traced_lists_and_refuses_the_committed_paths \.\.\. FAILED
 # The v3 measurement build ungrouped on a host that can trace it.
