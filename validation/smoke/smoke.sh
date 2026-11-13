@@ -220,17 +220,32 @@ run_one() {
 # must be rejected. A wrapper or check that lets a build fall back to the system's C library fails here.
 selftest() {
     t=$work/selftest
-    rm -rf "$t" && mkdir -p "$t/ok" "$t/bad" || return 1
+    rm -rf "$t" && mkdir -p "$t/ok" || return 1
     e=0
     env LIELLA_SMOKE_SYSROOT="$sys" LIELLA_SMOKE_LDSO="$ldso" "$work/bin/liella-cc" -O1 -shared -fPIC \
         "$here/selftest/plugin.c" -o "$t/ok/libplugin.so" > "$t/build.log" 2>&1 &&
     env LIELLA_SMOKE_SYSROOT="$sys" LIELLA_SMOKE_LDSO="$ldso" "$work/bin/liella-cc" -O1 "$here/selftest/hello.c" \
         -lm -lpthread -o "$t/ok/hello" >> "$t/build.log" 2>&1 || { echo "smoke-selftest: FAIL liella-cc does not build (see $t/build.log)"; return 1; }
-    gcc -O1 "$here/selftest/hello.c" -lm -o "$t/bad/hello" >> "$t/build.log" 2>&1 || { echo "smoke-selftest: FAIL gcc does not build"; return 1; }
+    # Negative controls, one per rule of check-elf.sh: each must be rejected on its own.
+    #   system: the system compiler's build (system loader, libc.so.6 by soname)
+    #   interp: Liella's libc by path, the system's loader as PT_INTERP
+    #   soname: Liella's loader, the system's libc.so.6 named as well
+    #   static: a static program (no PT_INTERP)
+    #   nolibc: Liella's loader, no C library named at all
+    for k in system interp soname static nolibc; do mkdir -p "$t/bad-$k"; done
+    lcc() { env LIELLA_SMOKE_SYSROOT="$sys" LIELLA_SMOKE_LDSO="$ldso" "$work/bin/liella-cc" "$@"; }
+    { gcc -O1 "$here/selftest/hello.c" -lm -o "$t/bad-system/hello" &&
+        lcc -O1 "$here/selftest/hello.c" -lm -Wl,--dynamic-linker=/lib64/ld-linux-x86-64.so.2 -o "$t/bad-interp/hello" &&
+        lcc -O1 "$here/selftest/hello.c" -lm /lib/x86_64-linux-gnu/libc.so.6 -Wl,--allow-shlib-undefined -o "$t/bad-soname/hello" &&
+        gcc -O1 -static "$here/selftest/hello.c" -lm -o "$t/bad-static/hello" &&
+        lcc -O1 -nostartfiles -Wl,--as-needed "$here/selftest/nolibc.c" -o "$t/bad-nolibc/nolibc"; } >> "$t/build.log" 2>&1 ||
+        { echo "smoke-selftest: FAIL a negative control does not build (see $t/build.log)"; return 1; }
     "$here/check-elf.sh" "$ldso" "$sys" "$t/ok" > "$t/check-ok.log" 2>&1 || { echo "smoke-selftest: FAIL check-elf rejects liella-cc's build:"; cat "$t/check-ok.log"; e=1; }
-    if "$here/check-elf.sh" "$ldso" "$sys" "$t/bad" > "$t/check-bad.log" 2>&1; then
-        echo "smoke-selftest: FAIL check-elf accepts a build against the system's C library"; e=1
-    fi
+    for k in system interp soname static nolibc; do
+        if "$here/check-elf.sh" "$ldso" "$sys" "$t/bad-$k" > "$t/check-bad-$k.log" 2>&1; then
+            echo "smoke-selftest: FAIL check-elf accepts the $k negative control (not linked against Liella)"; e=1
+        fi
+    done
     out=$("$t/ok/hello" 2 2>&1); rc=$?
     [ $rc -eq 0 ] && [ "$out" = "hello 1.414214" ] || { echo "smoke-selftest: FAIL hello on Liella: exit $rc, output: $out"; e=1; }
     "$ldso" --list "$t/ok/hello" > "$t/list.log" 2>&1

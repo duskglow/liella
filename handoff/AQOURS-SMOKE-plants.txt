@@ -1,0 +1,9 @@
+# AQOURS-SMOKE plants: the smoke harness must reject a build that is not linked against Liella.
+# Run: cargo xtask plants handoff/AQOURS-SMOKE-plants.txt --dir <new RAM dir>
+# Each plant breaks one rule of liella-cc or check-elf.sh; `smoke.sh selftest` must fail naming the rule.
+cc-no-interp | validation/smoke/liella-cc | lit:-nodefaultlibs -L"$sys" "-Wl,--dynamic-linker=$ldso" "$@" ==> -nodefaultlibs -L"$sys" "$@" | sh validation/smoke/smoke.sh selftest | msg:smoke-selftest: FAIL (check-elf rejects liella-cc|hello on Liella)
+cc-no-sysroot-first | validation/smoke/liella-cc | lit:exec "$cc" -nodefaultlibs -L"$sys" "-Wl ==> exec "$cc" -nodefaultlibs "-Wl | sh validation/smoke/smoke.sh selftest | msg:smoke-selftest: FAIL check-elf rejects liella-cc
+check-no-interp-rule | validation/smoke/check-elf.sh | lit:if [ "$interp" != "$ldso" ]; then ==> if false; then | sh validation/smoke/smoke.sh selftest | msg:smoke-selftest: FAIL check-elf accepts the interp negative control
+check-no-soname-rule | validation/smoke/check-elf.sh | perl:s/libc\.so\.6 \| libm\.so\.6 \| libpthread/libc.so.6.x \| libm.so.6.x \| libpthread/ | sh validation/smoke/smoke.sh selftest | msg:smoke-selftest: FAIL check-elf accepts the soname negative control
+check-no-static-rule | validation/smoke/check-elf.sh | lit:elif [ "$type" = EXEC ]; then ==> elif false; then | sh validation/smoke/smoke.sh selftest | msg:smoke-selftest: FAIL check-elf accepts the static negative control
+check-no-libc-rule | validation/smoke/check-elf.sh | perl:s/elif ! printf '%s\\n' "\$needed" \| grep -qxF "\$libc"; then/elif false; then/ | sh validation/smoke/smoke.sh selftest | msg:smoke-selftest: FAIL check-elf accepts the nolibc negative control
