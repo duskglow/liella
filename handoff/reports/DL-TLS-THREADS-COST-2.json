@@ -2,28 +2,88 @@
  "task": "DL-TLS-THREADS-COST-2",
  "model": "opus",
  "tokens": null,
- "result": "COMPLETE: static pthread_create+join 35940.2 instr/call (next 35957.2); regenerated hot-text list committed, start-up faults below next (fast tool 51 vs 53, locale 48 vs 50); gate and 4/4 plants green",
+ "result": "COMPLETE: static pthread_create+join 35940.2 instr/call (next 35957.2); regenerated hot-text list committed with its 3 new generic keys pinned out of line; start-up faults below next (fast tool 51 vs 53, locale 48 vs 50; release 52 vs 55, 49 vs 52); gettext rows equal or -2",
  "branch": "task/dl-tls-threads-cost-2",
- "head": null,
- "gate": {"affected": "11712 passed / 0 failed (32 suites; conformance 127 passed)", "peak": "16G (page cache included), oom_kill 0"},
+ "head": "250543bc2",
+ "gate": {
+  "affected": "11712 passed / 0 failed (32 suites; conformance 127 passed)",
+  "peak": "16G (page cache included), oom_kill 0"
+ },
  "accepted_first_attempt": null,
  "rulings": [],
  "informational": [
   "origin/next e30374455 with its tracked lists fails hot_text_products in the release profile on the Broadwell-EP build host: setlocale+printf 52 > bound 51 (fast profile green)",
   "dynamic thread_create_join row not measured: wl_percall links Liella statically only; dl_tls_threads tests cover the behaviour",
-  "commit edcf064a3's message calls the build host Skylake-SP; it is Broadwell-EP (E5-2699 v4); corrected in the handoff"
+  "commit edcf064a3's message calls the build host Skylake-SP; it is Broadwell-EP (E5-2699 v4); corrected in the handoff",
+  "tools/hottext/regen.sh leaves tools/hottext/__pycache__/*.pyc in the tree it runs in; cargo xtask static private-paths then fails on the embedded home path (run python with -B or PYTHONDONTWRITEBYTECODE in regen)",
+  "regenerating the lists on a branch (ruling #5325) can key generics that the hottext pin check rejects, and hot-text.unpinned is remove-only: each new generic key needs #[inline(never)]; #[inline(always)] shifted inlining and keyed five others"
  ],
  "refused": [],
  "impact": [
-  {"kind": "perf", "what": "static thread_create_join (wl_percall) vs origin/next", "before": 35957.2, "after": 35940.2, "unit": "instr/call", "measured": true},
-  {"kind": "faults", "what": "coreutils-shaped tool start-up, fast profile, vs origin/next", "before": 53, "after": 51, "unit": "minor faults", "measured": true},
-  {"kind": "faults", "what": "coreutils-shaped tool start-up, release profile, vs origin/next", "before": 55, "after": 52, "unit": "minor faults", "measured": true},
-  {"kind": "faults", "what": "setlocale + printf start-up, fast profile, vs origin/next", "before": 50, "after": 48, "unit": "minor faults", "measured": true},
-  {"kind": "faults", "what": "setlocale + printf start-up, release profile, vs origin/next (bound 51)", "before": 52, "after": 49, "unit": "minor faults", "measured": true},
-  {"kind": "coverage", "what": "per-call spec validation/percall/thread_create.c and count-check script kept in the tree", "before": 0, "after": 1, "unit": "files", "measured": true}
+  {
+   "kind": "perf",
+   "what": "static thread_create_join (wl_percall) vs origin/next",
+   "before": 35957.2,
+   "after": 35940.2,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "perf",
+   "what": "gettext_found / ngettext_found (wl_percall, release) vs origin/next; gettext_language_steady and _alternating equal",
+   "before": 517.0,
+   "after": 515.0,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "faults",
+   "what": "coreutils-shaped tool start-up, fast profile, vs origin/next",
+   "before": 53,
+   "after": 51,
+   "unit": "minor faults",
+   "measured": true
+  },
+  {
+   "kind": "faults",
+   "what": "coreutils-shaped tool start-up, release profile, vs origin/next",
+   "before": 55,
+   "after": 52,
+   "unit": "minor faults",
+   "measured": true
+  },
+  {
+   "kind": "faults",
+   "what": "setlocale + printf start-up, fast profile, vs origin/next",
+   "before": 50,
+   "after": 48,
+   "unit": "minor faults",
+   "measured": true
+  },
+  {
+   "kind": "faults",
+   "what": "setlocale + printf start-up, release profile, vs origin/next (bound 51)",
+   "before": 52,
+   "after": 49,
+   "unit": "minor faults",
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "per-call spec validation/percall/thread_create.c and count-check script kept in the tree",
+   "before": 0,
+   "after": 1,
+   "unit": "files",
+   "measured": true
+  }
  ],
- "improvement": "the plants file of run 1 depended on host-local scripts in ~/work; a percall spec and count script in the tree let any host rerun the plants and pass private-paths",
+ "improvement": "regen.sh should run the pin check (cargo xtask static hottext) on the list it writes and name the keys that need a fixed boundary, before the 15-minute gate finds them",
  "next_step": "land after DL-TLS-THREADS-2; then DL-16d / DL-19",
  "report_file": "handoff/DL-TLS-THREADS-COST.md",
- "jobs": ["dl-tls-threads-cost-2-gate", "dl-tls-threads-cost-2-plants", "dl-tls-threads-cost-2-percall2"]
+ "jobs": [
+  "dl-tls-threads-cost-2-gate2",
+  "dl-tls-threads-cost-2-plants2",
+  "dl-tls-threads-cost-2-percall3",
+  "dl-tls-threads-cost-2-percall-gettext"
+ ]
 }
