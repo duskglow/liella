@@ -706,7 +706,11 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
     d.keys.store(base + lay.keys, Relaxed);
     d.slots.store(base + lay.keys + KEY_AREA, Relaxed);
     d.tp.store(tp, Relaxed);
-    let creator_mask = CSys.sigprocmask(liella_kernel::uapi::SIG_BLOCK, None).map_or(0, |m| m.0);
+    // The new thread starts with every signal blocked and sets its own mask: the creator blocks
+    // them here, until the clone is made, and the call's old mask is the creator's, the one the
+    // thread inherits unless the attribute names one. One call, not a query and a change.
+    let blocked = CSys.sigprocmask(SIG_SETMASK, Some(&SigSet(!0)));
+    let creator_mask = blocked.as_ref().map_or(0, |m| m.0);
     d.sigmask.store(a.sigmask.unwrap_or(creator_mask), Relaxed);
     let handshake = a.sched.is_some() || a.affinity.is_some();
     if let Some((policy, prio)) = a.sched {
@@ -727,10 +731,11 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
     LOCK_ALONE.store(false, Release);
     list_insert(d);
     LIVE.fetch_add(1, AcqRel);
-    // The new thread starts with every signal blocked and sets its own mask.
-    let all = CSys.sigprocmask(SIG_SETMASK, Some(&SigSet(!0))).unwrap_or(SigSet(creator_mask));
     let r = ffi::liella_machine_clone_thread(CLONE_FLAGS, sp, &b.tid, &b.tid, tp);
-    let _ = CSys.sigprocmask(SIG_SETMASK, Some(&all));
+    // The creator's own mask again (unchanged if blocking failed).
+    if let Ok(old) = blocked {
+        let _ = CSys.sigprocmask(SIG_SETMASK, Some(&old));
+    }
     if r < 0 {
         list_remove(d);
         LIVE.fetch_sub(1, AcqRel);
