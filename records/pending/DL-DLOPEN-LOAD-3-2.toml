@@ -1,0 +1,15 @@
+id = "COMPAT-NEW"
+behaviour = "`dlopen` of `ld.so` by a path other than its start-time name (§27, `s27_1_c_1`; probe P-13, ruling #5126)"
+glibc = "`ld.so` opened by its name or by `/lib64/ld-linux-x86-64.so.2` gives the start-time handle; opened by its real path (`/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2` on the probe host) it gives a different handle, a second object with that `l_name` (probe P-13)"
+liella = "Every path to the start-time `ld.so` gives its start-time handle: a found file is the same object when its `(st_dev, st_ino)` matches (D-27.34 item 2), and the loader never maps a second copy of itself"
+restore = "A tunable read at startup under which a path to `ld.so` that is not the start-time object's name maps a new copy of the file as an ordinary object; ignored in a secure (`AT_SECURE`, setuid/setgid) process, as COMPAT-12 is, because a second loader in the process shares none of the first one's state"
+cost = "none (the flag does not exist; the check would sit on the identity match of a found file, reached only when the match is the start-time `ld.so`)"
+status = "registered"
+decisions = ["D-27.34"]
+story = "DL-DLOPEN-LOAD-3"
+date = "2026-11-13"
+body = '''
+Registered option for ruling #5126 (DL-DLOPEN-LOAD-2 implemented the identity; DL-DLOPEN-LOAD-3 wrote the record).
+Liella's identity of a found file is `(st_dev, st_ino)` for every object (D-27.34 item 2); `ld.so` matched by its
+`DT_SONAME` or by identity is the start-time object (`crates/boundary/src/ld/dlopen.rs`).
+'''

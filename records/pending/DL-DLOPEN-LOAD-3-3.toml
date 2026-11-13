@@ -1,0 +1,15 @@
+id = "COMPAT-NEW"
+behaviour = "Objects whose `e_ehsize` is not the ELF64 header size, 64 (§27, `s27_1_f_0`; reader rule D-27.7, ruling #5294)"
+glibc = "An object with `e_ehsize` 0 loads (gaps probe, `tools/probe/dl/gaps`, ruling #5266); other values were not probed"
+liella = "Refused as malformed: `dlopen` fails with the dlerror text `<file>: malformed ELF object` and maps nothing; a program or startup dependency with such a header is refused at startup (the one ELF reader, D-27.7)"
+restore = "A tunable read at startup that lets the reader ignore `e_ehsize` (the header is read at its fixed ELF64 layout whatever the field says); ignored in a secure (`AT_SECURE`, setuid/setgid) process, as COMPAT-12 is, because it loosens the check of untrusted input"
+cost = "none (the flag does not exist; the check is one compare in the header read, which stays on every load)"
+status = "registered"
+decisions = ["D-27.7"]
+story = "DL-DLOPEN-LOAD-3"
+date = "2026-11-13"
+body = '''
+Registered option for ruling #5294: the reader keeps refusing an `e_ehsize` other than 64 (the secure default for
+malformed input). `dlopen` (DL-DLOPEN-LOAD-2) made the refusal visible to programs. Tests: `bad_ehsize`
+(`crates/ld/tests/elf_reader.rs`); the dlerror text is `liella_ld::dlopen::Refusal::Malformed`.
+'''

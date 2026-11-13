@@ -1,0 +1,4 @@
+# DL-DLOPEN-LOAD-3: plants on this run's changes (the dlerr/liella-ld edge, compose, the #5125 check).
+dlerr-names-liella-ld | crates/boundary/src/dlerr.rs | lit:    compose(text, parts); ==>     let _ = liella_ld::dlopen::bare(b""); compose(text, parts); | cargo test -p xtask --bin xtask a_loader_change | msg:a_loader_change_does_not_select_the_math_suites.*FAILED|is loader code: no liella-math suite
+compose-no-room-for-nul | crates/boundary/src/dlerr.rs | lit:            if n >= room { ==>             if n > room { | cargo test -p liella-boundary --lib dlerr | msg:s27_1_c_5_compose_concatenates_and_cuts_before_the_nul.*FAILED|panicked
+resolvers-per-object | crates/boundary/src/ld/dlopen.rs | lit:            Ok(d) => deferred[i - base] = d, ==>             Ok(d) => { if d { let _ = reloc::relocate_deferred::<Native, _>(&set, i, &mut ProcImage, &mut unique); } } | cargo xtask so && cargo test -p liella-ld --test dlopen | msg:dlopen check Some\(28\) failed

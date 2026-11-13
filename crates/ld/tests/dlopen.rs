@@ -62,6 +62,18 @@ int dl_ok_fn(void) { return 42; }
 ";
 const LIB_GONE: &str = "extern int gone_fn(void); int needs_gone(void) { return gone_fn(); }\n";
 const LIB_UNDEF: &str = "extern int undefined_symbol_xyz; int uses_undef(void) { return undefined_symbol_xyz; }\n";
+/// An IFUNC whose resolver writes one byte to fd 99 by a raw `write` (no relocation of its own),
+/// and an internal call that makes binding it run the resolver.
+const LIB_IFUNC: &str = "static const char mark = 'R';
+static int impl(void) { return 7; }
+static int (*res(void))(void) {
+    long r;
+    __asm__ volatile(\"syscall\" : \"=a\"(r) : \"a\"(1L), \"D\"(99L), \"S\"(&mark), \"d\"(1L) : \"rcx\", \"r11\", \"memory\");
+    return impl;
+}
+int ifn(void) __attribute__((ifunc(\"res\")));
+int use_ifn(void) { return ifn(); }
+";
 
 /// The program: argv[1] is the scratch directory.
 const PROG: &str = r#"#include <dlfcn.h>
@@ -132,15 +144,28 @@ int main(int argc, char **argv) {
     dlopen(at(dir, "missing.so"), RTLD_NOW);
     if (dlopen(at(dir, "libok.so"), RTLD_NOW) != h || dlerror() != NULL) return fail(23, "success clears the text", "text");
     if (!mapped("libok.so")) return fail(24, "loaded object mapped", "absent");
+    /* A set that fails runs no IFUNC resolver, whichever order its objects come in (#5125, probe
+       P-10); the resolver marks fd 99. Then the IFUNC object alone loads and its resolver runs. */
+    int pfd[2]; char b = 0;
+    if (pipe(pfd) != 0 || dup2(pfd[1], 99) != 99 || fcntl(pfd[0], F_SETFL, O_NONBLOCK) != 0) return fail(25, "pipe", "failed");
+    const char *roots[2] = { "libroot_ui.so", "libroot_iu.so" };
+    for (int i = 0; i < 2; i++) {
+        void *r = dlopen(at(dir, roots[i]), RTLD_NOW);
+        const char *e = dlerror();
+        if (r || !e || !strstr(e, "undefined symbol: undefined_symbol_xyz")) return fail(26 + i, "failing set: undefined symbol", e);
+    }
+    if (read(pfd[0], &b, 1) != -1) return fail(28, "no resolver ran in a failing set", "marked");
+    if (!dlopen(at(dir, "libifn.so"), RTLD_NOW) || read(pfd[0], &b, 1) != 1 || b != 'R') return fail(29, "the resolver runs on success", dlerror());
     return 0;
 }
 "#;
 
 /// s27_1_c_1, s27_1_c_5 (plan/ph14/dl-16-dlopen.md §1, §3, §4; dynlink.md "dlerror texts", the gaps
-/// probe; rulings #5126, #5127): `dlopen(NULL)`, a new object with its constructor run once, the same
+/// probe; rulings #5125, #5126, #5127): `dlopen(NULL)`, a new object with its constructor run once, the same
 /// handle for a second open, an `RTLD_NOLOAD` hit and a symlink, `l_name`; every refusal text with
 /// one `dlerror` each, the sweep over every unused mode bit; a failed open (missing dependency,
-/// undefined symbol) leaves nothing mapped; an `RTLD_NOLOAD` miss and a success clear a pending text.
+/// undefined symbol) leaves nothing mapped and runs no IFUNC resolver in either dependency order (s27_1_f_0,
+/// probe P-10); an `RTLD_NOLOAD` miss and a success clear a pending text.
 #[test]
 fn s27_1_c_1_dlopen_loads_and_refuses_with_texts() {
     let Some((d, ld, libc, crt1)) = setup("texts") else { return };
@@ -151,6 +176,12 @@ fn s27_1_c_1_dlopen_loads_and_refuses_with_texts() {
     cc(&d, "libneedsgone.so", LIB_GONE, &["-nostdlib", "-fPIC", "-shared", "-Wl,--no-as-needed", &format!("-L{dir}"), "-l:libGone.so"]);
     std::fs::remove_file(d.join("libGone.so")).unwrap();
     cc(&d, "libundef.so", LIB_UNDEF, &["-nostdlib", "-fPIC", "-shared"]);
+    cc(&d, "libifn.so", LIB_IFUNC, &["-nostdlib", "-fPIC", "-shared"]);
+    let rpath = format!("-Wl,-rpath,{dir}");
+    for (root, first, second) in [("libroot_ui.so", "libundef.so", "libifn.so"), ("libroot_iu.so", "libifn.so", "libundef.so")] {
+        let (a, b) = (format!("-l:{first}"), format!("-l:{second}"));
+        cc(&d, root, "int root_fn(void) { return 0; }\n", &["-nostdlib", "-fPIC", "-shared", "-Wl,--no-as-needed", &format!("-L{dir}"), &rpath, &a, &b]);
+    }
     // No PT_DYNAMIC: the valid object with that header retyped to PT_NULL.
     let mut nodyn = std::fs::read(d.join("libok.so")).unwrap();
     let elf = Elf::parse::<Native>(&nodyn).unwrap();
