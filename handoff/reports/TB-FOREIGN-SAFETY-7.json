@@ -1,0 +1,16 @@
+{"task": "TB-FOREIGN-SAFETY-7", "model": "opus", "tokens": null,
+ "result": "foreign path of the one-access locale entries is now a tail call (no push/pop): +4..+7 -> +4 per call vs next in the Fast-profile counts; #4779's +2 not reached: the cmpb fold needs a non-atomic read (unsafe category ruling), and percall's Fast products add a GOT load the Release build does not have",
+ "branch": "task/tb-foreign-safety-7", "head": "e8c366306",
+ "gate": {"affected": "see tb-foreign-safety-7-gate-4 (mei)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "cmpb fold of the D-X.58 gate needs a non-atomic read of the write-once byte OWNED_HERE (unsafe outside every S2 category)", "recommendation": "a narrow unsafe category (process-flag: non-atomic read of a byte written only before the first thread; thread.rs only): +3 -> +2 in Release; else accept +3"},
+  {"item": "wl_percall/wl_prep count Fast-profile products (plain cargo xtask so), which read OWNED_HERE through the GOT (+1) unlike the shipped Release build", "recommendation": "wl_prep builds with LIELLA_FULL_PROFILE=1 and keys the product cache by profile"}
+ ],
+ "informational": ["846 of 846 reads of the atomic bytes OWNED_HERE/LOCK_ALONE in release libc.a are movzbl+test: LLVM folds no atomic load (Relaxed included) into cmpb",
+                   "plants-1/-3 had view-ungated SURVIVED after towupper left view(); the test now asks view()'s address (plants-4 4/4 CAUGHT)"],
+ "refused": [],
+ "improvement": "percall measures the Fast profile while instruction limits are judged on it; a profile mismatch hid where the gate's cost came from for two runs",
+ "next_step": "after the cmpb ruling: non-atomic owned() read, check release disassembly for cmpb, count again (Release products if the tooling ruling lands)",
+ "report_file": "handoff/TB-FOREIGN-SAFETY.md",
+ "jobs": ["tb-foreign-safety-7-gate-4", "tb-foreign-safety-7-plants-4", "tb-foreign-safety-7-percall-3", "tb-foreign-safety-7-lint-4"]}

@@ -1,0 +1,12 @@
+{"task": "DL-LIBC-START-5", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: ld.so exports __libc_stack_end; dynamic subset links via a libc.so script (host libc_nonshared.a) and passes; a real bug found: a program's __fpu_control is not applied under Liella's ld.so (sym___fpu_control dynamic red)",
+ "branch": "task/dl-libc-start-5", "head": "8a228f3db",
+ "gate": {"affected": "not run (gate2 stopped: fpu_control step known red); dynamic subset green in plants baseline", "peak": null},
+ "accepted_first_attempt": false,
+ "rulings": [{"item": "Liella libc_nonshared.a product and installed libc.so linker script", "recommendation": "add as a product story; subset uses the host archive until then"}],
+ "informational": ["dynamic __fpu_control hook broken under Liella ld.so (0x37f at main, want 0x27f)", "s23_timefmt fails check 75 on the reference", "s12_stdio_front checks a recorded difference, static-only", "one heredoc used for a python edit"],
+ "refused": [],
+ "improvement": "a subset that claims an oracle must be run on the oracle when it is written: three of its programs had never passed on glibc",
+ "next_step": "find why libc.so.6 reads its own __fpu_control under Liella ld.so (readelf -r libc.so.6; ld.so scope order), fix, rerun ~/work/DL-LIBC-START-5/gate.sh and plants",
+ "report_file": "handoff/DL-LIBC-START-5-report.md",
+ "jobs": ["dl-libc-start-5-step0", "dl-libc-start-5-counts-base", "dl-libc-start-5-counts-head"]}

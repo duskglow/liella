@@ -1,0 +1,11 @@
+{"task": "LIBM-DIRECTED-INPLACE-3", "model": "opus", "tokens": null,
+ "result": "exp_upward stall named (h selected from the MXCSR value as data serialised calls) and fixed by a const-generic direction: Zen 1 unbooked 68.3 -> 22.4 ns (glibc 18.2, was 4.8x now 1.2x); plants 3/3",
+ "branch": "task/libm-directed-inplace-3", "head": null,
+ "gate": {"affected": "gate2 on the final head: see hand-back", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Every libm entry's per-call stmxcsr costs ~20 TSC ticks reciprocal throughput on Zen 1 (probe); a cheaper env check is a separate design story", "booked timing on Ivy Bridge and N100 not done"],
+ "refused": [],
+ "improvement": "a small hardware probe plus one disassembly named the stall before any redesign; bench --build-only needs --compare",
+ "next_step": "booked timing (Ivy Bridge, N100) of exp/exp_upward; LIBM-DIRECTED-INPLACE-4 for log, sin, pow with direction as a const generic",
+ "report_file": "handoff/LIBM-DIRECTED-INPLACE-3-report.md",
+ "jobs": ["libm-directed-inplace-3-gate2", "libm-directed-inplace-3-lint2", "libm-directed-inplace-3-plants", "libm-directed-inplace-3-t4"]}

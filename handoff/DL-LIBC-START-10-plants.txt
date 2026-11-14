@@ -1,0 +1,3 @@
+# DL-LIBC-START-10: TscGate::fresh is inlined into its caller in every build (fast profile, the gate's), so the first
+# mktime after localtime_r takes no page fault on this branch's layout.
+fresh-not-forced-inline | crates/legacy/src/recheck.rs | lit:    #[inline(always)] ==> | cargo xtask so && cargo test -p liella --test hot_text_products init_first_mktime_after_localtime_r_takes_no_fault | msg:init_first_mktime_after_localtime_r_takes_no_fault.*(FAILED|panicked)|first mktime after localtime_r: [1-9]

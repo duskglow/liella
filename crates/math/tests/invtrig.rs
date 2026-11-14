@@ -11,7 +11,11 @@
 use liella_boundary::posix::s10_math_gen as m;
 use liella_boundary::selftest;
 use liella_math::status::Rounding;
+use liella_math::hwop::SoftOps;
 use liella_math::{invtrig, pow, trig};
+
+#[path = "support/hypot_pairs.rs"]
+mod hypot_pairs;
 
 type K1 = fn(f64) -> Option<f64>;
 type K2 = fn(f64, f64) -> Option<f64>;
@@ -42,7 +46,7 @@ fn accurate1(f: &str, x: f64) -> f64 {
 }
 
 fn accurate2(f: &str, a: f64, b: f64) -> f64 {
-    if f == "atan2" { trig::atan2::<f64>(a, b, Rounding::Nearest).0 } else { pow::hypot::<f64>(a, b, Rounding::Nearest).0 }
+    if f == "atan2" { trig::atan2::<f64>(a, b, Rounding::Nearest).0 } else { pow::hypot_exact::<f64>(a, b, Rounding::Nearest).0 }
 }
 
 fn entry1(f: &str, x: f64) -> f64 {
@@ -291,4 +295,34 @@ fn double_atan_quick_phase_answers_alone_and_agrees_with_the_multiprecision_atan
     }
     // The test refuses about 2^-8 of operands (EPS = 2^-62 against a 2^-63 bound).
     assert!(answered * 100 > total * 98, "quick phase answered only {answered} of {total}: quick phase FAILED");
+}
+
+/// The `double` kernel `invtrig::hypot_rounded` (D-10.104) on the software root (`SoftOps`; the
+/// boundary's test runs the hardware root) is the exact path (D-10.13) in every direction, value bits, flags and `errno`, and the fast entry gives its nearest result in both
+/// builds: bit patterns, near-binade pairs at every magnitude, the gap boundary (26/27/28), ties
+/// (triples with an odd 54-bit hypotenuse) and exact roots at several scales, overflow at
+/// `DBL_MAX`, two subnormals (the `2^-1022` tininess edge) and a subnormal beside a normal.
+#[test]
+fn double_hypot_kernel_is_the_exact_path_in_every_direction() {
+    // Clauses: s10_3_c_0 (D-10.104).
+    let v = hypot_pairs::hard_pairs();
+    let modes = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
+    for &(x, y) in &v {
+        for (x, y) in [(x, y), (-y, x)] {
+            for mode in modes {
+                let (w, ws) = pow::hypot_exact::<f64>(x, y, mode);
+                let (g, gs) = invtrig::hypot_rounded::<SoftOps>(x, y, mode).expect("a finite pair");
+                assert!(g.to_bits() == w.to_bits() && gs == ws, "hypot({x:e}, {y:e}) {mode:?}: kernel {g:e} {gs:?}, exact {w:e} {ws:?}: kernel FAILED");
+            }
+            let w = pow::hypot_exact::<f64>(x, y, Rounding::Nearest).0;
+            if let Some(f) = invtrig::hypot_nearest(x, y, f64::sqrt) {
+                assert_eq!(f.to_bits(), w.to_bits(), "hypot({x:e}, {y:e}): fast entry {f:e}, exact {w:e}: fast FAILED");
+            }
+            for fma in builds() {
+                selftest::set_math_fma(fma);
+                assert_eq!(m::hypot(x, y).to_bits(), w.to_bits(), "hypot({x:e}, {y:e}) by the entry (fma {fma}): entry FAILED");
+            }
+        }
+    }
+    selftest::set_math_fma(false);
 }

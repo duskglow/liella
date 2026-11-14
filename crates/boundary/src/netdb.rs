@@ -95,17 +95,22 @@ fn without_switch<R>(f: impl FnOnce(&Ctx<'_, CSys>) -> R) -> R {
 
 /// `__h_errno_location()`: the address of this thread's `h_errno`.
 pub fn h_errno_location() -> *mut c_int {
-    core::ptr::with_exposed_provenance_mut(tb::tp().wrapping_add(H_ERRNO_OFFSET))
+    // D-X.58: the block's word only in a process the runtime started (no ABI fixes h_errno's
+    // place: programs reach it through this function), else the thread's registry words.
+    if crate::thread::owned() {
+        return core::ptr::with_exposed_provenance_mut(tb::tp().wrapping_add(H_ERRNO_OFFSET));
+    }
+    core::ptr::from_ref(&crate::thread::foreign_words().h_errno).cast::<c_int>().cast_mut()
 }
 
 /// This thread's `h_errno`.
 pub fn h_errno() -> i32 {
-    tb::current().h_errno.load(Relaxed)
+    crate::thread::words().h_errno.load(Relaxed)
 }
 
 /// Set this thread's `h_errno`.
 pub fn set_h_errno(v: i32) {
-    tb::current().h_errno.store(v, Relaxed);
+    crate::thread::words().h_errno.store(v, Relaxed);
 }
 
 /// The `h_errno` of a failure (an argument error is `NETDB_INTERNAL`).

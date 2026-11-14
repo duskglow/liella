@@ -20,11 +20,16 @@
 //!   with `fast64::log_dd`'s proved `eps_ln`. Bound: `eps = 2^-90·|y| + 0.64·eps_ln·|A or J1|`
 //!   (`J0`: `2^-90` absolute), plus an absolute `2^-1068` for `J1` (where `|y|·2^-90` and the
 //!   roundings of the last operations fall below `2^-1022`, their errors are absolute: at most
-//!   `2^-1075` each). Below `2^-1000` `y0`, `y1` decline (overflowing results are the 384-bit
-//!   path's). Below `2^-27` the entries skip the series: `j0` is 1 moved down by
-//!   `x²/4 < 2^-56`, less than a quarter of the last place below 1, and `j1` is `x/2` moved
-//!   toward 0 by less than `2^-56·|x/2|` (`wide::beside`); `j1` declines below `2^-1021`, where
-//!   `x/2` is subnormal.
+//!   `2^-1075` each).
+//! * `x < 2^-27` (the tiny band, D-10.110; D-10.106's leading series terms in double-double):
+//!   `j0` is 1 moved down by `x²/4 < 2^-56`, under a quarter of the last place below 1, and `j1`
+//!   is `x/2` moved toward 0 by less than `2^-56·|x/2|`: both read off the bits, `j1` below
+//!   `2^-1021` (subnormal results) through `float::round` from `(2m − 1)·2^-1076` and a sticky
+//!   bit. `Y0 = (2/π)·ln x + C_0 + z·(C_1 − (2/π)·ln x/4)` and
+//!   `Y1 = −(2/π)/x + x·((2/π)·ln x/2 + D_0)` (the series above to first order in `z`; dropped
+//!   terms below `2^-98` relative), `ln x` by `fast64::log_dd` (a subnormal `x` scaled by 2^128
+//!   first), `Y1` carried as `Y1·2^-128` and settled with that scale; below `Y1_OVERFLOW` every
+//!   mode overflows (`elem::overflow`).
 //! * `2^-5 <= x < 32`: `BESSEL_T`, 16 slots a binade, Taylor rows at the slot centre `c`
 //!   (`t = x − c` exact, `|t| <= 2^e/32`), evaluated as `fast_special`'s rows are (`f64` Horner
 //!   from `p_D` to `p_M`, then `M` double-double steps, then Fast2Sum); each row's last entry is
@@ -58,9 +63,7 @@ use core::cmp::Ordering;
 use crate::coeffs::tables as t;
 use crate::dd::{self, fast_two_sum, two_prod, two_sum, Dd};
 use crate::fast64;
-use crate::mp::Mp;
-use crate::status::{Rounding, Status};
-use crate::wide::beside;
+use crate::status::{Flags, Rounding, Status};
 
 /// 2^-5: the series below, `BESSEL_T` from here.
 pub const SMALL: f64 = f64::from_bits(0x3fa0_0000_0000_0000);
@@ -84,6 +87,17 @@ const E104: f64 = f64::from_bits(0x3970_0000_0000_0000);
 const S64: f64 = f64::from_bits(0x43f0_0000_0000_0000);
 /// `2/π` rounded up (by more than its last place), for the logarithm's share of the bound.
 const K_UP: f64 = core::f64::consts::FRAC_2_PI * 1.0001;
+/// 2^128 and 2^-128: the tiny band's exact scalings (subnormal operands, `Y1` near overflow).
+const S128: f64 = f64::from_bits(0x47f0_0000_0000_0000);
+const S128_INV: f64 = f64::from_bits(0x37f0_0000_0000_0000);
+/// `ln 2` as a double-double (within 2^-107).
+const LN2_DD: [u64; 2] = [0x3fe6_2e42_fefa_39ef, 0x3c7a_bc9e_3b39_803f];
+/// `⌊(2/π)·2^50·(1 − 2^-40)⌋·2^-1074`: below it `|Y1| > (2/π)/x > 2^1024·(1 + 2^-40)`, an
+/// overflow in every mode.
+const Y1_OVERFLOW: f64 = f64::from_bits(716_770_142_402_180);
+/// `Y1_OVERFLOW` plus 2^22 units: from here `|Y1| < 2^1024·(1 − 2^-27)`, so `fast64::settle`
+/// (which raises no overflow) never meets an overflowing result; between the two, the 384-bit path.
+const Y1_SAFE: f64 = f64::from_bits(716_770_142_402_180 + (1 << 22));
 
 const M: usize = t::BESSEL_T_DD;
 const D: usize = t::BESSEL_T_DEG;
@@ -174,16 +188,78 @@ fn mirrored(mode: Rounding) -> Rounding {
     }
 }
 
-/// `y` (within `eps`) correctly rounded in `mode`, or `None`.
-fn round(y: Dd, eps: f64, mode: Rounding) -> Option<(f64, Status)> {
+/// `y·2^m` (`y` within `eps`) correctly rounded in `mode`, or `None`.
+fn round(y: Dd, eps: f64, m: i32, mode: Rounding) -> Option<(f64, Status)> {
     if eps.partial_cmp(&dd::abs(y.hi)) != Some(Ordering::Less) {
         return None;
     }
     if y.hi < 0.0 {
-        fast64::settle(y.neg(), eps, 0, mirrored(mode)).map(|(v, st)| (-v, st))
+        fast64::settle(y.neg(), eps, m, mirrored(mode)).map(|(v, st)| (-v, st))
     } else {
-        fast64::settle(y, eps, 0, mode)
+        fast64::settle(y, eps, m, mode)
     }
+}
+
+/// `v` (positive, normal) moved toward 0 by less than a quarter of its last place, signed by
+/// `neg`: `v` or its neighbour toward 0, inexact (`J0` below 1, `J1` inside `x/2`).
+fn below(v: f64, neg: bool, mode: Rounding) -> (f64, Status) {
+    let inward = match mode {
+        Rounding::Zero => true,
+        Rounding::Down => !neg,
+        Rounding::Up => neg,
+        Rounding::Nearest => false,
+    };
+    let r = if inward { f64::from_bits(v.to_bits() - 1) } else { v };
+    (if neg { -r } else { r }, Status::flags(Flags::INEXACT))
+}
+
+/// `j1(x)` for `0 < |x| < 2^-1021`: `|x|/2 = m·2^-1075` (`m` the bits of `|x|`, its significand
+/// at the scale 2^-1074 on both sides of 2^-1022) moved toward 0 by far less than 2^-1076, so
+/// `|J1|` lies strictly between `(2m − 1)·2^-1076` and `2m·2^-1076`: rounded from there by
+/// [`crate::float::round`] (subnormal results with underflow, `ERANGE` only for 0).
+fn j1_subnormal(x: f64, mode: Rounding) -> (f64, Status) {
+    let m = u128::from(dd::abs(x).to_bits());
+    let e = crate::float::Exact { neg: x < 0.0, sig: 2 * m - 1, exp: -1076, sticky: true };
+    let (r, flags) = crate::float::round::<f64>(e, mode);
+    (r, crate::float::range_errno(r, Status::flags(flags)))
+}
+
+/// `ln x` as `(y, eps)` for `0 < x < 2^-27`: [`fast64::log_dd`], a subnormal `x` scaled by 2^128
+/// first (exact) and `128·ln 2` taken off (`|y| > 18`: the subtraction's rounding and
+/// `LN2_DD`'s `128·2^-107` stay below `2^-95·|y|`).
+fn ln_tiny(x: f64) -> Option<(Dd, f64)> {
+    if x >= f64::MIN_POSITIVE {
+        return fast64::log_dd(x);
+    }
+    let (l, e) = fast64::log_dd(x * S128)?;
+    let y = l.sub(Dd::of(LN2_DD).scale(128.0));
+    Some((y, e + dd::abs(y.hi) * E95))
+}
+
+/// `Y0` for `0 < x < 2^-27` as `(y, eps)`: `(2/π)·ln x·A(z) + C(z)` to first order in `z = x²`,
+/// `(2/π)·ln x + C_0 + z·(C_1 − (2/π)·ln x/4)` (`z < 2^-54`; the dropped terms are below
+/// `z²·(|ln x|/64 + 1) < 2^-98` against `|Y0| > 11`, the correction's roundings below 2^-100).
+fn y0_tiny(x: f64) -> Option<(Dd, f64)> {
+    let (l, el) = ln_tiny(x)?;
+    let c = &t::BESSEL_SMALL[2];
+    let kl = Dd::of(t::TWO_OVER_PI_DD).mul(l);
+    let corr = x * x * (f64::from_bits(c[1][0]) - 0.25 * kl.hi);
+    let y = kl.add(Dd::of(c[0])).add(Dd::from(corr));
+    Some((y, K_UP * el * 1.01 + dd::abs(y.hi) * E90))
+}
+
+/// `Y1·2^-128` for `Y1_OVERFLOW <= x < 2^-27` as `(y, eps)`: `−(2/π)/x + x·((2/π)·ln x/2 + D_0)`,
+/// the first-order form of `−(2/π)/x + (2/π)·ln x·J1 + x·D(z)` (the next terms below `2^-100`
+/// relative: `|Y1| > 2^26`); the quotient as `(2/π)/(x·2^128)` (exact scaling, below 2^946,
+/// inside Dekker's range), the correction scaled by 2^-128 (absolute errors of 2^-1075 where it
+/// is subnormal, against `|y| > 2^-102`).
+fn y1_tiny(x: f64) -> Option<(Dd, f64)> {
+    let (l, el) = ln_tiny(x)?;
+    let k = Dd::of(t::TWO_OVER_PI_DD);
+    let d0 = f64::from_bits(t::BESSEL_SMALL[3][0][0]);
+    let xs = x * S128_INV;
+    let y = k.div(Dd::from(x * S128)).neg().add(Dd::from(xs * (0.5 * k.hi * l.hi + d0)));
+    Some((y, K_UP * el * xs + dd::abs(y.hi) * E90))
 }
 
 /// `f(x)` for `x >= 2^-1000` (`f` as in [`table_kernel`]) as `(y, eps)`.
@@ -203,10 +279,10 @@ pub fn kernel(f: usize, x: f64) -> Option<(Dd, f64)> {
 pub fn j0(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     let ax = dd::abs(x);
     if ax < NEAR_SERIES {
-        return Some(beside::<f64>(Mp::from_i64(1), false, mode));
+        return Some(below(1.0, false, mode));
     }
     let (y, eps) = kernel(0, ax)?;
-    round(y, eps, mode)
+    round(y, eps, 0, mode)
 }
 
 /// `j1(x)` for a finite nonzero `x`, or `None`.
@@ -215,26 +291,35 @@ pub fn j1(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     if ax < NEAR_SERIES {
         // `J1(x) = (x/2)·(1 − x²/8 + ...)`: `x/2` (exact and normal from 2^-1021) moved toward 0
         // by less than `2^-56` of itself, under a quarter of its last place.
-        return if ax < J1_HALF { None } else { Some(beside::<f64>(Mp::from_f64(x * 0.5), false, mode)) };
+        // At 2^-1021 the neighbour of `x/2 = 2^-1022` toward 0 is subnormal: rounded with underflow.
+        return Some(if ax <= J1_HALF { j1_subnormal(x, mode) } else { below(ax * 0.5, x < 0.0, mode) });
     }
     let (y, eps) = kernel(1, ax)?;
-    round(if x < 0.0 { y.neg() } else { y }, eps, mode)
+    round(if x < 0.0 { y.neg() } else { y }, eps, 0, mode)
 }
 
 /// `y0(x)` for a finite `x > 0`, or `None`.
 pub fn y0(x: f64, mode: Rounding) -> Option<(f64, Status)> {
-    if x < TINY {
-        return None;
-    }
-    let (y, eps) = kernel(2, x)?;
-    round(y, eps, mode)
+    let (y, eps) = if x < NEAR_SERIES { y0_tiny(x)? } else { kernel(2, x)? };
+    round(y, eps, 0, mode)
 }
 
 /// `y1(x)` for a finite `x > 0`, or `None`.
 pub fn y1(x: f64, mode: Rounding) -> Option<(f64, Status)> {
-    if x < TINY {
-        return None;
+    if x < NEAR_SERIES {
+        if x < Y1_OVERFLOW {
+            return Some(crate::elem::overflow::<f64>(true, mode));
+        }
+        if x < Y1_SAFE {
+            return None;
+        }
+        let (y, eps) = y1_tiny(x)?;
+        return round(y, eps, 128, mode);
     }
     let (y, eps) = kernel(3, x)?;
-    round(y, eps, mode)
+    round(y, eps, 0, mode)
 }
+
+/// `jn`, `yn` and their `float` forms for orders `|n| >= 2` (LIBM-F64-BESSEL-N).
+#[path = "fast_bessel_n.rs"]
+pub mod n;

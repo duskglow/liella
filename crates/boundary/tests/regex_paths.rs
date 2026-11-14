@@ -51,6 +51,10 @@ fn the_expected_execution_path_runs() {
     // one-pass walk collects the groups (the RE-SEARCH merge fix).
     let mut swap = compile("([a-z]+) ([0-9]+)", POSIX_EXTENDED, false);
     assert_eq!(run(&mut swap, line, 0, n), (vec![Path::SpanOnePass, Path::GnuEngine], 0), "swap");
+    // An optional grouped iteration (`ENTER` with its skip and group fused in, REGCOMP-SCOPE-COST-2):
+    // still one-pass, and the walk leaves the loop by the skip after the last `a`.
+    let mut star = compile("(a)*b", POSIX_EXTENDED, false);
+    assert_eq!(run(&mut star, "xaab", 0, 4), (vec![Path::SpanOnePass, Path::GnuEngine], 1), "star");
     // Without a match in the text: still the span path decides.
     assert_eq!(run(&mut swap, "no digits here", 0, 14), (vec![Path::GnuEngine], -1), "swap, no match");
     // sed 's/\.so$/.a/': an end-anchored literal: the tail compare answers alone, no DFA or engine

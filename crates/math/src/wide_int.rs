@@ -4,8 +4,9 @@
 //! every value within `2^-92` of the approximation rounds alike in the caller's direction, that
 //! rounding is the correctly rounded result; the four directions are four integer roundings (no
 //! MXCSR or x87 control-word traffic, so directed modes cost the same). Otherwise (about `2^-26`
-//! of the operands) the caller takes the 384-bit route of [`crate::wide`]. Only the format with a
-//! 64-bit significand uses the tier; the integer kernel is the one `_Float128` extends by a limb.
+//! of the operands) the caller takes the 384-bit route of [`crate::wide`]. The format with a
+//! 64-bit significand uses this kernel; `_Float128` uses [`quad`], the same method on three limbs
+//! (D-10.85), which shares the `2/π` table, the `SC` table and the products here.
 //!
 //! Method. Payne-Hanek reduction (M. Payne, R. Hanek, "Radian reduction for trigonometric
 //! functions", SIGNUM Newsletter 18(1), 1983) for every operand, Tang's table method (P. T. P.
@@ -60,6 +61,9 @@
     clippy::unreadable_literal
 )] // fixed-point words, exponents and table indices of bounded range (each noted where it is formed)
 
+pub(crate) mod arc;
+pub(crate) mod quad;
+
 use crate::coeffs::tables as t;
 use crate::float::{Float, Kind, Num};
 use crate::status::{Flags, Rounding, Status};
@@ -71,7 +75,7 @@ const B: u32 = 92;
 const ERR: u64 = (1 << (128 - B)) + 4;
 /// `|d|` below `2^-92` (the top 128 bits of its 256-bit form below `2^36`) is refused.
 const MIN_D: u128 = 1 << 36;
-const M64: u128 = (1 << 64) - 1;
+pub(crate) const M64: u128 = (1 << 64) - 1;
 
 // The series of `sin(πd/2)/d` and `cos(πd/2)` in `u = d²` (step 3), each coefficient rounded to
 // nearest in the units noted.
@@ -90,6 +94,9 @@ const C1: u128 = 0x4ef4f326_f9177969_2b71366c_c0460d64; // (π/2)^2/2!, units 2^
 /// sends the caller to the 384-bit route. `n` is finite, nonzero and at least `2^-34` in
 /// magnitude (smaller operands are settled by the caller).
 pub(crate) fn sin_cos<F: Float>(n: &Num, cos: bool, mode: Rounding) -> Option<(F, Status)> {
+    if F::PREC == 113 {
+        return quad::sin_cos::<F>(n, cos, mode);
+    }
     if F::PREC != 64 || !F::EXPLICIT {
         return None;
     }
@@ -97,9 +104,61 @@ pub(crate) fn sin_cos<F: Float>(n: &Num, cos: bool, mode: Rounding) -> Option<(F
     round::<F>(neg, m, e, mode)
 }
 
+/// The sine and the cosine as a tier gives each: the rounded result and its status, or `None`
+/// where the tier refuses.
+pub(crate) type Pair<F> = (Option<(F, Status)>, Option<(F, Status)>);
+
+/// `(sin x, cos x)` as [`sin_cos`] gives each (the same operations on the same values, so the
+/// same result or refusal), from one reduction and one evaluation of each series (`sincos`,
+/// LIBM-SINCOS-SHARED, D-10.89; binary128 through [`quad::sin_and_cos`], D-10.91). Same
+/// precondition on `n`.
+pub(crate) fn sin_cos_pair<F: Float>(n: &Num, mode: Rounding) -> Pair<F> {
+    if F::PREC == 113 {
+        if let Some(pair) = quad::sin_and_cos::<F>(n, mode) {
+            return pair;
+        }
+    }
+    if F::PREC != 64 || !F::EXPLICIT {
+        return (sin_cos::<F>(n, false, mode), sin_cos::<F>(n, true, mode));
+    }
+    let Some(r) = reduced(n) else {
+        return (None, None);
+    };
+    let (sd, c) = (mulhi(r.d, sin_poly(r.u, r.u1)), cos_poly(r.u, r.u1));
+    let ys = place(&r, n.neg, false, || sd, || c);
+    let yc = place(&r, n.neg, true, || sd, || c);
+    (round::<F>(ys.0, ys.1, ys.2, mode), round::<F>(yc.0, yc.1, yc.2, mode))
+}
+
 /// `(sign, M, E)` with `M` in `[2^127, 2^128)` and `±M·2^E` within `2^-94` (relative) of `sin x`
 /// (`cos x`), or `None` outside the range of step 1 or for `|d| < 2^-92` (step 2).
 fn kernel(n: &Num, cos: bool) -> Option<(bool, u128, i32)> {
+    let r = reduced(n)?;
+    Some(place(&r, n.neg, cos, || mulhi(r.d, sin_poly(r.u, r.u1)), || cos_poly(r.u, r.u1)))
+}
+
+/// Steps 1 and 2 for `|x|`, shared by sine and cosine: the quadrant and table index, `|d|`
+/// normalised and `d²`.
+struct Reduced {
+    /// `q mod 4`.
+    q: u32,
+    /// `f < 0`.
+    negf: bool,
+    /// `j = round(128|f|)`, in `[0, 64]`.
+    j: usize,
+    /// `d < 0`.
+    sd: bool,
+    /// `|d| = d·2^(-128-kd)`, `7 <= kd <= 91`.
+    kd: u32,
+    d: u128,
+    /// `d²`, units `2^-142`, and its high word (units `2^-78`).
+    u: u128,
+    u1: u64,
+}
+
+/// [`Reduced`] for `|x|`, or `None` outside the range of step 1 or for `|d| < 2^-92`.
+#[inline(always)]
+fn reduced(n: &Num) -> Option<Reduced> {
     if n.kind != Kind::Finite || n.sig == 0 || n.sig >> 64 != 0 {
         return None;
     }
@@ -110,10 +169,6 @@ fn kernel(n: &Num, cos: bool) -> Option<(bool, u128, i32)> {
         return None;
     }
     let (q, negf, gh, gl) = reduce(m, e);
-    // sin|x| = sin(qπ/2 + a), cos|x| = sin((q + 1)π/2 + a); an odd quadrant takes cos a.
-    let k = q + u32::from(cos);
-    let odd = k & 1 != 0;
-    let neg = (!cos && n.neg) ^ (k & 2 != 0) ^ (!odd && negf);
     // j = round(128|f|), d = |f| - j/128 (256 bits; the high word as a signed value).
     let j = ((gh + (1 << 120)) >> 121) as usize; // gh <= 2^127: j <= 64
     let dh = gh.wrapping_sub((j as u128) << 121);
@@ -130,29 +185,41 @@ fn kernel(n: &Num, cos: bool) -> Option<(bool, u128, i32)> {
     let d = (dh << kd) | (dl >> (128 - kd)); // |d| = d·2^(-128-kd)
     let u = mulhi(d, d).checked_shr(2 * kd - 14).unwrap_or(0); // d², units 2^-142
     let u1 = (u >> 64) as u64; // units 2^-78
-    if j == 0 {
-        return Some(if odd {
-            let c = cos_poly(u, u1); // units 2^-127
+    Some(Reduced { q, negf, j, sd, kd, d, u, u1 })
+}
+
+/// Step 3 for sine (`cos` false) or cosine of `x` (sign `xneg`) from `r`: `(sign, M, E)` as
+/// [`kernel`]. `sd()` is `mulhi(d, sin_poly(u, u1))`, `c()` is `cos_poly(u, u1)`; each is called
+/// at most once, and only where the result needs it.
+#[inline(always)]
+fn place(r: &Reduced, xneg: bool, cos: bool, sd: impl FnOnce() -> u128, c: impl FnOnce() -> u128) -> (bool, u128, i32) {
+    // sin|x| = sin(qπ/2 + a), cos|x| = sin((q + 1)π/2 + a); an odd quadrant takes cos a.
+    let k = r.q + u32::from(cos);
+    let odd = k & 1 != 0;
+    let neg = (!cos && xneg) ^ (k & 2 != 0) ^ (!odd && r.negf);
+    if r.j == 0 {
+        return if odd {
+            let c = c(); // units 2^-127
             let l = c.leading_zeros();
             (neg, c << l, -127 - l as i32)
         } else {
-            let s = mulhi(d, sin_poly(u, u1)); // s·2^(-126-kd)
+            let s = sd(); // s·2^(-126-kd)
             let l = s.leading_zeros();
-            (neg, s << l, -126 - kd as i32 - l as i32)
-        });
+            (neg, s << l, -126 - r.kd as i32 - l as i32)
+        };
     }
-    let s = mulhi(d, sin_poly(u, u1)) >> (kd - 7); // S(|d|), units 2^-133
-    let c = cos_poly(u, u1); // C(d), units 2^-127
-    let [sj, cj] = SC[j - 1];
-    let r = if odd {
+    let s = sd() >> (r.kd - 7); // S(|d|), units 2^-133
+    let c = c(); // C(d), units 2^-127
+    let [sj, cj] = SC[r.j - 1];
+    let v = if odd {
         let (a, b) = (mulhi(cj, c), mulhi(sj, s) >> 6);
-        if sd { a + b } else { a - b }
+        if r.sd { a + b } else { a - b }
     } else {
         let (a, b) = (mulhi(sj, c), mulhi(cj, s) >> 6);
-        if sd { a - b } else { a + b }
+        if r.sd { a - b } else { a + b }
     }; // units 2^-127, at least sin(π/512)
-    let l = r.leading_zeros();
-    Some((neg, r << l, -127 - l as i32))
+    let l = v.leading_zeros();
+    (neg, v << l, -127 - l as i32)
 }
 
 /// Word `i` of the bits of `2/π` behind two zero words (bit `j` of `2/π` at bit `j + 127`).
@@ -192,20 +259,37 @@ fn reduce(m: u64, e: i32) -> (u32, bool, u128, u128) {
 
 /// `⌊a·b/2^128⌋` less at most 2 (the low product and two carries dropped).
 #[inline]
-fn mulhi(a: u128, b: u128) -> u128 {
+pub(crate) fn mulhi(a: u128, b: u128) -> u128 {
     let (ah, al, bh, bl) = (a >> 64, a & M64, b >> 64, b & M64);
     ah * bh + ((ah * bl) >> 64) + ((al * bh) >> 64)
 }
 
 /// `⌊a·b/2^64⌋` less at most 1.
 #[inline]
-fn mul_wide(a: u128, b: u64) -> u128 {
+pub(crate) fn mul_wide(a: u128, b: u64) -> u128 {
     let b = u128::from(b);
     (a >> 64) * b + (((a & M64) * b) >> 64)
 }
 
+/// `v as u64` for an integer-valued `v` in `[2^52, 2^64]` (`2^64` gives `2^64 − 1`, as `as` saturates),
+/// read from the bits: no SSE conversion. `as u64` of a value at or above `2^63` converts it
+/// signed first, which overflows and raises the invalid flag in MXCSR on every call; the
+/// envelope's exit drops that flag again with an MXCSR write, and on Ivy Bridge the next call's
+/// MXCSR read then stalls in microcode (LIBM-LD-ARC-RETHINK-2's attribution: ~58 microcode uops a
+/// call, successive asinl calls no longer overlapping). The root's seed `s0` and its reciprocal
+/// lie in `[2^63, 2^64]` on every call; arc's `div` and quad's `div3` reciprocals reach `2^63` when
+/// the divisor's top word is below `2^63 + 2^11`, and arc's `soft_sqrt` passes `[2^52, 2^54)` (D-10.95).
+#[inline(always)]
+pub(crate) fn big_u64(v: f64) -> u64 {
+    debug_assert!(v >= (1u64 << 52) as f64);
+    let b = v.to_bits();
+    let sh = ((b >> 52) as u32).wrapping_sub(1075); // v = m·2^sh, sh in [0, 12]
+    let m = (b & ((1 << 52) - 1)) | (1 << 52);
+    if sh >= 12 { u64::MAX } else { m << sh }
+}
+
 #[inline]
-fn mulhi64(a: u64, b: u64) -> u64 {
+pub(crate) fn mulhi64(a: u64, b: u64) -> u64 {
     ((u128::from(a) * u128::from(b)) >> 64) as u64
 }
 
@@ -230,7 +314,7 @@ fn cos_poly(u: u128, u1: u64) -> u128 {
 
 /// Step 5: `±m·2^e` rounded into `F` (64-bit significand) in `mode`, or `None` when the bound
 /// does not decide it.
-fn round<F: Float>(neg: bool, m: u128, e: i32, mode: Rounding) -> Option<(F, Status)> {
+pub(crate) fn round<F: Float>(neg: bool, m: u128, e: i32, mode: Rounding) -> Option<(F, Status)> {
     let lo = m as u64;
     // The distance above the last representable value or midpoint must lie in [ERR, 2^63 - ERR].
     if (lo & (u64::MAX >> 1)).wrapping_sub(ERR) > (1 << 63) - 2 * ERR {
@@ -330,7 +414,7 @@ mod tests {
     use crate::float::{self, Exact, F80};
     use crate::mp::{self, Mp};
 
-    const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
+    pub(super) const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
 
     /// `v·2^units` rounded to the nearest integer (these values are irrational: no ties).
     fn fixed(v: Mp, units: i64) -> u128 {
@@ -475,10 +559,10 @@ mod tests {
         }
     }
 
-    struct Rng(u64);
+    pub(super) struct Rng(pub(super) u64);
 
     impl Rng {
-        fn next(&mut self) -> u64 {
+        pub(super) fn next(&mut self) -> u64 {
             let mut x = self.0;
             x ^= x << 13;
             x ^= x >> 7;
@@ -497,11 +581,11 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct Tally {
-        calls: u64,
-        undecided: u64,
-        refused: u64,
-        worst: f64,
+    pub(super) struct Tally {
+        pub(super) calls: u64,
+        pub(super) undecided: u64,
+        pub(super) refused: u64,
+        pub(super) worst: f64,
     }
 
     /// The tier on `n` against the 384-bit route in the four modes, and the kernel's error against
@@ -540,7 +624,7 @@ mod tests {
     /// `frac(2^e·2/π)` gives (Muller, Elementary Functions, 3rd ed. 2016, ch. 11): the last
     /// convergent denominator below 2^62 (as far as the 127-bit expansion's convergents are the
     /// number's own).
-    fn near_multiple(e: i32) -> Option<Num> {
+    pub(super) fn near_multiple(e: i32) -> Option<Num> {
         let (mut num, mut den) = (alpha(e), 1u128 << 127);
         let (mut q2, mut q1) = (1u128, 0u128);
         let mut best = None;
@@ -614,7 +698,7 @@ mod tests {
     /// The brief's sweep: 10^7 seeded operands over the four bands and the near multiples of π/2 at
     /// every exponent. `cargo test --release -p liella-math --lib wide_int -- --ignored`.
     #[test]
-    #[ignore = "10^7 operands against the 384-bit route: run in release as a job"]
+    #[ignore = "10^7 operands against the 384-bit route: cargo xtask long-sweeps runs it in release (nightly and release runs)"]
     fn tier_agrees_with_the_wide_route_long() {
         const TOTAL: usize = 10_000_000;
         let threads = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);

@@ -1,0 +1,12 @@
+{"task": "LIBM-RETHINK-HYPOT", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: f64 hypot band traced (256-bit fallback: window/gap/exact-root/directed refusals) and redesigned; continuation brief written, no libm change",
+ "branch": "task/libm-rethink-hypot", "head": null,
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["baseline instructions/call (mei, wl_percall): typ 110.0 vs glibc 65.9; near 2306.9 vs 68.8; bits 3703.4 vs 41.5",
+                   "cabs/cpow callers of pow::hypot::<f64> keep the 256-bit path until the continuation routes F::PREC == 53 to the new kernel"],
+ "refused": [],
+ "improvement": "a RETHINK brief at 180k context with mandatory reading (rules 19.5k + brief 20k) leaves too little for design plus implementation; split RETHINK into design and implement legs or raise the token budget",
+ "next_step": "implement handoff/LIBM-RETHINK-HYPOT/LIBM-RETHINK-HYPOT-2.md (D-10.104), measure with validation/percall/hypot.c",
+ "report_file": "handoff/LIBM-RETHINK-HYPOT.md",
+ "jobs": ["mei:libm-rethink-hypot-pc-before"]}

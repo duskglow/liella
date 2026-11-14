@@ -1,0 +1,19 @@
+# LAYOUT-TEXT-PIN-14 plants (cargo xtask plants; docs/plants.md). The -12 plants on the merged tree, the plant for
+# 10e20c108 (LAYOUT-TEXT-PIN-13: the unreferenced-key check names only keys listed for the profile being built), the
+# unreferenced-key verdict that follows ruling #5193's modes, and the start-up data key that -13's generator fix keeps.
+# ltp12-child-robust-wrapper: the fork child's robust-list registration back on its own start-up wrapper: the fork
+#   child reads 7 at a pre pad (a second start-up text window), above FORK_BOUND 6.
+# ltp12-unref-check-off: the unreferenced-key error never raised: the xtask unit test catches it.
+# ltp12-ehframe-counted: unwind-table relocations counted as references (every function would be reached).
+# ltp13-unref-profile-filter: the profile filter dropped (a key the other profile lists blocks this profile's regen).
+# ltp14-unref-promote-passes: the promotion run passes with an unreferenced key listed.
+# ltp14-unref-warn-unmarked: the default build's line is not a warning.
+# ltp14-startup-key-dropped: __libc_single_threaded (read at start-up by absolute address) out of the start-up data
+#   list, so it leaves the .data1 cluster: the probe's start-up count moves with the data phase.
+ltp12-child-robust-wrapper | crates/boundary/src/thread.rs | lit:let _ = raw::syscall(crate::nr::SET_ROBUST_LIST, [i64::try_from(addr_of(&d.robust)).unwrap_or(0), 24, 0, 0, 0, 0]); ==> let _ = raw::set_robust_list(addr_of(&d.robust), 24); | cargo xtask so && cargo test -p liella --test hot_text_products init_data_clusters_hold_at_every_text_phase | msg:fork child above its bound [0-9]+|fork: fault count moves with the text phase
+ltp12-unref-check-off | xtask/src/hottext.rs | lit:unreferenced.contains(&e.key) ==> unreferenced.contains(&e.key) && false | cargo test -p xtask dead_key_check_flags_a_key_nothing_references | msg:the dead key is reported
+ltp12-ehframe-counted | xtask/src/hottext.rs | lit:== ".eh_frame" ==> == ".eh_frame_none" | cargo test -p xtask dead_key_check_flags_a_key_nothing_references | msg:unreferenced keys
+ltp13-unref-profile-filter | xtask/src/hottext.rs | lit:(e.profiles.is_empty() || e.profiles.iter().any(|p| p == profile)) ==> true | cargo test -p xtask dead_key_check_flags_a_key_nothing_references | msg:a fast-only key is not the release build's
+ltp14-unref-promote-passes | xtask/src/hottext.rs | perl:s/(DeadKeys::Promote\) => )Err\((format!\(.*?unreferenced keys fail.*?\))\),/$1Ok(Some($2)),/ | cargo test -p xtask dead_key_check_flags_a_key_nothing_references | msg:Result::unwrap_err
+ltp14-unref-warn-unmarked | xtask/src/hottext.rs | lit:(Some(e), DeadKeys::Warn) => Ok(Some(format!("warning: {e} ==> (Some(e), DeadKeys::Warn) => Ok(Some(format!("{e} | cargo test -p xtask dead_key_check_flags_a_key_nothing_references | msg:DeadKeys::Warn\)\.unwrap\(\)\.is_some_and
+ltp14-startup-key-dropped | crates/libc-so/startup-data.keys | lit:__libc_single_threaded	rw	fast,release ==> | cargo xtask so && cargo test -p liella --test hot_text_products init_ | msg:fault count moves with the text phase|above|FAILED

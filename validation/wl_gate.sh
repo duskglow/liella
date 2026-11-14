@@ -22,7 +22,8 @@
 # glibc / BASE / NEW interleaved per workload; --report: wl_report.py per host (the table, the
 # noise bands, WL-GATE PASS or FAIL; a failing workload is re-measured once first).
 # Results: <host>:~/wl/out/<new>-<host>.tsv (+ -retry.tsv); the table is printed.
-# Caches: keke:~/wl/{src,products,kit}/<sha> are reused.
+# Caches: keke:~/wl/src/<sha> and ~/wl/{products,kit}/<sha>-release (wl_key, validation/wl_lock.sh: the shipped release
+# profile) are reused.
 set -u
 steps=
 while [ $# -gt 0 ]; do case $1 in --prep|--time|--report) steps="$steps $1"; shift ;; *) break ;; esac; done
@@ -34,6 +35,8 @@ here=$(cd "$(dirname "$0")" && pwd)
 ns=${new:0:9}
 bs=${base:0:9}
 . "$here/lab_host.sh"
+. "$here/wl_lock.sh"   # wl_key: kits and products are keyed by sha and products profile (release, what ships; WL-PREP-RELEASE-PROFILE)
+nk=$(wl_key "$new") && bk=$(wl_key "$base") || exit 2
 keke="ssh -o BatchMode=yes claude@$(lab_addr keke)"
 hip() { # host -> address (validation/lab_host.sh; addresses live on the operator's machine, never in the repo)
     case $1 in
@@ -71,8 +74,8 @@ wlsig() { # paths -> remote command printing "<path> <md5 of its find listing: n
 }
 relay() { # host: stream what the host lacks (or holds in another version) keke -> this machine -> host, one tar
     local h=$1 want todo
-    $keke "cd ~/wl && test -d kit/glibc && test -d kit/$new && test -d kit/$base" || { echo "wl_gate: kits missing on keke"; return 1; }
-    want="work kit/glibc kit/$new kit/$base $($keke 'cd ~/wl && echo bin/*')"
+    $keke "cd ~/wl && test -d kit/glibc && test -d kit/$nk && test -d kit/$bk" || { echo "wl_gate: kits missing on keke"; return 1; }
+    want="work kit/glibc kit/$nk kit/$bk $($keke 'cd ~/wl && echo bin/*')"
     todo=$(LC_ALL=C comm -23 <($keke "$(wlsig $want)" | LC_ALL=C sort) <($(hssh "$h") "$(wlsig $want)" | LC_ALL=C sort) | cut -d' ' -f1 | paste -sd' ')
     [ -n "$todo" ] || { echo "wl_gate: $h is up to date (relay)"; return 0; }
     echo "wl_gate: relaying to $h through this machine: $todo"
@@ -84,7 +87,7 @@ copy() { # host: kits, inputs and scripts to a timing host; keke -> host directl
     local h=$1 ip
     ip=$(hip "$h") || return 1
     if [ "${WL_RELAY:-0}" != 1 ] && $keke "ssh -o BatchMode=yes -o ConnectTimeout=5 claude@$ip true" 2>/dev/null; then
-        $keke "ssh -o BatchMode=yes claude@$ip 'mkdir -p ~/wl/out ~/wl/kit' && rsync -a -e 'ssh -o BatchMode=yes' ~/wl/bin ~/wl/work claude@$ip:wl/ && rsync -a -e 'ssh -o BatchMode=yes' ~/wl/kit/glibc ~/wl/kit/$new ~/wl/kit/$base claude@$ip:wl/kit/" || { echo "wl_gate: rsync to $h failed"; return 1; }
+        $keke "ssh -o BatchMode=yes claude@$ip 'mkdir -p ~/wl/out ~/wl/kit' && rsync -a -e 'ssh -o BatchMode=yes' ~/wl/bin ~/wl/work claude@$ip:wl/ && rsync -a -e 'ssh -o BatchMode=yes' ~/wl/kit/glibc ~/wl/kit/$nk ~/wl/kit/$bk claude@$ip:wl/kit/" || { echo "wl_gate: rsync to $h failed"; return 1; }
     else
         relay "$h" || { echo "wl_gate: relay to $h failed"; return 1; }
     fi
@@ -94,7 +97,7 @@ $keke "mkdir -p ~/wl/bin ~/wl/out"
 . "$here/wl_install.sh"; wl_install_scripts || exit 1   # B = ~/wl/bin/v-<hash>, never overwritten; needed by EVERY step
 case " $steps " in *" --prep "*)
     for s in $new $base; do
-        $keke "test -f ~/wl/products/$s/libc.a || test -d ~/wl/src/$s" || \
+        $keke "test -f ~/wl/products/$(wl_key "$s")/libc.a || test -d ~/wl/src/$s" || \
             { git archive --format=tar "$s" | $keke "t=~/wl/src/.$s.\$\$; rm -rf \$t; mkdir -p \$t && tar -x -C \$t && { mv -T \$t ~/wl/src/$s 2>/dev/null || rm -rf \$t; }"; }
     done
     long keke "wl-prep-$ns" 0 "bash $B/wl_prep.sh $new $base"

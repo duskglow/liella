@@ -1,0 +1,18 @@
+{"task": "LAYOUT-TEXT-PIN-15", "model": "opus", "tokens": null,
+ "result": "merged next (traced default, lists deleted); the traced default already keeps __libc_single_threaded in the start-up data list in both profiles; the -13 absolute-operand scan only added 11 untouched objects and broke STARTUP-DATA-WINDOWS (8 > 7 rw pages fast), so it is reverted; the branch's code equals next",
+ "branch": "task/layout-text-pin-15", "head": "f5043280a",
+ "gate": {"affected": "direct tier on the final head: see job layout-text-pin-15-gate2; start-up layout tests fast+release: job layout-text-pin-15-layout", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "next under the traced default: the fork child reads 6 at pre pads 0x2000-0x6000 (fast) and 0x2000-0x5000, 0xe000 (release), above FORK_BOUND 5 which bounds only the unpadded probe; start-up jitter, ruling #4347, not chased",
+  "cargo xtask affected selects 0 suites for a change to tools/hottext/startup_data.py: the trace generators reach no direct test"
+ ],
+ "refused": [],
+ "impact": [
+  {"kind": "none", "what": "code identical to origin/next; handoff record of the -12..-15 chain only (the reverted scan measured 8 written start-up pages > fast budget 7, job layout-text-pin-15-abA)", "before": null, "after": null, "unit": null, "measured": true}
+ ],
+ "improvement": "map tools/hottext/*.py and *.sh to hot_text_products and the layout check in the affected tier: a generator change currently gates on 0 suites",
+ "next_step": "none on this chain: land the handoff record or close",
+ "report_file": "handoff/LAYOUT-TEXT-PIN-15.md",
+ "jobs": ["layout-text-pin-15-lint2", "layout-text-pin-15-gate2", "layout-text-pin-15-layout"]}

@@ -67,6 +67,11 @@ macro_rules! field {
 }
 
 field! {
+    /// `ThreadBlock::dtv`: the dynamic thread vector `ld.so` built (phase 14 DL-12, D-27.20).
+    Dtv = dtv
+}
+
+field! {
     /// `ThreadBlock::locale`: the thread's `uselocale` choice (D-7.8).
     Locale = locale
 }
@@ -162,7 +167,8 @@ impl Field for TidWord {
     const OFFSET: usize = core::mem::offset_of!(ThreadBlock, tid);
 }
 
-/// The 8 bytes at `ThreadBlock::flags` (0x9c; the low 4 are [`Flags`]).
+/// The 8 bytes at `ThreadBlock::flags` (0x9c). There is no reader of the flags themselves: no
+/// decision is taken on them (D-X.58: a foreign block holds another library's data there).
 pub enum FlagsWord {}
 impl sealed::Sealed for FlagsWord {}
 impl Field for FlagsWord {
@@ -177,14 +183,6 @@ impl Field32 for Tid {
     const SHIFT: u32 = 0;
 }
 
-/// `ThreadBlock::flags`: Liella's flags (`FLAG_OWN`).
-pub enum Flags {}
-impl sealed::Sealed for Flags {}
-impl Field32 for Flags {
-    type Word = FlagsWord;
-    const SHIFT: u32 = 0;
-}
-
 // The words' layout: each `Field32` a 4-aligned `AtomicU32` at the start of its word (`SHIFT`
 // 0), the word's 8 bytes inside the block and inside one 64-byte line of the 64-aligned block.
 const _: () = {
@@ -196,7 +194,7 @@ const _: () = {
     assert!(<FlagsWord as Field>::OFFSET % 4 == 0 && <FlagsWord as Field>::OFFSET % 64 + 8 <= 64);
     assert!(<TidWord as Field>::OFFSET + 8 <= liella_rt::tls::BLOCK_SIZE);
     assert!(<FlagsWord as Field>::OFFSET + 8 <= liella_rt::tls::BLOCK_SIZE);
-    assert!(<Tid as Field32>::SHIFT == 0 && <Flags as Field32>::SHIFT == 0);
+    assert!(<Tid as Field32>::SHIFT == 0);
 };
 
 /// The calling thread's `F` field: `current().<field>.load(Relaxed)` as one `%fs`-relative
@@ -333,7 +331,8 @@ pub(crate) fn table_words<const N: usize>(addr: usize) -> Option<&'static liella
 
 /// A selected time zone (D-23.6). Crate-private contract: `addr` is an address
 /// `liella_legacy::time_compat` recorded for an entry it leaked; such values are never freed or
-/// modified.
+/// modified. Always inlined, as `zone::Glue::entry_at` (HOTTEXT-TIME-CLUSTER-STABLE).
+#[inline(always)]
 pub(crate) fn zone_entry_at(addr: usize) -> &'static liella_legacy::time_compat::Entry {
     // UNSAFE(slice): the contract above.
     #[allow(unsafe_code)]
@@ -409,6 +408,36 @@ pub(crate) fn fresh(tp: usize) -> &'static ThreadBlock {
     // SAFETY: the creator's own mapping, laid out by `liella_rt::thread::Layout`.
     unsafe {
         at(tp)
+    }
+}
+
+/// A chunk of the foreign-thread registry (D-X.58). Crate-private contract: `addr` is an
+/// anonymous mapping of at least `size_of::<ShadowChunk>()` bytes that `thread::shadow_entry`
+/// made (zero-filled by the kernel, a valid value of every field: all atomics) and never unmaps.
+// UNSAFE(slice): the registry's own mapping becomes a reference.
+#[allow(unsafe_code)]
+pub(crate) fn shadow_chunk_at(addr: usize) -> &'static crate::thread::ShadowChunk {
+    // UNSAFE(slice): see the function's contract; every field is atomic.
+    #[allow(unsafe_code)]
+    // SAFETY: the caller's contract; the mapping is page-aligned (64-aligned) and permanent.
+    unsafe {
+        &*core::ptr::with_exposed_provenance::<crate::thread::ShadowChunk>(addr)
+    }
+}
+
+/// The shared spare words (D-X.58) as a thread block. Crate-private contract: `addr` is the
+/// address of `thread::SPARE`, a 64-aligned static of `BLOCK_SIZE` bytes of atomics.
+// UNSAFE(slice): a static of atomic words becomes a block-shaped reference.
+#[allow(unsafe_code)]
+pub(crate) fn spare_at(addr: usize) -> &'static ThreadBlock {
+    const _: () = assert!(size_of::<crate::thread::Spare>() == liella_rt::tls::BLOCK_SIZE);
+    const _: () = assert!(align_of::<crate::thread::Spare>() >= align_of::<ThreadBlock>());
+    // UNSAFE(slice): see the function's contract; every field of a block is atomic, and zero
+    // words are a valid value of each.
+    #[allow(unsafe_code)]
+    // SAFETY: the caller's contract; the static lives for the whole process.
+    unsafe {
+        &*core::ptr::with_exposed_provenance::<ThreadBlock>(addr)
     }
 }
 

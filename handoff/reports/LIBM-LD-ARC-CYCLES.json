@@ -1,0 +1,12 @@
+{"task": "LIBM-LD-ARC-CYCLES", "model": "opus", "tokens": null,
+ "result": "x87 arc rows timed in cycles (IVB / N100, Liella/glibc): asinl 7.9/5.4, acosl 3.9/3.2, atan2l 2.8/2.5, atanl 2.4/2.2, tanl 0.80/0.92; atanl inlines its kernel copy: 657 -> 632 instructions (atanl_big 530 -> 498), target <= 607 not reached; accuracy unchanged",
+ "branch": "task/libm-ld-arc-cycles", "head": null,
+ "gate": {"affected": "183 passed / 0 failed", "peak": "1.7G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["atanl ratchet target (<= 607, atanl_big <= 480) not reached: 25 / 18 instructions left; the earlier head was not disassembled (no old checkouts of another story's work), cause inferred from the current head's call structure", "asinl, acosl, atan2l, atanl stay above 1.5x in cycles on both CPU classes; cause read from the code (serial sqrtsd/divsd chain), not profiled per phase", "cargo xtask bench --stage replaces target/liella with products lacking local symbols: disassemble before staging"],
+ "refused": [],
+ "improvement": "the brief asked for disassembly of two heads of another story's branch, which the git rule forbids; briefs for ratchets should name an allowed method (e.g. the earlier head's products cached under ~/wl/products/<sha>)",
+ "next_step": "split atanl's inlined path per phase (wl_trace.sh) for the last 25 instructions; then shorten the divsd chain (one shared reciprocal, integer table index) and time in cycles",
+ "report_file": "handoff/libm-ld-arc-cycles.md",
+ "jobs": ["libm-ld-arc-cycles-gate", "libm-ld-arc-cycles-plants", "libm-ld-arc-cycles-count2", "libm-ld-arc-cycles-accuracy", "nico:libm-ld-arc-cycles-ivb", "nozomi:libm-ld-arc-cycles-n100"]}

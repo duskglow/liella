@@ -95,10 +95,101 @@ pub(super) fn onepass_scaled(x: f32) -> f64 {
 #[inline(always)]
 pub(super) fn exp_onepass(x: f32, c: f64, amax: u32) -> Option<f32> {
     if (x.to_bits() & 0x7fff_ffff).wrapping_sub(ONEPASS_AMIN) >= amax - ONEPASS_AMIN {
-        return None;
+        return exp_onepass_tiny(x);
     }
     let y = exp_z(onepass_scaled(x) * (c * ONEPASS_SCALE));
     if (y.to_bits().wrapping_add(EXP_ONEPASS_DELTA) & 0x0fff_ffff) <= 2 * EXP_ONEPASS_DELTA {
+        return None;
+    }
+    Some(y as f32)
+}
+
+/// [`exp_onepass`]'s answer below its range (LIBM-TINY-FASTPATHS, D-10.108), inlined into the
+/// kernel's refusal branch: as an out-of-line call it made the entry a non-leaf function, 2
+/// instructions more on every operand (probed). e^x, 2^x or 10^x for a normal x with |x| < 2^-27, as 1 + x
+/// rounded in the caller's direction, or `None` (zeros, subnormals, |x| ≥ 2^-27, NaN).
+/// * Value: b^x - 1 has x's sign and |b^x - 1| < 2^-27·ln 10·1.001 < 2^-25.79 (b = e, 2, 10), so
+///   b^x and 1 + x both lie strictly inside (1 - 2^-24, 1) or (1, 1 + 2^-23) on x's side of 1,
+///   and inside (1 - 2^-25, 1 + 2^-24), between the midpoints around 1. Neither is a `float` and
+///   no `float` lies between them, so every directed rounding gives both the same `float`, and
+///   round to nearest gives 1 for both.
+/// * Arithmetic: x is normal (its conversion raises nothing; DAZ reads it unchanged). The `double`
+///   sum 1 + x is rounded in the caller's direction and then converted in that direction: the
+///   `float` grid is part of the `double` grid, so two directed roundings the same way are the one
+///   rounding of 1 + x; in round to nearest the sum stays within 2^-26 of 1 and converts to 1. x ≠ 0,
+///   so the sum or the conversion is inexact, and nothing else is raised (operands and result
+///   near 1: no overflow, underflow or subnormal): the one-pass contract, inexact only.
+#[inline(always)]
+fn exp_onepass_tiny(x: f32) -> Option<f32> {
+    // 2^-27 and the least normal as `float` bits.
+    if (x.to_bits() & 0x7fff_ffff).wrapping_sub(0x0080_0000) >= 0x3200_0000 - 0x0080_0000 {
+        return None;
+    }
+    Some((1.0 + f64::from(x)) as f32)
+}
+
+/// The `float`s 10^n, n = 1..=10 (5^10 < 2^24, so each is exact), at index (biased exponent mod
+/// 32): their exponents 130, 133, ..., 160 differ mod 32. Every other index holds 0, which no
+/// positive normal operand matches. [`log_onepass`] refuses these operands (D-10.72).
+const TEN_POW_BITS: [u32; 32] = {
+    let mut t = [0u32; 32];
+    let p = [0x4120_0000, 0x42c8_0000, 0x447a_0000, 0x461c_4000, 0x47c3_5000, 0x4974_2400, 0x4b18_9680, 0x4cbe_bc20, 0x4e6e_6b28, 0x5015_02f9];
+    let mut k = 0;
+    while k < p.len() {
+        t[((p[k] >> 23) & 31) as usize] = p[k];
+        k += 1;
+    }
+    t
+};
+
+/// ln x (`BASE` 0), log2 x (1) or log10 x (2) rounded in the caller's rounding direction by one
+/// evaluation in `double` and one `cvtsd2ss` (LIBM-F32-ONEPASS-REST, D-10.72), or `None` for the
+/// caller's envelope. The kernel of [`log_core`] with every operand built from x's bits:
+/// * Operands: positive normal x only, tested on the bits first (zero, negative, subnormal, ∞ and
+///   NaN never reach a floating-point instruction). log10 also refuses x = 10^n (n = 1..=10), whose
+///   result is exact while the kernel's arithmetic is not (one table load and compare).
+/// * x = 2^e·m, m in [0.75, 1.5), split on the bits: e = (bits(x) - bits(0.75)) >> 23 (arithmetic),
+///   m's `float` bits = bits(x) - e·2^23, and m as a `double` = those bits shifted to the `double`
+///   fields plus 896 in the exponent; e as a `double` = (bits(1.5·2^52) + e) - 1.5·2^52 (exact).
+///   No `cvtss2sd`/`cvtsi2sd`: each `double` arrives by a full-register `movq` (D-10.67, D-10.68).
+/// * r = m·LOG_INV[i] - 1 is exact in every direction (24 by 24 bits, then Sterbenz); log adds
+///   ((e·LN2 + LOG_C[i]) + r) + s as [`log_core`]; log2 adds e + ((LOG_C[i] + r) + s)·(1/ln 2), so
+///   x = 2^n (m = 1, i = 0, LOG_C[0] = 0, r = s = 0) gives y = n with every operation exact; log10
+///   multiplies the log sum by 1/ln 10. x = 1 makes every operation exact for all three (y = ±0,
+///   which the test below refuses). So the arithmetic raises inexact only for an inexact result.
+/// * Bound in any direction (each operation 2^-52 relative, RN's 2^-53 doubled, the constants RN):
+///   [`log_core`]'s cases with each rounding term doubled: case A (e = 0, c = 1, y = r + s, r
+///   exact) ε ≤ 2^-44.8 (remainder) + 2^-52 + 2^-57 ≤ 2^-44.78, then ≤ 2^-44.7 after log2's and
+///   log10's constant and product; cases B1/B2 and log2's e + t (|e + t| ≥ 0.415 for e ≠ 0, |t| ≤
+///   ln 1.5) stay below 2^-47.5. |y - f| < ε·2^53/(1 - ε) < 313 ulp(y) ([`LOG_DELTA`] = 640 ≥
+///   1.5·313 + 1). Every intermediate is a normal `double` or an exact zero (|r| ≥ 2^-24 when
+///   nonzero, r⁴ ≥ 2^-96), so FTZ and DAZ change nothing and nothing but inexact is raised.
+/// * Rounding: as [`exp_onepass`] (the result's magnitude lies in [2^-26, 128], a normal `float`).
+///   The exhaustive tests (all 2^32 operands × 4 directions against the envelope) check the bound.
+#[inline(always)]
+pub(super) fn log_onepass<const BASE: u8>(x: f32) -> Option<f32> {
+    let b = x.to_bits();
+    if b.wrapping_sub(0x0080_0000) >= 0x7f00_0000 {
+        return None;
+    }
+    if BASE == 2 && TEN_POW_BITS[((b >> 23) & 31) as usize] == b {
+        return None;
+    }
+    let e = (b.wrapping_sub(0x3f40_0000) as i32) >> 23;
+    let mb = b.wrapping_sub((e as u32) << 23);
+    let m = f64::from_bits((u64::from(mb) << 29).wrapping_add(896 << 52));
+    let i = ((mb >> 16) & 127) as usize;
+    let ef = f64::from_bits(SHIFT.to_bits().wrapping_add(e as i64 as u64)) - SHIFT;
+    let r = m * LOG_INV[i] - 1.0;
+    let r2 = r * r;
+    let s = r2 * (-0.5 + r * D3) + (r2 * r2) * ((D4 + r * D5) + r2 * D6);
+    let y = if BASE == 1 {
+        ef + ((LOG_C[i] + r) + s) * INV_LN2
+    } else {
+        let l = ((ef * LN2 + LOG_C[i]) + r) + s;
+        if BASE == 2 { l * INV_LN10 } else { l }
+    };
+    if (y.to_bits().wrapping_add(LOG_DELTA) & 0x0fff_ffff) <= 2 * LOG_DELTA {
         return None;
     }
     Some(y as f32)

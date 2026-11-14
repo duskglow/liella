@@ -2,7 +2,7 @@
 //! library's locks, `_Fork`, `clone` (`vfork` is csys/src/machine/vfork.S), and the handler registry.
 //!
 //! **`fork`** (D-18.6): the *prepare* handlers run newest first; the library's locks are taken
-//! in one order (the handler registry, `popen`'s list and `system`'s count, the stdio list,
+//! in one order (the loader's state lock in a program `ld.so` started, DL-16c; the handler registry, `popen`'s list and `system`'s count, the stdio list,
 //! the thread list, the stack cache's, the setxid broadcast's, the time zone's, the heap's,
 //! the environment's; none while the caller is the process's only thread, P5); then `clone`.
 //! The parent releases them and runs
@@ -86,7 +86,11 @@ fn prepare_handlers() {
     }
 }
 
+/// The loader first (DL-16c, plan/ph14/dl-16-dlopen.md §4's lock order: loader, thread list,
+/// loader arena, the library's own locks): its step waits for a `dlopen` that is changing the
+/// loader's state, never for one that is running constructors.
 fn lock_all() {
+    crate::posix::s27_dynlink::loader_fork(0);
     ATFORK_LOCK.lock_raw(&CSys, Scope::Private);
     crate::spawn::fork_locks(true);
     liella_legacy::stdio_compat::hold_list(&CSys, true);
@@ -99,7 +103,9 @@ fn lock_all() {
     crate::process::hold_env_lock(true);
 }
 
-fn unlock_all() {
+/// The locks of [`lock_all`] in reverse; `child`: in the new process (the loader's step then also
+/// frees its writer lock when a thread that does not exist there held it).
+fn unlock_all(child: bool) {
     crate::process::hold_env_lock(false);
     heap::HEAP.unlock_all(&CSys);
     heap::DEBUG.lock().unlock(&CSys, Scope::Private);
@@ -110,6 +116,7 @@ fn unlock_all() {
     liella_legacy::stdio_compat::hold_list(&CSys, false);
     crate::spawn::fork_locks(false);
     ATFORK_LOCK.unlock(&CSys, Scope::Private);
+    crate::posix::s27_dynlink::loader_fork(if child { 2 } else { 1 });
 }
 
 /// `clone(SIGCHLD | CLONE_CHILD_SETTID | CLONE_CHILD_CLEARTID)` naming the thread block's TID
@@ -189,14 +196,14 @@ pub fn fork() -> KResult<i32> {
     let r = raw_fork();
     if r == Ok(0) {
         if locks {
-            unlock_all();
+            unlock_all(true);
         }
         child_reset();
         heap::HEAP.park_others(&CSys, &heap::KernelPages);
         handlers(2, call);
     } else {
         if locks {
-            unlock_all();
+            unlock_all(false);
         }
         handlers(1, call);
     }
@@ -221,7 +228,7 @@ pub fn clone(f: usize, stack: usize, flags: i32, arg: usize, ptid: usize, tls: u
     let sp = (stack & !15).wrapping_sub(16);
     // The two words the C layer pops in the child: the function and its argument (written
     // just below the caller's stack top, in its stack).
-    crate::conv::store_words_user(sp, &[f, arg])?;
+    crate::conv::store_words_user(sp, [f, arg])?;
     let flags = u64::from(u32::from_ne_bytes(flags.to_ne_bytes()));
     // A child sharing our memory while we keep running: the mutexes must use atomics from
     // now on (MUTEX-3). With CLONE_VFORK the caller is suspended until the child executes or

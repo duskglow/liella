@@ -1,0 +1,42 @@
+{
+ "task": "LIBM-F32-ONEPASS-REST-4",
+ "model": "opus",
+ "tokens": null,
+ "result": "run 3's counts red explained (in-job wait under the 150-min slot cap) and re-measured (16 min); sinf/cosf/tanf/asinhf/acoshf timed vs a base on Ivy Bridge and N100: 20-48% faster on four rows, sinf -3.5% on Ivy Bridge only; no code change; powf not started (design notes in handoff)",
+ "branch": "task/libm-f32-onepass-rest-4",
+ "head": "50c2c08dd",
+ "gate": {
+  "affected": "FULL (escalated: xtask changed on the branch): 32 suites ok, 11426 passed / 0 failed; conformance 121 passed / 0 failed",
+  "peak": "16G (page cache included), oom_kill=0"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "keep run 3's bit-built trig operand although sinf is ~3.5% slower on Ivy Bridge (1.78 -> 1.84 x glibc; N100 2.36 -> 2.26 faster; cosf, tanf, asinhf, acoshf 20-48% faster on both hosts)",
+   "recommendation": "keep: the net is a large gain, the partial-write check stays at 0 findings, and the sinf-only loss (cosf runs the same code) points at placement; follow up only if the timing sweep reopens sinf"
+  },
+  {
+   "item": "this chain reached -4 (no merge conflicts): RUT rule asks for a step-back review before a -5",
+   "recommendation": "cut powf as its own story (profile-first, one-pass proof in all directions, exact cases on the bits) instead of LIBM-F32-ONEPASS-REST-5"
+  }
+ ],
+ "informational": [
+  "counts cause: run 3's after.sh waited for the sweep inside the counts jobrun; SLOT_MAX_MIN (150 min) counted the wait; fixed by one job per step, counts started with SLOT_MAX_MIN=60 (measured 16 min on kanon)",
+  "partial-write on kanon: 779 exports walked, 0 findings (0 allowed)",
+  "powf: 249.8 vs 76.1 instructions; time ratio twice the instruction ratio on Skylake-SP (6.4x vs 3.3x): look for serialising work in the envelope",
+  "conformance count 121 on the Broadwell build host vs 126 on the Skylake-SP CI host in run 3 (host-dependent selection, all passed)"
+ ],
+ "refused": [],
+ "improvement": "after.sh-style chaining (a job that jobwaits for another inside its own jobrun) silently spends the slot cap; jobrun could refuse or warn when a job's command calls jobwait, or start the cap clock at the first non-wait step",
+ "next_step": "powf: wl_trace.sh split of one call first, then the one-pass design from the handoff notes",
+ "report_file": "handoff/libm-f32-onepass-rest.md",
+ "jobs": [
+  "kanon:libm-f32-onepass-rest-4-gate",
+  "kanon:libm-f32-onepass-rest-4-lint",
+  "kanon:libm-f32-onepass-rest-4-counts",
+  "kotori:libm-f32-onepass-rest-4-ivb",
+  "kotori:libm-f32-onepass-rest-4-ivb-base",
+  "nozomi:libm-f32-onepass-rest-4-n100",
+  "nozomi:libm-f32-onepass-rest-4-n100-base"
+ ]
+}

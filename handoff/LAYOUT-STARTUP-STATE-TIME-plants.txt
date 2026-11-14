@@ -1,0 +1,10 @@
+# LAYOUT-STARTUP-STATE-TIME plants (cargo xtask plants; docs/plants.md). Fast products (the gate's profile).
+# lsst-generation: time_compat::GENERATION (the first localtime_r's read on an untouched `.bss` page, #4901) dropped
+# from the declared list: it goes back to `.bss` and the `localtime_mktime` trace of
+# init_startup_data_accesses_are_in_the_data1_cluster names it.
+# lsst-table-on: setenv's process::TABLE_ON dropped: the same trace names it.
+lsst-generation | crates/libc-so/startup-state.list | perl:s/\nliella_legacy::time_compat::GENERATION\n/\n/ | cargo test -p liella --test hot_text_products -- init_startup_data_accesses | msg:localtime_mktime: \.bss\.[A-Za-z0-9_]+time_compat[0-9]+GENERATION
+lsst-table-on | crates/libc-so/startup-state.list | perl:s/\nliella_boundary::process::TABLE_ON\n/\n/ | cargo test -p liella --test hot_text_products -- init_startup_data_accesses | msg:localtime_mktime: \.bss\.[A-Za-z0-9_]+process[0-9]+TABLE_ON
+# cargo xtask plants results (2 plants: 2 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# lsst-generation: CAUGHT, caught by hot_text_products init_startup_data_accesses_are_in_the_data1_cluster
+# lsst-table-on: CAUGHT, caught by hot_text_products init_startup_data_accesses_are_in_the_data1_cluster

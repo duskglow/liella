@@ -1,0 +1,21 @@
+{"task": "DL-DLADDR-3", "model": "opus", "tokens": null,
+ "result": "COMPLETE: dladdr, dladdr1 and dlinfo verified: FULL-tier gate green and all 9 plants CAUGHT (run 2's plants job had hit the 150-min shared-job cap; the same plants now run as two jobs)",
+ "branch": "task/dl-dladdr-3", "head": "5d7461be1",
+ "gate": {"affected": "11767 passed / 0 failed (FULL tier, escalated by generated compat_aliases.S); conformance 131 passed / 0 failed", "peak": "16G (page cache included), oom_kill 0"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "records/pending/DL-DLADDR-2-1..5 (D-NEW, series D-27) and DL-DLADDR-2-6 (COMPAT-NEW) need ids", "recommendation": "assign the next free D-27 ids and COMPAT id, then land"}],
+ "informational": [
+   "Each plant whose command is `cargo xtask affected --only conformance:...` builds the products twice (the plants tool with the mutant, then affected again: ~433 s), about 16.5 min per plant; a file of more than ~8 such plants cannot finish inside the 150-min shared-job cap",
+   "dladdr misses vDSO addresses: the vDSO is not in Liella's object chain yet (P-12)",
+   "Liella's dl_iterate_phdr lists only the program and the vDSO until DL-16c",
+   "RTLD_DI_SERINFO of the program: the reference leaves out the program's own DT_RUNPATH; Liella likely lists it (not checked)",
+   "RTLD_DI_ORIGIN of the program is refused by Liella; giving the program's directory is a possible follow-up"],
+ "refused": [],
+ "impact": [
+   {"kind": "correctness", "what": "dladdr, dladdr1, dlinfo exported and answering as the reference on the s27_dladdr / s27_dlinfo corpus (not exported on next)", "before": null, "after": null, "unit": null, "measured": true},
+   {"kind": "coverage", "what": "conformance programs s27_dladdr and s27_dlinfo (clauses s27_1_c_6, s27_1_c_7), proven by 9 plants all CAUGHT", "before": 0, "after": 9, "unit": "plants caught", "measured": true},
+   {"kind": "unblock", "what": "AQOURS-SMOKE programs waiting on DL-18 (backtraces, crash handlers, plugin hosts)", "before": null, "after": null, "unit": null, "measured": false}],
+ "improvement": "The plants tool already rebuilds the products with the mutant, yet `affected --only conformance:...` rebuilds them again (~7 min per plant); letting affected reuse fresh products (or the tool pass a no-rebuild flag) would halve conformance plant runs and keep 9-plant files under the 150-min cap",
+ "next_step": "Coordinator: assign ids to records/pending/DL-DLADDR-2-1..6, then land; optional follow-up: SERINFO-of-the-program probe",
+ "report_file": "handoff/DL-DLADDR.md",
+ "jobs": ["kanon:dl-dladdr-3-gate", "kanon:dl-dladdr-3-plants-a", "kanon:dl-dladdr-3-plants-b"]}

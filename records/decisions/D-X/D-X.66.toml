@@ -1,0 +1,10 @@
+id = "D-X.66"
+section = "x"
+status = "active"
+amends = ["D-X.59"]
+story = "CODEMAP-TRAIN-OWNED"
+date = "2026-11-10"
+tests = ["xtask/src/codemap.rs::train_owned_check_and_out_of_tree_generation", "xtask/src/codemap.rs::removed_file_leaves_no_row_and_check_sees_it"]
+body = '''
+**The code map (`docs/codemap/README.md`, `docs/codemap/symbols.tsv`) is train-owned** (CODEMAP-TRAIN-OWNED), like the decision views and `crates/math/KERNELS.md` (D-X.59). Static's `codemap` check is fatal only under `LIELLA_TRAIN=1`. On a story branch it prints one advisory line, `codemap: N files pending regeneration by the train`. Off the train, `cargo xtask codemap` writes `target/records-views/docs/codemap/` and leaves the tracked files byte-identical. It writes in place only under `LIELLA_TRAIN=1` or with `--in-place`. Definitions it cannot resolve, and dead paths in the README's hand-written part, still fail everywhere. Why: every branch that changes an exported symbol or a test file made the tracked map stale. On 11-10 at least five hand-backs went red on `static: codemap` alone, and branches that did regenerate it conflicted with each other. The train regenerates the map once per landing with `cargo xtask codemap --in-place`. The hand-written part of `README.md` is still edited on story branches, because generation keeps it verbatim from the tracked file.
+'''

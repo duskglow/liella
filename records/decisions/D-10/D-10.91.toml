@@ -1,0 +1,10 @@
+id = "D-10.91"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+story = "LIBM-F128-TRIG-INT-2"
+date = "2026-11-11"
+body = '''
+**`_Float128` `tanf128`/`sincosf128` on the integer tier: one reduction, a Newton quotient** (LIBM-F128-TRIG-INT-2; extends D-10.85's three-limb kernel; contract D-10.19 unchanged: correctly rounded in every mode). `crates/math/src/wide_int/quad.rs`: `both` runs D-10.85's reduction and polynomials once and gives `sin\|a\|` and `cos\|a\|`; `sin_and_cos` (from `wide::sincos` for the 113-bit format) rounds each with the shared integer rounding test, and a function the test does not decide alone takes the 384-bit route; `tan` (from `wide_int::arc::tan`) divides them (`tan a` in even quadrants, `cot a` in odd ones). The quotient `div3`: one `divsd` reciprocal estimate, one Newton step on the reciprocal and one exact residual correction in integer limbs (Brent and Zimmermann, Modern Computer Arithmetic, 2010, ch. 3; J.-M. Muller, Elementary Functions, 3rd ed. 2016, ch. 2), no integer `div`: within `2^-162.2` relative. Proof (module documentation, steps 6 and 7): `tan` within `2^-155.6`, inside the rounding test's `2^-152`. `sinf128`/`cosf128` keep their single-function kernel (cheaper than computing both). Tests: `quotient_meets_its_bound` (20 000 random significands and the extremes, including `δ = 1/2` where the Newton step is zero and just above it where it is negative), and tan and sincos on every operand of the sin/cos agreement tests (unit and the 10^7 `tier_agrees_with_the_wide_route_long`). Measurements: `handoff/libm-f128-trig-int-2.md`.
+'''

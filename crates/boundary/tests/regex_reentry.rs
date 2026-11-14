@@ -44,7 +44,7 @@ static HITS: AtomicU32 = AtomicU32::new(0);
 /// Set while the outer `regexec` runs; handler entries that find it set landed mid-search.
 static IN_SEARCH: AtomicBool = AtomicBool::new(false);
 static MID: AtomicU32 = AtomicU32::new(0);
-/// Handler calls that run the inner search.
+/// Mid-search handler calls that run the inner search; the outer loop runs until this many have.
 const WORK: u32 = 200;
 static INNER_BAD: AtomicU32 = AtomicU32::new(0);
 
@@ -69,16 +69,26 @@ fn right(m: &[regmatch_t], units: usize, at: i32) -> bool {
         && (m[last].rm_so, m[last].rm_eo) == (end - 2, end)
 }
 
-/// The SIGALRM handler: a whole `regexec` with the inner pattern, checked.
-/// It does the work for the first [`WORK`] signals only, so a handler slower than the timer
-/// cannot starve the outer loop.
+/// The SIGALRM handler: a whole `regexec` with the inner pattern, checked, but only when it
+/// interrupted the outer search, and for the first [`WORK`] such calls (so a handler slower than
+/// the timer cannot starve the outer loop).
+///
+/// The inner search can outlast the timer period, so each such call is followed at once by the
+/// next signal. Work done outside a search would therefore not be one stray call but a run of
+/// them: a signal left pending at the unblock before a search (the process preempted for one
+/// period) used to start a run that spent the whole budget there, and the test then proved
+/// nothing (mid-search 0). Now a call outside a search returns at once, and the budget counts
+/// only calls that re-entered `regexec`.
 extern "C" fn on_alarm(_sig: i32) {
-    if HITS.fetch_add(1, Ordering::SeqCst) >= WORK {
+    HITS.fetch_add(1, Ordering::SeqCst);
+    if !IN_SEARCH.load(Ordering::SeqCst) || MID.fetch_add(1, Ordering::SeqCst) >= WORK {
         return;
     }
-    if IN_SEARCH.load(Ordering::SeqCst) {
-        MID.fetch_add(1, Ordering::SeqCst);
-    }
+    inner_search();
+}
+
+/// The inner `regexec`, checked against its answer without signals.
+fn inner_search() {
     let Some((re, subject)) = INNER.get() else {
         INNER_BAD.fetch_add(1, Ordering::SeqCst);
         return;
@@ -116,22 +126,31 @@ fn body() -> bool {
         return false;
     }
     let want: Vec<(i32, i32)> = m.iter().map(|x| (x.rm_so, x.rm_eo)).collect();
-    on_alarm(0);
+    inner_search();
     if INNER_BAD.load(Ordering::SeqCst) != 0 {
         eprintln!("the inner search is wrong without signals");
         return false;
     }
-    HITS.store(0, Ordering::SeqCst);
     // The handler may only run inside regexec (it allocates; the loop around it does too).
     mask(SIG_BLOCK);
     let mut act = CSigaction::new(on_alarm as extern "C" fn(i32) as usize, SigSet::empty(), 0);
     act.flags = SA_RESTART;
     assert_eq!(sig::sigaction(SIGALRM, Some(&act), None), 0);
     timer(2000);
+    // Leave a signal pending at the first unblock, as a process preempted for one period would:
+    // its handler runs outside any search, and must neither count nor spend the budget.
+    let mut pending = sigset_t { __val: [0; 16] };
+    loop {
+        assert_eq!(sig::sigpending(Some(&mut pending)), 0);
+        if sig::sigismember(Some(&pending), SIGALRM) == 1 {
+            break;
+        }
+    }
     let start = std::time::Instant::now();
     let mut outer_bad = 0u32;
     let mut runs = 0u32;
-    while (runs < 3 || HITS.load(Ordering::SeqCst) < WORK) && start.elapsed() < std::time::Duration::from_secs(30) {
+    // The loop ends on the count of re-entered searches; the time limit is only a hang guard.
+    while (runs < 3 || MID.load(Ordering::SeqCst) < WORK) && start.elapsed() < std::time::Duration::from_secs(30) {
         m.fill(regmatch_t { rm_so: -9, rm_eo: -9 });
         mask(SIG_UNBLOCK);
         IN_SEARCH.store(true, Ordering::SeqCst);
@@ -145,12 +164,13 @@ fn body() -> bool {
     }
     timer(0);
     let (hits, inner_bad) = (HITS.load(Ordering::SeqCst), INNER_BAD.load(Ordering::SeqCst));
-    let mid = MID.load(Ordering::SeqCst);
+    let mid = MID.load(Ordering::SeqCst).min(WORK);
     eprintln!("runs {runs} in {:?}, handler calls {hits}, mid-search {mid}, outer wrong {outer_bad}, inner wrong {inner_bad}", start.elapsed());
-    // At least 20 inner searches must have run inside an outer one, or the test proves nothing.
+    // At least 20 inner searches must have run inside an outer one, or the test proves nothing
+    // (only the hang guard can end the loop short of WORK).
     // SIGALRM goes to the whole process: only as the sole thread (D-X.42) is every handler run
     // counted here one that interrupted this thread, not one that ran beside it.
-    sole_thread() && mid >= 20 && hits >= 50 && outer_bad == 0 && inner_bad == 0
+    sole_thread() && mid >= 20 && outer_bad == 0 && inner_bad == 0
 }
 
 #[test]

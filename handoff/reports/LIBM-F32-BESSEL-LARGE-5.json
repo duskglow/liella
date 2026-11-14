@@ -1,0 +1,72 @@
+{
+ "task": "LIBM-F32-BESSEL-LARGE-5",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: LAYOUT-JITTER: f32 Bessel large band merged with next 51af84e06 (longsweeps.rs conflict resolved keeping both sides' rows); lint, plants 6/6 and percall green (large 405.5-417.5 instr/call, 1.31-1.39x glibc, from 1.75e5-1.78e5); gate red only on init_data_clusters_hold_at_every_text_phase (tool 55 at cold 0x8000, 54 elsewhere; next 54 at all 10 phases)",
+ "branch": "task/libm-f32-bessel-large-5",
+ "head": "31411a58d",
+ "gate": {
+  "affected": "1601 passed / 2 failed (one layout test, in the plain and exports-interposed passes of test -p liella)",
+  "peak": "gate: peak memory 2.7G (page cache included; reclaimed under the limit) oom_kill=0 rc=1"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "init_data_clusters_hold_at_every_text_phase: merged head tool 54 at 9 phases, 55 at cold 0x8000; next 51af84e06 54 at all 10 (job nextlayout on mei). The branch changes no start-up code; handled per ruling #4347 (not chased)",
+  "percall value checks print MISMATCH against glibc on Bessel rows; base next and the head give identical values, so this predates the branch",
+  "run 4's exhaustive sweeps (kanon libm-f32-bessel-large-4-sweeps) ended rc 0; product code unchanged since",
+  "superseded: libm-f32-bessel-large-5-gate (rc 1 on the layout test only, ruling #4347 LAYOUT-JITTER; the evidence for this hand-back, not a final-head pass)"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "perf",
+   "what": "j0f large (|x| >= 2^19) per call",
+   "before": 175440.4,
+   "after": 405.5,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "perf",
+   "what": "j1f large per call",
+   "before": 178324.1,
+   "after": 406.0,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "perf",
+   "what": "y0f large per call",
+   "before": 175430.4,
+   "after": 408.0,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "perf",
+   "what": "y1f large per call",
+   "before": 178328.1,
+   "after": 417.5,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "cost",
+   "what": "start-up layout test tool fault count 55 at one cold pad (54 on next); layout jitter, held for the layout fix",
+   "before": 54,
+   "after": 55,
+   "unit": "faults",
+   "measured": true
+  }
+ ],
+ "improvement": "a story that only merged next spent a gate cycle to learn about start-up layout jitter: running hot_text_products' phase test right after the merge (one minute after cargo xtask so) would flag LAYOUT-JITTER before the full direct gate",
+ "next_step": "after the layout fix lands on next: merge next, rerun the direct gate only; then land. Follow-up: jnf(0|1, x) for |x| >= 2^19 through the one-call rest path",
+ "report_file": "handoff/LIBM-F32-BESSEL-LARGE.md",
+ "jobs": [
+  "libm-f32-bessel-large-5-lint1",
+  "libm-f32-bessel-large-5-plants",
+  "libm-f32-bessel-large-5-percall",
+  "libm-f32-bessel-large-5-nextlayout"
+ ]
+}

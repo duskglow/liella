@@ -115,7 +115,7 @@ against `next`; the maintainers run the lab steps (counts, the merge queue) for 
 
 **Planned (owner ruling 2026-10-11, not implemented yet):** the direct tier will drop the
 serialized `*_products` tests and the interposed re-run, and will map exported assembly labels
-(and `crates/libc-so/hot-text-<profile>.list`) to the tests that reach them, so a change to a `.S` kernel selects its
+(and the hot-text grouping) to the tests that reach them, so a change to a `.S` kernel selects its
 tests directly. The CI FULL gate stays the exhaustive run.
 
 ## Tests and how decisions are recorded
@@ -133,7 +133,14 @@ tests directly. The CI FULL gate stays the exhaustive run.
   maintainers' merge train regenerates them (D-X.55). To see a view with your records in it, run
   `cargo xtask records-gen` and read it under `target/records-views/<same path>`; the tracked
   views stay untouched, so there is nothing to restore (`crates/math/KERNELS.md` and
-  `cargo xtask kernel-index` work the same way; only the train writes in place, D-X.59). A decision that replaces an earlier one is
+  `cargo xtask kernel-index` work the same way; only the train writes in place, D-X.59). The start-up
+  lists (`hot-text.list`, `startup-text.keys`, `probe-text.keys`, `startup-data.keys`) are never committed:
+  every `cargo xtask so` traces the probes linked against the archive it built and writes them into
+  `target/product/<profile>` (trace-at-build, D-X.88 / D-X.92; needs gdb with Python, or
+  `LIELLA_LAYOUT_TRACE=ungrouped` for an ungrouped product), and `cargo xtask static` refuses one in the tree
+  (LT-5, LAYOUT-DELETE-LISTS). Nothing needs regenerating on your branch. The hand-written inputs
+  (`hot-text.clusters`, `hot-text.first-window`, `startup-state.list` in `crates/libc-so/`) are still edited and
+  committed on your branch; the fault bounds and the layout contracts fail everywhere. A decision that replaces an earlier one is
   a new record with `supersedes = ["D-..."]`, a partial change uses `amends`; edit an existing
   record only to correct it or add a test reference. Find a decision with
   `grep -rn "D-12.18" records/` (or in the generated tables). Local details you can decide

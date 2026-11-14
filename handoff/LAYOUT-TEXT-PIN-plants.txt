@@ -1,0 +1,9 @@
+# LAYOUT-TEXT-PIN (D-X.63): plants on xtask/src/hottext.rs; each rebuilds the products (the tool does) and runs the
+# product test that must catch it. ltp-no-rename restores the old rule (an unlisted section keeps its name, so the
+# 154 `.text.unlikely.*` sections and `exit`'s `.text.exit` stay ahead of the group); ltp-unlikely-only renames only
+# what matches `.text.unlikely*`, so the library's 7-byte `.text.exit` (function `exit`, crate `c`) stays ahead and
+# TEXT-PREFIX must name it; ltp-no-align drops the cluster head alignment (the pad test must see a cluster straddle
+# a 64 KiB window or a 0-fault mode fault).
+ltp-no-rename | xtask/src/hottext.rs | perl:s/let want = section_for\(f, keys\);/let want = section_for(f, keys); if !keys.contains_key(&key(f)) && !_name.starts_with(".text.hot.") { return _name.to_string(); }/ | cargo test -p liella --test hot_text_products init_no_library_text_precedes_the_hot_group | msg:TEXT-PREFIX: \d+ libc.a input sections lie ahead.*text.unlikely
+ltp-unlikely-only | xtask/src/hottext.rs | perl:s/\["unlikely", "exit", "startup", "hot"\]/["unlikely"]/ | cargo test -p liella --test hot_text_products init_no_library_text_precedes_the_hot_group | msg:TEXT-PREFIX: 1 libc.a input sections lie ahead.*\.text\.exit \(7 bytes\)
+ltp-no-align | xtask/src/hottext.rs | perl:s/let align = cluster_align\(bytes, min\);/let align = min;/ | cargo test -p liella --test hot_text_products init_zero_fault_calls_hold_at_every_text_phase | msg:straddles a 64 KiB window|faults, want 0

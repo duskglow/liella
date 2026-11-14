@@ -37,13 +37,13 @@ use crate::errno;
 use crate::netdb;
 use crate::stdio::{self, Locking};
 use crate::sys::CSys;
-use crate::tb;
 
 // ------------------------------------------------------------------------------ the state
 
 /// The thread's state: its address (`__res_state()`).
 pub fn res_state() -> usize {
-    let b = tb::current();
+    // D-X.58: the thread's own words (its block only in a process the runtime started).
+    let b = crate::thread::words();
     let a = b.res.load(Relaxed);
     if a != 0 {
         return a;
@@ -61,7 +61,11 @@ pub fn res_state() -> usize {
 
 /// Free the calling thread's state (at its exit).
 pub(crate) fn thread_ending() {
-    let b = tb::current();
+    let b = crate::thread::words();
+    if crate::thread::is_spare(b) {
+        // Shared by every foreign thread (no registry memory): never freed.
+        return;
+    }
     let a = b.res.swap(0, Relaxed);
     if a != 0 && a != core::ptr::addr_of!(data::_res).expose_provenance() {
         if let Some(st) = own_state(a) {
@@ -134,7 +138,7 @@ fn print_slot(addr: usize) -> Option<core::result::Result<(), &'static mut [u8]>
     if addr == core::ptr::addr_of!(data::_res).expose_provenance() {
         return Some(Ok(()));
     }
-    if addr != 0 && tb::current().res.load(Relaxed) == addr {
+    if addr != 0 && crate::thread::words().res.load(Relaxed) == addr {
         return conv::own_bytes(addr.saturating_add(STATE_SIZE), 8).map(Err);
     }
     None

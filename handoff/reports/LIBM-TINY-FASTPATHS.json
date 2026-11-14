@@ -1,0 +1,13 @@
+{"task": "LIBM-TINY-FASTPATHS", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: expf/exp2f/exp10f tiny operands (|x| < 2^-27) answered in the one-pass entry, 233-928 -> 22-26 instructions (glibc 26-32); trig large/tiny, exp huge, asinf, log1pf, expm1f not done",
+ "branch": "task/libm-tiny-fastpaths", "head": "bbf6d8488",
+ "gate": {"affected": "gate2 on 1f06a3e05: 2423 passed / 0 failed; gate3 on final head pending", "peak": "3.9G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["first gate red only on cargo xtask static (bare | in the record body), fixed",
+                   "exhaustive sweeps (3 functions x 2^32 x 4 directions) take over 40 min on mei; two runs stopped to sync newer heads"],
+ "refused": [],
+ "improvement": "the libm_tail probe tool lives only on an unlanded branch; landing it would let stories run before/after without copying it",
+ "next_step": "read probe2 (kernel range must be 46/46/50 again) and sweeps3; then trig |x| >= 2^19 Payne-Hanek and tiny trig (plan in handoff)",
+ "report_file": "handoff/LIBM-TINY-FASTPATHS.md",
+ "jobs": ["mei:libm-tiny-fastpaths-lint3", "mei:libm-tiny-fastpaths-gate3", "mei:libm-tiny-fastpaths-plants3", "mei:libm-tiny-fastpaths-sweeps3", "mei:libm-tiny-fastpaths-probe2"]}

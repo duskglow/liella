@@ -1,0 +1,11 @@
+{"task": "TEST-LONG-SWEEPS-RUN-2", "model": "opus", "tokens": null,
+ "result": "origin/next merged (wide_dd conflict: kept next's un-ignored sweep, dropped its runner row; both static checks kept); next's new clog_csqrt sweep added to the long group; count group (230 s wall, ~3 s of tests) added to the nightly per #4751; weekly exhaustive (#4750) documented, scheduled outside the repo",
+ "branch": "task/test-long-sweeps-run-2", "head": "61d5dac09",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Ruling #4750's weekly exhaustive job must be scheduled on the ops side (no scheduler in the repository)", "TEST-LONG-SWEEPS-BOUNDARY (#4752) still open: crates/boundary ignored sweeps"],
+ "refused": [],
+ "improvement": "The long-sweeps static check caught an unlisted ignored sweep that arrived with the merge, which is the failure it exists to catch. A merge-only continuation should run static on the merged head first.",
+ "next_step": "coordinator schedules weekly cargo xtask long-sweeps --group exhaustive; then TEST-LONG-SWEEPS-BOUNDARY",
+ "report_file": "handoff/test-long-sweeps-run.md",
+ "jobs": ["test-long-sweeps-run-2-gate", "test-long-sweeps-run-2-plants", "test-long-sweeps-run-2-runner", "test-long-sweeps-run-2-count", "test-long-sweeps-run-2-lint2"]}
