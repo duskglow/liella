@@ -1,0 +1,10 @@
+id = "D-NEW"
+series = "D-X"
+section = "x"
+status = "active"
+story = "PLANTS-KILL-TREE"
+date = "2026-11-14"
+tests = ["xtask/src/plants.rs::a_timed_out_step_leaves_no_process_of_its_group"]
+body = '''
+**A plants step leaves no process of its group alive** (PLANTS-KILL-TREE). `cargo xtask plants` starts each step (`timeout <limit> <cmd>`) as the leader of its own process group, and once the step has ended, by exit or at its limit, signals the whole group with TERM and then KILL after a short grace period, so grandchildren such as the tracer and probes a product build starts do not outlive the step. Why: a build that ran into its limit used to leave its helper processes running on the build host.
+'''

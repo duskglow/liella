@@ -29,6 +29,7 @@
 
 use std::fs;
 use std::io::Write as _;
+use std::os::unix::process::CommandExt;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::time::Instant;
@@ -401,7 +402,9 @@ fn on_ram(dir: &Path) -> Option<bool> {
 fn run_logged(cwd: &Path, argv: &[String], log: &Path, timeout: u64) -> Result<i32, String> {
     let file = fs::File::create(log).map_err(|e| format!("cannot create {}: {e}", log.display()))?;
     let err = file.try_clone().map_err(|e| e.to_string())?;
-    let status = Command::new("timeout")
+    // The child leads its own process group (timeout(1) makes the same group), so one group signal reaches every
+    // grandchild, such as the gdb and probes a build-time trace starts, however the step ended.
+    let mut child = Command::new("timeout")
         .arg(timeout.to_string())
         .args(argv)
         .current_dir(cwd)
@@ -410,9 +413,22 @@ fn run_logged(cwd: &Path, argv: &[String], log: &Path, timeout: u64) -> Result<i
         .stdin(Stdio::null())
         .stdout(file)
         .stderr(err)
-        .status()
+        .process_group(0)
+        .spawn()
         .map_err(|e| format!("cannot run {argv:?}: {e}"))?;
+    let pgid = child.id();
+    let status = child.wait().map_err(|e| format!("cannot wait for {argv:?}: {e}"))?;
+    kill_group(pgid);
     Ok(status.code().unwrap_or(128))
+}
+
+/// End every process left in group `pgid`: TERM, then KILL when the group is still there after a grace period.
+fn kill_group(pgid: u32) {
+    let signal = |sig: &str| Command::new("kill").args([sig, "--"]).arg(format!("-{pgid}")).stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success());
+    if signal("-TERM") {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        signal("-KILL");
+    }
 }
 
 fn sh(cmd: &str) -> Vec<String> {
@@ -1130,6 +1146,29 @@ mod tests {
         let out = run(&cfg);
         assert_eq!(out.verdicts, vec![("h1".to_string(), Verdict::Caught)]);
         assert_eq!(out.code, EXIT_OK);
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    // no spec clause: a step that ends at its limit leaves no process of its group alive (a grandchild that ignores TERM too)
+    #[test]
+    fn a_timed_out_step_leaves_no_process_of_its_group() {
+        let (src, dir) = toy("killtree");
+        fs::create_dir_all(&dir).unwrap();
+        let pidfile = dir.join("grandchild.pid");
+        let log = dir.join("step.log");
+        let cmd = format!("trap '' TERM; sleep 300 & echo $! > {}; wait", pidfile.display());
+        let rc = run_logged(&dir, &sh(&cmd), &log, 1).unwrap();
+        assert_eq!(rc, TIMED_OUT);
+        let pid = fs::read_to_string(&pidfile).unwrap().trim().to_string();
+        let alive = |pid: &str| fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|st| !st.rsplit(')').next().unwrap_or("").trim_start().starts_with('Z'));
+        // Reaping by init may lag the kill: poll a bounded number of times.
+        for _ in 0..500 {
+            if !alive(&pid) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(!alive(&pid), "grandchild {pid} survived the step's timeout");
         let _ = fs::remove_dir_all(src.parent().unwrap());
     }
 }
