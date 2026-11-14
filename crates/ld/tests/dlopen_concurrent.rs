@@ -253,12 +253,15 @@ static int concurrent(void) {
 }
 
 /* fork while another thread is inside a constructor (probe P-9): fork returns, and the child
-   lists the object, finds it with RTLD_NOLOAD, and opens a new one. */
+   lists the object, finds it with RTLD_NOLOAD, looks a symbol up and opens a new one. A dlsym
+   first releases both loader locks: the other thread's dlopen then proceeds (else the hang
+   guard ends the run). */
 static void *slow_opener(void *a) { (void)a; return dlopen(at("libslow.so"), RTLD_NOW); }
 static int forking(void) {
     int in[2], out[2];
     if (pipe(in) || pipe(out)) FAIL(40, "pipe");
     slow_in = in[1]; slow_out = out[0];
+    if (dlsym(RTLD_DEFAULT, "slow_in") != (void *)&slow_in) FAIL(47, "dlsym slow_in: %s", dlerror());
     pthread_t t; char b;
     if (pthread_create(&t, 0, slow_opener, 0) != 0) FAIL(41, "pthread_create");
     if (read(in[0], &b, 1) != 1) FAIL(42, "the slow constructor did not start");
@@ -268,7 +271,7 @@ static int forking(void) {
         struct walk w = walk(); int listed = 0;
         for (int k = 0; k < w.n && k < 64; k++) listed |= strstr(w.names[k], "/libslow.so") != NULL;
         n_log = 0;
-        int ok = listed && dlopen(at("libslow.so"), RTLD_NOW | RTLD_NOLOAD) && dlopen(at("libplain3.so"), RTLD_NOW) && n_log == 1 && ctor_log[0] == 43;
+        int ok = listed && dlopen(at("libslow.so"), RTLD_NOW | RTLD_NOLOAD) && dlsym(RTLD_DEFAULT, "slow_out") == (void *)&slow_out && dlopen(at("libplain3.so"), RTLD_NOW) && n_log == 1 && ctor_log[0] == 43;
         _exit(ok ? 0 : 1 + listed);
     }
     if (pid < 0) FAIL(43, "fork");
@@ -381,8 +384,9 @@ fn s27_1_c_8_concurrent_dlopen_and_walk() {
 }
 
 /// s27_1_c_1 (probe P-9, plan §4 lock order): `fork` while another thread runs a `dlopen`'d
-/// constructor returns, and the child lists the object, finds it with `RTLD_NOLOAD` and opens a
-/// new object whose constructor runs.
+/// constructor returns, and the child lists the object, finds it with `RTLD_NOLOAD`, finds a
+/// symbol with `dlsym` and opens a new object whose constructor runs; a `dlsym` before the other
+/// thread starts leaves neither loader lock held (DL-16b's `dlsym` under DL-16c's lock pair).
 #[test]
 fn s27_1_c_1_fork_during_dlopen_child_can_load() {
     let Some((d, ld, libc, crt1)) = setup("fork") else { return };
