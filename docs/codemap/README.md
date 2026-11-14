@@ -108,7 +108,7 @@ Other crates: abi, boundary, core, kernel, ld, ld-so, legacy, libc-so, libm-so, 
 | `/usr/lib/locale` | crates/core/src/locale/mod.rs:533 |
 | `/usr/lib/locale/locale-archive` | crates/core/src/locale/mod.rs:535 |
 | `/usr/lib/x86_64-linux-gnu` | crates/ld/src/arch.rs:317 |
-| `/usr/share/i18n/charmaps/` | crates/legacy/src/global_locale.rs:96 |
+| `/usr/share/i18n/charmaps/` | crates/legacy/src/global_locale.rs:101 |
 | `/usr/share/locale` | crates/legacy/src/intl.rs:62 |
 | `/usr/share/locale-langpack` | crates/legacy/src/intl.rs:66 |
 | `/usr/share/locale/locale.alias` | crates/core/src/locale/mod.rs:537 |
