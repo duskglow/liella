@@ -1,0 +1,22 @@
+{"task": "TB-FOREIGN-WORDS-LOW-7", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: merged next (trace-at-build); SPARE kept out of the start-up heap path (written start-up pages fast 14->12, release 15->14, both at budget); release start-up checks green; fast hot_text_products red: start-up text group 268 bytes past the first window (+~704 bytes vs next, heap D-X.60 growth); plants 5/6 caught (slow-path-own-copy survived)",
+ "branch": "task/tb-foreign-words-low-7", "head": null,
+ "gate": {"affected": "not run (fast start-up tests red: hot_text_products 22 passed / 3 failed; release 0 failed)", "peak": "594M (sizes job)"},
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": [
+   "Under trace-at-build the .data.rel.ro bytes that start-up functions address are not clustered (link order): on this branch they spread over 7-8 pages vs next's 6; this is the remaining start-up layout jitter source for STARTUP-DATA-WINDOWS.",
+   "slow-path-own-copy plant (-5's KernelPages heap slow path) survives on trace-at-build: init_heap_metadata_of_new_size_classes_stays_dense no longer sees the difference.",
+   "percall could not run: next's base d6918f2c3 is not primed on mei (wl_prime_base.sh needs a git checkout)."
+ ],
+ "refused": [],
+ "impact": [
+   {"kind": "faults", "what": "STARTUP-DATA-WINDOWS written start-up pages, fast products (branch merged with next)", "before": 14, "after": 12, "unit": "pages", "measured": true},
+   {"kind": "faults", "what": "STARTUP-DATA-WINDOWS written start-up pages, release products (branch merged with next)", "before": 15, "after": 14, "unit": "pages", "measured": true},
+   {"kind": "cost", "what": "start-up text group end vs first fault-around window, fast (next +436 bytes margin); fix-forward: move the D-X.60 heap foreign branches out of line (handoff next step 1)", "before": 436, "after": -268, "unit": "bytes margin", "measured": true},
+   {"kind": "coverage", "what": "plants on the heap cache lookup split", "before": 0, "after": 2, "unit": "plants", "measured": true}
+ ],
+ "jobs": ["tb-foreign-words-low-7-checks", "tb-foreign-words-low-7-plants", "tb-foreign-words-low-7-nextso", "tb-foreign-words-low-7-nextpages", "tb-foreign-words-low-7-exp", "tb-foreign-words-low-7-nextfast", "tb-foreign-words-low-7-sizes"],
+ "improvement": "A continuation brief that says 'no code change is needed, rerun the tests' should still budget for a fix: the new traced contracts (data windows, first window) are tighter than the ones the earlier runs passed.",
+ "next_step": "Shrink the start-up text group by >= 268 bytes (D-X.60 heap foreign branches to cold helpers), then percall, plants, FULL tier.",
+ "report_file": "handoff/TB-FOREIGN-WORDS-LOW.md"}
