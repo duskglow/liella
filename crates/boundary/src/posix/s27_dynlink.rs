@@ -311,3 +311,51 @@ export! { "GLIBC_2.34";
 pub extern "C" fn dlerror() -> *mut c_char {
     core::ptr::with_exposed_provenance_mut(crate::dlerr::take())
 }}
+
+/// The loader's `dladdr`/`dladdr1` entry (`StartInfo::dladdr`, stored by `runtime::early_init`): 0
+/// in a program `ld.so` did not start (DL-18).
+pub static LOADER_DLADDR: AtomicUsize = AtomicUsize::new(0);
+/// The loader's `dlinfo` entry (`StartInfo::dlinfo`): 0 in a program `ld.so` did not start (DL-18).
+pub static LOADER_DLINFO: AtomicUsize = AtomicUsize::new(0);
+
+/// `dladdr1` through the loader's entry: 0 (nothing found) in a program `ld.so` did not start.
+fn dl_addr(addr: *const c_void, info: *mut c_void, extra: *mut *mut c_void, flags: c_int) -> c_int {
+    let f = LOADER_DLADDR.load(Ordering::Acquire);
+    if f == 0 {
+        return 0;
+    }
+    let w = |v: usize| i64::from_ne_bytes(u64::try_from(v).unwrap_or(0).to_ne_bytes());
+    let r = crate::ffi::liella_machine_call4(f, w(addr.expose_provenance()), w(info.expose_provenance()), w(extra.expose_provenance()), i64::from(flags));
+    c_int::try_from(r).unwrap_or(0)
+}
+
+export! { "GLIBC_2.34";
+/// `dladdr(addr, info)` (§27.1 s27_1_c_6, dladdr(3); phase 14 DL-18): the object holding `addr` and
+/// the dynamic symbol holding it (`crates/boundary/src/ld/dlopen/dladdr.rs`); 0 with `*info`
+/// untouched when no object holds it, and always in a static program.
+pub extern "C" fn dladdr(addr: *const c_void, info: *mut c_void) -> c_int {
+    dl_addr(addr, info, core::ptr::null_mut(), 0)
+}}
+
+export! { "GLIBC_2.34";
+/// `dladdr1(addr, info, extra, flags)` (§27.1 s27_1_c_6): `dladdr`, and for `RTLD_DL_SYMENT` the
+/// symbol's `Elf64_Sym` (NULL when none holds it), for `RTLD_DL_LINKMAP` the object's link map, in
+/// `*extra`.
+pub extern "C" fn dladdr1(addr: *const c_void, info: *mut c_void, extra: *mut *mut c_void, flags: c_int) -> c_int {
+    dl_addr(addr, info, extra, flags)
+}}
+
+export! { "GLIBC_2.34";
+/// `dlinfo(handle, request, arg)` (§27.1 s27_1_c_7, dlinfo(3); phase 14 DL-18): the loader answers
+/// (`crates/boundary/src/ld/dlopen/dladdr.rs`). In a static program no handle exists: -1 with the
+/// text `dlinfo: invalid handle`.
+pub extern "C" fn dlinfo(handle: *mut c_void, request: c_int, arg: *mut c_void) -> c_int {
+    let f = LOADER_DLINFO.load(Ordering::Acquire);
+    if f == 0 {
+        crate::dlerr::set(&[b"dlinfo: invalid handle"]);
+        return -1;
+    }
+    let w = |v: usize| i64::from_ne_bytes(u64::try_from(v).unwrap_or(0).to_ne_bytes());
+    let r = crate::ffi::liella_machine_call3(f, w(handle.expose_provenance()), i64::from(request), w(arg.expose_provenance()));
+    c_int::try_from(r).unwrap_or(-1)
+}}

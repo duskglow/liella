@@ -52,8 +52,30 @@ fn s27_1_c_3() {
 }
 clause!(s27_1_c_4, "27.1", "Contract", r##"**`dlclose`** decrements the reference count. At zero, it runs destructors and unmaps the object, unless the object is `NODELETE` or has unique symbols or TLS in use."##);
 clause!(s27_1_c_5, "27.1", "Contract", r##"**`dlerror()`** returns a Text describing the last failure on this thread, and clears it. It returns `NULL` if there was no error. ⚑ HIST: this is yet another error channel. `dlsym` returning `NULL` is ambiguous for symbols whose value is 0, so callers must check `dlerror`."##);
-clause!(s27_1_c_6, "27.1", "Contract", r##"**`dladdr(addr, &info)`** / **`dladdr1`** map an address to its object and nearest symbol."##);
-clause!(s27_1_c_7, "27.1", "Contract", r##"**`dlinfo(handle, request, arg)`** queries a handle: its link map, origin, search paths, TLS module ID and block, and namespace."##);
+/// §27.1 Contract: **`dladdr(addr, &info)`** / **`dladdr1`** map an address to its object and nearest symbol.
+///
+/// `s27_dladdr`: a helper with a fixed symbol layout (gaps, a size-0 symbol, equal starts,
+/// overlapping symbols, an IFUNC), the program and libc; `dladdr1` with `RTLD_DL_SYMENT` and
+/// `RTLD_DL_LINKMAP`; addresses no object holds; a backtrace through the helper. Checked on the
+/// reference and on Liella's loader (DL-18).
+#[test]
+fn s27_1_c_6() {
+    let out = conformance(&["s27_dladdr"]);
+    assert!(out.lines().any(|l| l == "conformance: 1 passed, 0 failed"), "s27_dladdr did not pass on both:\n{out}");
+    assert_not_pending(&out, "s27_dladdr");
+}
+/// §27.1 Contract: **`dlinfo(handle, request, arg)`** queries a handle: its link map, origin, search paths, TLS module ID and block, and namespace.
+///
+/// `s27_dlinfo`: `RTLD_DI_LMID`, `LINKMAP`, `ORIGIN`, `TLS_MODID` (the id `__tls_get_addr`
+/// takes), `TLS_DATA` (in two threads), `PHDR` (against the file's headers), `SERINFOSIZE` and
+/// `SERINFO` (`DT_RPATH`, `LD_LIBRARY_PATH`, `DT_RUNPATH`), and the unsupported requests' text.
+/// Checked on the reference and on Liella's loader (DL-18).
+#[test]
+fn s27_1_c_7() {
+    let out = conformance(&["s27_dlinfo"]);
+    assert!(out.lines().any(|l| l == "conformance: 1 passed, 0 failed"), "s27_dlinfo did not pass on both:\n{out}");
+    assert_not_pending(&out, "s27_dlinfo");
+}
 clause!(s27_1_c_8, "27.1", "Contract", r##"**`dl_iterate_phdr(cb, data)`** calls `cb` for each loaded object, with its load address and program headers. The loader lock is held during the callback."##);
 clause!(s27_1_c_9, "27.1", "Contract", r##"**`_dl_find_object(pc, &res)`** (2.35) finds an object and its `PT_GNU_EH_FRAME` for a program counter without taking locks. It exists for unwinders."##);
 clause!(s27_1_g_0, "27.1", "Guarantees", r##"Symbol resolution follows ELF rules (global scope order, symbol versioning, `STB_GNU_UNIQUE`, IFUNC resolvers run at bind time). Constructors run in dependency order."##);

@@ -62,7 +62,12 @@ struct Slot {
     file_id: [AtomicU64; 7],
 }
 const _: () = assert!(CAPACITY == FILES);
-static SLOTS: [Slot; CAPACITY] = [const {
+/// The table, page-aligned (STARTUP-DATA-PAGE-ALIGN-3): start-up writes its first records, whose page
+/// then stays the same wherever the objects ahead of it in `.lbss` end (unaligned, the head straddled
+/// two pages). The alignment costs at most 4 KiB of zero-filled address space, no file bytes.
+#[repr(C, align(4096))]
+struct Slots([Slot; CAPACITY]);
+static SLOTS: Slots = Slots([const {
     Slot {
         interned: AtomicUsize::new(0),
         name_addr: AtomicUsize::new(0),
@@ -73,7 +78,7 @@ static SLOTS: [Slot; CAPACITY] = [const {
         file_gen: AtomicUsize::new(0),
         file_id: [const { AtomicU64::new(0) }; 7],
     }
-}; CAPACITY];
+}; CAPACITY]);
 static COUNT: AtomicUsize = AtomicUsize::new(0);
 static NAME_COUNT: AtomicUsize = AtomicUsize::new(0);
 static FILE_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -139,7 +144,7 @@ fn load(a: &[AtomicUsize], i: usize) -> usize {
 
 /// Field `f` of slot `i` (0 past the end).
 fn field(f: fn(&'static Slot) -> &'static AtomicUsize, i: usize) -> usize {
-    SLOTS.get(i).map_or(0, |s| f(s).load(Acquire))
+    SLOTS.0.get(i).map_or(0, |s| f(s).load(Acquire))
 }
 
 /// The view of the `"C"` locale, as a static for [`view`].
@@ -167,7 +172,7 @@ fn intern_locked(objs: &impl Objects, l: Locale) -> KResult<usize> {
     if let Some(i) = (0..n).find(|&i| *objs.view_at(field(|s| &s.interned, i)).locale() == l) {
         return Ok(i.saturating_add(1));
     }
-    let slot = &SLOTS.get(n).ok_or(Errno::ENOMEM)?.interned;
+    let slot = &SLOTS.0.get(n).ok_or(Errno::ENOMEM)?.interned;
     // A category file an earlier view already tabulated is not tabulated again (LV-3).
     let reuse = |cat: Cat, d: &Data| {
         (0..n).find_map(|i| {
@@ -197,7 +202,7 @@ fn intern_name_locked(objs: &impl Objects, name: &[u8]) -> KResult<(usize, &'sta
             return Ok((i, stored));
         }
     }
-    let e = SLOTS.get(n).ok_or(Errno::ENOMEM)?;
+    let e = SLOTS.0.get(n).ok_or(Errno::ENOMEM)?;
     let (addr, len) = (&e.name_addr, &e.name_len);
     let mut v = TryVec::with_capacity(name.len().saturating_add(1))?;
     v.extend_from_slice(name)?;
@@ -241,7 +246,7 @@ struct Files<'a, M: Mapper> {
 /// Record file slot `i`: the mapping, its identity, checked in `generation`. The caller holds
 /// [`LOCK`].
 fn record_file(i: usize, addr: usize, len: usize, id: &Identity, generation: usize) {
-    if let Some(e) = SLOTS.get(i) {
+    if let Some(e) = SLOTS.0.get(i) {
         let (a, l, w, g) = (&e.file_addr, &e.file_len, &e.file_id, &e.file_gen);
         a.store(addr, Release);
         l.store(len, Release);
@@ -254,7 +259,7 @@ fn record_file(i: usize, addr: usize, len: usize, id: &Identity, generation: usi
 
 fn file_id(i: usize) -> Identity {
     let mut id = [0u64; 7];
-    if let Some(w) = SLOTS.get(i).map(|e| &e.file_id) {
+    if let Some(w) = SLOTS.0.get(i).map(|e| &e.file_id) {
         for (v, slot) in id.iter_mut().zip(w) {
             *v = slot.load(Acquire);
         }
@@ -284,7 +289,7 @@ impl<M: Mapper> Source for Files<'_, M> {
             // The first use since an invalidation: the same file is used again, a changed one
             // mapped again (the old mapping stays for the locales that point into it).
             if self.m.identity(path) == Some(file_id(i)) {
-                if let Some(g) = SLOTS.get(i).map(|e| &e.file_gen) {
+                if let Some(g) = SLOTS.0.get(i).map(|e| &e.file_gen) {
                     g.store(generation, Release);
                 }
                 return Some(current);
@@ -299,7 +304,7 @@ impl<M: Mapper> Source for Files<'_, M> {
         }
         // A new file: only when it can be recorded (a full table fails the load cleanly, as a
         // missing file does, instead of mapping again at every call).
-        let fname = &SLOTS.get(n)?.file_name;
+        let fname = &SLOTS.0.get(n)?.file_name;
         if MAPS.load(Acquire) >= MAP_LIMIT {
             return None;
         }

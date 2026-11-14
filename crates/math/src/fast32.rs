@@ -39,6 +39,7 @@ mod inv_trig;
 mod trig;
 
 use bessel::bessel_eval;
+pub(crate) use bessel::bessel_large;
 #[cfg(test)]
 pub(crate) use cexp::{cexp_core, CEXP_DELTA};
 pub use cexp::{cexpf, cexpf_nearest};

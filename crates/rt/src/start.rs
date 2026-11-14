@@ -369,6 +369,12 @@ pub mod private {
         /// The loader's `dlclose` entry (DL-17): `(handle)` to 0, or -1 with the failure text set
         /// in the calling thread's dlerror record; 0: none.
         pub dlclose: usize,
+        /// The loader's `dladdr`/`dladdr1` entry (DL-18): `(addr, info, extra, flags)` to 1 with
+        /// `*info` (and `*extra`) filled, or 0 when no object holds `addr`; 0: none.
+        pub dladdr: usize,
+        /// The loader's `dlinfo` entry (DL-18): `(handle, request, arg)` to the request's result or
+        /// -1 with the failure text set; 0: none.
+        pub dlinfo: usize,
     }
 
     #[cfg(test)]

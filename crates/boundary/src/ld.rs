@@ -666,8 +666,8 @@ pub(super) fn release_tls(walk: usize, gone: &mut NewTls, generation: u64) {
     }
 }
 
-/// The place of the initially loaded module whose image starts at `image` (its object's bias +
-/// `p_vaddr`).
+/// The place of the module whose image starts at `image` (its object's bias + `p_vaddr`): an
+/// initially loaded one, or (for `dlinfo`) a `dlopen`ed one [`tls_visit`] has appended.
 pub(super) fn initial_place(image: u64) -> Option<Placed> {
     (0..THREAD_MODS_LEN.load(Acquire)).filter_map(module_words).find(|w| w[0] == image).map(|w| Placed { module: w[3], tp_offset: i64::from_ne_bytes(w[4].to_ne_bytes()) })
 }
@@ -1322,6 +1322,8 @@ fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<
             dl_find_object: readers::find_object_address(),
             dl_fork: dlopen::fork_address(),
             dlclose: dlopen::close_address(),
+            dladdr: dlopen::dladdr::dladdr_address(),
+            dlinfo: dlopen::dladdr::dlinfo_address(),
         };
         let at = core::ptr::from_ref(&info).expose_provenance();
         let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), args(at), 0, 0);

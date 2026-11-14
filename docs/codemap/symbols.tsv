@@ -61,7 +61,7 @@ _IO_vfprintf	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:1135	ret::count
 _IO_vfscanf	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:1068	scanf::vfscanf
 _IO_vsprintf	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:1171	ret::count
 __adjtimex	GLIBC_2.2.5	crates/boundary/src/posix/s23_time.rs:121	ret::int32
-__after_morecore_hook	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3825	
+__after_morecore_hook	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3849	
 __arch_prctl	GLIBC_2.2.5	crates/boundary/src/posix/s18_processes.rs:454	ret::int
 __argz_count	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:948	ret::must
 __argz_next	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:1008	ret::found
@@ -138,7 +138,7 @@ __fread_chk	GLIBC_2.7	crates/boundary/src/posix/s12_stdio.rs:327	ret::elements
 __fread_unlocked_chk	GLIBC_2.7	crates/boundary/src/posix/s12_stdio.rs:333	ret::elements
 __freadable	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:139	ret::truth
 __freading	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:129	ret::truth
-__free_hook	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3833	
+__free_hook	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3857	
 __freelocale	GLIBC_2.2.5	crates/boundary/src/posix/s07_locale.rs:49	locale::freelocale
 __fsetlocking	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:149	ret::or_zero
 __fwprintf_chk		csys/src/adapter/variadic.c:178	liella_vfwprintf4
@@ -264,14 +264,14 @@ __longjmp_chk	GLIBC_2.11	crates/boundary/src/posix/s21_contexts.rs:23	context::l
 __lseek	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:304	ret::off
 __lxstat	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:278	ret::store_into
 __lxstat64	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:284	ret::store_into
-__malloc_hook	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3841	
-__malloc_initialize_hook	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3849	
+__malloc_hook	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3865	
+__malloc_initialize_hook	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3873	
 __mbrlen	GLIBC_2.2.5	crates/boundary/src/posix/s06_multibyte.rs:113	
 __mbrtowc	GLIBC_2.2.5	crates/boundary/src/posix/s06_multibyte.rs:86	
 __mbsnrtowcs_chk	GLIBC_2.4	crates/boundary/src/posix/s06_multibyte.rs:221	ret::size_or_neg1
 __mbsrtowcs_chk	GLIBC_2.4	crates/boundary/src/posix/s06_multibyte.rs:215	ret::size_or_neg1
 __mbstowcs_chk	GLIBC_2.4	crates/boundary/src/posix/s06_multibyte.rs:233	ret::size_or_neg1
-__memalign_hook	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3857	
+__memalign_hook	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3881	
 __memcmpeq	GLIBC_2.35	csys/src/machine/fold.S:1323	liella_hot_equal_rest
 __memcpy_chk	GLIBC_2.3.4	crates/boundary/src/posix/s04_strings.rs:37	hot::move_bytes
 __memmove_chk	GLIBC_2.3.4	crates/boundary/src/posix/s04_strings.rs:43	hot::move_bytes
@@ -279,7 +279,7 @@ __mempcpy	GLIBC_2.2.5	csys/src/machine/fold.S:262	liella_machine_memmove
 __mempcpy_chk	GLIBC_2.3.4	crates/boundary/src/posix/s04_strings.rs:76	conv::chk
 __memset_chk	GLIBC_2.3.4	crates/boundary/src/posix/s04_strings.rs:103	hot::set_bytes
 __monstartup	GLIBC_2.2.5	crates/boundary/src/posix/s28_profiling.rs:219	
-__morecore	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3865	
+__morecore	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3889	
 __mq_open_2	GLIBC_2.34	crates/boundary/src/posix/s25_ipc.rs:134	ret::fd
 __mq_open_2	GLIBC_2.7	crates/boundary/src/posix/s25_ipc.rs:134	ret::fd
 __nanosleep	GLIBC_2.2.6	crates/boundary/src/posix/s23_time.rs:161	cancel::point
@@ -382,7 +382,7 @@ __read	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:143	ret::ssize
 __read_chk	GLIBC_2.4	crates/boundary/src/posix/s11_lowio.rs:216	ret::raw_ssize
 __readlink_chk	GLIBC_2.4	crates/boundary/src/posix/s13_filesystem.rs:97	ret::ssize
 __readlinkat_chk	GLIBC_2.5	crates/boundary/src/posix/s13_filesystem.rs:103	ret::ssize
-__realloc_hook	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3873	
+__realloc_hook	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3897	
 __realpath_chk	GLIBC_2.4	crates/boundary/src/posix/s13_filesystem.rs:919	ret::null
 __recv_chk	GLIBC_2.4	crates/boundary/src/posix/s15_sockets.rs:136	cancel::point
 __recvfrom_chk	GLIBC_2.4	crates/boundary/src/posix/s15_sockets.rs:154	cancel::point
@@ -571,7 +571,7 @@ _getshort	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:870	resolv::
 _longjmp		csys/src/machine/setjmp.S:145	liella_machine_longjmp_nomask
 _mcleanup	GLIBC_2.2.5	crates/boundary/src/posix/s28_profiling.rs:356	
 _mcount		csys/src/machine/mcount.S:38	liella_mcount_save
-_null_auth	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3881	
+_null_auth	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3905	
 _obstack_allocated_p	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:301	ret::must
 _obstack_begin	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:265	ret::must
 _obstack_begin_1	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:271	ret::must
@@ -587,17 +587,17 @@ _pthread_cleanup_push_defer	GLIBC_2.2.5	crates/boundary/src/posix/s22_threads.rs
 _rpc_dtablesize	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_clnt.rs:382	
 _seterr_reply	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_svc.rs:234	u64::from
 _setjmp		csys/src/machine/setjmp.S:108	liella_machine_sigsetjmp
-_start		csys/src/machine/entry.S:121	liella_start_main_static_pie
-_sys_errlist	GLIBC_2.12	csys/src/machine/compat_aliases.S:3456	
-_sys_errlist	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3453	
-_sys_errlist	GLIBC_2.3	csys/src/machine/compat_aliases.S:3454	
-_sys_errlist	GLIBC_2.4	csys/src/machine/compat_aliases.S:3455	
-_sys_nerr	GLIBC_2.12	csys/src/machine/compat_aliases.S:3815	
-_sys_nerr	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3776	
-_sys_nerr	GLIBC_2.3	csys/src/machine/compat_aliases.S:3789	
-_sys_nerr	GLIBC_2.4	csys/src/machine/compat_aliases.S:3802	
-_sys_siglist	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3618	
-_sys_siglist	GLIBC_2.3.3	csys/src/machine/compat_aliases.S:3619	
+_start		csys/src/machine/entry.S:127	liella_start_main_static_pie
+_sys_errlist	GLIBC_2.12	csys/src/machine/compat_aliases.S:3480	
+_sys_errlist	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3477	
+_sys_errlist	GLIBC_2.3	csys/src/machine/compat_aliases.S:3478	
+_sys_errlist	GLIBC_2.4	csys/src/machine/compat_aliases.S:3479	
+_sys_nerr	GLIBC_2.12	csys/src/machine/compat_aliases.S:3839	
+_sys_nerr	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3800	
+_sys_nerr	GLIBC_2.3	csys/src/machine/compat_aliases.S:3813	
+_sys_nerr	GLIBC_2.4	csys/src/machine/compat_aliases.S:3826	
+_sys_siglist	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3642	
+_sys_siglist	GLIBC_2.3.3	csys/src/machine/compat_aliases.S:3643	
 _tolower	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:415	locale::tolower
 _toupper	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:450	locale::toupper
 a64l	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:1098	ret::must
@@ -1041,13 +1041,19 @@ dirfd	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:742	ret::int
 dirname	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:924	ret::path_part
 div	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:1053	pack::div
 dl_iterate_phdr	GLIBC_2.2.5	crates/boundary/src/posix/s27_dynlink.rs:100	i64::from_ne_bytes
+dladdr	GLIBC_2.2.5	crates/boundary/src/posix/s27_dynlink.rs:315	core::ptr::null_mut
+dladdr	GLIBC_2.34	crates/boundary/src/posix/s27_dynlink.rs:315	core::ptr::null_mut
+dladdr1	GLIBC_2.3.3	crates/boundary/src/posix/s27_dynlink.rs:323	
+dladdr1	GLIBC_2.34	crates/boundary/src/posix/s27_dynlink.rs:323	
 dlerror	GLIBC_2.2.5	crates/boundary/src/posix/s27_dynlink.rs:290	core::ptr::with_exposed_provenance_mut
 dlerror	GLIBC_2.34	crates/boundary/src/posix/s27_dynlink.rs:290	core::ptr::with_exposed_provenance_mut
-dlopen	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:812	dlopen
+dlinfo	GLIBC_2.3.3	crates/boundary/src/posix/s27_dynlink.rs:331	crate::dlerr::set
+dlinfo	GLIBC_2.34	crates/boundary/src/posix/s27_dynlink.rs:331	crate::dlerr::set
+dlopen	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:836	dlopen
 dlopen	GLIBC_2.34	csys/src/machine/dl.S:17	liella_dl_open
-dlsym	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:820	dlsym
+dlsym	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:844	dlsym
 dlsym	GLIBC_2.34	csys/src/machine/dl.S:29	liella_dl_sym
-dlvsym	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:828	dlvsym
+dlvsym	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:852	dlvsym
 dlvsym	GLIBC_2.34	csys/src/machine/dl.S:41	liella_dl_sym
 dngettext	GLIBC_2.2.5	crates/boundary/src/posix/s07_locale.rs:130	ret::ptr
 dprintf		csys/src/adapter/variadic.c:160	liella_vdprintf4
@@ -2537,14 +2543,14 @@ llroundf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3783	mret::Soft
 llroundf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3789	mret::Soft::enter
 llseek	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:299	ret::off
 llseek	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:309	ret::off
-loc1	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3889	
-loc2	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3897	
+loc1	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3913	
+loc2	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3921	
 localeconv	GLIBC_2.2.5	crates/boundary/src/posix/s07_locale.rs:64	ret::ptr
 localtime	GLIBC_2.2.5	crates/boundary/src/posix/s23_time.rs:258	ret::null
 localtime_r	GLIBC_2.2.5	crates/boundary/src/posix/s23_time.rs:253	ret::null
 lockf	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:706	ret::zero
 lockf64	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:711	ret::zero
-locs	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3905	
+locs	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3929	
 log	(math-gen)	crates/boundary/src/posix/s10_math.tsv:104	mret::elem32_onepass
 log	(math-gen)	crates/boundary/src/posix/s10_math.tsv:105	mret::elem_fast
 log	(math-gen)	crates/boundary/src/posix/s10_math.tsv:106	mret::elem
@@ -2626,7 +2632,7 @@ malloc_stats	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:177	heap::mallo
 malloc_trim	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:141	ret::truth
 malloc_usable_size	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:136	heap::checked
 mallopt	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:146	malloc_compat::mallopt
-mallwatch	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3913	
+mallwatch	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3937	
 mblen	GLIBC_2.2.5	crates/boundary/src/posix/s06_multibyte.rs:118	ret::int
 mbrlen	GLIBC_2.2.5	crates/boundary/src/posix/s06_multibyte.rs:108	
 mbrtoc16	GLIBC_2.16	crates/boundary/src/posix/s06_multibyte.rs:96	ret::size_or_neg1
@@ -2699,7 +2705,7 @@ mq_getattr	GLIBC_2.34	crates/boundary/src/posix/s25_ipc.rs:181	ret::store_if
 mq_notify	GLIBC_2.3.4	crates/boundary/src/posix/s25_ipc.rs:175	ret::zero
 mq_notify	GLIBC_2.34	crates/boundary/src/posix/s25_ipc.rs:175	ret::zero
 mq_open		csys/src/adapter/variadic.c:240	
-mq_open	GLIBC_2.3.4	csys/src/machine/compat_aliases.S:1164	mq_open
+mq_open	GLIBC_2.3.4	csys/src/machine/compat_aliases.S:1188	mq_open
 mq_receive	GLIBC_2.3.4	crates/boundary/src/posix/s25_ipc.rs:163	cancel::point
 mq_receive	GLIBC_2.34	crates/boundary/src/posix/s25_ipc.rs:163	cancel::point
 mq_send	GLIBC_2.3.4	crates/boundary/src/posix/s25_ipc.rs:151	cancel::point
@@ -3088,7 +3094,7 @@ pthread_mutexattr_setrobust_np	GLIBC_2.4	crates/boundary/src/posix/s22_threads.r
 pthread_mutexattr_setrobust_np	GLIBC_2.4	crates/boundary/src/posix/s22_threads.rs:679	ret::errnum
 pthread_mutexattr_settype	GLIBC_2.2.5	crates/boundary/src/posix/s22_threads.rs:607	ret::errnum
 pthread_mutexattr_settype	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:607	ret::errnum
-pthread_once	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:1924	pthread_once
+pthread_once	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:1948	pthread_once
 pthread_once	GLIBC_2.34	csys/src/machine/once.S:77	liella_machine_once
 pthread_rwlock_clockrdlock	GLIBC_2.30	crates/boundary/src/posix/s22_threads.rs:916	ret::errnum
 pthread_rwlock_clockrdlock	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:916	ret::errnum
@@ -3340,7 +3346,7 @@ sem_getvalue	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:1220	ret::store
 sem_init	GLIBC_2.2.5	crates/boundary/src/posix/s22_threads.rs:1178	ret::zero
 sem_init	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:1178	ret::zero
 sem_open		csys/src/adapter/variadic.c:74	
-sem_open	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2284	sem_open
+sem_open	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2308	sem_open
 sem_post	GLIBC_2.2.5	crates/boundary/src/posix/s22_threads.rs:1190	ret::zero
 sem_post	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:1190	ret::zero
 sem_timedwait	GLIBC_2.2.5	crates/boundary/src/posix/s22_threads.rs:1208	ret::zero
@@ -3689,13 +3695,13 @@ svc_register	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_svc.rs:137
 svc_run	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_svc.rs:215	
 svc_sendreply	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_svc.rs:164	
 svc_unregister	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_svc.rs:144	
-svcerr_auth	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2446	liella_compat_svcerr_auth
-svcerr_decode	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2454	liella_compat_svcerr_decode
-svcerr_noproc	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2462	liella_compat_svcerr_noproc
-svcerr_noprog	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2470	liella_compat_svcerr_noprog
-svcerr_progvers	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2478	liella_compat_svcerr_progvers
-svcerr_systemerr	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2486	liella_compat_svcerr_systemerr
-svcerr_weakauth	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2494	liella_compat_svcerr_weakauth
+svcerr_auth	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2470	liella_compat_svcerr_auth
+svcerr_decode	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2478	liella_compat_svcerr_decode
+svcerr_noproc	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2486	liella_compat_svcerr_noproc
+svcerr_noprog	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2494	liella_compat_svcerr_noprog
+svcerr_progvers	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2502	liella_compat_svcerr_progvers
+svcerr_systemerr	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2510	liella_compat_svcerr_systemerr
+svcerr_weakauth	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2518	liella_compat_svcerr_weakauth
 svcfd_create	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_svc.rs:94	
 svcraw_create	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_svc.rs:100	
 svctcp_create	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_svc.rs:88	
@@ -3714,18 +3720,18 @@ symlinkat	GLIBC_2.4	crates/boundary/src/posix/s13_filesystem.rs:79	ret::zero
 sync	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:443	
 sync_file_range	GLIBC_2.6	crates/boundary/src/posix/s11_lowio.rs:453	ret::zero
 syncfs	GLIBC_2.14	crates/boundary/src/posix/s11_lowio.rs:448	ret::zero
-sys_errlist	GLIBC_2.12	csys/src/machine/compat_aliases.S:3460	
-sys_errlist	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3457	
-sys_errlist	GLIBC_2.3	csys/src/machine/compat_aliases.S:3458	
-sys_errlist	GLIBC_2.4	csys/src/machine/compat_aliases.S:3459	
-sys_nerr	GLIBC_2.12	csys/src/machine/compat_aliases.S:3816	
-sys_nerr	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3777	
-sys_nerr	GLIBC_2.3	csys/src/machine/compat_aliases.S:3790	
-sys_nerr	GLIBC_2.4	csys/src/machine/compat_aliases.S:3803	
-sys_sigabbrev	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3699	
-sys_sigabbrev	GLIBC_2.3.3	csys/src/machine/compat_aliases.S:3700	
-sys_siglist	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3620	
-sys_siglist	GLIBC_2.3.3	csys/src/machine/compat_aliases.S:3621	
+sys_errlist	GLIBC_2.12	csys/src/machine/compat_aliases.S:3484	
+sys_errlist	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3481	
+sys_errlist	GLIBC_2.3	csys/src/machine/compat_aliases.S:3482	
+sys_errlist	GLIBC_2.4	csys/src/machine/compat_aliases.S:3483	
+sys_nerr	GLIBC_2.12	csys/src/machine/compat_aliases.S:3840	
+sys_nerr	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3801	
+sys_nerr	GLIBC_2.3	csys/src/machine/compat_aliases.S:3814	
+sys_nerr	GLIBC_2.4	csys/src/machine/compat_aliases.S:3827	
+sys_sigabbrev	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3723	
+sys_sigabbrev	GLIBC_2.3.3	csys/src/machine/compat_aliases.S:3724	
+sys_siglist	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3644	
+sys_siglist	GLIBC_2.3.3	csys/src/machine/compat_aliases.S:3645	
 syscall		csys/src/adapter/variadic.c:50	
 sysconf	GLIBC_2.2.5	crates/boundary/src/posix/s24_system.rs:206	ret::sysconf
 sysctl	GLIBC_2.2.5	crates/boundary/src/posix/s29_legacy.rs:549	ret::zero
@@ -4011,36 +4017,36 @@ wprintf		csys/src/adapter/variadic.c:167	liella_vfwprintf4
 write	GLIBC_2.2.5	csys/src/machine/points.S:82	liella_write_rest
 writev	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:240	cancel::point
 xdecrypt	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_auth.rs:76	
-xdr_bool	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2710	liella_compat_xdr_bool
+xdr_bool	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2734	liella_compat_xdr_bool
 xdr_bytes	GLIBC_2.2.5	crates/boundary/src/posix/s29_legacy.rs:388	rules::len_ok
-xdr_char	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2726	liella_compat_xdr_char
+xdr_char	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2750	liella_compat_xdr_char
 xdr_double	GLIBC_2.2.5	crates/boundary/src/posix/s29_legacy.rs:359	
-xdr_enum	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2742	liella_compat_xdr_enum
-xdr_float	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2750	liella_compat_xdr_float
+xdr_enum	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2766	liella_compat_xdr_enum
+xdr_float	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2774	liella_compat_xdr_float
 xdr_free	GLIBC_2.2.5	crates/boundary/src/posix/s29_legacy.rs:485	ptr::null
-xdr_hyper	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2766	liella_compat_xdr_hyper
-xdr_int	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2774	liella_compat_xdr_int
-xdr_int16_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2782	liella_compat_xdr_int16_t
-xdr_int32_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2790	liella_compat_xdr_int32_t
-xdr_int64_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2798	liella_compat_xdr_int64_t
-xdr_int8_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2806	liella_compat_xdr_int8_t
-xdr_long	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2814	liella_compat_xdr_long
-xdr_longlong_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2822	liella_compat_xdr_longlong_t
+xdr_hyper	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2790	liella_compat_xdr_hyper
+xdr_int	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2798	liella_compat_xdr_int
+xdr_int16_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2806	liella_compat_xdr_int16_t
+xdr_int32_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2814	liella_compat_xdr_int32_t
+xdr_int64_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2822	liella_compat_xdr_int64_t
+xdr_int8_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2830	liella_compat_xdr_int8_t
+xdr_long	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2838	liella_compat_xdr_long
+xdr_longlong_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2846	liella_compat_xdr_longlong_t
 xdr_opaque	GLIBC_2.2.5	crates/boundary/src/posix/s29_legacy.rs:371	rules::pad
-xdr_quad_t	GLIBC_2.3.4	csys/src/machine/compat_aliases.S:2838	liella_compat_xdr_quad_t
-xdr_short	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2846	liella_compat_xdr_short
+xdr_quad_t	GLIBC_2.3.4	csys/src/machine/compat_aliases.S:2862	liella_compat_xdr_quad_t
+xdr_short	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2870	liella_compat_xdr_short
 xdr_string	GLIBC_2.2.5	crates/boundary/src/posix/s29_legacy.rs:444	c_uint::try_from
-xdr_u_char	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2862	liella_compat_xdr_u_char
-xdr_u_hyper	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2870	liella_compat_xdr_u_hyper
-xdr_u_int	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2878	liella_compat_xdr_u_int
-xdr_u_long	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2886	liella_compat_xdr_u_long
-xdr_u_longlong_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2894	liella_compat_xdr_u_longlong_t
-xdr_u_quad_t	GLIBC_2.3.4	csys/src/machine/compat_aliases.S:2902	liella_compat_xdr_u_quad_t
-xdr_u_short	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2910	liella_compat_xdr_u_short
-xdr_uint16_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2918	liella_compat_xdr_uint16_t
-xdr_uint32_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2926	liella_compat_xdr_uint32_t
-xdr_uint64_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2934	liella_compat_xdr_uint64_t
-xdr_uint8_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2942	liella_compat_xdr_uint8_t
+xdr_u_char	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2886	liella_compat_xdr_u_char
+xdr_u_hyper	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2894	liella_compat_xdr_u_hyper
+xdr_u_int	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2902	liella_compat_xdr_u_int
+xdr_u_long	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2910	liella_compat_xdr_u_long
+xdr_u_longlong_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2918	liella_compat_xdr_u_longlong_t
+xdr_u_quad_t	GLIBC_2.3.4	csys/src/machine/compat_aliases.S:2926	liella_compat_xdr_u_quad_t
+xdr_u_short	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2934	liella_compat_xdr_u_short
+xdr_uint16_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2942	liella_compat_xdr_uint16_t
+xdr_uint32_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2950	liella_compat_xdr_uint32_t
+xdr_uint64_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2958	liella_compat_xdr_uint64_t
+xdr_uint8_t	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2966	liella_compat_xdr_uint8_t
 xdr_void	GLIBC_2.2.5	crates/boundary/src/posix/s29_legacy.rs:365	
 xdr_wrapstring	GLIBC_2.2.5	crates/boundary/src/posix/s29_legacy.rs:479	
 xdrmem_create	GLIBC_2.2.5	crates/boundary/src/posix/s29_legacy.rs:208	
