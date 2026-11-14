@@ -1,0 +1,60 @@
+{
+ "task": "DL-DLCLOSE",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE checkpoint (context): dlclose, deferred reclamation, TLS id reuse, atfork drop implemented; clippy clean; tests not yet run",
+ "branch": "task/dl-dlclose",
+ "head": null,
+ "gate": {
+  "affected": null,
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "records/pending/ is gone from next: where do pending D-27 records go now",
+   "recommendation": "coordinator names the new location; the records are written at the finishing run"
+  }
+ ],
+ "informational": [
+  "DL-ATEXIT-OWNER not covered (opt-in interface); DL-ATFORK-FINALIZE covered",
+  "read_section uses striped two-parity reader counters instead of thread-block epochs (same guarantee, no thread walk): departure from design.md wording, see handoff",
+  "sorted address index left to DL-OBJ-TABLE-GROW"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "correctness",
+   "what": "dlclose exported and implemented (was missing)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  },
+  {
+   "kind": "coverage",
+   "what": "tests added: dlclose.rs (3 tests), tls unit test (1)",
+   "before": 0,
+   "after": 4,
+   "unit": "tests",
+   "measured": false
+  },
+  {
+   "kind": "unblock",
+   "what": "DL-ATEXIT-OWNER, DL-16S (need dlclose)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  }
+ ],
+ "improvement": "briefs for L loader stories could pre-split design+probe from implementation: one run cannot hold the reading, design, code and proof within ~150k context",
+ "next_step": "resume: read dl-dlclose-tests1, fix, dynlink.md record, records, plants, gate",
+ "report_file": "handoff/DL-DLCLOSE.md",
+ "jobs": [
+  "dl-dlclose-probe1",
+  "dl-dlclose-lint1",
+  "dl-dlclose-lint2",
+  "dl-dlclose-tests1"
+ ]
+}
