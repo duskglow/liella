@@ -558,9 +558,9 @@ fn tz_period_words_per_thread_and_fork() {
             (o.tm_hour, o.tm_isdst)
         }
         set_tz("EST5EDT,M3.2.0,M11.1.0");
-        if tb::read32::<tb::Flags>() & liella_rt::tls::FLAG_OWN == 0 {
-            // D-5.11: a block the runtime did not make (this test process's, made by the
-            // system's `ld.so`) keeps its cache words untouched; the answers stay right.
+        if tb::current().flags.load(Relaxed) & liella_rt::tls::FLAG_OWN == 0 {
+            // D-5.11: a process the runtime did not start (this test process, its blocks made
+            // by the system's `ld.so`) keeps its cache words untouched; the answers stay right.
             let before = words();
             assert_eq!(kind_at(SUMMER), (5, 1));
             assert_eq!(kind_at(WINTER), (17, 0));
