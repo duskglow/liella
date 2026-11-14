@@ -1,8 +1,20 @@
 # SMOKE-ERRNO-FIXES: readdir on a removed directory, setlocale's errno on failure (AQOURS-SMOKE F1, F3)
 
-State: branch task/smoke-errno-fixes-2 (continues task/smoke-errno-fixes); code head 39c95fe86 + a5e3b8f57
-(fixes), b811e98b8 (rulings applied to spec text and differences row); this note and the report json follow.
-Role keke:~/w/n3 (SMOKE-ERRNO-FIXES-2); the first run used kanon:~/w/kn1.
+State: branch task/smoke-errno-fixes-3 (continues -2 and the first run); code head 39c95fe86 + a5e3b8f57
+(fixes), b811e98b8 (rulings applied to spec text and differences row), f596e2846 (merge of origin/next 24a434a17,
+which has STARTUP-DATA-PAGE-ALIGN-3); this note, the plants results and the report json follow.
+READY TO LAND: gate and plants green on the merged head (SMOKE-ERRNO-FIXES-3, below). Nothing left to change.
+Roles: mei:~/w/s1 (-3), keke:~/w/n3 (-2), kanon:~/w/kn1 (first run).
+
+## Jobs (mei, -3, merged head f596e2846; code unchanged since b811e98b8)
+* smoke-errno-fixes-3-lint0: clippy + static on the inherited head b811e98b8 before the merge, rc 0.
+* smoke-errno-fixes-3-gate: clippy + static + `affected --run --base origin/next`, escalated to FULL (the branch
+  changes spec/clauses.tsv): rc 0; 32 suites ok, 11780 passed, 0 failed, 1379 ignored; conformance 135/0; peak
+  16G (page cache), oom_kill 0. The start-up layout contracts (STARTUP-DATA-WINDOWS) pass: the jitter of -2 is gone.
+* smoke-errno-fixes-3-plants: `cargo xtask plants handoff/SMOKE-ERRNO-FIXES-plants.txt --timeout 2400`: 3 CAUGHT,
+  0 SURVIVED, 0 WARN (results appended to the plants file).
+
+## History: -2 (keke)
 
 ## What changed
 * F1 (ruling #5467): `DirStream::refill` (crates/core/src/fs/dir.rs) takes `getdents64`'s `ENOENT` as the end
@@ -34,8 +46,7 @@ merge on the branch), job smoke-errno-fixes-2-onnext-so rc 1: 13 pages, same fou
 start-up code (a `#[cold]` `setlocale_failed` helper and one match arm in `DirStream::refill`); new cold code moving
 the start-up data through the page grid is the mechanism in handoff/layout-stability-rethink.md. Not chased (rule
 #4347: no regen loops, no section moves, no bound change).
-Next step: once the start-up layout fix lands (trace-at-build grouping; LAYOUT-RETHINK), re-sync, run the gate
-and `cargo xtask plants handoff/SMOKE-ERRNO-FIXES-plants.txt --dir <new RAM dir> --timeout 2400`; nothing else to change.
+Resolved in -3 by STARTUP-DATA-PAGE-ALIGN-3 on next (above).
 Diagnostic: smoke-errno-fixes-2-stubs (keke; regenerated clauses.tsv; rc 128 from a trailing `git status` in a
 role dir without .git, the regeneration itself completed). First run: smoke-errno-fixes-plants3 (kanon) rc 2:
 its baseline `so` hit the tool's 600 s default (cold traced build), not the code (PLANTS-PREPARE-TIMEOUT).
@@ -44,6 +55,12 @@ its baseline `so` hit the tool's 600 s default (cold traced build), not the code
 * NOT VERIFIED: the C reproducers (~/work/SMOKE-ERRNO-FIXES/run_probes.sh on kanon) were not re-run after the
   fix; the clause tests carry the same cases. The coreutils `removed-directory` case as a conformance program is
   not written. Both are optional follow-ups, not blockers.
+* validation/smoke/RESULTS.md (from next) still lists F1 and F3 as open findings; it records an earlier smoke run,
+  so it changes when the smoke harness is re-run on a head with this branch (not edited here).
+* Decision ids: records/pending/SMOKE-ERRNO-FIXES-1.toml and -2.toml wait for the coordinator's ids.
+
+## Next step
+Land. Optional: re-run validation/smoke (coreutils ls/removed-directory, bash run-glob-test) after landing.
 
 ## Do not redo
 Probes of the reference (first run, job smoke-errno-fixes-probe0 on kanon): readdir_removed NULL errno 0;
