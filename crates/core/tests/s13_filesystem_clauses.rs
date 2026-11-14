@@ -1270,9 +1270,10 @@ fn s13_2_g_0() {
 #[test]
 fn s13_2_f_0() {
     // NULL means the end (errno untouched) or an error: EBADF when the descriptor is closed
-    // underneath; ENOENT once a directory removed while open has no buffered entries left
-    // (D-13.2, owner ruling 2026-10-03), on every further call. EOVERFLOW cannot occur
-    // (ino_t is 64 bits).
+    // underneath. A directory removed while open (getdents64 fails with ENOENT) ends the stream
+    // once its buffered entries are used up, on every further call, with errno left alone
+    // (spec/behaviour/fstree.md, removed directory; coordinator ruling #5467, AQOURS-SMOKE F1:
+    // `ls` in a removed directory). EOVERFLOW cannot occur (ino_t is 64 bits).
     let d = Scratch::new("c2f0");
     // A descriptor closed underneath, checked alone (descriptor numbers are process-wide).
     in_child("s13_2_f_0", &d, |dir| {
@@ -1290,15 +1291,32 @@ fn s13_2_f_0() {
     d.dir("rm");
     let dp = x::opendir(d.c("rm").as_ptr());
     std::fs::remove_dir(d.at("rm")).unwrap();
-    for _ in 0..2 {
-        errno::set_raw(0);
+    for pre in [0, 1234] {
+        errno::set_raw(pre);
         assert!(x::readdir(dp).is_null());
-        assert_eq!(errno::get(), ENOENT_, "the removed directory");
+        assert_eq!(errno::get(), pre, "the removed directory: the end, errno left alone");
     }
     x::rewinddir(dp);
     errno::set_raw(0);
-    assert!(x::readdir(dp).is_null() && errno::get() == ENOENT_, "after rewinddir too");
+    assert!(x::readdir(dp).is_null() && errno::get() == 0, "after rewinddir too");
+    let mut e = liella_abi::layout::struct_dirent { d_ino: 0, d_off: 0, d_reclen: 0, d_type: 0, d_name: [0; 256] };
+    let mut res = null_mut();
+    assert_eq!(x::readdir_r(dp, Some(&mut e), Some(&mut res)), 0, "readdir_r: the end");
+    assert!(res.is_null());
     x::closedir(dp);
+    // scandir whose filter removes the directory at the first entry: the entries already read
+    // are the listing, not an error.
+    d.dir("scan");
+    for n in ["f0", "f1", "f2"] {
+        d.file(&format!("scan/{n}"));
+    }
+    REMOVE_AT_FILTER.set(Some(d.at("scan")));
+    let mut list = null_mut();
+    errno::set_raw(0);
+    // FS-ORDER: only the count and errno are checked, never which entries or their order.
+    let n = x::scandir(d.c("scan").as_ptr(), Some(&mut list), Some(remove_dir_filter), None);
+    REMOVE_AT_FILTER.set(None);
+    assert!(n > 0 && errno::get() == 0, "scandir of a directory removed while it reads: {n} entries, errno {}", errno::get());
     // Removed after part of a large directory was read: the buffered entries come first.
     d.dir("big");
     for i in 0..2000 {
@@ -1318,12 +1336,29 @@ fn s13_2_f_0() {
         more += 1;
     }
     assert!(more > 0 && more < 1952, "some buffered entries ({more}), not the rest");
-    assert_eq!(errno::get(), ENOENT_);
+    assert_eq!(errno::get(), 0, "the end of a removed directory, not ENOENT");
     let mut e = liella_abi::layout::struct_dirent { d_ino: 0, d_off: 0, d_reclen: 0, d_type: 0, d_name: [0; 256] };
     let mut res = null_mut();
-    assert_eq!(x::readdir_r(dp, Some(&mut e), Some(&mut res)), ENOENT_, "readdir_r returns it");
+    assert_eq!(x::readdir_r(dp, Some(&mut e), Some(&mut res)), 0, "readdir_r: the end");
     assert!(res.is_null());
     x::closedir(dp);
+}
+
+thread_local! {
+    /// The directory [`remove_dir_filter`] empties and removes at its first call.
+    static REMOVE_AT_FILTER: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+/// A `scandir` filter that keeps every entry and, at its first call, removes the directory being
+/// read (its files first).
+extern "C" fn remove_dir_filter(_e: *const core::ffi::c_void) -> c_int {
+    if let Some(p) = REMOVE_AT_FILTER.take() {
+        for n in ["f0", "f1", "f2"] {
+            std::fs::remove_file(p.join(n)).unwrap();
+        }
+        std::fs::remove_dir(&p).unwrap();
+    }
+    1
 }
 
 /// The names `scandir` listed (the array read through the library's own memcpy).
