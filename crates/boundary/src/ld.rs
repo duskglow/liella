@@ -1268,6 +1268,8 @@ fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<
             tls_release: fn_addr(thread_tls_release),
             dlopen: dlopen::entry_address(),
             dlsym: dlopen::dlsym::entry_address(),
+            dladdr: dlopen::dladdr::dladdr_address(),
+            dlinfo: dlopen::dladdr::dlinfo_address(),
         };
         let at = core::ptr::from_ref(&info).expose_provenance();
         let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), args(at), 0, 0);

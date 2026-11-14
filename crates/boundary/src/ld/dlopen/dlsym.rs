@@ -215,7 +215,7 @@ fn object_name<'p>(l: &Loader, i: usize, out: &'p mut PathBuf) -> &'p [u8] {
 /// The path at which the start found start-time object `i`: the first `DT_NEEDED` entry of a
 /// start-time object that names it, as a path or searched again with that object as the requester,
 /// matched by (`st_dev`, `st_ino`). False when none matches.
-fn start_path(l: &Loader, i: usize, out: &mut PathBuf) -> bool {
+pub(super) fn start_path(l: &Loader, i: usize, out: &mut PathBuf) -> bool {
     let Some(node) = l.nodes.get(i) else { return false };
     let id = (node.dev, node.ino);
     let soname = l.objs_upto(l.n).get(i).and_then(super::soname);

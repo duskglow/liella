@@ -209,6 +209,43 @@ fn in_list<A: Arch>(list: &[u8], seps: &[u8], origin: Option<&[u8]>, name: &[u8]
     false
 }
 
+/// The directories a search for a bare, unpinned name by `chain[0]` tries, in [`search`]'s order,
+/// each expanded (`RTLD_DI_SERINFO`, dlinfo(3)): the `DT_RPATH`s of the chain (when `chain[0]` has
+/// no `DT_RUNPATH`; each object's own only while it has no `DT_RUNPATH`), `LD_LIBRARY_PATH`,
+/// `chain[0]`'s `DT_RUNPATH`, then the default directories. The cache is not a directory and the
+/// `glibc-hwcaps` subdirectories are tried inside each one, so neither is listed. `each` returns
+/// false to stop.
+pub fn dirs<A: Arch>(chain: &[Scope<'_>], ctx: &Ctx<'_>, each: &mut dyn FnMut(&[u8]) -> bool) {
+    let me = chain.first().copied().unwrap_or_default();
+    let program_origin = chain.last().and_then(|s| s.origin);
+    let env_path = if ctx.secure { None } else { ctx.library_path };
+    let mut dir = PathBuf::default();
+    let mut list = |l: &[u8], seps: &[u8], origin: Option<&[u8]>, each: &mut dyn FnMut(&[u8]) -> bool| {
+        l.split(|b| seps.contains(b)).all(|elem| !expand::<A>(elem, origin, ctx, &mut dir) || each(dir.as_bytes()))
+    };
+    if me.runpath.is_none() {
+        for s in chain.iter().filter(|s| s.runpath.is_none()) {
+            if s.rpath.is_some_and(|r| !list(r, b":", s.origin, each)) {
+                return;
+            }
+        }
+    }
+    if env_path.is_some_and(|p| !list(p, b":;", program_origin, each)) {
+        return;
+    }
+    if me.runpath.is_some_and(|r| !list(r, b":", me.origin, each)) {
+        return;
+    }
+    if PREFIX == "/" {
+        let _ = A::SYSTEM_DIRS.iter().all(|d| each(d.as_bytes()));
+        return;
+    }
+    let mut lib = PathBuf::default();
+    if prefixed(b"lib", &mut lib) {
+        let _ = each(lib.as_bytes());
+    }
+}
+
 /// Search for the object `name` needed by `chain[0]` (`chain[1..]`: the objects that loaded it, up
 /// to the program), handing each candidate path to `try_open` until it returns true. Returns
 /// whether an object was found. A name with `/` is tried as given (after token expansion); the
