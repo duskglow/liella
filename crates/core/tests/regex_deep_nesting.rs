@@ -78,3 +78,26 @@ fn deep_nesting_runs_on_a_small_stack() {
     });
     t.unwrap().join().unwrap();
 }
+
+#[test]
+fn nullable_facts_follow_the_leaves() {
+    // Trace: no spec clause (the arena's facts: whether a node can match the empty string is
+    // computed as the parser adds it, from its children's; the pattern's `can_be_null` is the
+    // root's). Empty alternatives, assertions and back-references can match the empty string;
+    // the cases have no hidden groups, so the facts are the parser's, never recomputed.
+    for (pat, cf, want) in [
+        ("a|", cflags::EXTENDED, true),
+        ("|a", cflags::EXTENDED, true),
+        ("a||b", cflags::EXTENDED, true),
+        ("^$", cflags::EXTENDED, true),
+        ("\\<\\>", cflags::EXTENDED, true),
+        ("x*", cflags::EXTENDED, true),
+        (r"\(a*\)\1", 0, true),
+        ("a", cflags::EXTENDED, false),
+        ("ab|cd", cflags::EXTENDED, false),
+        ("a|b^", cflags::EXTENDED, false),
+        (r"\(a\)\1", 0, false),
+    ] {
+        assert_eq!(comp(pat.as_bytes(), cf).unwrap().can_be_null(), want, "{pat}");
+    }
+}
