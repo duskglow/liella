@@ -554,7 +554,7 @@ __wprintf_chk		csys/src/adapter/variadic.c:177	liella_vfwprintf4
 __write	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:162	ret::ssize
 __wuflow	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:547	ret::wint_or_weof
 __wunderflow	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:552	ret::wint_or_weof
-__x86_get_cpuid_feature_leaf	GLIBC_2.33	crates/boundary/src/posix/s27_dynlink.rs:154	usize::try_from
+__x86_get_cpuid_feature_leaf	GLIBC_2.33	crates/boundary/src/posix/s27_dynlink.rs:203	usize::try_from
 __xmknod	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:187	ret::zero
 __xmknodat	GLIBC_2.4	crates/boundary/src/posix/s13_filesystem.rs:193	ret::zero
 __xpg_basename	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:918	ret::path_part
@@ -563,7 +563,7 @@ __xpg_strerror_r	GLIBC_2.3.4	crates/boundary/src/posix/s02_diagnostics.rs:80	rep
 __xstat	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:266	ret::store_into
 __xstat64	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:272	ret::store_into
 _authenticate	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_svc.rs:157	
-_dl_find_object	GLIBC_2.35	crates/boundary/src/posix/s27_dynlink.rs:117	Auxv::from_words
+_dl_find_object	GLIBC_2.35	crates/boundary/src/posix/s27_dynlink.rs:166	i64::from_ne_bytes
 _exit	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:73	process::exit_now
 _flushlbf	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:109	stdio::flushlbf
 _getlong	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:865	resolv::get_be
@@ -1040,9 +1040,9 @@ difftime	GLIBC_2.2.5	crates/boundary/src/posix/s23_time.rs:278	liella::time::dif
 dirfd	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:742	ret::int
 dirname	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:924	ret::path_part
 div	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:1053	pack::div
-dl_iterate_phdr	GLIBC_2.2.5	crates/boundary/src/posix/s27_dynlink.rs:58	Auxv::from_words
-dlerror	GLIBC_2.2.5	crates/boundary/src/posix/s27_dynlink.rs:241	core::ptr::with_exposed_provenance_mut
-dlerror	GLIBC_2.34	crates/boundary/src/posix/s27_dynlink.rs:241	core::ptr::with_exposed_provenance_mut
+dl_iterate_phdr	GLIBC_2.2.5	crates/boundary/src/posix/s27_dynlink.rs:100	i64::from_ne_bytes
+dlerror	GLIBC_2.2.5	crates/boundary/src/posix/s27_dynlink.rs:290	core::ptr::with_exposed_provenance_mut
+dlerror	GLIBC_2.34	crates/boundary/src/posix/s27_dynlink.rs:290	core::ptr::with_exposed_provenance_mut
 dlopen	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:812	dlopen
 dlopen	GLIBC_2.34	csys/src/machine/dl.S:17	liella_dl_open
 dlsym	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:820	dlsym
@@ -2130,8 +2130,8 @@ liella_ctanl_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:1621	
 liella_daddl_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:1626	mret::Soft::enter
 liella_ddivl_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:1632	mret::Soft::enter
 liella_dfmal_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:1638	mret::Soft::enter
-liella_dl_open		crates/boundary/src/posix/s27_dynlink.rs:177	crate::strz::strz
-liella_dl_sym		crates/boundary/src/posix/s27_dynlink.rs:210	crate::dlerr::set
+liella_dl_open		crates/boundary/src/posix/s27_dynlink.rs:226	crate::strz::strz
+liella_dl_sym		crates/boundary/src/posix/s27_dynlink.rs:259	crate::dlerr::set
 liella_dmull_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:1644	mret::Soft::enter
 liella_dreml_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:1662	mret::ret
 liella_dsqrtl_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:1667	mret::Soft::enter
