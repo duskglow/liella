@@ -491,7 +491,7 @@ pub fn place(ar: &str, archive: &Path, root: &Path, work: &Path) -> Result<(usiz
     }
     // STARTUP-DATA-PAGE-ALIGN: the start-up relro cluster (the written start-up objects' relro part: what the
     // start-up functions reach, and the relro objects the page-fault trace saw written).
-    let rw_keys = keys(&fs::read_to_string(crate::hotlists::rel(root, "crates/libc-so/startup-data.keys")?).map_err(|e| format!("startup-data.keys: {e}"))?, |k| k == "rw");
+    let rw_keys = keys(&fs::read_to_string(crate::hotlists::rel(root, "startup-data.keys")?).map_err(|e| format!("startup-data.keys: {e}"))?, |k| k == "rw");
     let mut chosen = reached(&members, &text_keys);
     for (mi, (_, m)) in members.iter().enumerate() {
         chosen.extend(m.syms.values().filter(|s| matches!(s.ty.as_str(), "OBJECT" | "NOTYPE") && keyed(&s.name, &rw_keys)).filter_map(|s| s.ndx).map(|ndx| (mi, ndx)));
