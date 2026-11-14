@@ -107,8 +107,14 @@ liella_machine_ld_enter:
 	/* LAYOUT-DATA-CLUSTERS-3 (D-X.67): the relro output section starts on the same kind of boundary
 	 * (its size over the archive), so the relro objects start-up reads share one fault-around window
 	 * wherever text and read-only data end (a 28 KiB relro across a 64 KiB boundary cost tool and
-	 * setlocale a second window, release profile). */
-	.section .data.rel.ro,"aw",@progbits
+	 * setlocale a second window, release profile).
+	 * STARTUP-DATA-PAGE-ALIGN: named `.data.rel.ro.local`, so that it is the first input of the
+	 * linker's `*(.data.rel.ro.local* ...)` pattern (this start file comes first in the link), ahead
+	 * of the library's start-up relro cluster (`.data.rel.ro.local.liella_startup*`). In
+	 * `*(.data.rel.ro ...)`, behind the cluster, it padded the rest of relro to the next 64 KiB
+	 * boundary (56 KiB of fill): relro spanned two windows and the first `%.2f` and the
+	 * coreutils-shaped probe each took one more fault. */
+	.section .data.rel.ro.local,"aw",@progbits
 	.balign LIELLA_RELRO_ALIGN
 	.section .eh_frame,"a",@unwind
 	.globl liella_eh_frame_start

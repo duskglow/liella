@@ -1202,6 +1202,25 @@ fn map_inputs(map: &str, prefix: &str) -> Vec<(String, u64, u64)> {
     out
 }
 
+/// The bytes of `*fill*` (alignment padding) a link map shows inside the output section `name`, from its
+/// header line (the name at column 0) to the next output section's.
+fn output_fill(map: &str, name: &str) -> u64 {
+    let mut inside = false;
+    let mut fill: u64 = 0;
+    for l in map.lines() {
+        if !l.starts_with(' ') && l.starts_with('.') {
+            inside = l.split_whitespace().next() == Some(name);
+            continue;
+        }
+        let mut f = l.split_whitespace();
+        if inside && f.next() == Some("*fill*") {
+            let size = f.nth(1).and_then(|s| s.strip_prefix("0x")).and_then(|h| u64::from_str_radix(h, 16).ok()).unwrap_or(0);
+            fill = fill.saturating_add(size);
+        }
+    }
+    fill
+}
+
 /// STARTUP-DATA-PAGE-ALIGN (pending record STARTUP-DATA-PAGE-ALIGN-1, series D-X): the written start-up data takes
 /// the same pages whatever lies ahead of it. The probe linked with a start file padded by 0x4d0, 0x800, 0xc18 and
 /// 0x14d0 bytes of `.data.rel.ro.local` (`relro`: a program's own relro inputs, which the linker takes first, as an
@@ -1231,6 +1250,13 @@ fn init_startup_data_pages_hold_at_every_data_phase() {
             bad.push(format!("{region} {pad:#x}: relro cluster starts at {lo:#x}, not on a page boundary"));
         }
         spans.push((format!("{region} {pad:#x}"), pages));
+        // STARTUP-DATA-PAGE-ALIGN-2: the start file's 64 KiB relro alignment comes ahead of the cluster, so relro
+        // holds no more fill than the cluster head's own alignment (behind the cluster it padded the rest of relro
+        // by 56 KiB, into a second fault-around window: first %.2f 3 -> 4 faults, coreutils-shaped 50 -> 51).
+        let fill = output_fill(&map, ".data.rel.ro");
+        if fill >= 4096 {
+            bad.push(format!("{region} {pad:#x}: .data.rel.ro holds {fill:#x} bytes of fill, a page or more"));
+        }
         let reserve: Vec<(String, u64, u64)> = map_inputs(&map, ".lbss").into_iter().filter(|s| s.0.ends_with("4heap11RESERVE_MEM")).collect();
         if reserve.is_empty() {
             bad.push(format!("{region} {pad:#x}: heap::RESERVE_MEM not found in .lbss"));
