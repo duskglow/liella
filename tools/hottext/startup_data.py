@@ -93,17 +93,11 @@ def startup_fn_keys(path, profile):
 
 
 def operand_targets(exe, ranges):
-    """The `# <addr>` targets of the instructions inside `ranges` ([(start, end)]), and their absolute
-    operands: an immediate (`mov $0x871378,%rax`) or an absolute memory operand (`movzbl 0x871378,%eax`).
-    LAYOUT-TEXT-PIN-13: the static start-up code addresses some objects that way (`__libc_single_threaded`
-    in `runtime::start`), and a first touch perf does not record (its page already faulted in the traced
-    build) left the object out of the start-up cluster. `resolve` keeps only named data objects."""
+    """The `# <addr>` targets of the instructions inside `ranges` ([(start, end)])."""
     out = []
     for lo, hi in sorted(ranges):
         text = run(["objdump", "-d", "--no-show-raw-insn", f"--start-address={lo:#x}", f"--stop-address={hi:#x}", exe])
         for m in re.finditer(r"#\s+([0-9a-f]+)\b", text):
-            out.append(int(m.group(1), 16))
-        for m in re.finditer(r"(?:\$|[\s,])0x([0-9a-f]+)(?![0-9a-f(])", text):
             out.append(int(m.group(1), 16))
     return out
 
@@ -159,7 +153,7 @@ def main():
     with open(out_path + ".tmp", "w") as f:
         f.write("# Written by tools/hottext/startup_data.py during cargo xtask so (a trace of this build; never committed).\n")
         f.write("# STARTUP-DATA-WINDOWS (layout/contracts.tsv, D-X.50): the data objects `page_faults true` touches at start-up\n")
-        f.write("# (perf page-fault data addresses and the RIP-relative and absolute operands of the start-up functions of startup-text.keys).\n")
+        f.write("# (perf page-fault data addresses and the RIP-relative operands of the start-up functions of startup-text.keys).\n")
         f.write("# <key> TAB <ro|rw: the section's kind when traced> TAB <profile traced>.\n")
         for k in sorted(traced):
             f.write(f"{k}\t{traced[k]}\t{profile}\n")
