@@ -82,6 +82,20 @@ libc and `ld.so` by absolute path, a `dlopen`'d object by the name it was opened
 `dl_iterate_phdr` callback that calls `dlopen` of a new object returns, the running walk then visits that object
 (one more callback), and `dlpi_adds` grows by one within the walk.
 
+**dlclose** (record `== close (DL-17)`, probe `tools/probe/dl/close/run.sh SCRATCH`, same reference and conditions
+as the P-n probes). C-1: `dlclose` of the only open of an object returns 0, runs its destructor, unmaps it (`RTLD_NOLOAD`
+no longer finds it) and `dlpi_subs` is already +1 when it returns; no dlerror text. C-2: a successful `dlclose` clears
+a pending dlerror text. C-3: an `RTLD_GLOBAL` object G whose definition a later object U's relocation bound to (U has
+no `DT_NEEDED` on G) stays loaded and usable after `dlclose(G)`; `dlclose(U)` then runs U's destructor, then G's, and
+unmaps both. C-3b: an object opened `RTLD_LOCAL` and again (promoted) `RTLD_GLOBAL` needs two closes. C-4: an object
+with a general-dynamic TLS block, accessed or not, is unloaded; the next open gets the same module ID (2) and a fresh
+block (the initial value again). C-5: the same for an initial-exec TLS block (module ID 2 and value 9 again on
+re-open). C-6: an object defining an `STB_GNU_UNIQUE` symbol is unloaded when nothing looked the symbol up, and stays
+loaded after `dlclose` once `dlsym` looked it up. C-7: `RTLD_NODELETE` keeps the object loaded. C-8: a destructor that
+calls `dlclose` of another object succeeds (0); that object's destructor runs inside it and both are unmapped. C-9:
+`dlclose` of the program's handle (`dlopen(NULL)`) returns 0 with no text. At exit the objects still loaded (C-6's
+pinned one, C-7's) run their destructors: C-6's object (loaded first) before C-7's.
+
 **Static-TLS surplus** (record `== tls`): with default tunables, one `dlopen` of an object with an
 initial-exec TLS block of 1664 bytes succeeds and 1728 fails (64-byte steps); thirteen distinct
 128-byte blocks load one after another and the fourteenth fails. The text is

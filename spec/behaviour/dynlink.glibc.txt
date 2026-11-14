@@ -741,3 +741,61 @@ R-3 object ld-linux-x86-64.so.2 name absolute adds 5 subs 0 tls_modid 0
 R-3 object libR1.so name absolute adds 5 subs 0 tls_modid 0
 R-2 dlopen in a callback: returned 1, the running walk visits it 1, adds first 5 last 6, objects walked 6
 R-2 next walk: visits it 1, objects walked 6, adds 6
+
+== close (DL-17)
+start: objects 4 adds 4 subs 0
+ctor P
+C-1 opened: objects 5 adds 5 subs 0
+dtor P
+C-1 dlclose=0 dlerror=(none) loaded=0
+C-1 closed: objects 4 adds 5 subs 1
+ctor P
+dtor P
+C-2 dlclose=0 pending after=(none)
+ctor G
+ctor U
+C-3 open G=1 U=1 
+C-3 close G=0: G loaded=1
+C-3 use_g()=42
+dtor U
+dtor G
+C-3 close U=0: U loaded=0 G loaded=0
+ctor G
+C-3b after 1 close: loaded=1
+dtor G
+C-3b after 2 closes: loaded=0
+ctor TG
+dtor TG
+C-4 use=0 modid=2 dlclose=0 loaded=0
+ctor TG
+C-4 use=1 value=7
+dtor TG
+C-4 use=1 modid=2 dlclose=0 loaded=0
+C-4 end: objects 4 adds 11 subs 7
+ctor TI
+C-5 open=1 modid=2 value=9
+dtor TI
+C-5 dlclose=0 loaded=0
+ctor TI
+C-5 open=1 modid=2 value=9
+dtor TI
+C-5 dlclose=0 loaded=0
+ctor Q
+dtor Q
+C-6 unique not looked up: dlclose=0 loaded=0
+ctor Q
+C-6 unique looked up (1): dlclose=0 loaded=1
+ctor N
+C-7 nodelete dlclose=0 loaded=1
+C-7: objects 6 adds 16 subs 10
+ctor Y
+ctor X
+C-8 open X=1 Y loaded=1
+dtor X start
+dtor X dlclose(Y)=0
+dtor Y
+C-8 dlclose(X)=0 X loaded=0 Y loaded=0
+C-9 dlclose(program)=0 dlerror=(none)
+end: objects 6 adds 18 subs 12
+dtor Q
+dtor N
