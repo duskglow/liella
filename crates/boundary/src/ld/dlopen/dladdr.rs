@@ -179,7 +179,8 @@ fn origin(v: &View, i: usize) -> Option<&'static [u8]> {
 /// `RTLD_DI_SERINFOSIZE` (`fill` false) or `RTLD_DI_SERINFO` (`fill` true) of object `i` into the
 /// caller's `Dl_serinfo` at `arg`. The sizing call stores `dls_size` and `dls_cnt`; the filling call
 /// writes at most the caller's `dls_cnt` entries and never past its `dls_size` bytes, the strings
-/// after the entries, and stores the entries written in `dls_cnt` (D-NEW, DL-DLADDR).
+/// after the entries, and stores the entries written in `dls_cnt` (pending record
+/// records/pending/DL-DLADDR-2-4.toml).
 fn serinfo(v: &View, i: usize, arg: usize, fill: bool) {
     let env = Env::read_paths();
     let ctx = env.ctx();
