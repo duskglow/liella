@@ -1,0 +1,13 @@
+{"task": "LAYOUT-HASWELL-TOOL-51", "model": "opus", "tokens": null,
+ "result": "not reproduced: the fast coreutils-shaped probe reads 50 (bound 50) on the Haswell-EP host at next 630f3afb2, at 8f3e2993e and at the bound-setting landing ba8b29cde, plain and gated; no code change",
+ "branch": "task/layout-haswell-tool-51", "head": null,
+ "gate": {"affected": "hot_text_products on four host classes: see hand-back (jobs started after this commit)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "LAYOUT-HASWELL-TOOL-51: the 51 does not reproduce on next (three revisions, plain and gated builds, every run 50)", "recommendation": "close as not reproduced; if a gate reads 51 again, capture that job's tree and perf fault set at once (runner.py + sym.py in handoff/LAYOUT-HASWELL-TOOL-51.md)"}],
+ "informational": ["TB-FOREIGN-WORDS-LOW-8's 51 came from its gate in role shiki ~/w/sh1; that role's tree and build state were not reachable from this story", "fault sets of 630f3afb2 and ba8b29cde on Haswell-EP list the same pages per section"],
+ "refused": [],
+ "impact": [{"kind": "none", "what": "investigation: fast tool start-up faults on Haswell-EP at next", "before": 50, "after": 50, "unit": "faults", "measured": true}],
+ "improvement": "a start-up bound failure should print its perf fault set (section and symbol per fault) in the test log, so a one-off 51 names its page in the job that saw it",
+ "next_step": "coordinator: close; reopen only with a captured fault set from a run that reads 51",
+ "report_file": "handoff/LAYOUT-HASWELL-TOOL-51.md",
+ "jobs": ["layout-haswell-tool-51-lint", "layout-haswell-tool-51-kanon-proof", "shiki:layout-haswell-tool-51-shiki-proof", "mei:layout-haswell-tool-51-mei-proof", "keke:layout-haswell-tool-51-keke-proof"]}
