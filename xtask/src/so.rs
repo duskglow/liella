@@ -1105,8 +1105,10 @@ fn finish_archive(root: &Path, archive: &Path, product: &Path, out: &Path, layou
     let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), archive, &list, &root.join(crate::hotlists::TRACKED), &product.join("hot-work"), layout)?;
     println!("so: {hot} function sections grouped as hot text");
     // The read-only data start-up reads, after the grouping (it places STARTUP_NAMES), in one aligned section (D-X.62).
-    let (ro, ro_bytes) = crate::startup_ro::place(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), archive, root, &product.join("startup-ro-work"))?;
+    let (ro, ro_bytes, relro, relro_bytes) = crate::startup_ro::place(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), archive, root, &product.join("startup-ro-work"))?;
     println!("so: {ro} start-up read-only data sections in {} (at most {ro_bytes} of {} bytes)", crate::startup_ro::SECTION, crate::startup_ro::ALIGN);
+    // STARTUP-DATA-PAGE-ALIGN: and the start-up relro sections in one page-aligned group.
+    println!("so: {relro} start-up relro sections in {} (at most {relro_bytes} bytes, from a {}-byte boundary)", crate::startup_ro::RELRO_SECTION, crate::startup_ro::PAGE);
     let edges = exclude_link_edges(archive)?;
     println!("so: {edges} link-edge words excluded from every link output (D-22.16)");
     check_archive_elf(archive)?;

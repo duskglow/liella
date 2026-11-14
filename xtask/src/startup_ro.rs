@@ -44,6 +44,19 @@ const PROBE_KEYS: &str = "probe-text.keys";
 /// The prefix the weakening pass gives a library name (`weaken_archive`); start-up keys name the
 /// final archive's symbols, this pass runs before it.
 const LIB_PREFIX: &str = "__liella_libc_";
+/// STARTUP-DATA-PAGE-ALIGN: the start-up relro cluster. The `.data.rel.ro*` sections the start-up functions'
+/// relocations reach ([`reached`]: tables of `&str`s and slices, vtables, switch tables) are renamed to this
+/// name. GNU ld's default script takes `*(.data.rel.ro.local* ...)` before `*(.data.rel.ro .data.rel.ro.* ...)`,
+/// so they leave the compiler's emission order (where an unrelated change ahead of them, such as a libm
+/// change that re-partitions code generation, moved them by 0x4d0 bytes and two pages) and sit together at
+/// the head of the relro output section, after only the program's own `.data.rel.ro.local*` inputs.
+pub const RELRO_SECTION: &str = ".data.rel.ro.local.liella_startup";
+/// The first section of the cluster (lowest section index in its member, so the linker takes it first),
+/// aligned to [`PAGE`]: the cluster starts on a page boundary whatever relro input precedes it, and takes
+/// the same pages in every link.
+pub const RELRO_HEAD: &str = ".data.rel.ro.local.liella_startup_head";
+/// The page size the start-up relro cluster aligns to.
+pub const PAGE: u64 = 4096;
 
 /// A section of one archive member (`readelf -SW`).
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -223,6 +236,47 @@ fn plan(members: &[(String, Member)], text_keys: &BTreeSet<String>, ro_keys: &BT
     }
     sizes.sort_by(|a, b| b.cmp(a));
     (rename, bytes, sizes)
+}
+
+/// Whether `s` is a relocation-read-only data section ([`RELRO_SECTION`] candidates; TLS excluded).
+fn relro_data(s: &Sec) -> bool {
+    s.flags.contains('W') && !s.flags.contains('T') && !s.flags.contains('X') && s.name.starts_with(".data.rel.ro")
+}
+
+/// What [`relro_plan`] returns: per member, the (from, to) renames; and the bytes of the cluster.
+type RelroPlan = (BTreeMap<String, Vec<(String, String)>>, u64);
+
+/// STARTUP-DATA-PAGE-ALIGN: the start-up relro cluster. `chosen` are the (member, section) pairs [`reached`]
+/// found. Every relro section among them (by name: objcopy renames every section of a name) is renamed to
+/// [`RELRO_SECTION`], except the one with the lowest section index in the member holding the most of the
+/// cluster's bytes, which becomes [`RELRO_HEAD`] (the linker takes one member's inputs of one pattern in
+/// section-table order, so it is that member's first). Sections already renamed are left alone.
+fn relro_plan(members: &[(String, Member)], chosen: &BTreeSet<(usize, usize)>) -> RelroPlan {
+    let mut per: BTreeMap<usize, (BTreeSet<String>, u64)> = BTreeMap::new();
+    for &(mi, si) in chosen {
+        let Some(s) = members[mi].1.secs.get(&si) else { continue };
+        if relro_data(s) && s.name != RELRO_SECTION && s.name != RELRO_HEAD {
+            per.entry(mi).or_default().0.insert(s.name.clone());
+        }
+    }
+    let mut bytes = 0;
+    for (mi, (names, b)) in &mut per {
+        *b = members[*mi].1.secs.values().filter(|s| names.contains(&s.name)).map(|s| s.size + s.align.max(1) - 1).sum();
+        bytes += *b;
+    }
+    // The member with the most bytes (the first such in archive order on a tie) holds the head.
+    let head_member = per.iter().max_by(|a, b| a.1.1.cmp(&b.1.1).then(b.0.cmp(a.0))).map(|(mi, _)| *mi);
+    let mut out: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
+    for (mi, (names, _)) in per {
+        let m = &members[mi].1;
+        let head = (Some(mi) == head_member).then(|| m.secs.iter().find(|(_, s)| names.contains(&s.name)).map(|(_, s)| s.name.clone())).flatten();
+        let list = out.entry(members[mi].0.clone()).or_default();
+        for n in names {
+            let to = if head.as_ref() == Some(&n) { RELRO_HEAD } else { RELRO_SECTION };
+            list.push((n, to.to_string()));
+        }
+    }
+    (out, bytes + PAGE - 1)
 }
 
 /// The sections the start-up functions' relocations address (`text_keys`: [`starts`]), and
@@ -429,33 +483,49 @@ pub fn dump(root: &Path, args: &[String]) -> Result<(), String> {
 
 /// Rename the start-up read-only data sections of `archive` to [`SECTION`] in place (`root`: the tree with
 /// the key files; `work`: scratch). Fails when they could exceed [`ALIGN`] bytes. Returns (sections renamed, bytes).
-pub fn place(ar: &str, archive: &Path, root: &Path, work: &Path) -> Result<(usize, u64), String> {
+pub fn place(ar: &str, archive: &Path, root: &Path, work: &Path) -> Result<(usize, u64, usize, u64), String> {
     let (text_keys, ro_keys, members) = inputs(archive, root)?;
     let (rename, bytes, sizes) = plan(&members, &text_keys, &ro_keys);
     if bytes > ALIGN {
         return Err(format!("start-up read-only data: up to {bytes} bytes in {SECTION} > {ALIGN} (its alignment, xtask/src/startup_ro.rs and entry.S): it would span two 64 KiB windows in some links; largest: {}", sizes.iter().take(12).map(|(n, s)| format!("{s} {n}")).collect::<Vec<_>>().join(", ")));
     }
+    // STARTUP-DATA-PAGE-ALIGN: the start-up relro cluster (the written start-up objects' relro part: what the
+    // start-up functions reach, and the relro objects the page-fault trace saw written).
+    let rw_keys = keys(&fs::read_to_string(crate::hotlists::rel(root, "startup-data.keys")?).map_err(|e| format!("startup-data.keys: {e}"))?, |k| k == "rw");
+    let mut chosen = reached(&members, &text_keys);
+    for (mi, (_, m)) in members.iter().enumerate() {
+        chosen.extend(m.syms.values().filter(|s| matches!(s.ty.as_str(), "OBJECT" | "NOTYPE") && keyed(&s.name, &rw_keys)).filter_map(|s| s.ndx).map(|ndx| (mi, ndx)));
+    }
+    let (relro, relro_bytes) = relro_plan(&members, &chosen);
     let _ = fs::remove_dir_all(work);
     fs::create_dir_all(work).map_err(|e| e.to_string())?;
-    let names: Vec<&String> = rename.keys().collect();
+    let names: BTreeSet<&String> = rename.keys().chain(relro.keys()).collect();
     if !names.is_empty() {
         crate::so::run(Command::new(ar).current_dir(work).arg("x").arg(archive).args(&names))?;
     }
     let objcopy = std::env::var("OBJCOPY").unwrap_or_else(|_| "objcopy".into());
-    let mut n = 0;
-    for (m, secs) in &rename {
+    let (mut n, mut nr) = (0, 0);
+    for m in &names {
         let mut cmd = Command::new(&objcopy);
-        for s in secs {
+        for s in rename.get(*m).into_iter().flatten() {
             cmd.arg("--rename-section").arg(format!("{s}={SECTION}"));
             n += 1;
         }
+        for (from, to) in relro.get(*m).into_iter().flatten() {
+            cmd.arg("--rename-section").arg(format!("{from}={to}"));
+            nr += 1;
+        }
         crate::so::run(cmd.arg(work.join(m)))?;
+        // The head's alignment, by its new name (a second pass: the rename is done by then).
+        if relro.get(*m).is_some_and(|l| l.iter().any(|(_, to)| to == RELRO_HEAD)) {
+            crate::so::run(Command::new(&objcopy).arg("--set-section-alignment").arg(format!("{RELRO_HEAD}={PAGE}")).arg(work.join(m)))?;
+        }
     }
     if !names.is_empty() {
         crate::so::run(Command::new(ar).current_dir(work).arg("r").arg(archive).args(&names))?;
     }
     let _ = fs::remove_dir_all(work);
-    Ok((n, bytes))
+    Ok((n, bytes, nr, relro_bytes))
 }
 
 #[cfg(test)]
@@ -526,6 +596,48 @@ Symbol table '.symtab' contains 3 entries:
      2: 0000000000000000   768 OBJECT  GLOBAL HIDDEN     5 CTYPE
      3: 0000000000000000   768 OBJECT  GLOBAL HIDDEN     6 OTHER
 ";
+
+    const RELRO_LISTING: &str = "
+File: libc.a(r.o)
+
+Section Headers:
+  [Nr] Name              Type            Address          Off    Size   ES Flg Lk Inf Al
+  [ 0]                   NULL            0000000000000000 000000 000000 00      0   0  0
+  [ 2] .data.rel.ro.cold PROGBITS        0000000000000000 000030 000040 00  WA  0   0  8
+  [ 3] .text.start       PROGBITS        0000000000000000 000040 000020 00  AX  0   0 16
+  [ 4] .rela.text.start  RELA            0000000000000000 000300 000030 18   I 12   3  8
+  [ 5] .data.rel.ro..Lanon.9 PROGBITS    0000000000000000 000060 000018 00  WA  0   0  8
+  [ 6] .data.rel.ro.VT   PROGBITS        0000000000000000 000080 000030 00  WA  0   0  8
+  [ 7] .tdata.T          PROGBITS        0000000000000000 0000b0 000008 00 WAT  0   0  8
+
+Relocation section '.rela.text.start' at offset 0x300 contains 2 entries:
+    Offset             Info             Type               Symbol's Value  Symbol's Name + Addend
+0000000000000003  0000000300000002 R_X86_64_PC32          0000000000000000 .data.rel.ro.VT - 4
+000000000000000a  0000000200000002 R_X86_64_PC32          0000000000000000 .data.rel.ro..Lanon.9 - 4
+
+Symbol table '.symtab' contains 4 entries:
+   Num:    Value          Size Type    Bind   Vis      Ndx Name
+     2: 0000000000000000     0 SECTION LOCAL  DEFAULT    5 .data.rel.ro..Lanon.9
+     3: 0000000000000000     0 SECTION LOCAL  DEFAULT    6 .data.rel.ro.VT
+     4: 0000000000000000    32 FUNC    GLOBAL DEFAULT    3 start_fn
+";
+
+    #[test]
+    fn startup_relro_sections_form_one_group_headed_by_the_first() {
+        // STARTUP-DATA-PAGE-ALIGN (no spec clause; layout of the products): the relro sections a start-up function
+        // reaches are renamed into the cluster, the one first in the section table to the page-aligned head (the
+        // linker takes it first); an unreached relro section and a TLS section stay.
+        let members = parse(RELRO_LISTING);
+        let text: BTreeSet<String> = ["start_fn".to_string()].into();
+        let (renames, bytes) = relro_plan(&members, &reached(&members, &text));
+        let r: Vec<(&str, &str)> = renames["r.o"].iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        assert_eq!(r, [(".data.rel.ro..Lanon.9", RELRO_HEAD), (".data.rel.ro.VT", RELRO_SECTION)]);
+        assert_eq!(bytes, (0x18 + 7) + (0x30 + 7) + PAGE - 1);
+        assert!(RELRO_HEAD.starts_with(".data.rel.ro.local") && RELRO_SECTION.starts_with(".data.rel.ro.local"), "the default script's first relro pattern");
+        // Already placed: nothing to do again.
+        let placed = RELRO_LISTING.replace(".data.rel.ro..Lanon.9", RELRO_HEAD).replace(".data.rel.ro.VT  ", RELRO_SECTION);
+        assert!(relro_plan(&parse(&placed), &reached(&parse(&placed), &text)).0.is_empty());
+    }
 
     #[test]
     fn startup_read_only_data_sections_follow_the_startup_functions_and_ro_keys() {
