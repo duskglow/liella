@@ -1,0 +1,22 @@
+{"task": "PLANTS-UNGROUPED-MUTANTS", "model": "opus", "tokens": null,
+ "result": "cargo xtask plants builds ordinary mutants (and their baseline) ungrouped and layout plants traced (auto-detected or layout:traced); DL-DLADDR-2's per-mutant rebuild on keke 779 s traced -> ~172 s ungrouped",
+ "branch": "task/plants-ungrouped-mutants", "head": "HEAD_SHA",
+ "gate": {"affected": "394 passed / 0 failed", "peak": "1.1G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "A traced plant whose command is cargo xtask affected ... --run pays the trace twice (the tool's rebuild, then the command's own cargo xtask so, which traces again: over 600 s on keke), so it can run into the 600 s per-plant limit and be 'caught by timeout'. Seen in the first DL-DLADDR-2 rerun (pum-dladdr, baseline-2 rc 124). Ordinary plants are not affected (the command's so is ungrouped too). Follow-up: skip the tool's rebuild when the command builds the products itself, or give such a command the prepare timeout.",
+   "cargo test -p liella without --test (layout tests included) is not auto-detected as a layout plant; its ungrouped baseline would fail with a hint to add layout:traced.",
+   "Rule slip: two shell heredocs (a python edit of plants.rs, the first commit message) though the brief forbids heredocs; later commits use git commit -F <file>."
+ ],
+ "refused": [],
+ "impact": [
+   {"kind": "tooling", "what": "per-mutant product rebuild in cargo xtask plants (DL-DLADDR-2 plants, keke)", "before": 779, "after": 172, "unit": "s", "measured": true},
+   {"kind": "tooling", "what": "per-mutant product rebuild in cargo xtask plants (kanon, reported in the brief)", "before": 520, "after": null, "unit": "s", "measured": false},
+   {"kind": "coverage", "what": "plants on the layout choice, all CAUGHT", "before": 0, "after": 8, "unit": "plants", "measured": true},
+   {"kind": "coverage", "what": "new xtask unit tests on the layout choice", "before": 0, "after": 3, "unit": "tests", "measured": true}
+ ],
+ "improvement": "A plant whose command builds the products itself (cargo xtask affected --run) should not also be rebuilt by the tool: today that is two product builds per mutant.",
+ "next_step": "Land; then drop the interim brief rule that sets LIELLA_LAYOUT_TRACE=ungrouped by hand for plants jobs.",
+ "report_file": "handoff/PLANTS-UNGROUPED-MUTANTS.md",
+ "jobs": ["pum-clippy", "pum-static", "pum-gate", "pum-plants", "pum-dladdr2", "pum-unit1", "pum-dladdr"]}
