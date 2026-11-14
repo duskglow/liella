@@ -1,0 +1,15 @@
+id = "COMPAT-NEW"
+behaviour = "`dlinfo(RTLD_DI_TLS_DATA)` for a `dlopen`ed object whose TLS block the calling thread has not used yet (§27.1, §27.3, `s27_1_c_7`; ruling #5521)"
+glibc = "NULL until the calling thread first uses a variable of the block, then the block's address (black-box probe `tools/probe/dl/dladdr/`)"
+liella = "The block's address whenever the block exists: a `dlopen`ed object's block is placed and initialised in the static surplus at `dlopen` (D-27.39), so it exists before first use"
+restore = "A tunable read at startup under which `RTLD_DI_TLS_DATA` gives NULL until the calling thread first reaches the module through `__tls_get_addr`; needs a per-thread used mark per module; not implemented"
+cost = "none (the flag does not exist; the check would sit on the `RTLD_DI_TLS_DATA` path only)"
+status = "registered"
+decisions = ["D-27.39"]
+story = "DL-DLADDR-2"
+date = "2026-11-14"
+body = '''
+Registered option for ruling #5521 (keep Liella's answer, register the reference's as a future option). The
+decision for Liella's answer is this story's pending TLS_DATA decision; D-27.39 is the placement it rests on. Revisit
+when DL-19 adds dynamic blocks.
+'''

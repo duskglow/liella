@@ -728,3 +728,191 @@ align3.so: ok
 fail then NOLOAD miss: handle NULL, dlerror NULL
 fail then successful open: handle non-NULL, dlerror NULL
 fail then NOLOAD hit: handle non-NULL, dlerror NULL
+== dladdr-dlinfo (DL-18 DL-DLADDR): sh tools/probe/dl/dladdr/run.sh SCRATCH, Skylake-SP build host, Ubuntu 24.04 glibc 2.39, gcc 13, 2026-11-14; raw addresses (arg0 of requests 2 and 11) vary per run
+== probe (no -rdynamic, DT_RPATH /prog/rp)
+== dladdr in the probe object
+dladdr base                         ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr base+1                       ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr base+64                      ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr s_a                          ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_a] saddr=base+4416
+dladdr s_a+15                       ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_a] saddr=base+4416
+dladdr s_a+16 (local gap)           ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr s_a+47 (local gap end)       ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr s_zero                       ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_zero] saddr=base+4464
+dladdr s_zero+8 (size 0)            ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr s_b (ties)                   ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_b_alias] saddr=base+4480
+dladdr s_b+8                        ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_b_alias] saddr=base+4480
+dladdr s_w1/s_w2 (weak first)       ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_w1] saddr=base+4496
+dladdr s_nt (notype)                ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_nt] saddr=base+4512
+dladdr ifres (IFUNC value)          ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_if] saddr=base+4528
+dladdr ifres+12                     ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_if] saddr=base+4528
+dladdr s_nt+8 (in s_outer)          ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_outer] saddr=base+4516
+dladdr s_impl+4 (in s_outer)        ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_impl] saddr=base+4544
+dladdr s_impl                       ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_impl] saddr=base+4544
+dladdr s_tail                       ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_tail] saddr=base+4560
+dladdr s_tail+15                    ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_tail] saddr=base+4560
+dladdr s_tail+16                    ret=1 fname=[<dir>/libP.so] fbase=base sname=[lib_tls_addr] saddr=base+4576
+dlsym s_if == s_impl 1, dlsym s_impl == base+4544
+dladdr s_obj                        ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_obj] saddr=base+16408
+dladdr s_obj+4                      ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_obj] saddr=base+16408
+dladdr s_obj+8                      ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr .plt start                   ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr .plt last byte               ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr .plt.sec start               ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr .dynsym                      ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr .eh_frame                    ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr .bss start                   ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+link_map l_addr == fbase 1
+dynsym s_a        index=13 bind=1 type=2 size=16
+dynsym s_zero     index=18 bind=1 type=2 size=0
+dynsym s_b        index=21 bind=1 type=2 size=16
+dynsym s_b_alias  index=12 bind=1 type=2 size=16
+dynsym s_b_weak   index=19 bind=2 type=2 size=16
+dynsym s_w1       index=10 bind=2 type=2 size=16
+dynsym s_w2       index=15 bind=1 type=2 size=16
+dynsym s_nt       index=14 bind=1 type=0 size=16
+dynsym s_if       index=20 bind=1 type=10 size=16
+dynsym s_impl     index=16 bind=1 type=2 size=16
+dynsym s_tls      index=9 bind=1 type=6 size=8
+dynsym s_outer    index=7 bind=1 type=2 size=40
+== dladdr1
+dladdr1 SYMENT s_a+4 ret=1 sym=non-NULL value=base+4416 size=16 info=0x12
+dladdr1 SYMENT base+1 ret=1 sym=NULL sname=(null)
+dladdr1 LINKMAP s_a ret=1 map==handle 1
+dladdr1 LINKMAP main ret=1 map==dlopen(NULL) 1
+dladdr1 flags=0 ret=1 extra=untouched
+dladdr1 flags=3 ret=1 extra=untouched
+dladdr1 LINKMAP unmapped ret=0 extra=untouched
+dlerror after dladdr miss=[NULL]
+== dladdr elsewhere
+dladdr main (program)               ret=1 fname=[./probe] fbase=base sname=[(null)] saddr=NULL+0
+dladdr probe_exported (program)     ret=0 (info untouched)
+dladdr printf (libc)                ret=1 fname=[/lib/x86_64-linux-gnu/libc.so.6] fbase=base sname=[_IO_printf] saddr=base+393472
+dladdr dladdr (libc)                ret=1 fname=[/lib/x86_64-linux-gnu/libc.so.6] fbase=base sname=[dladdr] saddr=base+621024
+dladdr __tls_get_addr (ld.so)       ret=1 fname=[/lib64/ld-linux-x86-64.so.2] fbase=base sname=[__tls_get_addr] saddr=base+96288
+dladdr _dl_find_object              ret=1 fname=[/lib/x86_64-linux-gnu/libc.so.6] fbase=base sname=[_dl_find_object] saddr=base+1595296
+dladdr vDSO base                    ret=1 fname=[linux-vdso.so.1] fbase=base sname=[(null)] saddr=NULL+0
+vDSO handle found, __vdso_clock_gettime found
+dladdr vDSO clock_gettime           ret=1 fname=[linux-vdso.so.1] fbase=base sname=[clock_gettime] saddr=base+3648
+dladdr vDSO clock_gettime+1         ret=1 fname=[linux-vdso.so.1] fbase=base sname=[clock_gettime] saddr=base+3648
+dladdr NULL                         ret=0 (info untouched)
+dladdr 8                            ret=0 (info untouched)
+dladdr -1                           ret=0 (info untouched)
+dladdr stack                        ret=0 (info untouched)
+dladdr heap                         ret=0 (info untouched)
+== dlinfo
+dlinfo lib          req= 0 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo lib          req= 1 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo lib          req= 2 ret=0 dlerror=[NULL] arg0=0000594f82ca02d0
+dlinfo lib          req= 3 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo lib          req= 6 ret=0 dlerror=[NULL] arg0=2d6c642f706d742f
+dlinfo lib          req= 7 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo lib          req= 8 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo lib          req= 9 ret=0 dlerror=[NULL] arg0=0000000000000002
+dlinfo lib          req=10 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo lib          req=11 ret=12 dlerror=[NULL] arg0=000072ebbc5b6040
+dlinfo lib          req=12 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo program      req= 1 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo program      req= 2 ret=0 dlerror=[NULL] arg0=000072ebbc5f62e0
+dlinfo program      req= 3 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo program      req= 7 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo program      req= 8 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo program      req= 9 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo program      req=10 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo program      req=11 ret=13 dlerror=[NULL] arg0=0000594f5a431040
+dlinfo LMID ret=0 lmid=0
+dlinfo LINKMAP ret=0 ==handle 1 name=[<dir>/libP.so]
+dlinfo ORIGIN lib ret=0 [<dir>]
+dlinfo ORIGIN libc ret=0 [/lib/x86_64-linux-gnu]
+dlinfo TLS_MODID lib ret=0 modid=2
+dlinfo TLS_MODID program ret=0 modid=0
+dlinfo TLS_DATA main thread ret=0 data==&s_tls 0 data=NULL
+dlinfo TLS_DATA new thread, before use: ret=0 data=NULL
+dlinfo TLS_DATA new thread, after use: ret=0 data==&s_tls 1
+dlinfo PHDR ret=12 phdr==base+64 1
+dlinfo lib SERINFOSIZE ret=0 size=142 cnt=4
+dlinfo lib SERINFO ret=0 size=142 cnt=4
+  [0] [/lib/x86_64-linux-gnu] flags=0x0 offset=80
+  [1] [/usr/lib/x86_64-linux-gnu] flags=0x0 offset=102
+  [2] [/lib] flags=0x0 offset=128
+  [3] [/usr/lib] flags=0x0 offset=133
+dlinfo lib SERINFO cnt-1 ret=0 dlerror=[NULL]
+dlinfo program SERINFOSIZE ret=0 size=142 cnt=4
+dlinfo program SERINFO ret=0 size=142 cnt=4
+  [0] [/lib/x86_64-linux-gnu] flags=0x0 offset=80
+  [1] [/usr/lib/x86_64-linux-gnu] flags=0x0 offset=102
+  [2] [/lib] flags=0x0 offset=128
+  [3] [/usr/lib] flags=0x0 offset=133
+dlinfo program SERINFO cnt-1 ret=0 dlerror=[NULL]
+== extra object <dir>/sub/libQ.so
+dlinfo extra        req= 9 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo extra SERINFOSIZE ret=0 size=227 cnt=7
+dlinfo extra SERINFO ret=0 size=227 cnt=7
+  [0] [/r1] flags=0x0 offset=128
+  [1] [<dir>/sub/x] flags=0x0 offset=132
+  [2] [/r2] flags=0x0 offset=161
+  [3] [/lib/x86_64-linux-gnu] flags=0x0 offset=165
+  [4] [/usr/lib/x86_64-linux-gnu] flags=0x0 offset=187
+  [5] [/lib] flags=0x0 offset=213
+  [6] [/usr/lib] flags=0x0 offset=218
+dlinfo extra SERINFO cnt-1 ret=0 dlerror=[NULL]
+dlinfo ORIGIN extra ret=0 [<dir>/sub]
+dladdr extra fname=[<dir>/sub/libQ.so]
+== extra object <dir>/sub/libR.so
+dlinfo extra        req= 9 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo extra SERINFOSIZE ret=0 size=162 cnt=5
+dlinfo extra SERINFO ret=0 size=162 cnt=5
+  [0] [/rp] flags=0x0 offset=96
+  [1] [/lib/x86_64-linux-gnu] flags=0x0 offset=100
+  [2] [/usr/lib/x86_64-linux-gnu] flags=0x0 offset=122
+  [3] [/lib] flags=0x0 offset=148
+  [4] [/usr/lib] flags=0x0 offset=153
+dlinfo extra SERINFO cnt-1 ret=0 dlerror=[NULL]
+dlinfo ORIGIN extra ret=0 [<dir>/sub]
+dladdr extra fname=[<dir>/sub/libR.so]
+== extra object ./sub/libQ.so
+dlinfo extra        req= 9 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo extra SERINFOSIZE ret=0 size=227 cnt=7
+dlinfo extra SERINFO ret=0 size=227 cnt=7
+  [0] [/r1] flags=0x0 offset=128
+  [1] [<dir>/sub/x] flags=0x0 offset=132
+  [2] [/r2] flags=0x0 offset=161
+  [3] [/lib/x86_64-linux-gnu] flags=0x0 offset=165
+  [4] [/usr/lib/x86_64-linux-gnu] flags=0x0 offset=187
+  [5] [/lib] flags=0x0 offset=213
+  [6] [/usr/lib] flags=0x0 offset=218
+dlinfo extra SERINFO cnt-1 ret=0 dlerror=[NULL]
+dlinfo ORIGIN extra ret=0 [<dir>/sub]
+dladdr extra fname=[<dir>/sub/libQ.so]
+== probe_rd (-rdynamic), LD_LIBRARY_PATH=/l1:/l2
+dladdr1 LINKMAP main ret=1 map==dlopen(NULL) 1
+dladdr main (program)               ret=1 fname=[./probe_rd] fbase=base sname=[main] saddr=base+7560
+dladdr probe_exported (program)     ret=1 fname=[./probe_rd] fbase=base sname=[probe_exported] saddr=base+12807
+dlinfo program      req= 1 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo program      req= 2 ret=0 dlerror=[NULL] arg0=00007300b77042e0
+dlinfo program      req= 3 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo program      req= 7 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo program      req= 8 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo program      req= 9 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo program      req=10 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo program      req=11 ret=13 dlerror=[NULL] arg0=00005ead580f1040
+dlinfo TLS_MODID program ret=0 modid=0
+dlinfo TLS_DATA main thread ret=0 data==&s_tls 0 data=NULL
+dlinfo lib SERINFOSIZE ret=0 size=182 cnt=6
+dlinfo lib SERINFO ret=0 size=182 cnt=6
+  [0] [/l1] flags=0x0 offset=112
+  [1] [/l2] flags=0x0 offset=116
+  [2] [/lib/x86_64-linux-gnu] flags=0x0 offset=120
+  [3] [/usr/lib/x86_64-linux-gnu] flags=0x0 offset=142
+  [4] [/lib] flags=0x0 offset=168
+  [5] [/usr/lib] flags=0x0 offset=173
+dlinfo lib SERINFO cnt-1 ret=0 dlerror=[NULL]
+dlinfo program SERINFOSIZE ret=0 size=182 cnt=6
+dlinfo program SERINFO ret=0 size=182 cnt=6
+  [0] [/l1] flags=0x0 offset=112
+  [1] [/l2] flags=0x0 offset=116
+  [2] [/lib/x86_64-linux-gnu] flags=0x0 offset=120
+  [3] [/usr/lib/x86_64-linux-gnu] flags=0x0 offset=142
+  [4] [/lib] flags=0x0 offset=168
+  [5] [/usr/lib] flags=0x0 offset=173
+dlinfo program SERINFO cnt-1 ret=0 dlerror=[NULL]

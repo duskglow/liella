@@ -1,0 +1,19 @@
+id = "D-NEW"
+series = "D-27"
+section = "s26-29"
+spec = "§27.1"
+ann = "—"
+status = "active"
+story = "DL-DLADDR-2"
+date = "2026-11-14"
+tests = ["s27_1_c_6", "s27_1_c_7"]
+body = '''
+**`dladdr`, `dladdr1` and `dlinfo` take no lock (DL-18 `DL-DLADDR`, D-27.1, plan/ph14/dl-16-dlopen.md §4).** They
+read the published objects through the loader's read section (`read_section` in `crates/boundary/src/ld/dlopen.rs`):
+a node is visible only after everything it points at was written, and nothing published is rewritten or unmapped,
+so a crash handler, profiler or backtrace may call them while another thread is inside `dlopen`. Only the first
+loader call of the process builds the loader's state, under the lock; a reader in a thread that is itself inside
+that first build sees no objects (`dladdr` returns 0, `dlinfo` fails with `dlinfo: invalid handle`) instead of
+waiting on itself. DL-DLOPEN-CONCURRENT (DL-16c) was not on next when this was written: its reader and this one
+fold into one when it lands.
+'''

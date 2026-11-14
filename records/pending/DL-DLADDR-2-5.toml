@@ -1,0 +1,19 @@
+id = "D-NEW"
+series = "D-27"
+section = "s26-29"
+spec = "§27.1, §27.3"
+ann = "—"
+status = "active"
+story = "DL-DLADDR-2"
+date = "2026-11-14"
+tests = ["s27_1_c_7"]
+body = '''
+**`RTLD_DI_TLS_DATA` gives the calling thread's block whenever it exists (DL-18 `DL-DLADDR`, ruling #5521).** A
+`dlopen`ed object's TLS block is placed in the static surplus and initialised for every thread at `dlopen`
+(D-27.39), so the block exists before the thread first touches a variable in it: `dlinfo` returns its address then
+too, the address `__tls_get_addr` gives for offset 0 of the module. A caller (a debugger helper, a runtime walking
+its own TLS) gets the block it can use at once, and the answer does not depend on which thread touched what. The
+reference's answer, NULL until the calling thread first used the block, is a registered, not implemented,
+compatibility option (pending compat record of this story); docs/differences-from-glibc.md has the row. Revisit
+when DL-19 adds dynamic blocks: a block created on first use has no address before it.
+'''
