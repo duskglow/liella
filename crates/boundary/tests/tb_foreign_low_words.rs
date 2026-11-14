@@ -59,6 +59,9 @@ fn foreign_block_low_words_neither_trusted_nor_written() {
         let saved = low(b);
         let planted = (0x5a5a_5a5a, 0x7fff_fff0, 0x18, 0x8, 0xa5a5);
         put(b, planted);
+        // The cache word as the heap's general paths read it (KernelPages): the registry's, never
+        // the planted 0x90 (8 is no cache's address).
+        let word = liella_boundary::selftest::heap_cache_word().1;
         let during = ask();
         let after = low(b);
         put(b, saved);
@@ -67,6 +70,7 @@ fn foreign_block_low_words_neither_trusted_nor_written() {
         assert_eq!(first, expect, "the answers with the block as the other library left it");
         assert_eq!(during, expect, "the answers with garbage in the block's words 0x80-0x9b");
         assert_eq!(after, planted, "no word at 0x80-0x9b of the other library's block was written");
+        assert_ne!(word, planted.3, "the heap's general paths read the cache word at 0x90 of the other library's block");
     })
     .join()
     .unwrap();
