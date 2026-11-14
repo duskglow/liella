@@ -7,23 +7,48 @@
 //! string end is checked before use, and any inconsistency means "no cache" (the caller falls back
 //! to the default directories), never an out-of-bounds read or a panic. Work is bounded: a lookup
 //! is a binary search plus one run of equal keys.
+//!
+//! The writer ([`write`], UTIL-2) lives beside the reader and shares its constants and
+//! [`compare`], so the order the writer produces is the order the reader searches.
 
 use core::cmp::Ordering;
+
+mod writer;
+pub use writer::{encoded_len, order, write, Entry, WriteError, ENTRIES_MAX, GENERATOR_MAX, HWCAPS_MAX, NAME_MAX, PATH_MAX};
 
 /// The magic and version at offset 0 (no NUL).
 pub const MAGIC: &[u8; 20] = b"glibc-ld.so.cache1.1";
 /// The header size; the entries follow it.
 pub const HEADER: usize = 48;
+/// The header's flags byte (offset 28): 2 in every file seen (Appendix D.3.1).
+pub const HEADER_FLAGS: u8 = 2;
 /// The size of one entry.
 pub const ENTRY: usize = 24;
 /// The extension directory's magic.
 pub const EXT_MAGIC: u32 = 0xeaa4_2174;
+/// The extension tag of the generator text.
+pub const TAG_GENERATOR: u32 = 0;
 /// The extension tag of the hwcaps-name array.
 pub const TAG_HWCAPS: u32 = 1;
 /// Bit 62 of an entry's `hwcap`: its low 32 bits index the hwcaps-name array.
 pub const HWCAP_INDEX: u64 = 1 << 62;
 /// Extension records looked at (bounded work on a hostile file).
 pub const EXT_MAX: usize = 64;
+
+/// One entry of a parsed cache, as [`Cache::get`] reads it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Stored<'a> {
+    /// Library type and ABI (Appendix D.3.1).
+    pub flags: u32,
+    /// The key (soname, or file name).
+    pub key: &'a [u8],
+    /// The path (always absolute).
+    pub path: &'a [u8],
+    /// The raw hwcap word.
+    pub hwcap: u64,
+    /// The glibc-hwcaps subdirectory name, for an entry that has one.
+    pub hwcaps: Option<&'a [u8]>,
+}
 
 /// A parsed cache: the file and the checked positions of its parts.
 #[derive(Clone, Copy, Debug)]
@@ -168,6 +193,42 @@ impl<'a> Cache<'a> {
             return None; // a cache path is absolute: anything else is an inconsistent entry
         }
         Some((u32_at(self.file, at)?, key, value, u64_at(self.file, at.checked_add(16)?)?))
+    }
+
+    /// Entry `i` (`i < len()`, file order) as stored; `None` when it is out of range or
+    /// inconsistent. `hwcaps` is the subdirectory name when the hwcap word has bit 62 and its index
+    /// names an entry of the hwcaps-name array.
+    pub fn get(&self, i: usize) -> Option<Stored<'a>> {
+        if i >= self.nlibs {
+            return None;
+        }
+        let (flags, key, path, hwcap) = self.entry(i)?;
+        let hwcaps = if hwcap & HWCAP_INDEX == 0 {
+            None
+        } else {
+            usize::try_from(hwcap & 0xffff_ffff).ok().and_then(|n| self.hwcaps_name(n))
+        };
+        Some(Stored { flags, key, path, hwcap, hwcaps })
+    }
+
+    /// The generator text (extension tag 0, Appendix D.3.2), when the file has one and it lies
+    /// inside the file.
+    pub fn generator(&self) -> Option<&'a [u8]> {
+        let ext = usize_at(self.file, 32)?;
+        if ext == 0 || u32_at(self.file, ext)? != EXT_MAGIC {
+            return None;
+        }
+        let count = usize_at(self.file, ext.checked_add(4)?)?;
+        let records = ext.checked_add(8)?;
+        for i in 0..count.min(EXT_MAX) {
+            let rec = records.checked_add(i.checked_mul(16)?)?;
+            if u32_at(self.file, rec)? == TAG_GENERATOR {
+                let offset = usize_at(self.file, rec.checked_add(8)?)?;
+                let size = usize_at(self.file, rec.checked_add(12)?)?;
+                return self.file.get(offset..offset.checked_add(size)?);
+            }
+        }
+        None
     }
 
     /// The hwcaps name with index `i`.

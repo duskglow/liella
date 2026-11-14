@@ -1,0 +1,17 @@
+# REGCOMP-DEEP-NESTING-3 plants (cargo xtask plants; docs/plants.md)
+# A recursive pass restored: the compiler compiles a group's body by calling itself again.
+compile-recurses | crates/core/src/pattern/regex/program.rs | lit:Step::Call(Call { id: x, next: close, chain, share: NONE, bare: false }) ==> Step::Done(self.compile(t, x, close, chain)?) | cargo test -p liella --test regex_deep_nesting | msg:overflowed its stack|SIGSEGV|SIGABRT
+# The depth limit reintroduced: the parser refuses a group past 256 open ones.
+depth-limit | crates/core/src/pattern/regex/parse.rs | lit:self.open += 1; ==> self.open += 1; if self.open > 256 { return Err(ReError::ESpace); } | cargo test -p liella --test regex_deep_nesting --test regex_pre14_triage | msg:deep_groups_and_alternations_compile_and_match.*FAILED|ESpace
+# The heap stacks cannot grow past their inline entries: a fixed limit again, everywhere they are used.
+stack-no-spill | crates/core/src/pattern/regex/parse.rs | lit:nomem(self.heap.push(v))?; ==> return Err(ReError::ESpace); | cargo test -p liella --test regex_deep_nesting | msg:deep_groups_and_alternations_compile_and_match.*FAILED|ESpace
+# Leaf fast paths (run 3). A concatenation's leaf loop skips an item.
+cat-leaf-skip | crates/core/src/pattern/regex/program.rs | lit:(k, next) = (j, pc); ==> (k, next) = (j.saturating_sub(1), pc); | cargo test -p liella --test s14_search_clauses --test regex_subpatterns | msg:FAILED|panicked
+# An alternation's leaf loop skips a branch.
+alt-leaf-skip | crates/core/src/pattern/regex/program.rs | lit:k += 1; ==> k += 2; | cargo test -p liella --test s14_search_clauses --test regex_subpatterns | msg:FAILED|panicked
+# The repetition driver continues from a wrong entry after a leaf copy.
+rep-leaf-entry | crates/core/src/pattern/regex/program.rs | lit:ret = pc; ==> ret = pc.saturating_add(1); | cargo test -p liella --test s14_search_clauses --test regex_subpatterns | msg:FAILED|panicked
+# The parser's leaf facts: an assertion or empty node no longer nullable.
+leaf-facts-nullable | crates/core/src/pattern/regex/parse.rs | perl:s/(Node::Backref\(_\) => Item \{ node, nullable: )true/${1}false/ | cargo test -p liella --test s14_search_clauses --test regex_subpatterns --test regex_anchor_repeat --test regex_stacked | msg:FAILED|panicked
+# The fast path off: every leaf goes through a frame and a step again (the run 2 compiler).
+quick-off | crates/core/src/pattern/regex/program.rs | perl:s/(fn quick.*?)self\.leaf\(it, next, chain\)/$1Ok(None)/s | cargo test -p liella --test s14_search_clauses --test regex_subpatterns | equivalent:performance only (same program emitted); the regcomp percall rows measure it

@@ -1,0 +1,19 @@
+{"task": "UTIL-CACHE-WRITER", "model": "opus", "tokens": null,
+ "result": "cache::write in liella-ld beside the reader: D.3.1 new format with tags 0 and 1, deterministic total order sharing cache::compare, validated and bounded input, no allocation; reference ldconfig -p and the reference loader agree with Liella-written caches",
+ "branch": "task/util-cache-writer", "head": "1a1c96692",
+ "gate": {"affected": "460 passed / 0 failed (5 suites, 0 SKIPPED)", "peak": "1.9G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The reference orders compare-equal keys of one directory (libv.so.1.9 / libv.so.1.09) by directory listing (opposite orders on ext4 and zram); Liella orders them by path bytes, one of the reference's possible outcomes (pending record)", "The ld_cache reader fuzz target had no seeds and stayed at 11 edges; it now has 5 writer-made seeds (110 edges, 36M runs, no finding)", "The decision is a pending record (records/pending/UTIL-CACHE-WRITER-1.toml, D-NEW, series D-27): the coordinator assigns the id", "percall not applicable: parse and lookup unchanged, no benchmarked path touched"],
+ "refused": [],
+ "impact": [
+   {"kind": "unblock", "what": "UTIL-3 (ldconfig) can write caches through cache::write and print them through Cache::get / Cache::generator", "before": null, "after": null, "unit": null, "measured": false},
+   {"kind": "coverage", "what": "tests in crates/ld/tests/cache_write.rs (round trip, layout, refusal, reference ldconfig -p, reference loader)", "before": 0, "after": 5, "unit": "tests", "measured": true},
+   {"kind": "coverage", "what": "plants caught on the writer and reader accessors", "before": 0, "after": 13, "unit": "plants", "measured": true},
+   {"kind": "coverage", "what": "ld_cache reader fuzz edges reached in 5 min (writer-made seeds)", "before": 11, "after": 110, "unit": "edges", "measured": true},
+   {"kind": "coverage", "what": "new fuzz target ld_cache_write (writer then reader)", "before": 0, "after": 1, "unit": "targets", "measured": true}
+ ],
+ "improvement": "The fuzz harness accepts a target with no seeds whose input needs a long magic (ld_cache sat at 11 edges); fuzz-check could warn when a target's 5-second run never leaves its first few edges",
+ "next_step": "UTIL-3: ldconfig (conf parser, sorted directory scan feeding cache::Entry rows, links, -r via openat2, atomic replace, freestanding static product)",
+ "report_file": "handoff/UTIL-CACHE-WRITER.md",
+ "jobs": ["util-cache-writer-clippy2", "util-cache-writer-static3", "util-cache-writer-gate", "util-cache-writer-plants", "util-cache-writer-fuzz", "util-cache-writer-fuzz2"]}

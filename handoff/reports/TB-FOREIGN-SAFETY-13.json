@@ -1,0 +1,21 @@
+{"task": "TB-FOREIGN-SAFETY-13", "model": "opus", "tokens": null,
+ "result": "Finish only: percall rerun on the final head (keke, code 10301e40c, head 94a1c46a1) rc 0 with the same counts as run 12; lint rc 0; run 12's FULL gate-2 and plants-2 on 10301e40c rc 0",
+ "branch": "task/tb-foreign-safety-13", "head": "94a1c46a1",
+ "gate": {"affected": "mei tb-foreign-safety-12-gate-2 rc 0 (FULL, on 10301e40c = same code)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "mbrtowc_ascii / mbstowcs_short / wcrtomb_2byte are still +9/+8/+4 per call over next d53c0d551 (as in run 12); follow-up story: tail-call shaped quick path",
+   "plants-2 WARN-NO-MSG on mask-always-owned (SIGABRT not in its msg regex); a later plants file should add SIGABRT|signal: 6"
+ ],
+ "refused": [],
+ "impact": [
+   {"kind": "perf", "what": "mb_cur_max per call (validation/percall/locale.c, Release) vs run 11", "before": 14, "after": 12, "unit": "instr/call", "measured": false},
+   {"kind": "perf", "what": "iswalpha_2byte / towupper_2byte / wcwidth_2byte per call vs run 11 (each -2)", "before": null, "after": null, "unit": "instr/call", "measured": false},
+   {"kind": "cost", "what": "mbrtowc_ascii / mbstowcs_short / wcrtomb_2byte vs next d53c0d551: 51 vs 42, 570 vs 562, 95 vs 91 (re-measured on the final head, keke tb-foreign-safety-13-percall; fix-forward: tail-call shaped quick path)", "before": null, "after": null, "unit": "instr/call", "measured": true},
+   {"kind": "coverage", "what": "plants on the folded gate (inherited from run 12)", "before": null, "after": 5, "unit": "plants", "measured": false}
+ ],
+ "improvement": "A percall job verified against the hand-back head's content could be rerun automatically by the dispatcher when only a test file changed after it; this run spent a whole agent on one count job.",
+ "next_step": "Land; follow-up story for the mbrtowc/mbstowcs/wcrtomb quick paths (+4..+9 over next).",
+ "report_file": "handoff/TB-FOREIGN-SAFETY.md",
+ "jobs": ["keke:tb-foreign-safety-13-lint", "keke:tb-foreign-safety-13-percall", "mei:tb-foreign-safety-12-plants-2", "mei:tb-foreign-safety-12-gate-2", "mei:tb-foreign-safety-12-lint-3"]}

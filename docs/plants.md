@@ -6,10 +6,13 @@ script (XTASK-PLANTS, plan/next-batch-1024-2.md).
 
 **The tool is the required way to run plants (owner, 2026-11-05).** Do not write your own plants script: hand-written
 scripts printed CAUGHT next to passing tests, hung for 150 minutes and silently skipped plants. The project's
-per-plant limit is `--timeout 600` (the default); a plant whose command runs into it is CAUGHT ("caught by timeout").
+per-plant limit is `--timeout 600` (the default); a plant whose command runs into it is CAUGHT ("caught by timeout"). The product build (`cargo xtask so`, the baseline and one per plant that uses the products)
+has its own limit, `--prepare-timeout <secs>` (default 3600), because a cold traced build can exceed 600 s. A baseline
+build that runs into it ends `BASELINE FAILED: so timed out after N s (prepare timeout)`; a mutant's build that does
+is reported `BUILD-TIMEOUT` (not CAUGHT: the mutant was not tested) and fails the run.
 
 ```
-cargo xtask plants <plants-file> --dir <new-directory> [--timeout <secs>]   # default and project limit: 600
+cargo xtask plants <plants-file> --dir <new-directory> [--timeout <secs>] [--prepare-timeout <secs>]   # test limit 600 (project rule); build limit 3600
 ```
 
 Run it from the role tree on the build host, under plain `jobrun` (not `~/bin/gate`, which gives the job a private
@@ -35,11 +38,26 @@ applying the plant and before the command (log `<id>.so.log`; if the mutant does
 on that log and the command is not run). A command is known not to use them only when it is one plain
 `cargo test` whose targets are all named (`--lib`, `--bin <name>`, `--test <name>`) and no named test target
 uses the products by the rule `cargo xtask affected` builds them for (its source or support files name
-`target/liella`, `libc.a`, `liella-crt1` or `conformance`). Such a plant reuses the baseline build; anything
+`target/liella`, `join("liella")` (the ld tests' path to the built `ld.so`), `libc.a`, `liella-crt1` or
+`conformance`). Such a plant reuses the baseline build; anything
 else (shell syntax, `cargo xtask affected`, all targets of a package, an unknown target or option) rebuilds.
 After a plant that rebuilt the products, the next plant that does not use them first rebuilds them unmutated
 (`<id>.so-restore.log`), so no command sees an earlier plant's mutant. The verdict line names the build
-used (`build: the baseline products, not rebuilt`, or `rebuilt with the mutant in <n>s`).
+used and its layout (`build: the baseline products (layout ungrouped), not rebuilt`, or `rebuilt with the mutant,
+layout ungrouped, in <n>s`).
+
+**The layout of each build** (PLANTS-UNGROUPED-MUTANTS). A mutant's behaviour does not depend on the start-up layout,
+and a traced product build costs minutes per mutant, so the tool builds the products of an ordinary plant (and its
+baseline) **ungrouped**: it sets `LIELLA_LAYOUT_TRACE=ungrouped` for the build and for the plant's command (a command
+such as `cargo xtask affected ... --run` that builds the products itself builds them the same way). A plant that
+measures the start-up layout is built **traced** (`LIELLA_LAYOUT_TRACE=1`, the build and its command): a plant whose
+command names a start-up layout test (`hot_text_products`, `heap_meta_products`, `cold_bss_products`: `cargo xtask
+affected`'s layout tests) or `layout-check`, or runs `cargo xtask affected ... --run` without `--only` (which selects
+the layout tests for a change that reaches `libc.a`), or that is marked `layout:traced` (below). Such a plant always
+rebuilds the products. The baseline builds once per layout the file uses (`so.log` ungrouped first, then
+`so-traced.log` when the file has both) and runs each command in its plants' layout. The tool sets the variable
+itself, so a value in the caller's environment does not matter. A baseline command that fails on the ungrouped
+build says so: if it measures the layout, mark its plants `layout:traced`.
 
 Logs go to `<dir>/logs/` (`so.log`, `baseline-<n>.log`, `<id>.log`, `<id>.so.log`, `<id>.so-restore.log`). The tool writes nothing outside `--dir`.
 `CARGO_TARGET_DIR` is removed from the commands' environment, so the copy builds into its own `target/`.
@@ -74,6 +92,9 @@ id | path | pattern | cmd
     failure, not just the test, because a passing run prints the test's name too (for example `msg:my_test.*FAILED|panicked`).
   - `equivalent:<reason>`: the mutant behaves like the original by design. If its command passes, it is EQUIVALENT.
   - none: the plant is judged by exit status alone.
+- An optional field after all of them, `layout:traced`: the plant's products are built with the traced start-up
+  layout (see "The layout of each build"). Use it for a command that measures the layout without naming a layout test,
+  for example `id | path | pattern | cmd | msg:<regex> | layout:traced`. Any other `layout:` value is refused.
 
 ## Verdicts
 

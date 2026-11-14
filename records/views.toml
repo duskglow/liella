@@ -308,6 +308,17 @@ columns = ["id", "spec", "ann", "body"]
 head = "records/views/s26-29.head.md"
 
 [[view]]
+name = "s31"
+path = "plan/07-decisions/s31-utilities.md"
+kind = "decision"
+section = "s31"
+series = ["D-31"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s31.head.md"
+
+[[view]]
 name = "x"
 path = "plan/07-decisions/x-implementation-decisions.md"
 kind = "decision"

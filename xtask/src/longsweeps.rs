@@ -234,6 +234,7 @@ pub const NOT_SWEEPS: &[(&str, &str, &str)] = &[
     ("crates/core/tests/no_proc_lane.rs", "link_max_without_proc", "LIELLA_NPL_LINK_MAX is the expected value the test hands its re-executed child, not a size"),
     ("crates/core/tests/no_proc_lane.rs", "getauxval_hosted_without_proc", "LIELLA_NPL_PAGESZ is the expected value the test hands its re-executed child, not a size"),
     ("crates/core/tests/s25_ipc_clauses.rs", "s25_2_c_3", "LIELLA_C25_UNDO is the semaphore id the test hands its re-executed child, not a size"),
+    ("crates/ld/tests/cache_write.rs", "write_reader_fuzz_seeds", "regenerates fuzz/seeds/ld_cache from the cache writer; it checks nothing"),
 ];
 
 /// The identifier at the start of `s` (a `$` for a `macro_rules!` metavariable).
