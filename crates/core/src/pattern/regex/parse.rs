@@ -94,7 +94,9 @@ fn kids_of(kids: &[u32], start: u32, len: u32) -> &[u32] {
     kids.get(s..e).unwrap_or(&[])
 }
 
-/// `node` with its facts, from its children's (all in `nodes`).
+/// `node` with its facts, from its children's (all in `nodes`). Out of line, so that the
+/// parser's per-leaf path ([`Parser::add`]) stays small enough to inline.
+#[inline(never)]
 fn facts(nodes: &[Item], kids: &[u32], node: Node, wrap: u32) -> Item {
     let (nullable, mut groups) = match node {
         Node::Byte(_) | Node::Set(_) => (false, NO_GROUPS),
