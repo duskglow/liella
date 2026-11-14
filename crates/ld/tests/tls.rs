@@ -121,7 +121,7 @@ fn tls_surplus_first_fit_alignment_gap_reuse_and_rollback() {
 /// the generation on, an ID a failed `dlopen` gives back is taken again without a generation, and IDs
 /// stop at the limit.
 #[test]
-fn s27_1_c_4_surplus_free_and_module_id_reuse_with_generation() {
+fn tls_surplus_free_and_module_id_reuse_with_generation() {
     let m = |memsz, align| Module { vaddr: 0, filesz: 0, memsz, align };
     let (lo, hi, tpa) = (100u64, 1100u64, 64u64);
     let mut s = tls::Surplus::<8>::default();

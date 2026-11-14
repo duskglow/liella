@@ -16,6 +16,10 @@ crates/ld/tests/dlclose.rs (basic 39 checks, concurrent readers loop, C++ plugin
 xtask so, the five ld test targets) holds the first results: `ssh keke ~/bin/jobwait dl-dlclose-tests1`, log
 ~/logs/dl-dlclose-tests1.log. compat_aliases.S was regenerated on keke and copied back: it showed no diff; the static
 check says whether the `dlclose@GLIBC_2.2.5` stub needs anything else.
+**Static on 07211860e (in tests1):** compat-gen STALE (my local copy of compat_aliases.S was the pre-regen one:
+run `cargo xtask compat-gen` in the role after tests1 ends and copy the file back), and trace refused the unit test
+name `s27_1_c_4_...` in tls.rs (renamed to `tls_surplus_free_and_module_id_reuse_with_generation` in the next commit;
+its doc names s27_1_c_4).
 **Remaining (estimate 60-80 calls):** fix what tests1 finds; dynlink.md `== close` record; pending decision records
 (the records/pending/ directory is gone from next: ask where pending D-27 records go now); differences row for
 `dlclose` of a handle with no open left (shared row D-16-PLAN-3 covers it: check wording); plants file (unmap before
