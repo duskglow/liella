@@ -6,7 +6,7 @@
  *   - RTLD_DI_TLS_MODID: 0 without PT_TLS; else the module id __tls_get_addr takes for the block;
  *     RTLD_DI_TLS_DATA: NULL without PT_TLS; the calling thread's block once that thread used it
  *     (before that the reference gives NULL and Liella the block: docs/differences-from-glibc.md);
- *   - RTLD_DI_PHDR: returns the program header count, stores the run-time table (dl_iterate_phdr's);
+ *   - RTLD_DI_PHDR: returns the program header count, stores the run-time table (the file's headers);
  *   - RTLD_DI_SERINFOSIZE / RTLD_DI_SERINFO: the search path, DT_RPATH, LD_LIBRARY_PATH, DT_RUNPATH
  *     ($ORIGIN expanded), then the system directories; dls_size is the header, the entries and the
  *     strings; strings follow the entries, flags 0; a buffer one entry short still succeeds;
@@ -18,6 +18,7 @@
 /* HELPER-FLAGS: dla_rp -Wl,--disable-new-dtags,-rpath,/rp */
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <elf.h>
 #include <link.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -41,29 +42,29 @@ static void *open_helper(const char *name)
     return h;
 }
 
-/* dl_iterate_phdr's program header table and count for the object loaded at ADDR. */
-struct ph { uintptr_t addr; const void *phdr; int n; };
-static int ph_cb(struct dl_phdr_info *in, size_t sz, void *p)
-{
-    (void)sz;
-    struct ph *q = p;
-    if (in->dlpi_addr != q->addr)
-        return 0;
-    q->phdr = in->dlpi_phdr;
-    q->n = in->dlpi_phnum;
-    return 1;
-}
-
-/* RTLD_DI_PHDR on H agrees with dl_iterate_phdr. */
-static int phdr_ok(void *h)
+/* RTLD_DI_PHDR on helper NAME (handle H): the count is the file's e_phnum and the table is the
+ * file's program headers, mapped at the load bias plus e_phoff (the first PT_LOAD maps offset 0
+ * at address 0 in these helpers). */
+static int phdr_ok(const char *name, void *h)
 {
     struct link_map *lm = NULL;
     const void *t = NULL;
-    if (dlinfo(h, RTLD_DI_LINKMAP, &lm) != 0 || lm == NULL)
-        return 0;
-    struct ph q = {lm->l_addr, NULL, 0};
-    int n = dlinfo(h, RTLD_DI_PHDR, &t);
-    return dl_iterate_phdr(ph_cb, &q) == 1 && n == q.n && n > 0 && t == q.phdr;
+    char p[4096];
+    snprintf(p, sizeof p, "%s/lib%s.so", dir, name);
+    FILE *f = fopen(p, "rb");
+    Elf64_Ehdr eh;
+    Elf64_Phdr ph[32];
+    int ok = f != NULL && fread(&eh, sizeof eh, 1, f) == 1 && eh.e_phnum > 0 && eh.e_phnum <= 32 &&
+             fseek(f, (long)eh.e_phoff, SEEK_SET) == 0 && fread(ph, sizeof ph[0], eh.e_phnum, f) == eh.e_phnum;
+    if (f != NULL)
+        fclose(f);
+    ok = ok && dlinfo(h, RTLD_DI_LINKMAP, &lm) == 0 && lm != NULL;
+    int n = ok ? dlinfo(h, RTLD_DI_PHDR, &t) : -1;
+    ok = ok && n == eh.e_phnum && t == (const void *)(lm->l_addr + eh.e_phoff) &&
+         memcmp(t, ph, eh.e_phnum * sizeof ph[0]) == 0;
+    if (!ok)
+        fprintf(stderr, "s27_dlinfo: PHDR of %s: %d headers at %p\n", name, n, t);
+    return ok;
 }
 
 /* The search path of H: dls_size, the strings after the entries, and its first WANT entries. */
@@ -138,7 +139,7 @@ int main(void)
     if (syms == NULL || run == NULL || rp == NULL || g == NULL)
         return 100;
     tls_addr = (long *(*)(void))dlsym(syms, "lib_tls_addr");
-    tls_get_addr = (void *(*)(void *))dlsym(RTLD_DEFAULT, "__tls_get_addr");
+    tls_get_addr = (void *(*)(void *))dlsym(syms, "dla_tls_get_addr");
     CHECK(tls_addr != NULL && tls_get_addr != NULL);
     if (fails)
         return fails;
@@ -178,8 +179,8 @@ int main(void)
     CHECK(dlinfo(run, RTLD_DI_TLS_DATA, &data) == 0 && data == NULL);
 
     /* PHDR. */
-    CHECK(phdr_ok(syms));
-    CHECK(phdr_ok(run));
+    CHECK(phdr_ok("dla_syms", syms));
+    CHECK(phdr_ok("dla_run", run));
     const void *pt = NULL;
     CHECK(dlinfo(g, RTLD_DI_PHDR, &pt) == (int)getauxval(AT_PHNUM) && pt == (const void *)getauxval(AT_PHDR));
 

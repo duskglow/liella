@@ -67,7 +67,7 @@ fn s27_1_c_6() {
 /// §27.1 Contract: **`dlinfo(handle, request, arg)`** queries a handle: its link map, origin, search paths, TLS module ID and block, and namespace.
 ///
 /// `s27_dlinfo`: `RTLD_DI_LMID`, `LINKMAP`, `ORIGIN`, `TLS_MODID` (the id `__tls_get_addr`
-/// takes), `TLS_DATA` (in two threads), `PHDR` (against `dl_iterate_phdr`), `SERINFOSIZE` and
+/// takes), `TLS_DATA` (in two threads), `PHDR` (against the file's headers), `SERINFOSIZE` and
 /// `SERINFO` (`DT_RPATH`, `LD_LIBRARY_PATH`, `DT_RUNPATH`), and the unsupported requests' text.
 /// Checked on the reference and on Liella's loader (DL-18).
 #[test]

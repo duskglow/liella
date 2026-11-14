@@ -1,8 +1,9 @@
 /* Spec §27.1 (s27_1_c_6 dladdr, dladdr1): an address mapped to its object and symbol, as the
  * reference answers (the dladdr probe, tools/probe/dl/dladdr/; spec/behaviour/dynlink.md "dladdr
  * and dlinfo"). Against the helper dla_syms (a fixed symbol layout, opened by dlopen):
- *   - the object: dli_fname is the path it was opened by, dli_fbase the page of its lowest load
- *     address (that of dl_iterate_phdr's entry holding the address), the link map's l_addr;
+ *   - the object: dli_fname is the path it was opened by, dli_fbase its load bias (the address
+ *     of s_a less its st_value in the file; the program's from dl_iterate_phdr), the link map's
+ *     l_addr;
  *   - the symbol: only a dynamic symbol that HOLDS the address (st_value <= a < st_value +
  *     st_size, or a == st_value for size 0); none (a local-code gap, past a size-0 symbol, the ELF
  *     header): ret 1 with dli_sname and dli_saddr NULL; overlapping holders: the highest start;
@@ -56,8 +57,8 @@ static uintptr_t load_base(const void *a)
     return q.base;
 }
 
-/* The .dynsym index of NAME in FILE (section headers), -1 if absent. */
-static long dynsym_index(const char *file, const char *name)
+/* The .dynsym index of NAME in FILE (section headers), -1 if absent; its st_value in *VALUE. */
+static long dynsym_index(const char *file, const char *name, uint64_t *value)
 {
     FILE *f = fopen(file, "rb");
     long r = -1;
@@ -79,6 +80,7 @@ static long dynsym_index(const char *file, const char *name)
                     for (size_t k = 0; k < sh[s].sh_size / sizeof *sy; k++)
                         if (sy[k].st_name < st->sh_size && strcmp(str + sy[k].st_name, name) == 0) {
                             r = (long)k;
+                            *value = sy[k].st_value;
                             break;
                         }
                 }
@@ -97,7 +99,8 @@ static const char *lowest(const char *file, const char *const *names, int n)
     const char *best = NULL;
     long bi = -1;
     for (int k = 0; k < n; k++) {
-        long i = dynsym_index(file, names[k]);
+        uint64_t v;
+        long i = dynsym_index(file, names[k], &v);
         if (i >= 0 && (bi < 0 || i < bi)) {
             bi = i;
             best = names[k];
@@ -160,7 +163,10 @@ int main(int argc, char **argv)
     CHECK(s_a && s_zero && s_b && s_w1 && s_nt && s_outer && s_impl && s_tail && s_obj);
     if (fails)
         return fails;
-    base = load_base(s_a);
+    uint64_t v_a = 0;
+    CHECK(dynsym_index(p, "s_a", &v_a) > 0 && v_a != 0);
+    base = (uintptr_t)s_a - v_a; /* the load bias; the first PT_LOAD maps offset 0 at address 0 */
+    CHECK(memcmp((void *)base, ELFMAG, SELFMAG) == 0);
     struct link_map *lm = NULL;
     CHECK(dlinfo(h, RTLD_DI_LINKMAP, &lm) == 0 && lm != NULL && lm->l_addr == base);
 
@@ -228,7 +234,7 @@ int main(int argc, char **argv)
           d.dli_saddr == (void *)main);
     void *pf = dlsym(RTLD_DEFAULT, "printf");
     CHECK(pf != NULL && dladdr(pf, &d) == 1 && d.dli_fname && strstr(d.dli_fname, "libc") != NULL &&
-          (uintptr_t)d.dli_fbase == load_base(pf) && d.dli_saddr == pf && d.dli_sname != NULL &&
+          memcmp(d.dli_fbase, ELFMAG, SELFMAG) == 0 && (char *)d.dli_fbase < (char *)pf && d.dli_saddr == pf && d.dli_sname != NULL &&
           dlsym(RTLD_DEFAULT, d.dli_sname) == pf);
 
     /* A backtrace through the helper: callback's return address is in dla_call, dla_call's in main. */

@@ -36,6 +36,9 @@ __asm__(
 extern __thread long s_tls;
 /* The calling thread's s_tls (touches the block). */
 long *lib_tls_addr(void) { return &s_tls; }
+/* __tls_get_addr as this object reaches it (the test's module-id check). */
+extern void *__tls_get_addr(void *);
+void *dla_tls_get_addr(void *ti) { return __tls_get_addr(ti); }
 #else
 long *lib_tls_addr(void) { return NULL; }
 #endif
