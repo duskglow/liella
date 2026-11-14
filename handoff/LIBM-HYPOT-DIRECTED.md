@@ -1,8 +1,8 @@
 # LIBM-HYPOT-DIRECTED: hardware math operations through a trait; hypot first (#4967)
 
-State: branch `task/libm-hypot-directed-2` (continues `task/libm-hypot-directed` 490dcb9d7; origin/next ca154363f merged
-in), HEAD in handoff/reports/LIBM-HYPOT-DIRECTED-2.json. Role keke:~/w/n1 (Zen 1). Code head 4c5326b09 (the merge);
-later commits are handoff/ only.
+State: branch `task/libm-hypot-directed-3` (continues `task/libm-hypot-directed-2` 4b2397908; origin/next 8f3e2993e
+merged in, trace-at-build layout now the default), HEAD in handoff/reports/LIBM-HYPOT-DIRECTED-3.json. Role
+mei:~/w/s2. Code head 50bc1b6ec (the merge); later commits are handoff/ only. Ready to land.
 
 ## Decisions in force
 
@@ -24,8 +24,25 @@ later commits are handoff/ only.
   both profiles build and hot_text_products passes with next's lists, so the branch changes no list and drops no
   key (startup-data.keys keeps `global_locale::GLOBAL` in both profiles). Only merge conflict besides the lists:
   s10_math_symbols.rs (next removed the unused `skip_note` module; this branch's `hypot_pairs` kept).
+* -3: CI was red on 4b2397908 only on `hot_text_products init_data_clusters_hold_at_every_text_phase`, the
+  start-up layout jitter (ruling #4347) that the traced default removes. LAYOUT-TRACE-DEFAULT has landed, so per the
+  coordinator note: merged origin/next 8f3e2993e (clean, no conflicts) and reran the gate; nothing else changed.
+  The branch still changes no generated layout list.
 
-## RESULTS (keke, Zen 1; labels are ~/logs/<label>.log)
+## RESULTS -3 (mei; labels are ~/logs/<label>.log)
+
+* `libm-hypot-directed-3-lint0`: clippy + static on the inherited head 4b2397908: rc 0.
+* `libm-hypot-directed-3-lint1` (code head 50bc1b6ec): clippy --all-features -D warnings, cargo xtask clippy,
+  cargo xtask static: rc 0.
+* `libm-hypot-directed-3-gate` (affected --run --base origin/next; 243 of 272 targets, 135 conformance programs):
+  rc 0, 11 suites ok, 11729 passed / 0 failed, conformance 135 / 0, peak 16G (page cache), oom_kill 0.
+  `init_data_clusters_hold_at_every_text_phase` and `init_short_programs_stay_within_their_page_fault_bounds`
+  PASS in both runs of `test -p liella` (plain and exports interposed); `hypot_on_the_hardware_root_...` PASS.
+* `libm-hypot-directed-3-plants` (tool, handoff/LIBM-HYPOT-DIRECTED-2-plants.txt, products rebuilt per mutant):
+  3 CAUGHT, 0 SURVIVED, 0 WARN.
+* Not rerun (code unchanged since -2): percall (hypot_near_up 329.6 -> 296.6 instr/call, -2's measurement).
+
+## RESULTS -2 (keke, Zen 1; labels are ~/logs/<label>.log)
 
 * `libm-hypot-directed-2-lint0`: clippy + static on the inherited head 490dcb9d7: rc 0.
 * `libm-hypot-directed-2-hot` (code head): `cargo xtask so` + hot_text_products, fast then release: 24 passed /
