@@ -1,0 +1,89 @@
+{
+ "task": "DL-DLCLOSE-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE checkpoint (context): red tests1 fixed (stale compat alias, corpus bugs); gate found a reclaim race (SIGSEGV), fixed in c5f79f668 with a deterministic test; the correct grace period now exhausts the 512-object table under a stalled reader (15/240 stress runs): fix needs a ruling",
+ "branch": "task/dl-dlclose-2",
+ "head": "c5f79f668",
+ "gate": {
+  "affected": "a73b54e63: 6557 passed / 1 failed (dlclose_concurrent_with_readers SIGSEGV, fixed in c5f79f668); no gate on c5f79f668",
+  "peak": "12G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "dlopen/dlclose may block when retired objects pile up behind a stalled dl_iterate_phdr/_dl_find_object reader (else the 512-object table fills: cannot load more objects)",
+   "recommendation": "yes: at entry, outside the loader locks, above a retired threshold poll-wait for the old parity to drain, never when the caller own stripe counts a reader (then fail as today)"
+  },
+  {
+   "item": "exit order of dlopen objects pinned at exit (record C-6/C-7 vs DL-16a last-initialised-first)",
+   "recommendation": "a follow-up probe story (two NODELETE objects; unique-pinned pair) before changing fini_loaded"
+  }
+ ],
+ "informational": [
+  "records/pending/DL-DLCLOSE-1.toml is a D-NEW (series D-27, amends D-27.44): CI holds the branch until the id is assigned",
+  "docs/differences-from-glibc.md still cites records/pending/DL-16-PLAN-3.toml for the dlclose/dlsym invalid-handle row; that pending file is not on next (ruling #5628 says all were assigned): the row's reference may need the assigned id",
+  "SPEC GAP: exit-time order of dlopen objects still loaded: record == close ran C-6 (STB_GNU_UNIQUE-pinned, loaded first) before C-7 (RTLD_NODELETE); Liella runs the last initialised first (DL-16a fini_loaded), which would give C-7 first. Not compared on Liella; a probe of two NODELETE objects and of a unique-pinned pair decides whether exit order or unique pinning differs",
+  "plants WARN-DEV-SHM (plants dir under /dev/shm): no plant command mounts its own /dev/shm, no effect",
+  "read_section uses striped two-parity reader counters instead of thread-block epochs (same guarantee): recorded in the decision record",
+  "stress dl-dlclose-2-stress1 overlapped my lint job and threw away stdout; its 21 fails are the same exhaustion (stress2 alone: 15/240 with messages)"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "correctness",
+   "what": "dlclose exported (dlclose@GLIBC_2.2.5 and default) and implemented: unload, finalisers, deferred unmap after readers leave, TLS id reuse, atfork drop (was missing)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": true
+  },
+  {
+   "kind": "correctness",
+   "what": "reader-parity flip on every dlclose let two closes in one dl_iterate_phdr walk unmap the visited object (SIGSEGV); fixed, check 33 deterministic",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "tests added: dlclose.rs (3 tests: basic 39 checks, concurrent readers x3000, C++ plugin x300) and 1 tls unit test",
+   "before": 0,
+   "after": 4,
+   "unit": "tests",
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "plants (on a73b54e63; plant 1 re-pointed to the new drained())",
+   "before": 0,
+   "after": 5,
+   "unit": "plants",
+   "measured": true
+  },
+  {
+   "kind": "unblock",
+   "what": "DL-ATEXIT-OWNER (needs the module map with unloading)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  },
+  {
+   "kind": "cost",
+   "what": "concurrent dlclose test fails with table exhaustion under a stalled reader; fix-forward: the ruling above",
+   "before": 0,
+   "after": 15,
+   "unit": "fails per 240 stress runs",
+   "measured": true
+  }
+ ],
+ "improvement": "a stress loop of every new concurrency test (jobrun, 6x40 in RAM) before the first gate would have found both the reclaim race and the exhaustion in minutes instead of a 75-minute gate",
+ "next_step": "after the ruling: entry-time drain wait (handoff design), stress 6x40 = 0 fails, plants, gate",
+ "report_file": "handoff/DL-DLCLOSE.md",
+ "jobs": [
+  "dl-dlclose-2-lint2",
+  "dl-dlclose-2-tests6"
+ ]
+}
