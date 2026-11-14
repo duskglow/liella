@@ -7,13 +7,17 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
-/// File slugs per top-level spec section (shared with crates/posix/src/sNN_*.rs).
-pub const SLUGS: [&str; 30] = [
+/// File slugs per top-level spec section (shared with crates/posix/src/sNN_*.rs). §30 (the pattern
+/// catalogue) has no clauses; §31 is the utilities (UTIL-SPEC).
+pub const SLUGS: [&str; 32] = [
     "conventions", "startup", "diagnostics", "memory", "strings", "ctype", "multibyte", "locale",
     "numeric", "random", "math", "lowio", "stdio", "filesystem", "search", "sockets",
     "nameservices", "users", "processes", "terminals", "signals", "contexts", "threads", "time",
-    "system", "ipc", "syslog", "dynlink", "profiling", "legacy",
+    "system", "ipc", "syslog", "dynlink", "profiling", "legacy", "catalogue", "utilities",
 ];
+
+/// The top-level sections that hold no clauses: §30 consolidates the annotations of the others into patterns.
+pub const NO_CLAUSES: [u32; 1] = [30];
 
 /// Appendix B entries the generator relocates. Each is a filing error in the spec's generated
 /// index, corrected to the section whose text specifies the symbol (see spec/ERRATA.md).
@@ -110,7 +114,7 @@ pub(crate) fn ident_part(s: &str) -> String {
     s.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '_' }).collect()
 }
 
-/// Parse all testable clauses of the spec body (sections 0-29).
+/// Parse all testable clauses of the spec body (sections 0-29 and 31; not §30, [`NO_CLAUSES`]).
 pub fn clauses(spec: &str) -> Vec<Clause> {
     let mut out: Vec<Clause> = Vec::new();
     let mut top: u32 = 0;
@@ -142,7 +146,7 @@ pub fn clauses(spec: &str) -> Vec<Clause> {
 
     for raw in spec.lines() {
         let line = raw.trim_end();
-        if line.starts_with("## Appendix") || line.starts_with("## 30.") {
+        if line.starts_with("## Appendix") {
             flush(&mut cur, &mut out);
             break;
         }
@@ -153,7 +157,7 @@ pub fn clauses(spec: &str) -> Vec<Clause> {
                 if let Ok(n) = num.parse::<u32>() {
                     top = n;
                     section = n.to_string();
-                    in_body = true;
+                    in_body = !NO_CLAUSES.contains(&n);
                 }
             }
             continue;
@@ -626,5 +630,17 @@ mod tests {
                 ("s1_1_f_0", "none."),
             ]
         );
+    }
+
+    /// UTIL-SPEC (no spec clause: the generator's rule): §30, the pattern catalogue, gives no clauses, and the
+    /// section after it (§31, the utilities) does; the appendices end the body.
+    #[test]
+    fn the_catalogue_gives_no_clauses_and_the_section_after_it_does() {
+        let spec = "## 29. A\n\n### 29.1 F\n\n**Contract.** the last clause before the catalogue.\n\n## 30. Catalogue\n\n| # | Pattern |\n|---|---|\n| H1 | text |\n\n\
+                    **Contract.** not a clause.\n\n## 31. Utilities\n\n### 31.2 ldconfig\n\n**Contract.**\n\n* first.\n\n\
+                    | Name | Source |\n|---|---|\n| x | probe |\n\n## Appendix A. K\n\n**Contract.** not a clause.\n";
+        let c = clauses(spec);
+        let ids: Vec<(&str, &str, u32)> = c.iter().map(|c| (c.id.as_str(), c.section.as_str(), c.top)).collect();
+        assert_eq!(ids, [("s29_1_c_0", "29.1", 29), ("s31_2_c_1", "31.2", 31), ("s31_2_c_r1", "31.2", 31)]);
     }
 }
