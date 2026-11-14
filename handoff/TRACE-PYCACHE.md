@@ -9,3 +9,9 @@ Gate: `affected --run --base origin/next` escalated to FULL (tools/hottext/*.sh 
 Not verified: clippy/static ran on the first commit only (second commit is test-fixture only; the xtask tests compiled it).
 Other tree walkers (policy.rs, compat_ids.rs etc.) were not changed: they filter by extension.
 Next: none; land.
+
+## Run 2 (TRACE-PYCACHE-2)
+Inherited head was already fixed (walk-dir fixture adds a non-.pyc file inside __pycache__). On that tree: lint (static + clippy) rc 0
+(TRACE-PYCACHE-2-lint), `cargo test -p xtask --bin xtask` rc 0 (TRACE-PYCACHE-2-gate; affected escalates to FULL for tools/hottext/*.sh),
+plants 3/3 CAUGHT (TRACE-PYCACHE-2-plants2; handoff/TRACE-PYCACHE-plants.txt). TRACE-PYCACHE-2-plants (rc 2) was SUPERSEDED: its baseline
+`cargo xtask so` hit the 600 s per-command timeout on a loaded host; rerun with --timeout 1800.
