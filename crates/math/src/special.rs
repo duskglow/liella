@@ -984,7 +984,7 @@ fn limit<F: Float>() -> i64 {
 }
 
 /// `jn(n, x)`: `double` and `float` try the recurrence tier ([`crate::fast_bessel::n`]) first, then
-/// [`jn_accurate`]. `float` orders 0 and ±1 that the recurrence tier refuses go to [`jn_low`].
+/// [`jn_accurate`]. `float` operands the recurrence tier refuses go to [`jn_low`].
 pub fn jn<F: Float>(n: i32, x: F, mode: Rounding) -> (F, Status) {
     if F::PREC == 53 {
         if let Some(r) = from_fast("jn", fast_bessel::n::jn(n, as_f64(x), mode)) {
@@ -996,15 +996,15 @@ pub fn jn<F: Float>(n: i32, x: F, mode: Rounding) -> (F, Status) {
         if let Some((v, st)) = r {
             return (F::from_bits(u128::from(v.to_bits())), st);
         }
-        if n.unsigned_abs() <= 1 {
-            return jn_low(n, x, mode);
-        }
+        // One out-of-line call with the arguments the accurate path takes: the answered calls
+        // keep the frame they had (an order test here cost ynf 4 instructions a call).
+        return jn_low(n, x, mode);
     }
     jn_accurate(n, x, mode)
 }
 
-/// `float` `jn` of orders 0 and ±1 after the recurrence tier refused `x`: [`j0`] and [`j1`]
-/// themselves (`J_{−1}(x) = J_1(−x)`; a NaN keeps its sign on the accurate path), so these
+/// `float` `jn` after the recurrence tier refused `x`: orders past ±1 on the accurate path, 0
+/// and ±1 by [`j0`] and [`j1`] themselves (`J_{−1}(x) = J_1(−x)`; a NaN keeps its sign on the accurate path), so these
 /// orders share the large band (D-10.109) and agree with `j0f`/`j1f` bit for bit. The tier
 /// already answers every operand `j0f`/`j1f`'s fast path answers (the same `fast32::eval`), so
 /// the test sits on its refusal only and every answered call runs next's code unchanged; out of
@@ -1014,6 +1014,9 @@ pub fn jn<F: Float>(n: i32, x: F, mode: Rounding) -> (F, Status) {
 #[cold]
 #[inline(never)]
 fn jn_low<F: Float>(n: i32, x: F, mode: Rounding) -> (F, Status) {
+    if n.unsigned_abs() > 1 {
+        return jn_accurate(n, x, mode);
+    }
     if f32::from_bits(x.to_bits() as u32).is_normal() {
         return match n {
             0 => bessel32_rest(0, "j0f", x, mode),
@@ -1041,20 +1044,23 @@ pub fn yn<F: Float>(n: i32, x: F, mode: Rounding) -> (F, Status) {
         if let Some((v, st)) = r {
             return (F::from_bits(u128::from(v.to_bits())), st);
         }
-        if n.unsigned_abs() <= 1 {
-            return yn_low(n, x, mode);
-        }
+        // One out-of-line call with the arguments the accurate path takes: the answered calls
+        // keep the frame they had (an order test here cost ynf 4 instructions a call).
+        return yn_low(n, x, mode);
     }
     yn_accurate(n, x, mode)
 }
 
-/// `float` `yn` of orders 0 and ±1 after the recurrence tier refused `x`, as [`jn_low`]: [`y0`]
-/// and [`y1`] themselves; `Y_{−1} = −Y_1` (mirrored mode) for finite x > 0, the rest of order −1
+/// `float` `yn` after the recurrence tier refused `x`, as [`jn_low`]: orders past ±1 on the
+/// accurate path, 0 and ±1 by [`y0`] and [`y1`] themselves; `Y_{−1} = −Y_1` (mirrored mode) for finite x > 0, the rest of order −1
 /// on the accurate path. The tier tried `fast32::eval` exactly on normal x > 0, so those go
 /// straight on to [`bessel32_rest`].
 #[cold]
 #[inline(never)]
 fn yn_low<F: Float>(n: i32, x: F, mode: Rounding) -> (F, Status) {
+    if n.unsigned_abs() > 1 {
+        return yn_accurate(n, x, mode);
+    }
     let xf = f32::from_bits(x.to_bits() as u32);
     if xf.is_normal() && xf > 0.0 {
         return match n {
