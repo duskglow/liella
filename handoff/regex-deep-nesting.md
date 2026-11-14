@@ -1,57 +1,64 @@
-# REGCOMP-DEEP-NESTING: handoff (checkpoint, WIP)
+# REGCOMP-DEEP-NESTING(-2): handoff
 
-State: branch `task/regcomp-deep-nesting`, cut from origin/next d53c0d551. HEAD = the WIP commit after this note.
-**The code is NOT compiled or tested yet.** The run stopped at the ~150k context checkpoint (thread_common).
+State: branch `task/regcomp-deep-nesting-2` (continues `task/regcomp-deep-nesting`), cut from origin/next d53c0d551.
+HEAD: see the report json (handoff/reports/REGCOMP-DEEP-NESTING-2.json). Build role used: keke:~/w/n1.
 
-## What the story needs (brief)
-Remove regcomp's nesting-depth refusal (parse.rs `MAX_DEPTH = 256`, REG_ESPACE) by making every pass that recursed
-on nesting depth iterative, so depth is bounded by memory only. No differences row (coordinator ruling #5468).
+## What the story does
+regcomp no longer refuses deep nesting (parse.rs `MAX_DEPTH = 256` / REG_ESPACE removed; coordinator ruling
+#5468: no differences row). Every pass that recursed on nesting depth keeps its work on a heap stack instead:
+1. parser (`Parser::tree`, was alternation -> branch -> group recursion);
+2. `hide_subpatterns` (survey/plan/apply walks -> pre-order with an explicit stack);
+3. the tree is an arena (`Parsed::nodes`), so drop cannot recurse; `nullable` and group ranges computed per node
+   on insertion (were recursive walks, quadratic in repetition nesting);
+4. compiler (`Builder::compile/start/resume` + `Rep` state machine replace `node`/`rep` recursion; same emission order).
+The matcher (exec.rs, dfa.rs, required.rs) works on the flat program: no tree recursion. `regex_oracle/` (test-only
+copy) keeps its 256 limit; the oracle diff stays green.
+Decision: pending record records/pending/REGCOMP-DEEP-NESTING-2-1.toml (series D-14; id to be assigned).
 
-## Passes that recursed on depth (all in crates/core/src/pattern/regex/; found by a self-recursion scan + reading)
-1. parse.rs parser: `alternation` -> `branch` -> `group` -> `alternation` (mutual recursion).
-2. parse.rs `hide_subpatterns`: `survey`, `plan`, `apply` (recursive tree walks).
-3. The tree's own drop (`Node` held `TryBox<Node>` / `TryVec<Node>`: dropping a deep tree recursed).
-4. program.rs `nullable`, `group_range::walk` (called per repetition, so also quadratic in rep nesting).
-5. program.rs `Builder::node` <-> `Builder::rep` (the compiler).
-The matcher (exec.rs, dfa.rs, required.rs) works on the flat instruction array: no tree recursion found there.
-`regex_oracle/` is a frozen test-only copy: left alone (it still refuses depth > 256; check the oracle diff tests).
+## Tests and proofs (run 2)
+* crates/core/tests/regex_deep_nesting.rs: groups (ERE, BRE) and nested alternations at 255, 256, 1,000, 10,000,
+  100,000 compile and match (offsets = reference's; subexpressions checked up to 1,000); a 64 KiB-stack thread
+  compiles and matches depth 100,000 and gets REG_ESPACE (cap) for `((a)*)*` at 100,000.
+* regex_pre14_triage.rs T30 test + spec/behaviour/regex-pre14-triage.md T30 updated (balanced deep compiles).
+* validation/percall/regcomp.c: new regcomp+regfree percall rows of ordinary patterns.
+* Plants: handoff/REGCOMP-DEEP-NESTING-2-plants.txt (compiler recursion restored; depth limit; no heap spill).
+* Gate, plants and percall results: RESULTS section below.
 
-## What the WIP commit does (written, unverified)
-* parse.rs: the tree is an arena `Parsed::nodes: TryVec<Item>` (every node after its children; `Node` children are u32
-  ids; Cat/Alt children in `Parsed::kids`). Dropping it cannot recurse. `Item` carries `nullable` and `groups`
-  (first/last group) computed when the node is added, plus `wrap` (hidden group; was a wrapper `Group` node).
-* parse.rs: `Parser::tree()` replaces alternation/branch/group: open groups on a `Stack<Level, 16>`, branches and items
-  of all open levels on one `work: Stack<u32, 32>`; `collect()` turns the top segment into Cat/Alt/one item/Empty.
-  `too_deep`, `bracket_end`, `last_depth`, `MAX_DEPTH` removed. Error order kept (same token checks in same order).
-* parse.rs `hide_subpatterns`: pre-order with an explicit stack; "before the last group" is `opened < ngroups`
-  (groups met so far in pre-order); renumbering + facts recompute is one forward pass (children first).
-* `Stack<T, N>`: N inline entries, then a TryVec (fallible: REG_ESPACE); keeps ordinary patterns allocation-free.
-* program.rs: `Builder::compile/start/resume` + a `Rep` state machine (`Phase`) replace node/rep; the instruction
-  emission order is meant to be identical to the recursive version (each recursive call is a suspension point;
-  `share` travels in each `Call`). `can_be_null` = root item's `nullable`.
+## Probe-settled (keke, scratch probe nest_probe.c, reference vs Liella static, ERE, main thread)
+* Nested repetitions `(`^n `a` `)*`^n: Liella compiles up to depth 914, REG_ESPACE from 915 (D-14.8 2^21-node
+  cap, kept by ruling #5482). The reference compiles 256, 500, 1,000 and 2,000 (deeper not settled by the probe).
+  Liella's cost: every instruction counts (scope depth + 1) nodes, so the nodes grow with the square of the depth:
+  about 2 x 2^21 / 914^2 = 5 nodes per level per enclosing scope (derived from the cap depth, not counted).
+* Groups and alternations at 10,000 (nmatch 10,001) and the reproducer (REG_NOSUB, 255..1000): same answers.
+* Liella regexec with all subexpressions at 10,000 nested ALTERNATIONS through the C entry returns REG_ESPACE
+  (reference: match); the core API (no thread scratch) matches but takes seconds. Groups x states capture cost
+  of the matcher: a follow-up, not this story (see INFORMATIONAL).
 
-## Probe-settled (reference, keke, main thread, ERE): job keke:regcomp-deep-nesting-probe
-Groups `((..(a)..))` on "xay": depths 255, 256, 1000, 10000 -> regcomp 0, regexec 0, pmatch[0..2] = (1,2).
-Alternations `(a|(a|..(b)..))` on "xby": same, (1,2). `(x(x(..a..)))` on "zzxxxxxxxxa": compiles, no match.
-Nested `((a)*)*..`: 255, 256, 1000 compile, match (0,0). Larger depths: not recorded here (see hand-back).
-Probe source: scratch only (nest_probe.c), not in the tree.
+## Not to redo
+The iterative passes are done and green; do not reintroduce recursion. Timing probe: compile is linear (depth 100,000:
+70-150 ms release); regexec with subexpressions is the slow part at depth >= 10,000.
 
-## Next steps (exact)
-1. Sync, build: fix compile errors (`cargo xtask clippy` on keke:~/w/n1). Check `program.rs` tests and any test
-   that built `Node` directly.
-2. Update crates/core/tests/regex_pre14_triage.rs `deep_nesting_stays_bounded_and_names_an_unbalanced_pattern`:
-   balanced deep patterns now compile and match; the unbalanced cases (EPAREN, EBRACK) stay. Check
-   spec/behaviour/regex-pre14-triage.md T30 text.
-3. New test (e.g. crates/core/tests/regex_deep_nesting.rs): depths 255, 256, 1000, 10000, 100000 compile + match
-   (groups, alternations); a 64 KiB-stack thread compiling+matching depth 100000 (and nested reps: must return
-   Ok or REG_ESPACE from the 2^21-node cap without overflowing). Check exec with/without subexpressions at depth
-   (NoScratch may refuse big searches: use the scratch API if needed).
-4. Plants file: restore a recursive pass (e.g. make `compile` recurse) -> small-stack test; re-add a depth check in
-   `Parser::tree` -> reproducer test.
-5. Pending decision record (series D-14): `cargo xtask records new decision D-NEW --series D-14 --story REGCOMP-DEEP-NESTING`.
-6. Gate (`affected --run --base origin/next`), regex corpora/fuzz, percall regcomp/regexec rows vs next.
+## Next step
+Follow-ups for the coordinator: (a) lower the per-scope node cost so nested repetitions reach the reference's depths
+(ruling #5482's separate story); (b) matcher capture cost with many groups (REG_ESPACE / seconds at 10,000 groups).
 
-## INFORMATIONAL
-* Nested repetitions `((a)*)*...` grow the program by scope depth per instruction (MAX_NODES 2^21 cap, D-14.8):
-  expect REG_ESPACE around depth 1000 where the reference compiles; that is the existing size cap, not the native
-  stack. Not raised (rules: never raise a bound); a RULING may be wanted.
+## RESULTS (run 2, keke:~/w/n1)
+* Clippy + static clean on the final head (job regcomp-deep-nesting-2-gate-2, which also ran s14_search_clauses,
+  regex_deep_nesting, regex_pre14_triage: all pass).
+* Direct-tier gate regcomp-deep-nesting-2-gate-1 (head c41767000): RED only on s14_search_clauses s14_9_f_0, which
+  pinned the old limit (300 nested groups, `a` + 300 `*` -> REG_ESPACE). Probed: the reference compiles both (and 1,000
+  stars); expectation changed to 0 (commit 23ca7ec0b). Peak memory 2.0G. Conformance 2/2.
+* Plants regcomp-deep-nesting-2-plants-2 (code identical to the final head): 3 of 3 CAUGHT, no WARN. plants-1 died in
+  the baseline `cargo xtask so` (600 s timeout, cold copy on a host with 20 of 24 cores busy); rerun with --timeout 1500.
+* Percall regcomp-deep-nesting-2-percall-1 (instructions/call, base d53c0d551 -> new, glibc):
+  regcomp_literal_nosub 17559 -> 18452 (+5.1%, glibc 9976); regcomp_ipv4 133271 -> 136715 (+2.6%, glibc 292803);
+  regcomp_sed_groups 77906 -> 76903; regcomp_email_alt 106615 -> 105947; regcomp_kv_bre 74139 -> 72935;
+  regexec_sed_groups/sed_tail/re_search_sed_groups/rx_backref*: identical.
+  **Two regcomp rows slower: the brief's "no slower ordinary row" is NOT met yet.**
+
+## Exact next step (continuation)
+Profile regcomp_literal_nosub and regcomp_ipv4 (validation/wl_trace.sh, base d53c0d551 primed on keke) and remove
+the surplus. Suspects, not measured: the inline `Stack` arrays initialised on every regcomp (levels 16, work 32,
+hide 32, entries 16, frames 8 x the large `Frame` holding a whole `Rep`), and `Rep` copied through `Frame` on each
+suspension of a bounded repetition (ipv4's `{3}`, `{1,3}`). Then rerun percall (validation/percall/regcomp.c) and
+the direct gate.
