@@ -12,3 +12,17 @@ path-max-unbounded | crates/ld/src/cache/writer.rs | lit:p.len() <= PATH_MAX && 
 hwcaps-dir-unchecked | crates/ld/src/cache/writer.rs | lit:d.strip_suffix(h).and_then(|d| d.strip_suffix(HWCAPS_DIR)) ==> d.strip_suffix(h) | cargo test -p liella-ld --test cache_write | msg:write_refuses_invalid_input.*(FAILED|panicked)
 generator-bound-off-by-one | crates/ld/src/cache/writer.rs | lit:generator.len() > GENERATOR_MAX ==> generator.len() >= GENERATOR_MAX | cargo test -p liella-ld --test cache_write | msg:write_refuses_invalid_input.*(FAILED|panicked)
 reader-generator-wrong-tag | crates/ld/src/cache.rs | lit:? == TAG_GENERATOR { ==> ? == TAG_HWCAPS { | cargo test -p liella-ld --test cache_write | msg:write_round_trip_in_comparison_order.*(FAILED|panicked)
+# cargo xtask plants results (13 plants: 13 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG, 0 BUILD-TIMEOUT):
+# tie-order-reversed: CAUGHT, caught by cache_write write_round_trip_in_comparison_order
+# hwcaps-after-plain: CAUGHT, caught by cache_write write_layout_is_the_d31_new_format
+# path-tie-reversed: CAUGHT, caught by cache_write write_round_trip_in_comparison_order
+# key-order-ascending: CAUGHT, caught by cache_write write_layout_is_the_d31_new_format
+# entries-unsorted: CAUGHT, caught by cache_write write_round_trip_in_comparison_order
+# generator-tag-dropped: CAUGHT, caught by cache_write write_layout_is_the_d31_new_format
+# hwcaps-tag-dropped: CAUGHT, caught by cache_write write_layout_is_the_d31_new_format
+# key-not-path-tail: CAUGHT, caught by cache_write write_layout_is_the_d31_new_format
+# dotdot-name-accepted: CAUGHT, caught by cache_write write_refuses_invalid_input
+# path-max-unbounded: CAUGHT, caught by cache_write write_refuses_invalid_input
+# hwcaps-dir-unchecked: CAUGHT, caught by cache_write write_refuses_invalid_input
+# generator-bound-off-by-one: CAUGHT, caught by cache_write write_refuses_invalid_input
+# reader-generator-wrong-tag: CAUGHT, caught by cache_write write_round_trip_in_comparison_order
