@@ -95,12 +95,12 @@ fn words(line: &str) -> impl Iterator<Item = &str> {
 const ALLOCATOR_FILES: &[&str] = &["src/heap.rs", "src/selftest/failalloc.rs", "src/ld.rs"];
 const CATEGORIES: [&str; 8] = ["extern", "export", "slice", "allocator", "tb-field", "hot-kernel", "machine-register", "process-flag"];
 
-/// Category *process-flag* (owner ruling #4888, 2026-11-12, D-X.58): a non-atomic read of a byte
+/// Category *process-flag* (owner ruling #4888, 2026-11-12, D-X.58): a non-atomic read of a word
 /// written only before the first thread starts, in this one file of liella-boundary and nowhere
 /// else (crate-relative path).
 const PROCESS_FLAG_FILE: &str = "src/thread.rs";
 /// The only body a *process-flag* block may have (whitespace removed): the read of the ownership
-/// byte, so the category cannot grow into other reads or any write.
+/// word, so the category cannot grow into other reads or any write.
 const PROCESS_FLAG_READ: &str = "*OWNED_HERE.as_ptr()";
 
 /// The body of the (stripped) `unsafe {` block at `lines[n]`, whitespace removed, up to its first
@@ -430,8 +430,8 @@ pub fn unsafe_audit(root: &Path) -> Result<(), String> {
                     // Owner ruling 2026-10-06 (plan S2): the one `%fs`-relative field load.
                     ("tb-field", &["src/tb.rs"])
                 } else if l.contains("unsafe {") && tag_above(&src_lines, n, 6).as_deref() == Some("process-flag") {
-                    // Owner ruling #4888 (D-X.58): the write-once ownership byte, read without an
-                    // atomic so the gate is one `cmpb`; only in thread.rs and only that read.
+                    // Owner ruling #4888 (D-X.58): the write-once ownership word, read without an
+                    // atomic so the gate folds into a memory operand; only in thread.rs and only that read.
                     if block_body(&code_lines, n) != PROCESS_FLAG_READ {
                         errors.push(format!("{}:{}: a `process-flag` block may only read `{PROCESS_FLAG_READ}` (D-X.58)", f.display(), n + 1));
                     }

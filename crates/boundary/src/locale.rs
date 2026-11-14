@@ -159,10 +159,10 @@ fn view_of_special(loc: usize) -> &'static LocaleView {
 /// whose word is not stored (0) resolves its `uselocale` choice, else the global locale.
 #[inline]
 pub fn view() -> &'static LocaleView {
-    if !crate::thread::owned() {
-        return foreign_view();
+    match owned_view() {
+        Some(v) => v,
+        None => foreign_view(),
     }
-    owned_view()
 }
 
 /// `f` of the calling thread's current locale view ([`view`]), for an entry whose whole result is
@@ -173,10 +173,8 @@ pub fn view() -> &'static LocaleView {
 /// value (`move`): a closure of at most two words travels in registers, so the call stays a jump.
 #[inline(always)]
 pub fn with_view<R>(f: impl FnOnce(&'static LocaleView) -> R) -> R {
-    if !crate::thread::owned() {
-        return foreign_with_view(f);
-    }
-    f(owned_view())
+    let Some(v) = owned_view() else { return foreign_with_view(f) };
+    f(v)
 }
 
 /// `iswalpha(wc)` and its siblings: class `mask` of `wc` in the calling thread's locale. Not
@@ -184,10 +182,8 @@ pub fn with_view<R>(f: impl FnOnce(&'static LocaleView) -> R) -> R {
 /// the compiler then calls instead of inlining; the foreign case is the same tail call.
 #[inline(always)]
 pub fn isw_int(wc: u32, mask: Class) -> i32 {
-    if !crate::thread::owned() {
-        return foreign_isw_int(wc, mask);
-    }
-    owned_view().isw_int(wc, mask)
+    let Some(v) = owned_view() else { return foreign_isw_int(wc, mask) };
+    v.isw_int(wc, mask)
 }
 
 /// [`isw_int`] in a process the runtime did not start (D-X.58).
@@ -201,10 +197,8 @@ fn foreign_isw_int(wc: u32, mask: Class) -> i32 {
 /// [`isw_int`]).
 #[inline(always)]
 pub fn wtrans(wc: u32, upper: bool) -> u32 {
-    if !crate::thread::owned() {
-        return foreign_wtrans(wc, upper);
-    }
-    owned_view().wtrans(wc, upper)
+    let Some(v) = owned_view() else { return foreign_wtrans(wc, upper) };
+    v.wtrans(wc, upper)
 }
 
 /// [`wtrans`] in a process the runtime did not start (D-X.58).
@@ -220,12 +214,17 @@ pub fn with_current<R>(f: impl FnOnce(&'static Locale) -> R) -> R {
     with_view(move |v| f(v.locale()))
 }
 
-/// [`view`] in a process the runtime started: the `view` word, else the `uselocale` choice.
+/// [`view`] in a process the runtime started: the `view` word, else the `uselocale` choice;
+/// `None` in a process it did not start (D-X.58). The word is read ANDed with
+/// [`owned_mask`](crate::thread::owned_mask), so the gate rides on the word's zero test (no
+/// `cmpb` on the hot path) and another library's data there is 0, never a view; the test of
+/// [`owned`](crate::thread::owned) is on the unstored path only.
 #[inline(always)]
-fn owned_view() -> &'static LocaleView {
-    match tb::read::<tb::View>() {
-        0 => view_of(tb::read::<tb::Locale>()),
-        w => tb::view_at(w),
+fn owned_view() -> Option<&'static LocaleView> {
+    match tb::read::<tb::View>() & crate::thread::owned_mask() {
+        0 if !crate::thread::owned() => None,
+        0 => Some(view_of(tb::read::<tb::Locale>())),
+        w => Some(tb::view_at(w)),
     }
 }
 
@@ -250,8 +249,9 @@ fn foreign_view() -> &'static LocaleView {
 fn ctype_word<F: tb::Field>(slot: usize) -> usize {
     // 0 elsewhere: the caller's unstored path (one cold call site, so the hot path keeps no
     // frame) reads the registry word through [`foreign_word_or_zero`].
+    // The word ANDed with the ownership mask: the gate rides on the caller's zero test.
     let _ = slot;
-    if crate::thread::owned() { tb::read::<F>() } else { 0 }
+    tb::read::<F>() & crate::thread::owned_mask()
 }
 
 /// The registry ctype word `slot` in a process the runtime did not start (D-X.58), 0 in one it
@@ -397,8 +397,9 @@ pub fn ctype_slot(slot: usize) -> usize {
     // returns `ctype_fill`'s result, a tail call, so the filled path keeps no frame (no
     // push/pop of the stack-alignment slot a call in the middle would cost: PERF-CTYPE-LOC).
     // D-X.58: one cold call site for both slow cases (another library's block, words not yet
-    // stored), so the gate costs the hot path one `cmpb` and a branch, no frame.
-    if crate::thread::owned() && tb::read::<tb::CtypeB>() != 0 {
+    // stored); the word ANDed with the ownership mask is 0 in the first, so the gate rides on
+    // the zero test (no `cmpb`, no frame).
+    if tb::read::<tb::CtypeB>() & crate::thread::owned_mask() != 0 {
         return ctype_off(slot);
     }
     ctype_slot_slow(slot)

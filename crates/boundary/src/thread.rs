@@ -48,11 +48,12 @@ static LIVE: AtomicUsize = AtomicUsize::new(0);
 /// Whether the runtime started this process: a byte the cancellation-point entries read too
 /// (machine/points.S, D-X.58).
 use crate::ffi::liella_machine_owned as OWNED;
-/// [`OWNED`] as Rust reads it ([`owned`]): a crate-private byte is one rip-relative `cmpb`, where
-/// the assembler's symbol costs a GOT load and a `movzbl` first (+4 instead of +2 on every
-/// gated path). Both are stored together in `init_initial`, the only writer, before any other
-/// thread exists; a fork child inherits both.
-static OWNED_HERE: AtomicBool = AtomicBool::new(false);
+/// [`OWNED`] as Rust reads it ([`owned_mask`]): a crate-private word, all ones when the runtime
+/// started the process, else 0. A hot path ANDs it into the `%fs` word it loads anyway, so the
+/// gate costs no instruction there (the AND sets the flags its zero test used); the assembler's
+/// symbol would cost a GOT load first. Both are stored together in `init_initial`, the only
+/// writer, before any other thread exists; a fork child inherits both.
+static OWNED_HERE: AtomicUsize = AtomicUsize::new(0);
 /// MUTEX-2: [`alone`] in one byte for the mutex fast paths: set when the runtime takes the
 /// initial thread (so Liella creates every thread), cleared for good before the first thread is
 /// cloned (not set again in a fork child: sticky, as the probes show glibc's single-thread
@@ -213,7 +214,7 @@ pub(crate) fn init_initial(static_program: bool) {
     d.flags.fetch_or(DESC_CREATED, AcqRel);
     d.tp.store(tb::tp(), Relaxed);
     OWNED.store(true, Release);
-    OWNED_HERE.store(true, Release);
+    OWNED_HERE.store(usize::MAX, Release);
     LOCK_ALONE.store(SINGLE_THREADED.load(Acquire) != 0, Release);
     LIVE.store(1, Release);
     register_kernel_areas(d, RSEQ_OWNED.load(Acquire));
@@ -274,17 +275,28 @@ pub(crate) fn leave_lock_alone() {
 /// Whether the runtime started this process (so every thread it runs library code in is
 /// listed: the initial thread at startup, every other at creation).
 ///
-/// A plain read, not an atomic load: the compiler folds it into one `cmpb $0, X(%rip)` on every
-/// gated path (an atomic byte load is always `movzbl` + `test`), D-X.58, ruling #4888.
+/// One `cmpq $0, X(%rip)` on a gated path ([`owned_mask`]).
 #[inline(always)]
 pub(crate) fn owned() -> bool {
-    // UNSAFE(process-flag): the write-once ownership byte, read without an atomic (ruling #4888).
+    owned_mask() != 0
+}
+
+/// All ones when the runtime started this process, else 0. A word Liella keeps in the calling
+/// thread's block is read as `tb::read::<F>() & owned_mask()`: one `and` with a memory operand
+/// in place of the `test` the word's zero check already costs, so the hot path pays nothing for
+/// the gate, and in a process another library started the value is 0 whatever the block holds
+/// (never used as a pointer or a decision), which sends the caller to its slow path (D-X.58).
+/// A plain read, not an atomic load: the compiler folds it into that `and` (or a `cmpq`), ruling
+/// #4888.
+#[inline(always)]
+pub(crate) fn owned_mask() -> usize {
+    // UNSAFE(process-flag): the write-once ownership word, read without an atomic (ruling #4888).
     #[allow(unsafe_code)]
     // UNSAFE(process-flag) SAFETY: `init_initial` is the only writer of `OWNED_HERE`, and it
-    // stores the byte once, on the initial thread, before the runtime or the program creates any
+    // stores the word once, on the initial thread, before the runtime or the program creates any
     // other thread; every thread made later starts after that store (thread creation orders it),
-    // and a fork child copies the settled byte. So no store can run concurrently with this read
-    // (no data race), and the pointer is a static's, always valid and aligned for a `bool`.
+    // and a fork child copies the settled word. So no store can run concurrently with this read
+    // (no data race), and the pointer is a static's, always valid and aligned for a `usize`.
     unsafe {
         *OWNED_HERE.as_ptr()
     }
