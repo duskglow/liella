@@ -913,9 +913,12 @@ pub fn run_so(root: &Path) -> Result<(), String> {
 /// alignment, D-4.33); the products themselves are built with `None`. `profile`: the
 /// test paths pass `Profile::for_tests()`; every measurement build (`rustflags` or not) passes
 /// `Release`. The cargo output lands in `product/<profile>`, so profiles never share an archive.
-pub fn build_archive(root: &Path, product: &Path, out: &Path, rustflags: Option<&str>, profile: Profile) -> Result<(std::path::PathBuf, (usize, usize), crate::copies::Stats), String> {
+/// `layout`: as every product build, a measurement build is grouped from a trace of itself ([`Layout::Traced`],
+/// ruling #5463: timing measures the layout that ships); [`Layout::Ungrouped`] only where the build host cannot
+/// run the build's code, so its probes cannot be traced (the caller says so in its output).
+pub fn build_archive(root: &Path, product: &Path, out: &Path, rustflags: Option<&str>, profile: Profile, layout: Layout) -> Result<(std::path::PathBuf, (usize, usize), crate::copies::Stats), String> {
     let _lock = lock_product_dir(product)?;
-    build_archive_locked(root, product, out, rustflags, profile, Layout::Committed)
+    build_archive_locked(root, product, out, rustflags, profile, layout)
 }
 
 /// [`build_archive`] with the caller holding the lock of `product` (`run_so_as` holds it for the whole run).
@@ -959,30 +962,23 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
     // (ruling #4923); the declared statics' own sections survive the join.
     crate::coldbss::move_startup_state(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, root, &product.join("state-work"))?;
     crate::coldbss::move_cold_bss(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("coldbss-work"))?;
-    // LAYOUT-TRACE-AT-BUILD (LT-1), LAYOUT-TRACE-DEFAULT: `layout` is the trace of this build in `run_so_as` (the
-    // default; `ungrouped` or `0` when the switch says so); a measurement, repair or regen build keeps the committed
-    // lists.
-    // A regen build keeps the archive as the grouping receives it: `cargo xtask hottext-recheck` reruns
-    // the grouping alone on it with the rewritten list (HOTLIST-REGEN-CHEAP). A trace-at-build run links its
-    // probes against a product finished from it, ungrouped.
-    if (crate::hottext::regen_on() && rustflags.is_none()) || layout != Layout::Committed {
-        let saved = product.join(profile.name()).join(crate::hottext::PRE_GROUP_ARCHIVE);
-        fs::copy(&archive, &saved).map_err(|e| format!("copy {}: {e}", saved.display()))?;
+    // LAYOUT-TRACE-AT-BUILD (LT-1), LAYOUT-TRACE-DEFAULT, LAYOUT-DELETE-LISTS (LT-5): `layout` is the trace of
+    // this build (the default of every build, measurement builds included) or the explicit `ungrouped`. A
+    // trace-at-build run links its probes against a product finished, ungrouped, from the archive saved here.
+    let saved = product.join(profile.name()).join(crate::hottext::PRE_GROUP_ARCHIVE);
+    fs::copy(&archive, &saved).map_err(|e| format!("copy {}: {e}", saved.display()))?;
+    // The lists start empty (headers only): an ungrouped product is built from them, the trace then rewrites
+    // them, and a list of an earlier build never survives into this one.
+    let lists = trace_lists_dir(product, profile);
+    for g in crate::hotlists::GENERATED {
+        let p = lists.join(g);
+        fs::write(&p, "# trace-at-build: written by tools/hottext/regen.sh during cargo xtask so\n").map_err(|e| format!("{}: {e}", p.display()))?;
     }
-    if layout != Layout::Committed {
-        // The lists start empty (headers only): an ungrouped product is built from them, the trace then rewrites
-        // them, and a list of an earlier build never survives into this one.
-        let lists = trace_lists_dir(product, profile);
-        for g in crate::hotlists::GENERATED {
-            let p = lists.join(g);
-            fs::write(&p, "# trace-at-build: written by tools/hottext/regen.sh during cargo xtask so\n").map_err(|e| format!("{}: {e}", p.display()))?;
-        }
-        crate::hotlists::force_dir(root, &lists)?;
-    }
+    crate::hotlists::force_dir(&lists);
     if layout == Layout::Traced {
         trace_layout(root, product, profile)?;
     }
-    let weak = finish_archive(root, &archive, product, out, rustflags.is_none().then(|| profile.name()), layout)?;
+    let weak = finish_archive(root, &archive, product, out, layout)?;
     Ok((archive, weak, copies))
 }
 
@@ -993,7 +989,7 @@ pub fn trace_lists_dir(product: &Path, profile: Profile) -> std::path::PathBuf {
 
 /// LAYOUT-TRACE-AT-BUILD (LT-1): the start-up lists of this build, from a trace of this build. A product finished
 /// ungrouped from [`crate::hottext::PRE_GROUP_ARCHIVE`] (`libc.a`, `liella-crt1.o`, `.profile` in
-/// `target/product/<profile>/trace`) is what the probes link against; `tools/hottext/regen.sh --replace --all-modes`
+/// `target/product/<profile>/trace`) is what the probes link against; `tools/hottext/regen.sh --products <dir>`
 /// traces them (every probe and `page_faults` mode the contracts measure) and writes the four generated lists into
 /// [`trace_lists_dir`], which this process then reads ([`crate::hotlists::force_dir`]). Nothing of an earlier build
 /// is read: the lists are written fresh, so no function name crosses a build. Not part of `LIELLA_BUILD_TAG` (that
@@ -1018,7 +1014,7 @@ fn trace_layout(root: &Path, product: &Path, profile: Profile) -> Result<(), Str
     let copy = tdir.join("liella-processed.a");
     let saved = lists.join(crate::hottext::PRE_GROUP_ARCHIVE);
     fs::copy(&saved, &copy).map_err(|e| format!("copy {}: {e}", saved.display()))?;
-    finish_archive(root, &copy, product, &tdir.join("libc.a"), None, Layout::Ungrouped)?;
+    finish_archive(root, &copy, product, &tdir.join("libc.a"), Layout::Ungrouped)?;
     let cc = std::env::var("CC").unwrap_or_else(|_| "cc".into());
     build_crt1(root, &cc, &tdir)?;
     fs::write(tdir.join(".profile"), format!("{}\n", profile.name())).map_err(|e| e.to_string())?;
@@ -1030,8 +1026,10 @@ fn trace_layout(root: &Path, product: &Path, profile: Profile) -> Result<(), Str
     let st = Command::new("bash")
         .arg(root.join("tools/hottext/regen.sh"))
         .arg(root)
-        .args(["--replace", "--all-modes", "--products"])
+        .arg("--products")
         .arg(&tdir)
+        // No Python helper of the trace may leave bytecode (`__pycache__`) in the tree.
+        .env("PYTHONDONTWRITEBYTECODE", "1")
         .env(crate::hotlists::ENV, &lists)
         .current_dir(root)
         .stdout(logf)
@@ -1060,7 +1058,7 @@ fn trace_layout(root: &Path, product: &Path, profile: Profile) -> Result<(), Str
     Ok(())
 }
 
-/// The regular files directly in [`crate::hotlists::TRACKED`] (the committed lists and the hand-kept inputs), by
+/// The regular files directly in [`crate::hotlists::TRACKED`] (the hand-kept layout inputs), by
 /// name, with their contents (LAYOUT-TRACE-AT-BUILD: [`trace_layout`] checks the trace left them alone).
 fn tracked_files(root: &Path) -> Result<std::collections::BTreeMap<String, Vec<u8>>, String> {
     let dir = root.join(crate::hotlists::TRACKED);
@@ -1097,14 +1095,14 @@ fn restore_tracked(root: &Path, before: &std::collections::BTreeMap<String, Vec<
 
 /// The archive's last steps, after the start-up state placement: the hot-text grouping from the lists `layout`
 /// names, the start-up read-only data, the link edges, the weakening (into `out`, published) and its checks.
-/// `profile`: as [`crate::hottext::group`] takes it. Returns the weakening counts.
-fn finish_archive(root: &Path, archive: &Path, product: &Path, out: &Path, profile: Option<&str>, layout: crate::hotlists::Layout) -> Result<(usize, usize), String> {
+/// Returns the weakening counts.
+fn finish_archive(root: &Path, archive: &Path, product: &Path, out: &Path, layout: crate::hotlists::Layout) -> Result<(usize, usize), String> {
     let list = match layout {
         Layout::Ungrouped => std::path::PathBuf::new(),
-        _ => crate::hotlists::path(root, "hot-text.list")?,
+        Layout::Traced => crate::hotlists::path("hot-text.list")?,
     };
     // The functions short programs run, grouped into `.text.hot.*` (PAGEFAULTS-2: fewer text faults).
-    let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), archive, &list, &root.join(crate::hotlists::TRACKED), &product.join("hot-work"), profile, layout)?;
+    let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), archive, &list, &root.join(crate::hotlists::TRACKED), &product.join("hot-work"), layout)?;
     println!("so: {hot} function sections grouped as hot text");
     // The read-only data start-up reads, after the grouping (it places STARTUP_NAMES), in one aligned section (D-X.62).
     let (ro, ro_bytes) = crate::startup_ro::place(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), archive, root, &product.join("startup-ro-work"))?;
@@ -1182,29 +1180,6 @@ fn build_crt1(root: &Path, cc: &str, dir: &Path) -> Result<Vec<String>, String> 
     Ok(defines)
 }
 
-/// `cargo xtask so` in the regen mode with [`crate::hottext::LIBC_ONLY_FLAG`] `<dir>` (HOTLIST-REGEN-CHEAP): only the products the
-/// regen's traces link, built exactly as [`run_so_as`] builds them (step 1 and the start object), into
-/// `dir`, with the `.profile` marker last. `target/liella` is not touched.
-pub fn run_regen_libc(root: &Path, dir: &Path, profile: Profile) -> Result<(), String> {
-    if !crate::hottext::regen_on() {
-        return Err(format!("so: {} is a regen build ({})", crate::hottext::LIBC_ONLY_FLAG, crate::hottext::REGEN_FLAG));
-    }
-    let product = root.join("target/product");
-    let _lock = lock_product_dir(&product)?;
-    fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let dir = fs::canonicalize(dir).map_err(|e| e.to_string())?;
-    if dir == fs::canonicalize(root.join("target/liella")).unwrap_or_default() {
-        return Err("so: --libc-only writes regen products, never into target/liella".into());
-    }
-    let _ = fs::remove_file(dir.join(".profile"));
-    println!("so: regen products (libc.a, liella-crt1.o), profile {}, into {}", profile.name(), dir.display());
-    build_archive_locked(root, &product, &dir.join("libc.a"), None, profile, Layout::Committed)?;
-    build_crt1(root, &std::env::var("CC").unwrap_or_else(|_| "cc".into()), &dir)?;
-    let marker = tmp_name(&dir.join(".profile"));
-    fs::write(&marker, format!("{}\n", profile.name())).map_err(|e| e.to_string())?;
-    publish(&marker, &dir.join(".profile"))
-}
-
 pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     let product = root.join("target/product");
     let release = root.join("target/liella");
@@ -1215,16 +1190,10 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     // LAYOUT-TRACE-AT-BUILD: a set built now names its lists only if this run traced (or skipped) the layout.
     let _ = fs::remove_file(release.join(crate::hotlists::MARKER));
     // LAYOUT-TRACE-DEFAULT: every product build traces its own layout unless the switch says otherwise.
-    let regen = crate::hottext::regen_on();
-    let layout = Layout::from_env(regen)?;
+    let layout = Layout::from_env()?;
     println!("so: profile {}", profile.name());
-    match layout {
-        Layout::Committed if !regen => println!(
-            "so: {}=0: grouping from the committed lists (list tooling until LT-5; a product build traces its own layout by default)",
-            crate::hotlists::TRACE_ENV
-        ),
-        Layout::Traced => println!("so: trace-at-build (the default; {}=ungrouped opts out): the start-up layout comes from a trace of this build", crate::hotlists::TRACE_ENV),
-        _ => {}
+    if layout == Layout::Traced {
+        println!("so: trace-at-build (the default; {}=ungrouped opts out): the start-up layout comes from a trace of this build", crate::hotlists::TRACE_ENV);
     }
 
     // 1. The archive, with its definitions made overridable (D-X.14).
@@ -1331,12 +1300,10 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     // STARTUP-TEXT-WINDOWS (D-X.49) reads its budget for this profile.
     // LAYOUT-TRACE-AT-BUILD: the products name the lists they were grouped from (before the check, whose verdict
     // cache hashes the products directory and so the lists' hashes in the marker).
-    if layout != Layout::Committed {
-        let lists = trace_lists_dir(&product, profile);
-        let tmp = tmp_name(&release.join(crate::hotlists::MARKER));
-        fs::write(&tmp, crate::hotlists::marker_text(&lists)).map_err(|e| e.to_string())?;
-        publish(&tmp, &release.join(crate::hotlists::MARKER))?;
-    }
+    let lists = trace_lists_dir(&product, profile);
+    let tmp = tmp_name(&release.join(crate::hotlists::MARKER));
+    fs::write(&tmp, crate::hotlists::marker_text(&lists)).map_err(|e| e.to_string())?;
+    publish(&tmp, &release.join(crate::hotlists::MARKER))?;
     match crate::layout::check_products(root, &release, Some(profile.name())) {
         // The explicit opt-out (ruling #5190): an ungrouped product is correct but misses the start-up contracts.
         Err(e) if layout == Layout::Ungrouped => println!("so: WARNING: {}=ungrouped: an UNGROUPED product (no start-up layout; more start-up faults); its layout contracts fail:

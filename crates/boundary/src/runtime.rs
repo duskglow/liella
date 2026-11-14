@@ -361,6 +361,8 @@ pub fn early_init(info: usize) {
     crate::thread::set_loader_tls(info.tls_size, info.tls_align, info.tls_init, info.tls_release);
     // The loader's `dlopen` entry (DL-16a): `dlopen` calls it; without one it fails with a text.
     crate::posix::s27_dynlink::LOADER_DLOPEN.store(info.dlopen, Release);
+    // Its `dlsym`/`dlvsym` entry (DL-16b), likewise.
+    crate::posix::s27_dynlink::LOADER_DLSYM.store(info.dlsym, Release);
     // Its readers and its `fork` step (DL-16c): `dl_iterate_phdr` and `_dl_find_object` see every
     // loaded object, `dlopen`'d ones included.
     crate::posix::s27_dynlink::LOADER_ITERATE.store(info.dl_iterate, Release);

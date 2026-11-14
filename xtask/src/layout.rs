@@ -458,8 +458,8 @@ fn check_products_full(root: &Path, dir: &Path, profile: Option<&str>) -> Result
 // STARTUP-TEXT-WINDOWS (D-X.49): the start-up text of the static probe in few 64 KiB windows
 //
 // A static program's text is a file mapping, and the first touch of each 64 KiB window of it costs one page fault
-// (fault-around maps the window). The functions `page_faults true` runs (keys in the row's `keys=` file, written by
-// `tools/hottext/regen.sh`) must occupy at most `budget-<profile>=` distinct windows of `page_faults.c` linked from the
+// (fault-around maps the window). The functions `page_faults true` runs (keys in the row's `keys=` list, written by
+// the trace of the build, `tools/hottext/regen.sh` run by `cargo xtask so`) must occupy at most `budget-<profile>=` distinct windows of `page_faults.c` linked from the
 // products as `crates/core/tests/hot_text_products.rs` links it, and none outside the hot group (D-X.20) may straddle
 // a window boundary. STARTUP-TEXT-GROUPED (`grouped=error|warn`): every start-up function of `libc.a` lies in the
 // hot group. Products and counters only: no timing, no tracing at check time.
@@ -647,7 +647,7 @@ fn startup_verdict(c: &Contract, t: &StartupText, window: u64, budget: u64, grou
     if !grouped.is_empty() {
         let what = format!("STARTUP-TEXT-GROUPED: {} start-up functions of libc.a outside the hot group 0x{lo:x}-0x{hi:x}: {}", grouped.len(), grouped.join(", "));
         if grouped_error {
-            bad.push(c.broken(&what, "add their keys to crates/libc-so/hot-text.list (tools/hottext/regen.sh)"));
+            bad.push(c.broken(&what, "the trace of this build did not group them (cargo xtask so traces the layout: see target/product/<profile>/trace.log)"));
         } else {
             summary += &format!("\nlayout: {} WARNING {what}", c.id);
         }
@@ -717,7 +717,7 @@ fn check_startup_windows(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Pr
     let text = std::fs::read_to_string(crate::hotlists::rel(pr.root, path).map_err(one)?).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     let keys = startup_keys(&text, &profile).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     if keys.is_empty() {
-        return Err(one(format!("layout: {}: {path}: no start-up key traced in profile {profile} (run tools/hottext/regen.sh)", c.id)));
+        return Err(one(format!("layout: {}: {path}: no start-up key traced in profile {profile} (rebuild: cargo xtask so traces the layout)", c.id)));
     }
     for f in &c.subjects {
         pr.file(f).map_err(|e| one(c.broken(f, &e)))?;
@@ -937,7 +937,7 @@ fn check_startup_data(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Produ
     let text = std::fs::read_to_string(crate::hotlists::rel(pr.root, path).map_err(one)?).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     let keys = startup_keys(&text, &profile).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     if keys.is_empty() {
-        return Err(one(format!("layout: {}: {path}: no start-up object traced in profile {profile} (run tools/hottext/startup_data.sh)", c.id)));
+        return Err(one(format!("layout: {}: {path}: no start-up object traced in profile {profile} (rebuild: cargo xtask so traces the layout)", c.id)));
     }
     for f in &c.subjects {
         pr.file(f).map_err(|e| one(c.broken(f, &e)))?;
@@ -1177,10 +1177,13 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         Some("--static") => static_check(root),
         Some(d) if d.starts_with('-') => Err(format!("layout-check: unknown option {d} (usage: layout-check [--static | <products dir>])")),
         // LAYOUT-TRACE-AT-BUILD: products grouped from a trace of their own build are checked against those lists.
-        Some(d) => crate::hotlists::follow_products(root, Path::new(d)).and_then(|()| check_products(root, Path::new(d), marker_profile(Path::new(d)).as_deref())),
+        Some(d) => {
+            crate::hotlists::follow_products(Path::new(d));
+            check_products(root, Path::new(d), marker_profile(Path::new(d)).as_deref())
+        }
         None => {
             let d = root.join("target/liella");
-            crate::hotlists::follow_products(root, &d)?;
+            crate::hotlists::follow_products(&d);
             check_products(root, &d, marker_profile(&d).as_deref())
         }
     }

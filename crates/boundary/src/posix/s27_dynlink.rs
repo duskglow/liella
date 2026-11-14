@@ -246,6 +246,42 @@ pub extern "C" fn dlopen(file: *const c_char, mode: c_int) -> *mut c_void {
     liella_dl_open(file, mode, 0)
 }}
 
+/// The loader's `dlsym`/`dlvsym` entry (`StartInfo::dlsym`, stored by `runtime::early_init`): 0 in a
+/// program `ld.so` did not start (DL-16b; a static program, ruling #5005).
+pub static LOADER_DLSYM: AtomicUsize = AtomicUsize::new(0);
+
+crate::internal_entry! {
+/// `dlsym(handle, name)` (`version` NULL) and `dlvsym(handle, name, version)` (§27.1, dlsym(3),
+/// dlvsym(3); phase 14 DL-16b): `csys/src/machine/dl.S` passes the caller's return address. In a
+/// program `ld.so` started, the loader's entry does the work (`crates/boundary/src/ld/dlopen/dlsym.rs`).
+/// Elsewhere (a static program, ruling #5005, D-27.33) NULL with the text `<dlsym|dlvsym>: no
+/// symbols can be looked up in a statically linked program`, never a crash.
+pub extern "C" fn liella_dl_sym(handle: *mut c_void, name: *const c_char, version: *const c_char, caller: usize) -> *mut c_void {
+    let f = LOADER_DLSYM.load(Ordering::Acquire);
+    if f == 0 {
+        let who: &[u8] = if version.is_null() { b"dlsym" } else { b"dlvsym" };
+        crate::dlerr::set(&[who, b": no symbols can be looked up in a statically linked program"]);
+        return core::ptr::null_mut();
+    }
+    let w = |v: usize| i64::from_ne_bytes(u64::try_from(v).unwrap_or(0).to_ne_bytes());
+    let r = crate::ffi::liella_machine_call4(f, w(handle.expose_provenance()), w(name.expose_provenance()), w(version.expose_provenance()), w(caller));
+    core::ptr::with_exposed_provenance_mut(usize::from_ne_bytes(r.to_ne_bytes()))
+}}
+
+export! { asm "GLIBC_2.34";
+/// `dlsym(handle, name)`: the symbol is `csys/src/machine/dl.S`'s (it captures the caller); this is
+/// its Rust twin for tests, with no caller (the program is the caller).
+pub extern "C" fn dlsym(handle: *mut c_void, name: *const c_char) -> *mut c_void {
+    liella_dl_sym(handle, name, core::ptr::null(), 0)
+}}
+
+export! { asm "GLIBC_2.34";
+/// `dlvsym(handle, name, version)`: the symbol is `csys/src/machine/dl.S`'s; this is its Rust twin
+/// for tests, with no caller.
+pub extern "C" fn dlvsym(handle: *mut c_void, name: *const c_char, version: *const c_char) -> *mut c_void {
+    liella_dl_sym(handle, name, version, 0)
+}}
+
 export! { "GLIBC_2.34";
 /// `dlerror()` (§27.1, dlerror(3)): the calling thread's pending text from its last failed `dl*`
 /// call, once (the next call returns NULL until another failure); NULL when none is pending. A

@@ -6,10 +6,13 @@ script (XTASK-PLANTS, plan/next-batch-1024-2.md).
 
 **The tool is the required way to run plants (owner, 2026-11-05).** Do not write your own plants script: hand-written
 scripts printed CAUGHT next to passing tests, hung for 150 minutes and silently skipped plants. The project's
-per-plant limit is `--timeout 600` (the default); a plant whose command runs into it is CAUGHT ("caught by timeout").
+per-plant limit is `--timeout 600` (the default); a plant whose command runs into it is CAUGHT ("caught by timeout"). The product build (`cargo xtask so`, the baseline and one per plant that uses the products)
+has its own limit, `--prepare-timeout <secs>` (default 3600), because a cold traced build can exceed 600 s. A baseline
+build that runs into it ends `BASELINE FAILED: so timed out after N s (prepare timeout)`; a mutant's build that does
+is reported `BUILD-TIMEOUT` (not CAUGHT: the mutant was not tested) and fails the run.
 
 ```
-cargo xtask plants <plants-file> --dir <new-directory> [--timeout <secs>]   # default and project limit: 600
+cargo xtask plants <plants-file> --dir <new-directory> [--timeout <secs>] [--prepare-timeout <secs>]   # test limit 600 (project rule); build limit 3600
 ```
 
 Run it from the role tree on the build host, under plain `jobrun` (not `~/bin/gate`, which gives the job a private
@@ -35,7 +38,8 @@ applying the plant and before the command (log `<id>.so.log`; if the mutant does
 on that log and the command is not run). A command is known not to use them only when it is one plain
 `cargo test` whose targets are all named (`--lib`, `--bin <name>`, `--test <name>`) and no named test target
 uses the products by the rule `cargo xtask affected` builds them for (its source or support files name
-`target/liella`, `libc.a`, `liella-crt1` or `conformance`). Such a plant reuses the baseline build; anything
+`target/liella`, `join("liella")` (the ld tests' path to the built `ld.so`), `libc.a`, `liella-crt1` or
+`conformance`). Such a plant reuses the baseline build; anything
 else (shell syntax, `cargo xtask affected`, all targets of a package, an unknown target or option) rebuilds.
 After a plant that rebuilt the products, the next plant that does not use them first rebuilds them unmutated
 (`<id>.so-restore.log`), so no command sees an earlier plant's mutant. The verdict line names the build

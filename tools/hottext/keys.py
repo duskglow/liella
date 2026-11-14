@@ -279,8 +279,8 @@ def aliases(path):
     """--aliases <objdump -t of libc.a>: `<symbol key>\t<section key>` for every symbol that lies in a
     function section of another key (an assembly entry label, an alias such as bcmp, an internal entry),
     sorted. A symbol key found in two sections of different keys is left out (ambiguous).
-    LAYOUT-TEXT-PIN-6 (#4467): the traced start-up names include such labels, and merge.py
-    --startup-head resolves them to the section the list orders."""
+    LAYOUT-TEXT-PIN-6 (#4467): the traced start-up names include such labels, and order.py
+    --alias resolves them to the section the list orders."""
     seen = {}
     with open(path) as f:
         for line in f:

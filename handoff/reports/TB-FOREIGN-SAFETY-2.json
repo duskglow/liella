@@ -1,0 +1,12 @@
+{"task": "TB-FOREIGN-SAFETY-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: gate-1 cause fixed (outdated test), fork-child words fix, decoy/fork/period-cache tests, plants, D-X.58 record; counts not done; final gate and plants running",
+ "branch": "task/tb-foreign-safety-2", "head": "3902244d5",
+ "gate": {"affected": "tbfs2-gate-2 running (gate-1: static records red, fixed)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "codemap: run 1's handback-check was red on docs/codemap/symbols.tsv when merged with next (branch predates cargo xtask codemap)", "recommendation": "allow a merge of origin/next into the branch, or regenerate at landing"}],
+ "informational": ["plants-1: words-trusts-flag and h-errno-location-ungated were WARN-NO-MSG (caught; msg widened); period-word-moved SURVIVED as a read-only plant that is equivalent for the test (reads miss, stores unchanged): replaced by period-store-moved in plants-2"],
+ "refused": [],
+ "improvement": "records body must be one line: records new could say so in its message (cost a gate cycle)",
+ "next_step": "read tbfs2-gate-2 and tbfs2-plants-2 on mei; then counts before/after on isalpha/toupper, __ctype_b_loc, uselocale(0), __h_errno_location, errno, read, localeconv, pthread_getspecific, isw*",
+ "report_file": "handoff/TB-FOREIGN-SAFETY.md",
+ "jobs": ["tbfs2-gate-2", "tbfs2-plants-2"]}
