@@ -324,12 +324,20 @@ pub(crate) fn mbind_preferred(addr: usize, len: usize, node: u32) -> KResult<()>
 /// How many NUMA nodes the calling process may allocate on (`get_mempolicy(MPOL_F_MEMS_ALLOWED)`,
 /// its cpuset's memory nodes). `EINVAL` when a node lies beyond the 1024-bit mask (more nodes than
 /// the mask holds); `ENOSYS` without `CONFIG_NUMA`.
+///
+/// Through the generic entry (`liella_sys_syscall`), not the `get_mempolicy` stub: this runs once
+/// per process, on the first heap slow path of start-up, and the build's traced text order puts a
+/// function where start-up first runs it. The generic entry is also where every fork child returns
+/// from `clone` and every exit issues `exit_group`; first run here, it sits in the first 64 KiB
+/// text window with `set_robust_list`, so a fork child faults that window once (HEAP-FIRST-USE-7:
+/// first run only at the first stdout write, it fell one window later, fork child 6 > bound 5).
 pub(crate) fn allowed_node_count() -> KResult<u32> {
     let mut mask = [0u64; NODE_MASK_WORDS];
     let maxnode = (NODE_MASK_WORDS * 64 + 1) as i64;
     let flags = i64::from(liella_kernel::uapi::MPOL_F_MEMS_ALLOWED);
-    let rc = liella_sys_get_mempolicy(ptr::null_mut(), mask.as_mut_ptr().cast(), maxnode, 0, flags);
-    Errno::decode(rc).map(|_| mask.iter().map(|w| w.count_ones()).sum())
+    let at = mask.as_mut_ptr().expose_provenance() as i64;
+    syscall(crate::nr::GET_MEMPOLICY, [0, at, maxnode, 0, flags, 0])?;
+    Ok(mask.iter().map(|w| w.count_ones()).sum())
 }
 
 /// The NUMA node holding the page at `addr` (`get_mempolicy(MPOL_F_NODE | MPOL_F_ADDR)`); the
