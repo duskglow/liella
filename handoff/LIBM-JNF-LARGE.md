@@ -64,8 +64,11 @@ for the Hankel band at n = 2, 3 (DLMF 10.18.17-18, μ = 4n²):
 
 ## Jobs (mei), final head 833dd6654
 libm-jnf-large-2-lint3 rc 0 (xtask clippy, all-features clippy, static, the two band tests), -percall3 rc 0,
--percall3-sse2, -gate5, -plants5, -sweep5 (see the hand-back for their state).
-Superseded: -lint0 (rc 1: inherited record's bare `|`), -lint1/-percall1 (9a95f99a0), -lint2/-percall2 (30520a1bc),
+-percall3-sse2 rc 0, -gate5 rc 0 (affected --run --base origin/next, peak 2.8G), -plants5 rc 0 (13 plants, 0
+survived; jrest0, yrest1 WARN-NO-MSG: caught first by the band check, `j0f band not taken`; msg widened), -plants6
+(same file with the widened msgs, mei:~/work/LIBM-JNF-LARGE-2/plants.txt) and -sweep5 (full exhaustive) running at
+hand-back.
+Superseded: -plants5 (two WARN-NO-MSG, rerun as -plants6), -lint0 (rc 1: inherited record's bare `|`), -lint1/-percall1 (9a95f99a0), -lint2/-percall2 (30520a1bc),
 -trace1-new/-trace1-base (diagnostic; base rc 2: a role directory cannot trace a base rev).
 Run 1's -sweep4 had no jobs.tsv row: its log stops while the test runs (the role was released with it running).
 Driver scripts: mei:~/work/LIBM-JNF-LARGE-2/.
