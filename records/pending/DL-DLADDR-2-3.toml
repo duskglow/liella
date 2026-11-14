@@ -6,15 +6,7 @@ ann = "—"
 status = "active"
 story = "DL-DLADDR-2"
 date = "2026-11-14"
-tests = ["s27_1_c_7"]
+tests = ["crates/core/tests/s27_dynlink_clauses.rs::s27_1_c_7"]
 body = '''
-**`dlinfo`'s requests and failures (DL-18 `DL-DLADDR`; probe `tools/probe/dl/dladdr/`).** Answered: `RTLD_DI_LMID`
-(0), `RTLD_DI_LINKMAP` (the handle), `RTLD_DI_ORIGIN` (the directory of the path the object was loaded by),
-`RTLD_DI_SERINFOSIZE`/`RTLD_DI_SERINFO`, `RTLD_DI_TLS_MODID` (the module id of the TLS module table, 0 without
-`PT_TLS`), `RTLD_DI_TLS_DATA` (see the TLS_DATA decision of this story) and `RTLD_DI_PHDR` (returns the header
-count, stores the run-time table). Any other request fails with `unsupported dlinfo request`, the probed text, and
-leaves the argument untouched. Liella also fails, without touching memory: a handle that is not a published link map
-(`dlinfo: invalid handle`; one comparison per object, the handle is never dereferenced), a NULL argument
-(`dlinfo: invalid argument`), and `RTLD_DI_ORIGIN` of an object whose path the loader does not hold, the program and
-`ld.so` (`dlinfo: the origin of the object is unknown`). A success clears a pending dlerror text (#5127).
+**`dlinfo`'s requests and failures (DL-18 `DL-DLADDR`; probe `tools/probe/dl/dladdr/`).** Answered: `RTLD_DI_LMID` (0), `RTLD_DI_LINKMAP` (the handle), `RTLD_DI_ORIGIN` (the directory of the path the object was loaded by), `RTLD_DI_SERINFOSIZE`/`RTLD_DI_SERINFO`, `RTLD_DI_TLS_MODID` (the module id of the TLS module table, 0 without `PT_TLS`), `RTLD_DI_TLS_DATA` (see the TLS_DATA decision of this story) and `RTLD_DI_PHDR` (returns the header count, stores the run-time table). Any other request fails with `unsupported dlinfo request`, the probed text, and leaves the argument untouched. Liella also fails, without touching memory: a handle that is not a published link map (`dlinfo: invalid handle`; one comparison per object, the handle is never dereferenced), a NULL argument (`dlinfo: invalid argument`), and `RTLD_DI_ORIGIN` of an object whose path the loader does not hold, the program and `ld.so` (`dlinfo: the origin of the object is unknown`). A success clears a pending dlerror text (#5127).
 '''

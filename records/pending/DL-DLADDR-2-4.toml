@@ -6,13 +6,7 @@ ann = "—"
 status = "active"
 story = "DL-DLADDR-2"
 date = "2026-11-14"
-tests = ["s27_1_c_7"]
+tests = ["crates/core/tests/s27_dynlink_clauses.rs::s27_1_c_7"]
 body = '''
-**`RTLD_DI_SERINFO` writes only what the caller sized (DL-18 `DL-DLADDR`).** The list is the search an object's
-`dlopen` of a bare name would make (`liella_ld::search::dirs`): `DT_RPATH` (the object's, when it has no
-`DT_RUNPATH`), `LD_LIBRARY_PATH`, `DT_RUNPATH` with `$ORIGIN` expanded, then the system directories; every entry's
-flags are 0 and the strings follow the array (`dls_size` = 16 + 16 per entry + each string and its NUL), as probed.
-The filling call writes at most the caller's `dls_cnt` entries and never past its `dls_size` bytes, and stores the
-number of entries written in `dls_cnt`; a buffer sized for fewer entries still succeeds (the probe's answer), and
-nothing is written past it.
+**`RTLD_DI_SERINFO` writes only what the caller sized (DL-18 `DL-DLADDR`).** The list is the search an object's `dlopen` of a bare name would make (`liella_ld::search::dirs`): `DT_RPATH` (the object's, when it has no `DT_RUNPATH`), `LD_LIBRARY_PATH`, `DT_RUNPATH` with `$ORIGIN` expanded, then the system directories; every entry's flags are 0 and the strings follow the array (`dls_size` = 16 + 16 per entry + each string and its NUL), as probed. The filling call writes at most the caller's `dls_cnt` entries and never past its `dls_size` bytes, and stores the number of entries written in `dls_cnt`; a buffer sized for fewer entries still succeeds (the probe's answer), and nothing is written past it.
 '''
