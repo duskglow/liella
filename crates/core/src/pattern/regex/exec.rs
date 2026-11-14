@@ -1177,16 +1177,10 @@ impl<P: Policy> Matcher<'_, P> {
                 OP_ASSERT => prog.node(inst.b, j),
                 OP_SPLIT => {
                     let a = if inst.a == NONE { NONE } else { prog.node(inst.a, j) };
-                    let mut copy = [0i32; EPS_LOCAL];
-                    match copy.get_mut(..caps.len()) {
-                        Some(c) if depth < EPS_DEPTH && Self::inlined(st, a) => {
-                            copy_caps(c, caps);
-                            let carry = st.carry;
-                            let r = self.reach(st, pos, a, start, c, depth + 1);
-                            st.carry = carry;
-                            r?;
-                        }
-                        _ => self.insert(st, pos, a, start, caps)?,
+                    if depth < EPS_DEPTH && caps.len() <= EPS_LOCAL && Self::inlined(st, a) {
+                        self.reach_copy(st, pos, a, start, caps, depth, None)?;
+                    } else {
+                        self.insert(st, pos, a, start, caps)?;
                     }
                     if inst.b == NONE { NONE } else { prog.node(inst.b, j) }
                 }
@@ -1231,32 +1225,43 @@ impl<P: Policy> Matcher<'_, P> {
         let at_pos = i32::try_from(pos).map_err(|_| Fail::Re(ReError::ESpace))?;
         let body = prog.node(inst.b, super::program::enter_j(inst, j));
         let skip = prog.node(inst.c, j);
-        let mut copy = [0i32; EPS_LOCAL];
-        match copy.get_mut(..caps.len()) {
-            Some(c) if depth < EPS_DEPTH && Self::inlined(st, body) => {
-                copy_caps(c, caps);
-                if st.run.caps {
-                    self.enter_caps(inst, c, at_pos);
-                }
-                let carry = st.carry;
-                st.carry = None;
-                let r = self.reach(st, pos, body, start, c, depth + 1);
-                st.carry = carry;
-                r?;
-                Ok(skip)
+        if depth < EPS_DEPTH && caps.len() <= EPS_LOCAL && Self::inlined(st, body) {
+            self.reach_copy(st, pos, body, start, caps, depth, Some((inst, at_pos)))?;
+            Ok(skip)
+        } else {
+            // No copy (the iteration takes a bucket anyway, or no copy fits): the skip takes its
+            // bucket with the captures as they are, then the iteration changes them in place.
+            self.insert(st, pos, skip, start, caps)?;
+            st.carry = None;
+            if st.run.caps {
+                self.enter_caps(inst, caps, at_pos);
             }
-            _ => {
-                // No copy (the iteration takes a bucket anyway, or no copy fits): the skip takes
-                // its bucket with the captures as they are, then the iteration changes them in
-                // place.
-                self.insert(st, pos, skip, start, caps)?;
-                st.carry = None;
-                if st.run.caps {
-                    self.enter_caps(inst, caps, at_pos);
-                }
-                Ok(body)
-            }
+            Ok(body)
         }
+    }
+
+    /// A branch [`Self::walk`] takes first: `node` reached on a copy of the captures (at most
+    /// [`EPS_LOCAL`] elements), the walk's own captures and carry left as they were. `enter`: the
+    /// optional iteration's `ENTER` and position whose changes the copy takes first. Out of line
+    /// (REGCOMP-SCOPE-COST-3): inside `walk`, the copy's set-up was hoisted to every walk's
+    /// entry, taken or not.
+    #[inline(never)]
+    #[allow(clippy::too_many_arguments)] // one thread's state, as `walk`
+    fn reach_copy(&self, st: &mut State<'_, '_>, pos: usize, node: u32, start: usize, caps: &[i32], depth: u32, enter: Option<(super::program::Inst, i32)>) -> Result<(), Fail> {
+        let mut copy = [0i32; EPS_LOCAL];
+        // The callers check `caps.len() <= EPS_LOCAL`; the bucket is only the slice's else.
+        let Some(c) = copy.get_mut(..caps.len()) else { return self.insert(st, pos, node, start, caps) };
+        copy_caps(c, caps);
+        let carry = st.carry;
+        if let Some((inst, at_pos)) = enter {
+            if st.run.caps {
+                self.enter_caps(inst, c, at_pos);
+            }
+            st.carry = None;
+        }
+        let r = self.reach(st, pos, node, start, c, depth + 1);
+        st.carry = carry;
+        r
     }
 
     /// [`Self::advance_plain`] for patterns with back-references (chosen once per search, by
