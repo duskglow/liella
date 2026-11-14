@@ -1,15 +1,46 @@
-{"task": "TB-FOREIGN-WORDS-LOW-10", "model": "opus", "tokens": null,
+{
+ "task": "TB-FOREIGN-WORDS-LOW-10",
+ "model": "opus",
+ "tokens": null,
  "result": "coreutils-shaped faults back to 50 (bound 50) on the Skylake-SP host: errno stores out of line, heap slow paths built once (General source)",
- "branch": "task/tb-foreign-words-low-10", "head": null,
- "gate": {"affected": "see hand-back (shiki direct tier); mei direct tests in RAM copy", "peak": null},
+ "branch": "task/tb-foreign-words-low-10",
+ "head": null,
+ "gate": {
+  "affected": "see hand-back (shiki direct tier); mei direct tests in RAM copy",
+  "peak": null
+ },
  "accepted_first_attempt": null,
  "rulings": [],
- "informational": ["The text before the 32 KiB-aligned string kernels in next ends 8 bytes short of the boundary (0x477ff8): any growth there moves later text by 32 KiB and can add a coreutils-shaped fault on the Skylake-SP host (layout jitter, LAYOUT-RETHINK)",
-                   "Failing calls that set errno pay a call and return (+4 instructions vs next's inline store) on failure paths only; the #4779 rows are not on these paths (not measured in this run)"],
+ "informational": [
+  "The text before the 32 KiB-aligned string kernels in next ends 8 bytes short of the boundary (0x477ff8): any growth there moves later text by 32 KiB and can add a coreutils-shaped fault on the Skylake-SP host (layout jitter, LAYOUT-RETHINK)",
+  "Failing calls that set errno pay a call and return (+4 instructions vs next's inline store) on failure paths only; the #4779 rows are not on these paths (not measured in this run)"
+ ],
  "refused": [],
- "impact": [{"kind": "faults", "what": "coreutils-shaped program minor faults, fast products, Skylake-SP host", "before": 51, "after": 50, "unit": "faults", "measured": true},
-            {"kind": "size", "what": ".text of the page_faults tool program, fast products", "before": 3627111, "after": 3589863, "unit": "bytes", "measured": true}],
+ "impact": [
+  {
+   "kind": "faults",
+   "what": "coreutils-shaped program minor faults, fast products, Skylake-SP host",
+   "before": 51,
+   "after": 50,
+   "unit": "faults",
+   "measured": true
+  },
+  {
+   "kind": "size",
+   "what": ".text of the page_faults tool program, fast products",
+   "before": 3627111,
+   "after": 3589863,
+   "unit": "bytes",
+   "measured": true
+  }
+ ],
  "improvement": "A per-section perf fault diff plus a per-symbol size diff below the moved anchor found the cause in two jobs; a layout-check that reports the slack before each aligned anchor would flag a 8-byte margin before it bites",
  "next_step": "Land; layout owners: the 32 KiB-aligned string-kernel anchor has 8 bytes of slack on next",
  "report_file": "handoff/TB-FOREIGN-WORDS-LOW.md",
- "jobs": ["mei:tb-foreign-words-low-10-mei-direct", "tb-foreign-words-low-10-lint1", "tb-foreign-words-low-10-gate", "tb-foreign-words-low-10-plants"]}
+ "jobs": [
+  "mei:tb-foreign-words-low-10-mei-direct",
+  "tb-foreign-words-low-10-lint1",
+  "tb-foreign-words-low-10-gate3",
+  "tb-foreign-words-low-10-plants3"
+ ]
+}
