@@ -152,7 +152,7 @@ mod tests {
         for d in ["conformance/build", "target", "src", "tools/hottext/__pycache__"] {
             std::fs::create_dir_all(root.join(d)).unwrap();
         }
-        for f in ["conformance/build/s27_a.key", "target/x", "src/a.rs", ".synced", "tools/hottext/__pycache__/keys.cpython-312.pyc", "tools/stray.pyc"] {
+        for f in ["conformance/build/s27_a.key", "target/x", "src/a.rs", ".synced", "tools/hottext/__pycache__/keys.cpython-312.pyc", "tools/hottext/__pycache__/other", "tools/stray.pyc"] {
             std::fs::write(root.join(f), "x").unwrap();
         }
         let mut v = Vec::new();
