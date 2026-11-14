@@ -1,8 +1,25 @@
 # UTIL-CACHE-WRITER (UTIL-2): the ld.so cache writer in liella-ld
 
-**State.** Branch `task/util-cache-writer-2` (continues `task/util-cache-writer`, from origin/next
-`fa251fbb0`). Code head `1a1c96692`; the commits after it hold only handoff/ files. COMPLETE pending the
-coordinator's id for the decision record.
+**State.** Branch `task/util-cache-writer-3` (continues `task/util-cache-writer-2` and
+`task/util-cache-writer`, from origin/next `fa251fbb0`). Code head `ffee66514` (run 3's test fix); the
+commits after it hold only handoff/ files. COMPLETE. The decision record is D-27.43
+(`records/decisions/D-27/D-27.43.toml`, id assigned by the coordinator in `e94db0a4d`).
+
+**UTIL-CACHE-WRITER-3 (CI red fix).** CI on `e94db0a4d` failed `liella-ld::ldso_run
+ldso_run_features_only_from_arch`: the arch-seam test read every entry directly under `crates/ld/src` as a
+file, and the new module directory `src/cache/` failed `read_to_string` (IsADirectory). Fixed the test, not
+the layout: it now walks `src/` recursively (sorted, only `src/arch.rs` exempt) and asserts the walk reaches
+`src/cache/`. The plant `cpuid` in `src/cache/writer.rs` is caught with the message
+`cache/writer.rs: `cpuid` outside the arch seam` (`handoff/UTIL-CACHE-WRITER-3-plants.txt`).
+Results on kanon:~/w/kn1 (tree = `ffee66514` plus handoff/):
+| Job | Label | Result |
+|---|---|---|
+| Lint, inherited head `e94db0a4d` (step 0) | `util-cache-writer-3-lint0` | green |
+| Clippy (workspace, all features) + `xtask clippy` + `xtask static` + the fixed test | `util-cache-writer-3-lint` | green; test ok |
+| Gate (direct tier, `--base origin/next`) | `util-cache-writer-3-gate` | 5 suites, 467 passed, 0 failed, 1 ignored, peak 1.8G; ldso_run (24 tests) selected and passed |
+| Plants | `util-cache-writer-3-plants` | 1 of 1 CAUGHT (`cpuid-in-cache-writer`), 0 WARN |
+
+The fuzz results of run 2 still stand: run 3 changed only a test file outside the fuzzed code.
 
 **UTIL-CACHE-WRITER-2 (finish only, no code change).** Run 1's verify went red because its fuzz job ran
 before the last commits to `crates/ld/tests/cache_write.rs` and `fuzz/seeds/ld_cache/writer-*`. Run 2
@@ -21,11 +38,10 @@ reran every job on the final tree on mei:~/w/s2 under new labels (table "Results
   (it is a NOT_SWEEPS row in `xtask/src/longsweeps.rs`).
 * `fuzz/fuzz_targets/ld_cache_write.rs`: a new target that runs the writer, then the reader.
   `fuzz/seeds/ld_cache/writer-0..4` are 5 seeds the writer made for the reader target.
-* `records/pending/UTIL-CACHE-WRITER-1.toml`: a D-NEW record in series D-27 (the loader cache series;
-  D-27.16 is the reader). It records the order, layout, bounds and the probe result below.
-  The coordinator assigns the id.
+* `records/decisions/D-27/D-27.43.toml` (was `records/pending/UTIL-CACHE-WRITER-1.toml`; series D-27, the
+  loader cache series; D-27.16 is the reader). It records the order, layout, bounds and the probe result below.
 
-**Decisions in force.** D-27.16 (reader), the pending record above, owner #941 (the loader reads the new format only).
+**Decisions in force.** D-27.16 (reader), D-27.43 (writer), owner #941 (the loader reads the new format only).
 
 **Probe-settled.**
 * The reference `ldconfig -r ROOT` runs unprivileged.
@@ -64,7 +80,7 @@ marker, fixed); `-clippy` (an older head).
 `parse` and `lookup` are byte-for-byte unchanged; the new code runs only from `cache::write` and
 the two new accessors.
 
-**Open questions.** None for the owner. The record's id is for the coordinator to assign.
+**Open questions.** None.
 
 **Not to redo.**
 * Byte equality with reference-written caches is not a goal. The record documents the string layout.

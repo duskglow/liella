@@ -1,0 +1,18 @@
+{"task": "UTIL-CACHE-WRITER-3", "model": "opus", "tokens": null,
+ "result": "CI red fixed: the arch-seam test ldso_run_features_only_from_arch walks crates/ld/src recursively, so src/cache/ is checked instead of failing read_to_string; direct gate 467/0, plant cpuid-in-cache-writer CAUGHT",
+ "branch": "task/util-cache-writer-3", "head": "ffee66514",
+ "gate": {"affected": "467 passed / 0 failed (5 suites, 1 ignored)", "peak": "1.8G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["head above is the code head; the commit after it holds only handoff/ files", "Fuzz results of UTIL-CACHE-WRITER-2 (util-cache-writer-2-fuzz) still stand: run 3 changed only crates/ld/tests/ldso_run.rs"],
+ "refused": [],
+ "impact": [
+   {"kind": "correctness", "what": "liella-ld::ldso_run ldso_run_features_only_from_arch no longer fails with IsADirectory on crates/ld/src/cache/ (CI red on e94db0a4d)", "before": null, "after": null, "unit": null, "measured": true},
+   {"kind": "coverage", "what": "loader source files held to the arch-seam rule (src/cache/writer.rs now included)", "before": null, "after": null, "unit": "files", "measured": false},
+   {"kind": "coverage", "what": "plants caught on the arch-seam walk", "before": 0, "after": 1, "unit": "plants", "measured": true},
+   {"kind": "unblock", "what": "UTIL-3 (ldconfig) once this branch lands", "before": null, "after": null, "unit": null, "measured": false}
+ ],
+ "improvement": "Source-scanning tests that read_dir a src/ tree could share one recursive walker (xtask or a test-support helper) so adding a module directory never breaks them (a grep for read_dir(...\"src\") in crates/*/tests found no other today); a CI red costing a 22-min gate for a one-line walk bug argues for running a touched crate's source-scan tests in handback-check",
+ "next_step": "UTIL-3: ldconfig (conf parser, sorted directory scan feeding cache::Entry rows, atomic replace)",
+ "report_file": "handoff/UTIL-CACHE-WRITER.md",
+ "jobs": ["util-cache-writer-3-lint", "util-cache-writer-3-gate", "util-cache-writer-3-plants"]}

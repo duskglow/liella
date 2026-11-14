@@ -1,2 +1,4 @@
 # UTIL-CACHE-WRITER-3 plants: the arch-seam test walks crates/ld/src recursively (src/cache/ included); cargo xtask plants handoff/UTIL-CACHE-WRITER-3-plants.txt (docs/plants.md)
 cpuid-in-cache-writer | crates/ld/src/cache/writer.rs | lit://! The loader cache writer (UTIL-2 ==> //! The loader cache writer cpuid (UTIL-2 | cargo test -p liella-ld --test ldso_run ldso_run_features_only_from_arch | msg:cache/writer.rs: .cpuid. outside the arch seam
+# cargo xtask plants results (1 plants: 1 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG, 0 BUILD-TIMEOUT):
+# cpuid-in-cache-writer: CAUGHT, caught by ldso_run ldso_run_features_only_from_arch
