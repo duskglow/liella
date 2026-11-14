@@ -327,6 +327,28 @@ fn s7_2_f_0() {
     assert!(set(LC_ALL, "LC_CTYPE=C;LC_NUMERIC=nope").is_none(), "a composite name with an unknown part");
     assert_eq!(query(LC_CTYPE), "C.UTF-8");
     assert!(x::setlocale(99, c("C").as_ptr()).is_null(), "an unknown category");
+    // errno on failure (spec/behaviour/setlocale-errno.md; AQOURS-SMOKE F3: bash prints
+    // strerror(errno) when setlocale fails): ENOENT when a name's data is not available, on every
+    // attempt (a repeated name too, whatever errno held), as newlocale (D-7.18); EINVAL for a
+    // category number that names none; a successful call leaves errno alone.
+    for (cat, name) in [(LC_ALL, "zh_HK.big5hkscs"), (LC_ALL, "zh_HK.big5hkscs"), (LC_CTYPE, "xx_YY"), (LC_ALL, "a/b"), (LC_ALL, "LC_CTYPE=C;LC_NUMERIC=nope")] {
+        for pre in [0, 1234] {
+            errno::set_raw(pre);
+            assert!(x::setlocale(cat, c(name).as_ptr()).is_null(), "{name}");
+            assert_eq!(errno::get(), Errno::ENOENT.get(), "setlocale({cat}, {name}) fails with ENOENT (errno was {pre})");
+        }
+    }
+    for cat in [99, -1] {
+        errno::set_raw(0);
+        assert!(x::setlocale(cat, c("C").as_ptr()).is_null());
+        assert_eq!(errno::get(), Errno::EINVAL.get(), "setlocale({cat}, C): an unknown category is EINVAL");
+    }
+    for name in ["C", "POSIX", "C.UTF-8", "C"] {
+        errno::set_raw(1234);
+        assert!(set(LC_ALL, name).is_some());
+        assert_eq!(errno::get(), 1234, "a successful setlocale(LC_ALL, {name}) leaves errno alone");
+    }
+    set(LC_CTYPE, "C.UTF-8").unwrap();
     // D-7.7 (owner ruling 2026-10-04): a locale name is never resolved as a path. `.`, `..`, and
     // names whose candidates would be empty, `.` or `..` (`..@euro` tries `..`; `@x` tries ``)
     // are not found, from LOCPATH directories whose parent or self is a compiled locale; the
@@ -413,6 +435,20 @@ fn s7_3_c_1() {
     let fresh = x::newlocale(LC_NUMERIC_MASK, c("C.UTF-8").as_ptr(), null_mut());
     assert_eq!(text(x::nl_langinfo_l(CODESET, fresh)), "ANSI_X3.4-1968", "a NULL base is C");
     x::freelocale(fresh);
+    // `1 << LC_ALL` alone is every category (the C++ library's mask; spec gap settled by probe,
+    // spec/behaviour/newlocale-mask.md): nothing is left from `base`.
+    let base = x::newlocale(LC_ALL_MASK, c("C.UTF-8").as_ptr(), null_mut());
+    let all = x::newlocale(1 << LC_ALL, c("C").as_ptr(), base);
+    assert!(!all.is_null(), "1 << LC_ALL is accepted");
+    assert_eq!(text(x::nl_langinfo_l(CODESET, all)), "ANSI_X3.4-1968", "LC_CTYPE from the name");
+    for cat in [LC_NUMERIC, LC_TIME, LC_COLLATE, LC_MONETARY, LC_MESSAGES, 7, 12] {
+        assert_eq!(text(x::nl_langinfo_l(cat << 16 | 0xFFFF, all)), "C", "category {cat} from the name");
+    }
+    x::freelocale(all);
+    let fresh = x::newlocale(1 << LC_ALL, c("C.UTF-8").as_ptr(), null_mut());
+    assert_eq!(text(x::nl_langinfo_l(CODESET, fresh)), "UTF-8", "with a NULL base too");
+    assert_eq!(text(x::nl_langinfo_l(12 << 16 | 0xFFFF, fresh)), "C.UTF-8");
+    x::freelocale(fresh);
 }
 
 #[test]
@@ -463,6 +499,16 @@ fn s7_3_f_0() {
     errno::set_raw(0);
     assert!(x::newlocale(LC_ALL_MASK, c("xx_YY.NOPE").as_ptr(), null_mut()).is_null());
     assert_eq!(errno::get(), 2, "ENOENT: an unknown name");
+    // `1 << LC_ALL` is accepted only alone (spec/behaviour/newlocale-mask.md); bit 13 and up
+    // name no category.
+    for mask in [1 << LC_ALL | LC_CTYPE_MASK, 1 << LC_ALL | LC_NUMERIC_MASK | 1 << LC_TIME, LC_ALL_MASK | 1 << LC_ALL, 1 << 13, 1 << LC_ALL | 1 << 13] {
+        errno::set_raw(0);
+        assert!(x::newlocale(mask, c("C").as_ptr(), null_mut()).is_null(), "mask {mask:#x}");
+        assert_eq!(errno::get(), 22, "EINVAL: mask {mask:#x}");
+    }
+    errno::set_raw(0);
+    assert!(x::newlocale(1 << LC_ALL, null(), null_mut()).is_null());
+    assert_eq!(errno::get(), 22, "EINVAL: a NULL name");
 }
 
 #[test]

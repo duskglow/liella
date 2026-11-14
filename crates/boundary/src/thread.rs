@@ -14,7 +14,7 @@
 
 #![allow(clippy::arithmetic_side_effects)] // offsets inside one mapping (Layout checked them)
 
-use core::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering::{AcqRel, Acquire, Relaxed, Release}};
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, AtomicUsize, Ordering::{AcqRel, Acquire, Relaxed, Release}};
 
 use liella_kernel::errno::{Errno, KResult};
 use liella_kernel::sys::Sys;
@@ -45,7 +45,15 @@ static HEAD: AtomicUsize = AtomicUsize::new(0);
 /// Threads running. In a process Liella started the initial thread counts, and the last one to
 /// exit ends the process with status 0 (§22.1).
 static LIVE: AtomicUsize = AtomicUsize::new(0);
-static OWNED: AtomicBool = AtomicBool::new(false);
+/// Whether the runtime started this process: a byte the cancellation-point entries read too
+/// (machine/points.S, D-X.58).
+use crate::ffi::liella_machine_owned as OWNED;
+/// [`OWNED`] as Rust reads it ([`owned_mask`]): a crate-private word, all ones when the runtime
+/// started the process, else 0. A hot path ANDs it into the `%fs` word it loads anyway, so the
+/// gate costs no instruction there (the AND sets the flags its zero test used); the assembler's
+/// symbol would cost a GOT load first. Both are stored together in `init_initial`, the only
+/// writer, before any other thread exists; a fork child inherits both.
+static OWNED_HERE: AtomicUsize = AtomicUsize::new(0);
 /// MUTEX-2: [`alone`] in one byte for the mutex fast paths: set when the runtime takes the
 /// initial thread (so Liella creates every thread), cleared for good before the first thread is
 /// cloned (not set again in a fork child: sticky, as the probes show glibc's single-thread
@@ -206,6 +214,7 @@ pub(crate) fn init_initial(static_program: bool) {
     d.flags.fetch_or(DESC_CREATED, AcqRel);
     d.tp.store(tb::tp(), Relaxed);
     OWNED.store(true, Release);
+    OWNED_HERE.store(usize::MAX, Release);
     LOCK_ALONE.store(SINGLE_THREADED.load(Acquire) != 0, Release);
     LIVE.store(1, Release);
     register_kernel_areas(d, RSEQ_OWNED.load(Acquire));
@@ -244,7 +253,7 @@ fn addr_of<T>(r: &T) -> usize {
 /// cleared by the first creation, the library's own service threads included). Locks that only
 /// serialise threads may then be skipped. In a process another C library started, never.
 pub(crate) fn alone() -> bool {
-    OWNED.load(Acquire) && SINGLE_THREADED.load(Acquire) != 0
+    owned() && SINGLE_THREADED.load(Acquire) != 0
 }
 
 /// [`alone`] as the mutex fast paths ask it (MUTEX-2): one load of a private byte, and once
@@ -265,13 +274,193 @@ pub(crate) fn leave_lock_alone() {
 
 /// Whether the runtime started this process (so every thread it runs library code in is
 /// listed: the initial thread at startup, every other at creation).
+///
+/// One `cmpq $0, X(%rip)` on a gated path ([`owned_mask`]).
+#[inline(always)]
 pub(crate) fn owned() -> bool {
-    OWNED.load(Acquire)
+    owned_mask() != 0
+}
+
+/// All ones when the runtime started this process, else 0. A word Liella keeps in the calling
+/// thread's block is read as `tb::read::<F>() & owned_mask()`: one `and` with a memory operand
+/// in place of the `test` the word's zero check already costs, so the hot path pays nothing for
+/// the gate, and in a process another library started the value is 0 whatever the block holds
+/// (never used as a pointer or a decision), which sends the caller to its slow path (D-X.58).
+/// A plain read, not an atomic load: the compiler folds it into that `and` (or a `cmpq`), ruling
+/// #4888.
+#[inline(always)]
+pub(crate) fn owned_mask() -> usize {
+    // UNSAFE(process-flag): the write-once ownership word, read without an atomic (ruling #4888).
+    #[allow(unsafe_code)]
+    // UNSAFE(process-flag) SAFETY: `init_initial` is the only writer of `OWNED_HERE`, and it
+    // stores the word once, on the initial thread, before the runtime or the program creates any
+    // other thread; every thread made later starts after that store (thread creation orders it),
+    // and a fork child copies the settled word. So no store can run concurrently with this read
+    // (no data race), and the pointer is a static's, always valid and aligned for a `usize`.
+    unsafe {
+        *OWNED_HERE.as_ptr()
+    }
+}
+
+// ------------------------------------------------------------------------------ whose block (D-X.58)
+//
+// The words at 0x9c-0x187 of a thread block (flags, descriptor, locale, ctype words, lconv,
+// h_errno, resolver state, view, cache line) are Liella's only in a block the runtime made. A
+// block another C library's loader made (a test process's threads, a program under another
+// `ld.so`, D-22.10) uses those offsets for its own data, so nothing there is read as a pointer or
+// a decision, and nothing is written there. The test is [`owned`], a process-level fact: when the
+// runtime started the process every thread that runs library code has a block it made (it
+// creates every thread). It is never a word in the block: a foreign block's bit 0 of 0x9c (the
+// old `FLAG_OWN` test) is the other library's data. Elsewhere [`words`] gives the calling thread
+// a block-shaped area of its own: an entry in a registry keyed by thread pointer and kernel TID,
+// or the thread's own block when `create` made it (`claim_own`, from `entry` to `finish`).
+
+/// Registry entries per chunk.
+const SHADOWS: usize = 64;
+
+/// A registry entry: one thread's words outside its block.
+#[repr(C, align(64))]
+pub(crate) struct Shadow {
+    /// The thread pointer of the entry's thread; 0 while free. Never cleared once claimed (the
+    /// probe sequences stay valid); only the thread running at this pointer writes the rest.
+    key: AtomicUsize,
+    /// The kernel TID of the thread the words belong to: another TID at the same pointer is a
+    /// new thread on a reused block, which starts with empty words.
+    tid: AtomicU32,
+    /// Set while the thread at `key` is one `create` made (its own block holds its words).
+    own: AtomicBool,
+    /// The words of a thread whose block is not the runtime's.
+    block: liella_rt::tls::ThreadBlock,
+}
+
+/// A chunk of the registry (an anonymous mapping, zero-filled), linked through `next`.
+#[repr(C, align(64))]
+pub(crate) struct ShadowChunk {
+    next: AtomicUsize,
+    slots: [Shadow; SHADOWS],
+}
+
+/// The registry's first chunk (0 until a foreign thread first needs one).
+static SHADOW_HEAD: AtomicUsize = AtomicUsize::new(0);
+
+/// The words every foreign thread shares when no chunk can be mapped (`ENOMEM`): all atomics,
+/// so sharing them is sound; per-thread state is then the process's.
+#[repr(C, align(64))]
+pub(crate) struct Spare(pub(crate) [AtomicUsize; liella_rt::tls::BLOCK_SIZE / 8]);
+static SPARE: Spare = Spare([const { AtomicUsize::new(0) }; liella_rt::tls::BLOCK_SIZE / 8]);
+
+/// The block holding the calling thread's words at 0x9c-0x187: its own block in a process the
+/// runtime started (one test of a private byte), else [`foreign_words`].
+#[inline]
+pub(crate) fn words() -> &'static liella_rt::tls::ThreadBlock {
+    if owned() { tb::current() } else { foreign_words() }
+}
+
+/// [`words`] in a process the runtime did not start: the registry entry of the calling thread.
+#[cold]
+#[inline(never)]
+pub(crate) fn foreign_words() -> &'static liella_rt::tls::ThreadBlock {
+    let tid = u32::try_from(CSys.gettid()).unwrap_or(0);
+    let Some(s) = shadow_entry(tb::tp()) else { return tb::spare_at(addr_of(&SPARE)) };
+    if s.tid.load(Acquire) != tid {
+        // Another TID at this thread pointer: a new thread on a reused block (empty words), or
+        // a forked child's only thread, which continues its parent's thread and keeps its words
+        // (a fork by any library: no hook of Liella's need run). A thread whose TID is the
+        // process ID is a process's first thread, and a process's first thread finds an entry
+        // already keyed by its thread pointer only as a copy made by `fork`.
+        if i32::try_from(tid).unwrap_or(0) != CSys.getpid() {
+            s.own.store(false, Release);
+            clear_words(&s.block);
+        }
+        s.tid.store(tid, Release);
+    }
+    if s.own.load(Acquire) { tb::current() } else { &s.block }
+}
+
+/// Whether `b` is the shared [`SPARE`] words (whose resolver state is never freed).
+pub(crate) fn is_spare(b: &liella_rt::tls::ThreadBlock) -> bool {
+    addr_of(b) == addr_of(&SPARE)
+}
+
+/// Empty words (a new thread's).
+fn clear_words(b: &liella_rt::tls::ThreadBlock) {
+    let words = [&b.thread, &b.locale, &b.ctype_b, &b.ctype_toupper, &b.ctype_tolower, &b.res, &b.view];
+    for w in words.into_iter().chain(&b.lconv).chain(&b.cache) {
+        w.store(0, Relaxed);
+    }
+    b.flags.store(0, Relaxed);
+    b.h_errno.store(0, Relaxed);
+}
+
+/// A hash of a thread pointer: a chunk index to start probing at.
+fn shadow_hash(tp: usize) -> usize {
+    ((tp >> 12) ^ (tp >> 21)) % SHADOWS
+}
+
+/// The registry entry of the thread at `tp` (the caller's), claimed if it has none; `None` when
+/// no chunk can be mapped. Linear probing in each chunk, the next chunk only once one is full.
+fn shadow_entry(tp: usize) -> Option<&'static Shadow> {
+    let start = shadow_hash(tp);
+    let mut link = &SHADOW_HEAD;
+    loop {
+        let mut c = link.load(Acquire);
+        if c == 0 {
+            let len = size_of::<ShadowChunk>().next_multiple_of(PAGE);
+            let m = raw::mmap(0, len, prot_rw(), i32::try_from(MAP_PRIVATE | MAP_ANONYMOUS).unwrap_or(0), -1, 0).ok()?;
+            c = match link.compare_exchange(0, m, AcqRel, Acquire) {
+                Ok(_) => m,
+                Err(other) => {
+                    let _ = raw::munmap(m, len);
+                    other
+                }
+            };
+        }
+        let chunk = tb::shadow_chunk_at(c);
+        for k in 0..SHADOWS {
+            let s = chunk.slots.get((start + k) % SHADOWS)?;
+            match s.key.load(Acquire) {
+                key if key == tp => return Some(s),
+                0 => match s.key.compare_exchange(0, tp, AcqRel, Acquire) {
+                    Ok(_) => return Some(s),
+                    Err(key) if key == tp => return Some(s),
+                    Err(_) => {}
+                },
+                _ => {}
+            }
+        }
+        link = &chunk.next;
+    }
+}
+
+/// In a process the runtime did not start: the calling thread, which `create` made, keeps its
+/// words in its own block until [`release_own`] (the start of `entry`).
+fn claim_own() {
+    if owned() {
+        return;
+    }
+    let tid = u32::try_from(CSys.gettid()).unwrap_or(0);
+    if let Some(s) = shadow_entry(tb::tp()) {
+        s.own.store(false, Release);
+        s.tid.store(tid, Release);
+        s.own.store(true, Release);
+    }
+}
+
+/// [`claim_own`]'s end, before the thread's last instructions (its block may be unmapped or
+/// reused afterwards, by another library too).
+fn release_own() {
+    if owned() {
+        return;
+    }
+    if let Some(s) = shadow_entry(tb::tp()) {
+        s.own.store(false, Release);
+        s.tid.store(0, Release);
+    }
 }
 
 /// The calling thread's descriptor, if it has one.
 pub(crate) fn current() -> Option<&'static Thread> {
-    match tb::current().thread.load(Acquire) {
+    match words().thread.load(Acquire) {
         0 => None,
         a => Some(tb::desc_at(a)),
     }
@@ -295,7 +484,7 @@ fn adopt() -> KResult<&'static Thread> {
     d.keys.store(base + rt::DESC_SIZE, Relaxed);
     d.slots.store(base + rt::DESC_SIZE + KEY_AREA, Relaxed);
     d.tp.store(tb::tp(), Relaxed);
-    tb::current().thread.store(base, Release);
+    words().thread.store(base, Release);
     Ok(d)
 }
 
@@ -385,6 +574,12 @@ fn map_thread(len: usize, guard: usize) -> KResult<usize> {
 
 fn list_insert(d: &'static Thread) {
     let _g = LIST.lock(&CSys);
+    link_locked(d);
+}
+
+/// [`list_insert`]'s body, the thread-list lock held by the caller.
+#[inline(always)]
+fn link_locked(d: &'static Thread) {
     let me = addr_of(d);
     let head = HEAD.load(Relaxed);
     d.next.store(head, Relaxed);
@@ -431,6 +626,39 @@ pub(crate) fn find(tp: usize) -> Option<&'static Thread> {
     None
 }
 
+/// `__liella_thread_walk(cb, ctx)` (`LIELLA_PRIVATE`, DL-16d): Liella's `ld.so` gives a
+/// `dlopen`ed module's TLS block to every thread. Under the thread-list lock, which a thread's
+/// creation holds while its loader `tls_init` runs and it is listed: `cb(ctx, tp)` for each listed
+/// thread (and the caller, if it is not listed), then `cb(ctx, 0)` before the lock is released, so
+/// the loader publishes its table for later creations within the same critical section. A thread
+/// is visited while its mapping lives (it leaves the list before that is released). Returns 0.
+#[cfg_attr(not(feature = "runtime"), allow(dead_code))]
+pub(crate) extern "C" fn walk_threads(cb: usize, ctx: usize) -> usize {
+    if cb == 0 {
+        return 0;
+    }
+    let call = |tp: usize| {
+        let w = |v: usize| i64::from_ne_bytes(v.to_ne_bytes());
+        let _ = ffi::liella_machine_call3(cb, w(ctx), w(tp), 0);
+    };
+    let me = tb::tp();
+    let _g = LIST.lock(&CSys);
+    let mut listed = false;
+    let mut a = HEAD.load(Acquire);
+    while a != 0 {
+        let d = tb::desc_at(a);
+        a = d.next.load(Relaxed);
+        let tp = d.tp.load(Relaxed);
+        listed |= tp == me;
+        call(tp);
+    }
+    if !listed {
+        call(me);
+    }
+    call(0);
+    0
+}
+
 /// Visit every listed thread (the thread-list lock held): for the setxid broadcast, `fork`'s
 /// child and `pthread_getattr_np`.
 pub(crate) fn each(mut f: impl FnMut(&'static Thread)) {
@@ -461,7 +689,7 @@ pub(crate) fn serialized<T>(f: impl FnOnce() -> T) -> T {
 #[inline(never)]
 pub(crate) fn each_block(mut f: impl FnMut(&'static liella_rt::tls::ThreadBlock)) {
     if alone() {
-        return f(tb::current());
+        return f(words());
     }
     let _g = LIST.lock(&CSys);
     let me = tb::tp();
@@ -475,7 +703,7 @@ pub(crate) fn each_block(mut f: impl FnMut(&'static liella_rt::tls::ThreadBlock)
         f(tb::listed(tp));
     }
     if !listed {
-        f(tb::current());
+        f(words());
     }
 }
 
@@ -503,7 +731,7 @@ pub(crate) fn after_fork_child() {
         fork::set_if_differs!(d.robust[0], addr_of(&d.robust));
         fork::set_if_differs!(d.robust[2], 0);
         let _ = raw::set_robust_list(addr_of(&d.robust), 24);
-        if OWNED.load(Acquire) || d.has(DESC_CREATED) {
+        if owned() || d.has(DESC_CREATED) {
             head = addr_of(d);
         }
     }
@@ -660,13 +888,9 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
     };
     let tp = base + lay.tp;
     // The TLS block: the image, then zeros (fresh or cleared memory). The loader's area (address
-    // 0): its `tls_init` writes the images, zeros to each block's end, the dtv and the block's dtv
-    // word (a reused mapping held an earlier thread's bytes there); no other store below touches
-    // that word.
+    // 0) is filled under the thread-list lock below.
     if let Some(t) = img {
-        if t.addr == 0 {
-            let _ = ffi::liella_machine_call3(LOADER_INIT.load(Acquire), i64::from_ne_bytes(tp.to_ne_bytes()), 0, 0);
-        } else {
+        if t.addr != 0 {
             conv::copy_mapped(t.addr, base + lay.tls, t.filesz);
         }
     }
@@ -724,14 +948,29 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
         d.affinity_len.store(len, Relaxed);
     }
     // The two words the C layer pops in the new thread: the entry and its argument.
-    conv::store_words(sp, &[entry_addr(), daddr]);
+    conv::store_words(sp, [entry_addr(), daddr]);
 
     me.multiple_threads.store(1, Relaxed);
     SINGLE_THREADED.store(0, Release);
     // Before the clone: from here on every mutex operation uses atomics (the new thread reads
     // the cleared byte, written before the clone system call).
     LOCK_ALONE.store(false, Release);
-    list_insert(d);
+    {
+        let _g = LIST.lock(&CSys);
+        // The loader's area (its hook is set exactly when the image address is 0, at start-up):
+        // its `tls_init` writes every module's block, the dtv and the block's dtv word (a reused
+        // mapping held an earlier thread's bytes there; no store above touches that word). Under
+        // the list lock, with the listing: a `dlopen` that adds a module walks the list under this
+        // lock (`__liella_thread_walk`), so this thread either reads the loader's table after that
+        // walk or is listed for it, and gets the module's block exactly once (DL-16d,
+        // plan/ph14/dl-16-dlopen.md §5 point 1). The hook word, not the image kept live from the
+        // top: the static path pays one compare here and nothing else.
+        let init = LOADER_INIT.load(Acquire);
+        if init != 0 {
+            let _ = ffi::liella_machine_call3(init, i64::from_ne_bytes(tp.to_ne_bytes()), 0, 0);
+        }
+        link_locked(d);
+    }
     LIVE.fetch_add(1, AcqRel);
     let r = ffi::liella_machine_clone_thread(CLONE_FLAGS, sp, &b.tid, &b.tid, tp);
     // The creator's own mask again (unchanged if blocking failed).
@@ -774,6 +1013,7 @@ fn entry_addr() -> usize {
 
 /// The new thread's first Rust frame (called by the C layer on its stack).
 extern "C" fn entry(daddr: usize) -> i32 {
+    claim_own();
     let d = tb::desc_at(daddr);
     register_kernel_areas(d, RSEQ_OWNED.load(Acquire) || LOADER_RSEQ.load(Acquire));
     if d.started.load(Relaxed) == 0 && (d.sched_policy.load(Relaxed) != 0 || d.affinity.load(Relaxed) != 0) {
@@ -850,6 +1090,7 @@ pub(crate) fn finish(result: usize) -> ! {
             crate::stacks::thread_ending(d.tp.load(Relaxed));
         }
     }
+    release_own();
     raw::exit_thread(0)
 }
 
@@ -984,7 +1225,8 @@ pub(crate) fn tid_of(tp: usize) -> KResult<i32> {
 pub(crate) fn fast_tid() -> Option<u32> {
     let t = tb::read32::<tb::Tid>();
     // MUTEX-5: one signed test (`try_from` + `> 0` compiled to two branches on one flag set).
-    (tb::read32::<tb::Flags>() & FLAG_OWN != 0 && i32::from_ne_bytes(t.to_ne_bytes()) > 0).then_some(t)
+    // D-X.58: the TID word is trusted only in a process the runtime started.
+    (owned() && i32::from_ne_bytes(t.to_ne_bytes()) > 0).then_some(t)
 }
 
 /// [`own_tid`] without its system-call fallback: the TID the thread block holds, `None` when it
@@ -992,7 +1234,7 @@ pub(crate) fn fast_tid() -> Option<u32> {
 /// paths take it with no call, so they need no stack frame; `None` sends them to the full path.
 #[inline(always)]
 pub(crate) fn own_tid_fast() -> Option<u32> {
-    if tb::read32::<tb::Flags>() & FLAG_OWN == 0 {
+    if !owned() {
         return None;
     }
     let t = tb::read32::<tb::Tid>();
@@ -1007,7 +1249,7 @@ pub(crate) fn own_tid_fast() -> Option<u32> {
 pub(crate) fn own_tid() -> i32 {
     // MUTEX-3: two independent `%fs`-relative loads instead of `%fs:0` and two loads after it
     // (the mutex fast paths store the owner's TID).
-    if tb::read32::<tb::Flags>() & FLAG_OWN != 0 {
+    if owned() {
         match tb::read32::<tb::Tid>() {
             0 => CSys.gettid(),
             t => i32::try_from(t).unwrap_or(0),

@@ -1,0 +1,33 @@
+{
+ "task": "TB-FOREIGN-SAFETY-6",
+ "model": "opus",
+ "tokens": null,
+ "result": "both ld.rs plants now CAUGHT (10/10): the affected products rule missed the ld tests' join(\"liella\"), so ld.so was never rebuilt with the mutant; regen pyc and dropped start::program key fixed; ruling #4779 counts +4..+7 per one-access call vs primed next (accepted <= +2): not met",
+ "branch": "task/tb-foreign-safety-6",
+ "head": null,
+ "gate": {
+  "affected": "11588 passed / 0 failed (32 suites), conformance 128 passed / 0 failed (tb-foreign-safety-6-gate-2)",
+  "peak": "15G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "#4779: +4..+7 instructions per one-access locale call vs primed next ca8aa835a (mb_cur_max 12->18, toupper 24->28, iswalpha 29->35, towupper 28->35); the gate is 4 instructions (GOT-relaxed address load, unfolded atomic load) plus a push/pop for the non-tail cold call",
+   "recommendation": "back to the story: direct rip-relative cmpb on a byte in the readers' CGU or hidden, and a tail-call shaped foreign path; target +2"
+  }
+ ],
+ "informational": [
+  "the affected/plants products rule missed six liella-ld tests that run the built ld.so (fixed here: join(\"liella\") marker)",
+  "the run-5 --allow-drop hot-text regen dropped a live startup key (restored)",
+  "process slip: ran `git show origin/next:crates/libc-so/hot-text.list | grep ...` (no output used); the restored line came from this branch's own diff"
+ ],
+ "refused": [],
+ "improvement": "regen.sh --allow-drop should drop only keys xtask so reports dead, never merely untraced ones; wl_trace.sh should accept ~/wl/src/<sha> for a base trace",
+ "next_step": "codegen fix for the owned() gate (direct cmpb, no forced frame), then wl_trace + wl_percall locale.c against the primed base",
+ "report_file": "handoff/TB-FOREIGN-SAFETY.md",
+ "jobs": [
+  "tb-foreign-safety-6-gate-2",
+  "tb-foreign-safety-6-plants-2",
+  "tb-foreign-safety-6-percall-2"
+ ]
+}
