@@ -548,6 +548,8 @@ pub fn quick_exit(status: i32) -> ! {
 /// `__cxa_finalize(dso)`.
 pub fn finalize(dso: usize) {
     exit_handlers::finalize(&EXIT_HANDLERS, &QUICK_HANDLERS, &CSys, &KernelPages, dso, &mut conv::CCalls);
+    // The module's `pthread_atfork` handlers go too (DL-17, DL-ATFORK-FINALIZE).
+    crate::fork::forget_dso(dso);
 }
 
 /// `_exit`/`_Exit(status)`: end the process now.

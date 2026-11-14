@@ -36,7 +36,7 @@ pub const FILE: &str = "csys/src/machine/compat_aliases.S";
 /// Aliases held back because `libc.a` does not define their target yet: the libdl merge, whose
 /// functions arrive with dynamic loading (phase 14). `cargo xtask so` fails on any other alias whose
 /// target is missing, so a name leaves this list when its default version lands.
-pub const DEFERRED: &[&str] = &["dladdr", "dladdr1", "dlclose", "dlinfo", "dlmopen"];
+pub const DEFERRED: &[&str] = &["dladdr", "dladdr1", "dlinfo", "dlmopen"];
 
 /// Table `behaviour` rows whose own function has not landed, still exported as an alias of the
 /// default version's function because the previous rule exported them and the `so` ratchet

@@ -120,6 +120,18 @@ impl<const N: usize> Surplus<N> {
         self.len = self.len.min(mark);
     }
 
+    /// Free the place at `offset` from the thread pointer (what [`Surplus::place`] returned) of a
+    /// module that was unloaded (DL-17): its bytes may be placed again. The order of the other places
+    /// is kept (a later [`Surplus::rollback`] mark stays valid). False when no place is there.
+    pub fn free(&mut self, offset: i64) -> bool {
+        let d = offset.unsigned_abs();
+        let Some(used) = self.used.get_mut(..self.len) else { return false };
+        let Some(k) = used.iter().position(|&(_, b)| b == d && offset <= 0) else { return false };
+        used.copy_within(k.wrapping_add(1).., k);
+        self.len = self.len.wrapping_sub(1);
+        true
+    }
+
     /// A place for `m`'s block in the surplus `[lo, hi)` (bytes below a thread pointer aligned to
     /// `tp_align`): its offset from the thread pointer. The block's address keeps `p_vaddr`'s
     /// remainder modulo its alignment. `None`: no room, an alignment the thread pointer does not
@@ -150,6 +162,76 @@ impl<const N: usize> Surplus<N> {
         *self.used.get_mut(self.len)? = (d.wrapping_sub(m.memsz), d);
         self.len = self.len.wrapping_add(1);
         0i64.checked_sub_unsigned(d)
+    }
+}
+
+/// The TLS module IDs of modules loaded after start (DL-17, design §7: "module IDs reused after
+/// dlclose with a generation bump"; probe `== close` C-4/C-5: the reference gives a re-opened module
+/// the ID its closed predecessor had). The lowest freed ID is handed out first, then the next unused
+/// one. All-zero is the empty value (it lives in the loader's zeroed mapping).
+#[derive(Clone, Copy, Debug)]
+pub struct ModuleIds {
+    /// The highest ID handed out (the start's modules included once [`ModuleIds::take`] saw them).
+    top: u64,
+    /// Bit `id - 1` set: `id` (at most `top`) was released and may be taken again.
+    free: [u64; MODULES_MAX / 64],
+}
+
+impl Default for ModuleIds {
+    fn default() -> Self {
+        Self { top: 0, free: [0; MODULES_MAX / 64] }
+    }
+}
+
+impl ModuleIds {
+    /// An ID for a new module: the lowest released one, else the one after the highest handed out
+    /// (`floor`: IDs the process holds already, the start's modules and earlier ones), at most
+    /// `max`. `None` when every ID up to `max` is in use.
+    pub fn take(&mut self, floor: u64, max: u64) -> Option<u64> {
+        self.top = self.top.max(floor);
+        for (w, word) in self.free.iter_mut().enumerate() {
+            if *word != 0 {
+                let bit = word.trailing_zeros();
+                let id = u64::try_from(w).ok()?.checked_mul(64)?.checked_add(u64::from(bit))?.checked_add(1)?;
+                if id <= self.top {
+                    *word &= !(1u64 << bit);
+                    return Some(id);
+                }
+            }
+        }
+        let id = self.top.checked_add(1)?;
+        let limit = max.min(u64::try_from(MODULES_MAX).ok()?);
+        (id <= limit).then(|| {
+            self.top = id;
+            id
+        })
+    }
+
+    /// Give back `id`, taken by a `dlopen` that failed before any thread saw it: no generation.
+    pub fn put_back(&mut self, id: u64) {
+        if id != 0 && id == self.top {
+            self.top = id.wrapping_sub(1);
+        } else {
+            self.mark_free(id);
+        }
+    }
+
+    /// Release `id` of a module that was unloaded; `generation` is the TLS generation every thread's
+    /// dtv may still be built for: the generation the release makes, always newer, so a thread whose
+    /// dtv still names the old block for `id` repairs it before a reuse of `id` is reached.
+    #[must_use]
+    pub fn release(&mut self, id: u64, generation: u64) -> u64 {
+        self.mark_free(id);
+        generation.wrapping_add(1)
+    }
+
+    fn mark_free(&mut self, id: u64) {
+        let Some(i) = id.checked_sub(1).and_then(|i| usize::try_from(i).ok()) else { return };
+        if id <= self.top {
+            if let Some(word) = self.free.get_mut(i / 64) {
+                *word |= 1u64 << (i % 64);
+            }
+        }
     }
 }
 

@@ -368,6 +368,8 @@ pub fn early_init(info: usize) {
     crate::posix::s27_dynlink::LOADER_ITERATE.store(info.dl_iterate, Release);
     crate::posix::s27_dynlink::LOADER_FIND.store(info.dl_find_object, Release);
     crate::posix::s27_dynlink::LOADER_FORK.store(info.dl_fork, Release);
+    // Its `dlclose` entry (DL-17).
+    crate::posix::s27_dynlink::LOADER_DLCLOSE.store(info.dlclose, Release);
     // The tunables without diagnostics (`ld.so` read the string already).
     let secure = aux.get(AT_SECURE).is_some_and(|v| v != 0);
     // Secure mode's standard descriptors, before any constructor can open a file in their place

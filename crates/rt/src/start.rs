@@ -366,6 +366,9 @@ pub mod private {
         /// `fork`'s step (DL-16c): `(0)` before the clone (waits for a `dlopen` that is changing
         /// the loader's state), `(1)` in the parent and `(2)` in the child after it; 0: none.
         pub dl_fork: usize,
+        /// The loader's `dlclose` entry (DL-17): `(handle)` to 0, or -1 with the failure text set
+        /// in the calling thread's dlerror record; 0: none.
+        pub dlclose: usize,
     }
 
     #[cfg(test)]

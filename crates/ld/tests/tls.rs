@@ -114,6 +114,49 @@ fn tls_surplus_first_fit_alignment_gap_reuse_and_rollback() {
     assert_eq!(two.place::<Native>(lo, hi, tpa, &m(1, 1, 0)), None, "every place taken");
 }
 
+/// s27_1_c_4 (plan/ph14/design.md §7 "module IDs reused after dlclose with a generation bump"; probe
+/// `== close` C-4/C-5; DL-17): an unloaded module's surplus place is freed and placed again, the
+/// other places keep their order (a rollback mark stays valid), and freeing a place that is not there
+/// changes nothing; a released module ID is the next one taken (the lowest first), its release moves
+/// the generation on, an ID a failed `dlopen` gives back is taken again without a generation, and IDs
+/// stop at the limit.
+#[test]
+fn s27_1_c_4_surplus_free_and_module_id_reuse_with_generation() {
+    let m = |memsz, align| Module { vaddr: 0, filesz: 0, memsz, align };
+    let (lo, hi, tpa) = (100u64, 1100u64, 64u64);
+    let mut s = tls::Surplus::<8>::default();
+    let a = s.place::<Native>(lo, hi, tpa, &m(10, 1)).unwrap();
+    let b = s.place::<Native>(lo, hi, tpa, &m(20, 1)).unwrap();
+    assert_eq!((a, b), (-110, -130));
+    assert!(!s.free(-111), "no place ends there");
+    assert!(s.free(a), "the first place is freed");
+    assert_eq!(s.len(), 1);
+    assert_eq!(s.place::<Native>(lo, hi, tpa, &m(10, 1)), Some(-110), "its bytes are placed again");
+    assert_eq!(s.place::<Native>(lo, hi, tpa, &m(5, 1)), Some(-135), "after the live place");
+    assert!(s.free(b) && s.len() == 2);
+    assert_eq!(s.place::<Native>(lo, hi, tpa, &m(25, 1)), Some(-160), "the freed 20 bytes [110, 130) cannot hold 25: after the others");
+    assert_eq!(s.place::<Native>(lo, hi, tpa, &m(20, 1)), Some(-130), "they hold 20");
+
+    let mut ids = tls::ModuleIds::default();
+    // The start's modules hold IDs 1 and 2.
+    assert_eq!(ids.take(2, 512), Some(3));
+    assert_eq!(ids.take(2, 512), Some(4));
+    assert_eq!(ids.take(2, 512), Some(5));
+    let g = ids.release(4, 7);
+    assert!(g > 7, "a release moves the generation on ({g})");
+    let g2 = ids.release(3, g);
+    assert!(g2 > g, "every release does ({g2})");
+    assert_eq!(ids.take(2, 512), Some(3), "the lowest released ID first");
+    assert_eq!(ids.take(2, 512), Some(4));
+    assert_eq!(ids.take(2, 512), Some(6), "then the next unused one");
+    ids.put_back(6);
+    assert_eq!(ids.take(2, 512), Some(6), "an ID a failed open gave back");
+    ids.put_back(4);
+    assert_eq!(ids.take(2, 512), Some(4));
+    assert_eq!(ids.take(2, 7), Some(7));
+    assert_eq!(ids.take(2, 7), None, "no ID above the limit");
+}
+
 /// no spec clause (x86-64 psABI §4.4.1): `TPOFF64` is S + A + the block's (negative) offset from TP,
 /// `DTPOFF64` is S + A, `DTPMOD64` the module ID; `TLSDESC` has no single field: its descriptor
 /// (DL-15; Oliva, "Thread-Local Storage Descriptors for IA32 and AMD64/EM64T") is the function, then

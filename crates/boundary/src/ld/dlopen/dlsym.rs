@@ -74,11 +74,11 @@ extern "C" fn entry(handle: usize, name: usize, version: usize, caller: usize) -
 }
 
 /// The object record `handle` names, by one range test (D-27.32), or `None`.
-fn handle_index(l: &Loader, handle: usize) -> Option<usize> {
+pub(super) fn handle_index(l: &Loader, handle: usize) -> Option<usize> {
     let first = l.node_addr(0);
     let off = handle.checked_sub(first)?;
     let size = size_of::<Node>();
-    (off.checked_rem(size)? == 0).then_some(off.checked_div(size)?).filter(|&i| i < l.n)
+    (off.checked_rem(size)? == 0).then_some(off.checked_div(size)?).filter(|&i| i < l.n && !l.gone(i))
 }
 
 /// The object containing `caller` (the program when none does).
@@ -158,7 +158,7 @@ fn find_locked(handle: usize, name: usize, version: usize, caller: usize) -> Opt
     let mark = l.unique.len();
     let syms = syms_of(&l.syms, l.n);
     let start = &l.global[..l.n_start_global];
-    let found = symbols::lookup(syms, Scope::global(&buf[..len]), &req, &mut Uniq { table: &mut l.unique, syms, start });
+    let found = symbols::lookup(syms, Scope::global(&buf[..len]), &req, &mut Uniq { table: &mut l.unique, syms, start, binds: None });
     let Ok(Some(f)) = found else {
         let mut path = PathBuf::default();
         let obj = object_name(l, named, &mut path);

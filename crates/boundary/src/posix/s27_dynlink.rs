@@ -282,6 +282,27 @@ pub extern "C" fn dlvsym(handle: *mut c_void, name: *const c_char, version: *con
     liella_dl_sym(handle, name, version, 0)
 }}
 
+/// The loader's `dlclose` entry (`StartInfo::dlclose`, stored by `runtime::early_init`): 0 in a
+/// program `ld.so` did not start (DL-17; a static program, ruling #5005).
+pub static LOADER_DLCLOSE: AtomicUsize = AtomicUsize::new(0);
+
+export! { "GLIBC_2.34";
+/// `dlclose(handle)` (§27.1, s27_1_c_4, dlclose(3); phase 14 DL-17): in a program `ld.so` started,
+/// the loader drops one open of `handle` and unloads what is no longer used
+/// (`crates/boundary/src/ld/dlopen.rs`): 0. NULL, a pointer that is not a handle, or a handle with no
+/// open left: -1 with the text `dlclose: invalid handle` (pending DL-16-PLAN-3, ruling #5006), never
+/// a crash. In a static program no handle exists (ruling #5005): the same failure.
+pub extern "C" fn dlclose(handle: *mut c_void) -> c_int {
+    let f = LOADER_DLCLOSE.load(Ordering::Acquire);
+    if f == 0 {
+        crate::dlerr::set(&[b"dlclose: invalid handle"]);
+        return -1;
+    }
+    let w = |v: usize| i64::from_ne_bytes(u64::try_from(v).unwrap_or(0).to_ne_bytes());
+    let r = crate::ffi::liella_machine_call3(f, w(handle.expose_provenance()), 0, 0);
+    if r == 0 { 0 } else { -1 }
+}}
+
 export! { "GLIBC_2.34";
 /// `dlerror()` (§27.1, dlerror(3)): the calling thread's pending text from its last failed `dl*`
 /// call, once (the next call returns NULL until another failure); NULL when none is pending. A

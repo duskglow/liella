@@ -601,10 +601,14 @@ fn fill_static(tp: usize, dtv_at: usize, zero: bool) -> Option<()> {
     let mut count = 0u64;
     for i in 0..n {
         let [src, filesz, memsz, module, off] = module_words(i)?;
+        if module == 0 {
+            // A released ID (DL-17): no block until it is reused.
+            continue;
+        }
         let block = tp64.wrapping_add_signed(i64::from_ne_bytes(off.to_ne_bytes()));
         init_block(block, [src, filesz, memsz], zero)?;
         dtv.get(dtv_slot(module)?)?.store(block, Relaxed);
-        count = module;
+        count = count.max(module);
     }
     let [g, c, ..] = dtv else { return None };
     c.store(count, Relaxed);
@@ -619,10 +623,12 @@ pub(super) struct NewTls {
     pub(super) mods: [[u64; 5]; init::OBJECTS_MAX],
     pub(super) len: usize,
     generation: u64,
+    /// The modules are unloaded ([`release_tls`], DL-17), not added.
+    release: bool,
 }
 
 impl NewTls {
-    pub(super) const NONE: NewTls = NewTls { mods: [[0; 5]; init::OBJECTS_MAX], len: 0, generation: 0 };
+    pub(super) const NONE: NewTls = NewTls { mods: [[0; 5]; init::OBJECTS_MAX], len: 0, generation: 0, release: false };
 }
 
 /// The static surplus `[lo, hi)` below every thread pointer and the thread pointer's alignment
@@ -631,12 +637,33 @@ pub(super) fn surplus() -> (u64, u64, u64) {
     (SURPLUS_LO.load(Relaxed), SURPLUS_HI.load(Relaxed), THREAD_TLS_ALIGN.load(Relaxed))
 }
 
-/// The ID the `k`-th (from 0) new module of a `dlopen` gets, while every thread's dtv has a slot
-/// for it.
-pub(super) fn module_id(k: usize) -> Option<u64> {
-    let id = u64::try_from(THREAD_MODS_LEN.load(Acquire).checked_add(k)?.checked_add(1)?).ok()?;
+/// The module IDs a `dlopen` may hand out (`ltls::ModuleIds::take`): the IDs [`THREAD_MODS`]
+/// covers already (the floor), and the highest every thread's dtv has a slot for.
+pub(super) fn module_room() -> (u64, u64) {
+    let floor = u64::try_from(THREAD_MODS_LEN.load(Acquire)).unwrap_or(u64::MAX);
     let slots = THREAD_DTV_WORDS.load(Relaxed).saturating_sub(ltls::DTV_HEADER);
-    (id <= slots && id <= u64::try_from(ltls::MODULES_MAX).ok()?).then_some(id)
+    (floor, slots.min(u64::try_from(ltls::MODULES_MAX).unwrap_or(0)))
+}
+
+/// The TLS generation now (DL-17: `ltls::ModuleIds::release` makes the next).
+pub(super) fn tls_generation() -> u64 {
+    GENERATION.load(Relaxed)
+}
+
+/// Take `gone`'s modules (`mods[..len]`, ID in word 3) out of [`THREAD_MODS`] at the end of the C
+/// library's thread walk (its thread-list lock held, as [`publish_tls`]) and make `generation`
+/// current: a thread whose dtv still names an old block repairs it in [`tls_slow`] (DL-17). The
+/// threads' blocks are left as they are (their bytes belong to the surplus place, freed already).
+pub(super) fn release_tls(walk: usize, gone: &mut NewTls, generation: u64) {
+    gone.generation = generation;
+    gone.release = true;
+    #[allow(clippy::as_conversions)] // a function's address has no conversion other than `as`
+    let visit = (tls_visit as *const ()).expose_provenance();
+    let ctx = core::ptr::from_ref::<NewTls>(gone).expose_provenance();
+    let arg = |v: usize| i64::from_ne_bytes(v.to_ne_bytes());
+    if walk != 0 {
+        let _ = crate::ffi::liella_machine_call3(walk, arg(visit), arg(ctx), 0);
+    }
 }
 
 /// The place of the initially loaded module whose image starts at `image` (its object's bias +
@@ -670,12 +697,21 @@ extern "C" fn tls_visit(ctx: usize, tp: usize) -> usize {
     let Some(new) = (unsafe { core::ptr::with_exposed_provenance::<NewTls>(ctx).as_ref() }) else { return 0 };
     let mods = new.mods.get(..new.len).unwrap_or(&[]);
     if tp == 0 {
-        let n = THREAD_MODS_LEN.load(Relaxed);
-        for (slot, m) in THREAD_MODS.iter().skip(n).zip(mods) {
-            slot.iter().zip(m).for_each(|(w, &v)| w.store(v, Relaxed));
+        // Entry `id - 1` holds module `id` (DL-17: a released ID's entry is all zero until reused).
+        let mut n = THREAD_MODS_LEN.load(Relaxed);
+        for m in mods {
+            let Some(slot) = usize::try_from(m[3]).ok().and_then(|id| id.checked_sub(1)).and_then(|i| THREAD_MODS.get(i)) else { continue };
+            let words = if new.release { [0; 5] } else { *m };
+            slot.iter().zip(words).for_each(|(w, v)| w.store(v, Relaxed));
+            if !new.release {
+                n = n.max(usize::try_from(m[3]).unwrap_or(0));
+            }
         }
-        THREAD_MODS_LEN.store(n.saturating_add(mods.len()).min(ltls::MODULES_MAX), Release);
+        THREAD_MODS_LEN.store(n.min(ltls::MODULES_MAX), Release);
         GENERATION.store(new.generation, Release);
+        return 0;
+    }
+    if new.release {
         return 0;
     }
     let b = crate::tb::listed(tp);
@@ -696,7 +732,7 @@ extern "C" fn tls_visit(ctx: usize, tp: usize) -> usize {
         }
     }
     if let (Some(c), [g, n, ..]) = (count, dtv) {
-        n.store(c, Release);
+        n.store(c.max(n.load(Relaxed)), Release);
         g.store(new.generation, Release);
     }
     0
@@ -789,11 +825,12 @@ fn tls_slow(dtv: &[AtomicU64], module: u64, offset: u64) -> usize {
     let tp = u64::try_from(crate::tb::tp()).unwrap_or(0);
     let mut found = None;
     let mut count = 0u64;
-    for w in (0..n).filter_map(module_words) {
+    // A released ID's entry (module word 0, DL-17) is skipped.
+    for w in (0..n).filter_map(module_words).filter(|w| w[3] != 0) {
         let block = tp.wrapping_add_signed(i64::from_ne_bytes(w[4].to_ne_bytes()));
         if let Some(s) = dtv_slot(w[3]).and_then(|i| dtv.get(i)) {
             s.store(block, Relaxed);
-            count = w[3];
+            count = count.max(w[3]);
         }
         if w[3] == module {
             found = Some(block);
@@ -1284,6 +1321,7 @@ fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<
             dl_iterate: readers::iterate_address(),
             dl_find_object: readers::find_object_address(),
             dl_fork: dlopen::fork_address(),
+            dlclose: dlopen::close_address(),
         };
         let at = core::ptr::from_ref(&info).expose_provenance();
         let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), args(at), 0, 0);

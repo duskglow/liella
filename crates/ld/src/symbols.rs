@@ -443,6 +443,9 @@ pub trait UniqueRegistry {
     ///
     /// [`LookupError::NoMemory`] when the table cannot grow.
     fn record(&mut self, name: &[u8], version: &[u8], found: Found) -> Result<(), LookupError>;
+    /// A relocation of object `by` was bound to `found` (any binding, unique or not): `dlopen` keeps
+    /// the definer loaded while `by` is (phase 14 DL-17, probe `== close` C-3). Nothing by default.
+    fn bound(&mut self, _by: usize, _found: &Found) {}
 }
 
 /// The first definition of `req` in `scope` (object indices into `objects`). The first object in scope

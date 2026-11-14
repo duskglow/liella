@@ -23,21 +23,45 @@ use crate::{ffi, heap, raw, tb, thread};
 
 /// The registry's lock.
 static ATFORK_LOCK: RawMutex = RawMutex::new();
-/// The registered handlers, oldest first: heap nodes of four words (prepare, parent, child,
-/// next).
+/// The registered handlers, oldest first: heap nodes of five words (prepare, parent, child,
+/// next, the registering object's DSO handle; 0 for `pthread_atfork`). A dropped registration
+/// ([`forget_dso`]) keeps its node with the three handler words 0: a `fork` in another thread may be
+/// walking the list without the lock.
 static FIRST: AtomicUsize = AtomicUsize::new(0);
 static LAST: AtomicUsize = AtomicUsize::new(0);
 
 fn node(addr: usize) -> &'static [AtomicUsize] {
-    tb::words64(addr, 4)
+    tb::words64(addr, 5)
 }
 
 /// `__register_atfork(prepare, parent, child, dso)` / `pthread_atfork`: `ENOMEM` without
 /// memory.
 pub fn register(prepare: usize, parent: usize, child: usize) -> KResult<()> {
-    let n = liella_legacy::malloc_compat::malloc(&heap::CTX, 32).map_err(|_| Errno::ENOMEM)?;
+    register_dso(prepare, parent, child, 0)
+}
+
+/// `__cxa_finalize(dso)` for a non-zero `dso` (DL-17, DL-ATFORK-FINALIZE; spec/behaviour/dynlink.md:
+/// the reference drops a module's atfork handlers at its `__cxa_finalize` and its `dlclose`): every
+/// handler `dso` registered is never called again.
+pub fn forget_dso(dso: usize) {
+    if dso == 0 {
+        return;
+    }
+    let _g = ATFORK_LOCK.lock(&CSys);
+    let mut a = FIRST.load(Acquire);
+    while a != 0 {
+        let w = node(a);
+        if w.get(4).is_some_and(|d| d.load(Relaxed) == dso) {
+            w.iter().take(3).for_each(|h| h.store(0, Relaxed));
+        }
+        a = w.get(3).map_or(0, |x| x.load(Acquire));
+    }
+}
+
+fn register_with(prepare: usize, parent: usize, child: usize, dso: usize) -> KResult<()> {
+    let n = liella_legacy::malloc_compat::malloc(&heap::CTX, 40).map_err(|_| Errno::ENOMEM)?;
     let w = node(n);
-    for (slot, v) in w.iter().zip([prepare, parent, child, 0]) {
+    for (slot, v) in w.iter().zip([prepare, parent, child, 0, dso]) {
         slot.store(v, Relaxed);
     }
     let _g = ATFORK_LOCK.lock(&CSys);
@@ -240,7 +264,8 @@ pub fn clone(f: usize, stack: usize, flags: i32, arg: usize, ptid: usize, tls: u
     Errno::decode(r).map(|v| i32::try_from(v).unwrap_or(0))
 }
 
-/// `__register_atfork` (the DSO handle is for unregistering at `dlclose`, phase 14).
-pub fn register_dso(prepare: usize, parent: usize, child: usize, _dso: usize) -> KResult<()> {
-    register(prepare, parent, child)
+/// `__register_atfork(prepare, parent, child, dso)`: `dso` names the registering object, whose
+/// handlers [`forget_dso`] drops at its `__cxa_finalize` (its `dlclose`, DL-17).
+pub fn register_dso(prepare: usize, parent: usize, child: usize, dso: usize) -> KResult<()> {
+    register_with(prepare, parent, child, dso)
 }

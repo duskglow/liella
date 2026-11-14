@@ -18,14 +18,18 @@
 //! * **Counters** (dynlink.md `== phdr`): `dlpi_adds` counts every object ever mapped (the start
 //!   objects and the vDSO, then each object a `dlopen` maps, also in an attempt that fails),
 //!   `dlpi_subs` every object unmapped (a failed attempt's).
-//! * Every read goes through [`read_section`], empty in DL-16; DL-17 gives it per-thread reader
-//!   epochs so `dlclose` can free what a reader may still see.
+//! * **Unloading** (DL-17, handoff/DL-DLCLOSE.md): `dlclose` makes an entry invisible again
+//!   ([`unpublish`]: its live word to 0, `dlpi_subs` moves) and its object is unmapped only after every
+//!   reader that may have seen it has left: every read goes through [`read_section`], which counts
+//!   the reader in a two-parity counter striped by thread pointer; the writer flips the parity
+//!   ([`flip`]) after unpublishing and unmaps once the old parity's counters are drained
+//!   ([`drained`]), never waiting (a callback may call `dlclose`). A slot is reused only after that.
 
 use super::dlopen::{node_address, CAP};
 use super::{read_auxv, read_image, AUXV_WORDS_MAX, OWN_BASE, START_ARGS, START_INTERP, START_N, START_OBJS, THREAD_MODS, THREAD_MODS_LEN};
 use crate::posix::s27_dynlink::{find_in, int_result, vdso_headers};
 use crate::{conv, tb};
-use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
+use core::sync::atomic::Ordering::{Acquire, Relaxed, Release, SeqCst};
 use core::sync::atomic::{AtomicU64, AtomicUsize};
 use liella_abi::layout::{struct_dl_find_object, struct_dl_phdr_info};
 use liella_kernel::auxv::Auxv;
@@ -36,10 +40,19 @@ const PT_TLS: u64 = 7;
 const DT_STRTAB: u64 = 5;
 const DT_SONAME: u64 = 14;
 
-/// Per object: `[load bias, name address, program header table address, header count]`.
-static TABLE: [[AtomicUsize; 4]; CAP] = [const { [const { AtomicUsize::new(0) }; 4] }; CAP];
-/// Entries a reader may read (0: the start-time entries are not filled yet); only grows.
+/// Per object: `[load bias, name address, program header table address, header count, live]`; a
+/// reader reads the first four words only after it saw `live` set (Acquire), and they do not change
+/// until the slot is reused, after a grace period (DL-17).
+static TABLE: [[AtomicUsize; 5]; CAP] = [const { [const { AtomicUsize::new(0) }; 5] }; CAP];
+/// Entries a reader looks at (0: the start-time entries are not filled yet).
 static PUBLISHED: AtomicUsize = AtomicUsize::new(0);
+/// The reader parity (DL-17): bit 0 says which counter of its stripe a reader entering now uses.
+static PARITY: AtomicUsize = AtomicUsize::new(0);
+/// Readers inside [`read_section`], per parity, striped by thread pointer over cache lines.
+#[repr(align(64))]
+struct Stripe([AtomicUsize; 2]);
+const STRIPES: usize = 32;
+static READERS: [Stripe; STRIPES] = [const { Stripe([const { AtomicUsize::new(0) }; 2]) }; STRIPES];
 /// Objects `dlopen` calls have made visible or mapped and unmapped again ([`publish`],
 /// [`count_unmapped`]); the start-time objects are counted apart.
 static ADDS: AtomicU64 = AtomicU64::new(0);
@@ -47,10 +60,44 @@ static SUBS: AtomicU64 = AtomicU64::new(0);
 /// The vDSO's address (`AT_SYSINFO_EHDR`, 0: none); `usize::MAX` until read.
 static VDSO: AtomicUsize = AtomicUsize::new(usize::MAX);
 
-/// What a reader sees: the published objects and the counters. DL-17 brackets the closure with a
-/// reader epoch; in DL-16 nothing is ever freed, so the section is empty.
+/// What a reader sees: the published objects and the counters. The reader is counted for the whole
+/// closure (module documentation), so nothing it may see is unmapped before it leaves. A callback
+/// that leaves by `longjmp` stays counted: the objects closed meanwhile are then never unmapped (a
+/// leak, never a fault).
 pub(super) fn read_section<R>(f: impl FnOnce(&View) -> R) -> R {
-    f(&View { start: fill_start() })
+    // Fibonacci hashing of the thread pointer: its top 5 bits pick one of the 32 stripes.
+    let h = (u64::try_from(tb::tp()).unwrap_or(0) >> 6).wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 59;
+    let Some(stripe) = READERS.get(usize::try_from(h).unwrap_or(0) % STRIPES) else { return f(&View { start: fill_start() }) };
+    let mut p = PARITY.load(SeqCst) & 1;
+    loop {
+        let Some(c) = stripe.0.get(p) else { return f(&View { start: fill_start() }) };
+        c.fetch_add(1, SeqCst);
+        // A flip between the load and the count: leave and enter with the new parity (the writer
+        // may already have found the old one drained).
+        let q = PARITY.load(SeqCst) & 1;
+        if q == p {
+            break;
+        }
+        c.fetch_sub(1, Release);
+        p = q;
+    }
+    let r = f(&View { start: fill_start() });
+    if let Some(c) = stripe.0.get(p) {
+        c.fetch_sub(1, Release);
+    }
+    r
+}
+
+/// The writer's step after unpublishing (under the loader's state lock): readers entering from now
+/// on cannot see what was unpublished; the parity the earlier readers counted in (for [`drained`]).
+pub(super) fn flip() -> usize {
+    PARITY.fetch_add(1, SeqCst) & 1
+}
+
+/// Whether every reader counted in parity `p` has left (each one that entered before the [`flip`]
+/// that returned `p`): what was unpublished before that flip may be unmapped.
+pub(super) fn drained(p: usize) -> bool {
+    READERS.iter().all(|s| s.0.get(p & 1).is_none_or(|c| c.load(SeqCst) == 0))
 }
 
 /// A reader's view (see [`read_section`]).
@@ -74,10 +121,14 @@ impl View {
         PUBLISHED.load(Acquire).min(CAP)
     }
 
-    /// Entry `i`, below [`View::len`].
-    fn entry(&self, i: usize) -> Entry {
-        let w: [usize; 4] = core::array::from_fn(|j| TABLE.get(i).and_then(|e| e.get(j)).map_or(0, |x| x.load(Relaxed)));
-        Entry { bias: w[0], name: w[1], phdr: w[2], phnum: w[3] }
+    /// Entry `i`, below [`View::len`], when it is live.
+    fn entry(&self, i: usize) -> Option<Entry> {
+        let e = TABLE.get(i)?;
+        if e.get(4)?.load(Acquire) == 0 {
+            return None;
+        }
+        let w: [usize; 4] = core::array::from_fn(|j| e.get(j).map_or(0, |x| x.load(Relaxed)));
+        Some(Entry { bias: w[0], name: w[1], phdr: w[2], phnum: w[3] })
     }
 
     /// `(dlpi_adds, dlpi_subs)` now: the start-time objects and the vDSO, then the `dlopen`s'.
@@ -105,10 +156,11 @@ fn vdso() -> usize {
 /// The program headers of an object as `(p_type, p_vaddr, p_memsz)` triples.
 fn headers(phdr: usize, phnum: usize) -> impl Iterator<Item = (u64, u64, u64)> {
     // UNSAFE(slice): a loaded object's program header table (⚑ KERN for the program, `map::load`
-    // or the start's loader for the others), mapped for the process's lifetime (DL-16 never unmaps a
-    // published object).
+    // or the start's loader for the others), mapped while a reader may see its entry (DL-17: unmapped
+    // only after the readers that saw it left, `read_section`).
     #[allow(unsafe_code)]
-    // SAFETY: `phdr`/`phnum` come from a published entry: the table of an object that stays mapped.
+    // SAFETY: `phdr`/`phnum` come from a live entry read inside `read_section`: the object stays
+    // mapped until this reader has left.
     let w = unsafe { conv::words_at(phdr, phnum.saturating_mul(7)) };
     w.chunks_exact(7).map(|h| (h.first().copied().unwrap_or(0) & 0xffff_ffff, h.get(2).copied().unwrap_or(0), h.get(5).copied().unwrap_or(0)))
 }
@@ -164,12 +216,16 @@ fn fill_start() -> usize {
         let name = if k == 0 { c"".as_ptr().expose_provenance() } else { soname_at(bias, phdr, phnum) };
         let name = if name == 0 { c"".as_ptr().expose_provenance() } else { name };
         stage(k, bias, name, phdr, phnum);
+        if let Some(live) = TABLE.get(k).and_then(|e| e.get(4)) {
+            live.store(1, Release);
+        }
     }
     let _ = PUBLISHED.compare_exchange(0, total, Release, Relaxed);
     total
 }
 
-/// Write entry `k` of an object not visible yet (`super::dlopen::candidate`).
+/// Write entry `k` of an object not visible yet (`super::dlopen::candidate`): a slot no reader can
+/// be reading (never used, or freed after a grace period, DL-17).
 pub(super) fn stage(k: usize, bias: usize, name: usize, phdr: usize, phnum: usize) {
     if let Some(e) = TABLE.get(k) {
         for (w, v) in e.iter().zip([bias, name, phdr, phnum]) {
@@ -179,11 +235,25 @@ pub(super) fn stage(k: usize, bias: usize, name: usize, phdr: usize, phnum: usiz
 }
 
 /// The publication point of one `dlopen` (`super::dlopen::load_set`, after pass 2, before the
-/// constructors): entries below `len` become visible, `added` of them new.
-pub(super) fn publish(len: usize, added: usize) {
+/// constructors): the entries `base..len` (staged) become visible, `len` is the loader's count.
+pub(super) fn publish(base: usize, len: usize) {
     fill_start();
-    ADDS.fetch_add(u64::try_from(added).unwrap_or(0), Relaxed);
-    PUBLISHED.store(len, Release);
+    ADDS.fetch_add(u64::try_from(len.saturating_sub(base)).unwrap_or(0), Relaxed);
+    for e in TABLE.get(base..len).unwrap_or(&[]) {
+        if let Some(live) = e.get(4) {
+            live.store(1, Release);
+        }
+    }
+    PUBLISHED.fetch_max(len, Release);
+}
+
+/// `dlclose` unloads object `k` (DL-17): its entry is invisible to readers entering from now on,
+/// and `dlpi_subs` counts it (probe `== close` C-1: as `dlclose` returns).
+pub(super) fn unpublish(k: usize) {
+    if let Some(live) = TABLE.get(k).and_then(|e| e.get(4)) {
+        live.store(0, Release);
+    }
+    SUBS.fetch_add(1, Release);
 }
 
 /// A failed attempt mapped `n` objects and unmapped them again (dynlink.md: both counters move).
@@ -235,7 +305,10 @@ extern "C" fn iterate(cb: usize, data: usize) -> i64 {
     read_section(|v| {
         let mut i = 0usize;
         while i < v.len() {
-            let e = v.entry(i);
+            let Some(e) = v.entry(i) else {
+                i = i.wrapping_add(1);
+                continue;
+            };
             let (adds, subs) = v.counters();
             let (modid, block) = tls_of(&e);
             let info = struct_dl_phdr_info { dlpi_addr: u64::try_from(e.bias).unwrap_or(0), dlpi_name: e.name, dlpi_phdr: e.phdr, dlpi_phnum: u16::try_from(e.phnum).unwrap_or(0), dlpi_adds: adds, dlpi_subs: subs, dlpi_tls_modid: modid, dlpi_tls_data: block };
@@ -266,7 +339,7 @@ extern "C" fn iterate(cb: usize, data: usize) -> i64 {
 extern "C" fn find_object(pc: usize, result: usize) -> i64 {
     let found = read_section(|v| {
         (0..v.len()).find_map(|i| {
-            let e = v.entry(i);
+            let e = v.entry(i)?;
             find_in(e.phdr, e.phnum, e.bias, pc, true).map(|(lo, hi, eh)| (lo, hi, eh, node_address(i)))
         })
     });

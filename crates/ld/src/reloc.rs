@@ -206,7 +206,8 @@ fn target<'a>(set: &Objects<'_, 'a>, i: usize, sym: u32, copy: bool, unique: &mu
         scope = scope.excluding(0);
     }
     match symbols::resolve(set.syms, scope, &Request::new(name, want), st.bind() == STB_WEAK, unique) {
-        Ok(Binding::Defined(Found { obj, def })) => {
+        Ok(Binding::Defined(f @ Found { obj, def })) => {
+            unique.bound(i, &f);
             Ok(Target { s: value_of(set, obj, &def.st), ifunc: def.st.kind() == STT_GNU_IFUNC, obj: Some(obj), size: def.st.size })
         }
         Ok(Binding::WeakUndefined) => Ok(Target { s: 0, ifunc: false, obj: None, size: 0 }),
@@ -469,8 +470,8 @@ pub enum VersionError<'a> {
 
 /// The object of the load that `file` (a `vn_file`) names: its `DT_SONAME`, or the name it was
 /// loaded by.
-fn provider(objs: &[Obj<'_>], file: &[u8]) -> Option<usize> {
-    objs.iter().position(|o| o.dynm.get(dt::SONAME).and_then(|s| o.dynm.string(s).ok()) == Some(file) || o.name == file)
+fn provider(objs: &[Obj<'_>], file: &[u8], live: &impl Fn(usize) -> bool) -> Option<usize> {
+    objs.iter().enumerate().position(|(j, o)| live(j) && (o.dynm.get(dt::SONAME).and_then(|s| o.dynm.string(s).ok()) == Some(file) || o.name == file))
 }
 
 /// Check every `DT_VERNEED` entry of every object against the named object's `DT_VERDEF` (D-27.11):
@@ -482,11 +483,24 @@ fn provider(objs: &[Obj<'_>], file: &[u8]) -> Option<usize> {
 ///
 /// The first [`VersionError`], objects in load order.
 pub fn check_versions<'a>(objs: &[Obj<'a>]) -> Result<(), VersionError<'a>> {
+    check_versions_live(objs, |_| true)
+}
+
+/// [`check_versions`] over the objects `live` accepts (an unloaded object's slot is never read,
+/// DL-17): as checkers and as providers.
+///
+/// # Errors
+///
+/// As [`check_versions`].
+pub fn check_versions_live<'a>(objs: &[Obj<'a>], live: impl Fn(usize) -> bool) -> Result<(), VersionError<'a>> {
     for (by, o) in objs.iter().enumerate() {
+        if !live(by) {
+            continue;
+        }
         let Some(needs) = o.dynm.verneed().map_err(|e| VersionError::Elf(by, e))? else { continue };
         for vn in needs {
             let vn = vn.map_err(|e| VersionError::Elf(by, e))?;
-            let Some(p) = provider(objs, vn.file).and_then(|j| objs.get(j)) else { continue };
+            let Some(p) = provider(objs, vn.file, &live).and_then(|j| objs.get(j)) else { continue };
             let defs = p.dynm.verdef().map_err(|e| VersionError::Elf(by, e))?;
             for aux in vn.auxes() {
                 let aux = aux.map_err(|e| VersionError::Elf(by, e))?;
