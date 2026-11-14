@@ -1,0 +1,21 @@
+{"task": "DL-DLCLOSE-3", "model": "opus", "tokens": null,
+ "result": "dlopen/dlclose wait for readers to drain past a retired threshold or a high table top (ruling #5651); concurrent stress 0/240 at 6 and at 12 workers; room test with 13 checks; plants and gate started at hand-back",
+ "branch": "task/dl-dlclose-3", "head": "b4ec9ff46",
+ "gate": {"affected": "pending (dl-dlclose-3-gate1); ld targets 28 passed / 0 failed (dl-dlclose-3-tests3)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "With the retired-count trigger alone the 12-worker stress still failed 4/240: readers always inside some walk leave holes below the newest retired objects (slots reused from the top only); fixed with a second trigger (anything retired and the top past 3/4 of the table)",
+   "Known edge: a dl_iterate_phdr callback left by longjmp, or a thread that exits inside one, stays counted; past the threshold later dlopen/dlclose outside a read section then wait for ever (recorded in the pending dlclose record)",
+   "The thread block gains dl_reading (0x288-0x297, two spare words): the thread's own read sections per parity; makes the never-wait test exact and lets a fork child rebuild the reader counts",
+   "Exit order (ruling #5652) is the follow-up story DL-EXIT-ORDER-PROBE; fini_loaded unchanged"
+ ],
+ "refused": [],
+ "impact": [
+   {"kind": "correctness", "what": "concurrent dlopen/dlclose loop with dl_iterate_phdr readers: 'cannot load more objects' (15/240 runs at load ~25 before; 4/240 at 12 workers with the first trigger only)", "before": 15, "after": 0, "unit": "failed runs of 240", "measured": true},
+   {"kind": "coverage", "what": "new test s27_1_c_4_dlopen_waits_for_readers_only_outside_them (13 checks) and 7 new plants (12 in the file)", "before": null, "after": 7, "unit": "plants added", "measured": true}
+ ],
+ "improvement": "the stress script printed failure details through a grep whose output order hid them; keeping each failing run's full output (fail-<w>-<i>.err) made the second cause visible at once",
+ "next_step": "land after dl-dlclose-3-plants1 and dl-dlclose-3-gate1 pass; then DL-EXIT-ORDER-PROBE",
+ "report_file": "handoff/DL-DLCLOSE.md",
+ "jobs": ["dl-dlclose-3-tests3", "dl-dlclose-3-lint2", "dl-dlclose-3-stress4", "dl-dlclose-3-stress5", "dl-dlclose-3-plants1", "dl-dlclose-3-gate1"]}
