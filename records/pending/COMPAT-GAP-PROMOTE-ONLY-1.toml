@@ -1,0 +1,9 @@
+id = "D-NEW"
+series = "D-X"
+section = "x"
+status = "active"
+story = "COMPAT-GAP-PROMOTE-ONLY"
+date = "2026-11-14"
+body = '''
+**A gap in the COMPAT-n record ids warns on branches and trains and fails only in the next->main promotion run (`LIELLA_PROMOTE=1`)** (COMPAT-GAP-PROMOTE-ONLY, 2026-11-14; same scope as D-X.86). Ids are reserved in order but land in any order, so a gap is normal while stories are in flight. The warning names each missing id. A reference to an id with no record stays fatal everywhere; records are one file per id, so a duplicate cannot occur. Build policy only, no ABI or behaviour change.
+'''
