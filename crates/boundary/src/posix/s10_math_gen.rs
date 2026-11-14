@@ -184,17 +184,17 @@ pub extern "C" fn acos(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn acosf(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::acos)
+    mret::elem32_onepass(x, crate::hot::acosf_onepass, math::real::Real::acos)
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_acosf128_bits(x: F128Bits) -> F128Bits {
-    mret::elem(mret::f128(x), mret::Unit::Sse, math::real::Real::acos)
+    mret::elem(mret::f128(x), mret::Unit::Sse, |v, m| math::wide::acos_sqrt(v, m, crate::hot::sqrtsd))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn acosf32(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::acos)
+    mret::elem32_onepass(x, crate::hot::acosf_onepass, math::real::Real::acos)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -209,7 +209,7 @@ pub extern "C" fn acosf64(x: f64) -> f64 {
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_acosf64x_bits(x: LdBits) -> LdBits {
-    mret::elem(mret::f80(x), mret::Unit::X87, math::real::Real::acos)
+    mret::elem(mret::f80(x), mret::Unit::X87, |v, m| math::wide::acos_sqrt(v, m, crate::hot::sqrtsd))
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -254,7 +254,7 @@ pub extern "C" fn liella_acoshl_bits(x: LdBits) -> LdBits {
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_acosl_bits(x: LdBits) -> LdBits {
-    mret::elem(mret::f80(x), mret::Unit::X87, math::real::Real::acos)
+    mret::elem(mret::f80(x), mret::Unit::X87, |v, m| math::wide::acos_sqrt(v, m, crate::hot::sqrtsd))
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -264,17 +264,17 @@ pub extern "C" fn asin(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn asinf(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::asin)
+    mret::elem32_onepass(x, crate::hot::asinf_onepass, math::real::Real::asin)
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_asinf128_bits(x: F128Bits) -> F128Bits {
-    mret::elem(mret::f128(x), mret::Unit::Sse, math::real::Real::asin)
+    mret::elem(mret::f128(x), mret::Unit::Sse, |v, m| math::wide::asin_sqrt(v, m, crate::hot::sqrtsd))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn asinf32(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::asin)
+    mret::elem32_onepass(x, crate::hot::asinf_onepass, math::real::Real::asin)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -289,7 +289,7 @@ pub extern "C" fn asinf64(x: f64) -> f64 {
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_asinf64x_bits(x: LdBits) -> LdBits {
-    mret::elem(mret::f80(x), mret::Unit::X87, math::real::Real::asin)
+    mret::elem(mret::f80(x), mret::Unit::X87, |v, m| math::wide::asin_sqrt(v, m, crate::hot::sqrtsd))
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -334,7 +334,7 @@ pub extern "C" fn liella_asinhl_bits(x: LdBits) -> LdBits {
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_asinl_bits(x: LdBits) -> LdBits {
-    mret::elem(mret::f80(x), mret::Unit::X87, math::real::Real::asin)
+    mret::elem(mret::f80(x), mret::Unit::X87, |v, m| math::wide::asin_sqrt(v, m, crate::hot::sqrtsd))
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -349,7 +349,7 @@ pub extern "C" fn atan2(x: f64, y: f64) -> f64 {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn atan2f(x: f32, y: f32) -> f32 {
-    mret::elem((x, y), mret::Unit::Sse, |(x, y), m| math::real::Real::atan2(x, y, m))
+    mret::elem32_onepass2(x, y, math::fast32::atan2_onepass_any, |(x, y), m| math::real::Real::atan2(x, y, m))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -359,7 +359,7 @@ pub extern "C" fn liella_atan2f128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn atan2f32(x: f32, y: f32) -> f32 {
-    mret::elem((x, y), mret::Unit::Sse, |(x, y), m| math::real::Real::atan2(x, y, m))
+    mret::elem32_onepass2(x, y, math::fast32::atan2_onepass_any, |(x, y), m| math::real::Real::atan2(x, y, m))
 }}
 
 export! { libm "GLIBC_2.27";
@@ -384,7 +384,7 @@ pub extern "C" fn liella_atan2l_bits(x: LdBits, y: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn atanf(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::atan)
+    mret::elem32_onepass(x, math::fast32::atan_onepass_any, math::real::Real::atan)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -394,7 +394,7 @@ pub extern "C" fn liella_atanf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn atanf32(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::atan)
+    mret::elem32_onepass(x, math::fast32::atan_onepass_any, math::real::Real::atan)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -1064,7 +1064,7 @@ pub extern "C" fn liella_cimagl_bits(x: mret::Complex<LdBits>) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn clog(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::clog)
+    mret::cplx_fast(x, mret::Unit::Sse, math::complex_fast::clog_nearest, math::complex::clog)
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -1109,7 +1109,7 @@ pub extern "C" fn liella_clog10l_bits(x: mret::Complex<LdBits>) -> mret::Complex
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn clogf(x: mret::Complex<f32>) -> mret::Complex<f32> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::clog)
+    mret::cplx_fast(x, mret::Unit::Sse, math::fast32::clogf_nearest, math::complex::clog)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1119,17 +1119,17 @@ pub extern "C" fn liella_clogf128_bits(x: mret::Complex<F128Bits>) -> mret::Comp
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn clogf32(x: mret::Complex<f32>) -> mret::Complex<f32> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::clog)
+    mret::cplx_fast(x, mret::Unit::Sse, math::fast32::clogf_nearest, math::complex::clog)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn clogf32x(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::clog)
+    mret::cplx_fast(x, mret::Unit::Sse, math::complex_fast::clog_nearest, math::complex::clog)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn clogf64(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::clog)
+    mret::cplx_fast(x, mret::Unit::Sse, math::complex_fast::clog_nearest, math::complex::clog)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1229,7 +1229,7 @@ pub extern "C" fn cos(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn cosf(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::cos_nearest, math::real::Real::cos)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::cosf_nearest, math::real::Real::cos)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1239,7 +1239,7 @@ pub extern "C" fn liella_cosf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn cosf32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::cos_nearest, math::real::Real::cos)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::cosf_nearest, math::real::Real::cos)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -1424,12 +1424,12 @@ pub extern "C" fn liella_creall_bits(x: mret::Complex<LdBits>) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn csin(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csin)
+    mret::cplx_fast(x, mret::Unit::Sse, math::complex_fast::csin_nearest, math::complex::csin)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn csinf(x: mret::Complex<f32>) -> mret::Complex<f32> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csin)
+    mret::cplx_fast(x, mret::Unit::Sse, math::fast32::csinf_nearest, math::complex::csin)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1439,17 +1439,17 @@ pub extern "C" fn liella_csinf128_bits(x: mret::Complex<F128Bits>) -> mret::Comp
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn csinf32(x: mret::Complex<f32>) -> mret::Complex<f32> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csin)
+    mret::cplx_fast(x, mret::Unit::Sse, math::fast32::csinf_nearest, math::complex::csin)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn csinf32x(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csin)
+    mret::cplx_fast(x, mret::Unit::Sse, math::complex_fast::csin_nearest, math::complex::csin)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn csinf64(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csin)
+    mret::cplx_fast(x, mret::Unit::Sse, math::complex_fast::csin_nearest, math::complex::csin)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1459,12 +1459,12 @@ pub extern "C" fn liella_csinf64x_bits(x: mret::Complex<LdBits>) -> mret::Comple
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn csinh(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csinh)
+    mret::cplx_fast(x, mret::Unit::Sse, math::complex_fast::csinh_nearest, math::complex::csinh)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn csinhf(x: mret::Complex<f32>) -> mret::Complex<f32> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csinh)
+    mret::cplx_fast(x, mret::Unit::Sse, math::fast32::csinhf_nearest, math::complex::csinh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1474,17 +1474,17 @@ pub extern "C" fn liella_csinhf128_bits(x: mret::Complex<F128Bits>) -> mret::Com
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn csinhf32(x: mret::Complex<f32>) -> mret::Complex<f32> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csinh)
+    mret::cplx_fast(x, mret::Unit::Sse, math::fast32::csinhf_nearest, math::complex::csinh)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn csinhf32x(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csinh)
+    mret::cplx_fast(x, mret::Unit::Sse, math::complex_fast::csinh_nearest, math::complex::csinh)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn csinhf64(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csinh)
+    mret::cplx_fast(x, mret::Unit::Sse, math::complex_fast::csinh_nearest, math::complex::csinh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1504,12 +1504,12 @@ pub extern "C" fn liella_csinl_bits(x: mret::Complex<LdBits>) -> mret::Complex<L
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn csqrt(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csqrt)
+    mret::cplx_fast(x, mret::Unit::Sse, crate::hot::csqrt_nearest, math::complex::csqrt)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn csqrtf(x: mret::Complex<f32>) -> mret::Complex<f32> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csqrt)
+    mret::cplx_fast(x, mret::Unit::Sse, crate::hot::csqrtf_nearest, math::complex::csqrt)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1519,17 +1519,17 @@ pub extern "C" fn liella_csqrtf128_bits(x: mret::Complex<F128Bits>) -> mret::Com
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn csqrtf32(x: mret::Complex<f32>) -> mret::Complex<f32> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csqrt)
+    mret::cplx_fast(x, mret::Unit::Sse, crate::hot::csqrtf_nearest, math::complex::csqrt)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn csqrtf32x(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csqrt)
+    mret::cplx_fast(x, mret::Unit::Sse, crate::hot::csqrt_nearest, math::complex::csqrt)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn csqrtf64(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::csqrt)
+    mret::cplx_fast(x, mret::Unit::Sse, crate::hot::csqrt_nearest, math::complex::csqrt)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1757,7 +1757,7 @@ pub extern "C" fn liella_erfl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.29";
 pub extern "C" fn exp(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::exp_nearest, math::real::Real::exp)
+    mret::elem_fast_dir::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::exp_nearest, crate::hot::exp_directed, math::real::Real::exp)
 }}
 
 export! { libm "GLIBC_2.39";
@@ -1767,7 +1767,7 @@ pub extern "C" fn exp10(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.32";
 pub extern "C" fn exp10f(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::exp10_nearest, math::real::Real::exp10)
+    mret::elem32_onepass(x, math::fast32::exp10_onepass_any, math::real::Real::exp10)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1777,7 +1777,7 @@ pub extern "C" fn liella_exp10f128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn exp10f32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::exp10_nearest, math::real::Real::exp10)
+    mret::elem32_onepass(x, math::fast32::exp10_onepass_any, math::real::Real::exp10)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -1857,12 +1857,12 @@ pub extern "C" fn expf32(x: f32) -> f32 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn expf32x(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::exp_nearest, math::real::Real::exp)
+    mret::elem_fast_dir::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::exp_nearest, crate::hot::exp_directed, math::real::Real::exp)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn expf64(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::exp_nearest, math::real::Real::exp)
+    mret::elem_fast_dir::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::exp_nearest, crate::hot::exp_directed, math::real::Real::exp)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3813,7 +3813,7 @@ pub extern "C" fn log10(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn log10f(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::log10_nearest, math::real::Real::log10)
+    mret::elem32_onepass(x, math::fast32::log10_onepass_any, math::real::Real::log10)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3823,7 +3823,7 @@ pub extern "C" fn liella_log10f128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn log10f32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::log10_nearest, math::real::Real::log10)
+    mret::elem32_onepass(x, math::fast32::log10_onepass_any, math::real::Real::log10)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -3893,7 +3893,7 @@ pub extern "C" fn log2(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn log2f(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::log2_nearest, math::real::Real::log2)
+    mret::elem32_onepass(x, math::fast32::log2_onepass_any, math::real::Real::log2)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3903,7 +3903,7 @@ pub extern "C" fn liella_log2f128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn log2f32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::log2_nearest, math::real::Real::log2)
+    mret::elem32_onepass(x, math::fast32::log2_onepass_any, math::real::Real::log2)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -3973,7 +3973,7 @@ pub extern "C" fn liella_logbl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn logf(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::log_nearest, math::real::Real::log)
+    mret::elem32_onepass(x, math::fast32::log_onepass_any, math::real::Real::log)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3983,7 +3983,7 @@ pub extern "C" fn liella_logf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn logf32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::log_nearest, math::real::Real::log)
+    mret::elem32_onepass(x, math::fast32::log_onepass_any, math::real::Real::log)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -4867,7 +4867,7 @@ pub extern "C" fn sincos(x: f64, y: Option<&mut f64>, z: Option<&mut f64>) {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn sincosf(x: f32, y: Option<&mut f32>, z: Option<&mut f32>) {
-    mret::sincos(x, mret::Unit::Sse, math::real::Real::sincos, y, z)
+    mret::sincos_fast::<{ math::Status::HW_ANY.0 }, _>(x, crate::hot::sincosf_nearest, math::real::Real::sincos, y, z)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4877,7 +4877,7 @@ pub extern "C" fn liella_sincosf128_bits(x: F128Bits, y: Option<&mut F128Bits>, 
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn sincosf32(x: f32, y: Option<&mut f32>, z: Option<&mut f32>) {
-    mret::sincos(x, mret::Unit::Sse, math::real::Real::sincos, y, z)
+    mret::sincos_fast::<{ math::Status::HW_ANY.0 }, _>(x, crate::hot::sincosf_nearest, math::real::Real::sincos, y, z)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -4902,7 +4902,7 @@ pub extern "C" fn liella_sincosl_bits(x: LdBits, y: Option<&mut LdBits>, z: Opti
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn sinf(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::sin_nearest, math::real::Real::sin)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::sinf_nearest, math::real::Real::sin)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4912,7 +4912,7 @@ pub extern "C" fn liella_sinf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn sinf32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::sin_nearest, math::real::Real::sin)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::sinf_nearest, math::real::Real::sin)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -5022,7 +5022,7 @@ pub extern "C" fn tan(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn tanf(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::tan_nearest, math::real::Real::tan)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::tanf_nearest, math::real::Real::tan)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -5032,7 +5032,7 @@ pub extern "C" fn liella_tanf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn tanf32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::tan_nearest, math::real::Real::tan)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::tanf_nearest, math::real::Real::tan)
 }}
 
 export! { libm "GLIBC_2.27";

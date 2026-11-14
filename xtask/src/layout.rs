@@ -24,7 +24,7 @@ const HEADER: [&str; 6] = ["id", "kind", "subjects", "rule", "reason", "decision
 /// Kinds whose contract is held by a directive in the source (alignment attribute, `.p2align`, `.org`): a row of one
 /// of them needs a `LAYOUT(<ID>)` tag at that directive.
 const SITE_KINDS: &[&str] = &["classed-xref", "object-window", "object-align", "section-offset", "label-align"];
-const KINDS: &[&str] = &["fn-align", "classed-xref", "jcc", "section-rename", "object-window", "object-align", "section-offset", "label-align", "remap", "startup-text-windows"];
+const KINDS: &[&str] = &["fn-align", "classed-xref", "jcc", "section-rename", "object-window", "object-align", "section-offset", "label-align", "remap", "startup-text-windows", "startup-data-windows"];
 const DIRECTIVES: &[&str] = &[".p2align", ".balign", ".align ", ".org ", "align("];
 
 #[derive(Clone, Debug, PartialEq)]
@@ -39,7 +39,7 @@ pub struct Contract {
 
 impl Contract {
     /// The rule's `key=value` pairs (`; `-separated).
-    fn params(&self) -> Result<BTreeMap<String, String>, String> {
+    pub(crate) fn params(&self) -> Result<BTreeMap<String, String>, String> {
         let mut m = BTreeMap::new();
         for p in self.rule.split(';').map(str::trim).filter(|p| !p.is_empty()) {
             let (k, v) = p.split_once('=').ok_or_else(|| format!("layout: {}: rule part `{p}` is not key=value", self.id))?;
@@ -404,46 +404,51 @@ fn check_one(c: &Contract, pr: &mut Products) -> Result<String, Vec<String>> {
             Ok(format!("{n} products carry no build path"))
         }
         "startup-text-windows" => check_startup_windows(c, &p, pr),
+        "startup-data-windows" => check_startup_data(c, &p, pr),
         k => Err(one(format!("layout: {}: unknown kind `{k}` (known: {})", c.id, KINDS.join(", ")))),
     }
 }
 
-/// HOTTEXT-REGEN-UNBLOCK for the layout: a contract whose verdict follows the hot-text ORDER (`startup-text-windows`:
-/// where the start-up functions land in the group) is reported, not enforced, in the regen build of
-/// `tools/hottext/regen.sh --build`. That build is what the script traces to rewrite the order, so a list made by one
-/// profile's trace (its touch order moves a function only the other profile's start-up runs) would otherwise block its
-/// own repair in that other profile. regen.sh rebuilds with plain `cargo xtask so` after rewriting the list, and that
-/// build enforces every contract; nothing else can pass the flag (hottext::static_check).
-fn waived_in_regen(kind: &str, regen: bool) -> bool {
-    regen && kind == "startup-text-windows"
+/// Check every contract on the products in `dir` (built with `profile`, when known); one line per contract, every
+/// failure listed. A pass already proven for the same products, inputs, tools and checker is served from the verdict
+/// cache (`layout_verdict`), except under the CI train.
+pub fn check_products(root: &Path, dir: &Path, profile: Option<&str>) -> Result<(), String> {
+    crate::layout_verdict::check(root, dir, profile, || check_products_full(root, dir, profile))
 }
 
-/// Check every contract on the products in `dir` (built with `profile`, when known); one line per contract, every
-/// failure listed.
-pub fn check_products(root: &Path, dir: &Path, profile: Option<&str>) -> Result<(), String> {
+/// Every contract checked on the products; on a pass, the lines printed (for the verdict cache).
+fn check_products_full(root: &Path, dir: &Path, profile: Option<&str>) -> Result<Vec<String>, String> {
     let contracts = load(root)?;
     let mut pr = Products { root, dir, profile: profile.map(str::to_string), index: BTreeMap::new() };
     let mut bad = Vec::new();
-    let regen = crate::hottext::regen_on();
+    let mut ok = Vec::new();
+    let (all, mut slowest) = (std::time::Instant::now(), (0.0, String::new()));
     for c in &contracts {
-        match check_one(c, &mut pr) {
-            Ok(s) => println!("layout: {} ok: {s} ({})", c.id, c.decision),
+        let t = std::time::Instant::now();
+        let r = check_one(c, &mut pr);
+        let s = t.elapsed().as_secs_f64();
+        if s > slowest.0 {
+            slowest = (s, c.id.clone());
+        }
+        match r {
+            Ok(s) => {
+                ok.push(format!("layout: {} ok: {s} ({})", c.id, c.decision));
+                println!("{}", ok[ok.len() - 1]);
+            }
             Err(lines) => {
                 for l in &lines {
                     eprintln!("{l}");
                 }
                 eprintln!("layout: {} protects: {}", c.id, c.reason);
-                if waived_in_regen(&c.kind, regen) {
-                    println!("layout: {}: NOT enforced for this {} build (regen.sh rewrites the hot-text order, then rebuilds and checks it)", c.id, crate::hottext::REGEN_FLAG);
-                    continue;
-                }
                 bad.push(c.id.clone());
             }
         }
     }
+    println!("layout: {} contracts checked in {:.1} s (slowest {} {:.1} s)", contracts.len(), all.elapsed().as_secs_f64(), slowest.1, slowest.0);
     if bad.is_empty() {
-        println!("layout: all {} contracts of {MANIFEST} hold in {}", contracts.len(), dir.display());
-        Ok(())
+        ok.push(format!("layout: all {} contracts of {MANIFEST} hold in {}", contracts.len(), dir.display()));
+        println!("{}", ok[ok.len() - 1]);
+        Ok(ok)
     } else {
         Err(format!("layout: {} of {} contracts broken: {}", bad.len(), contracts.len(), bad.join(", ")))
     }
@@ -453,8 +458,8 @@ pub fn check_products(root: &Path, dir: &Path, profile: Option<&str>) -> Result<
 // STARTUP-TEXT-WINDOWS (D-X.49): the start-up text of the static probe in few 64 KiB windows
 //
 // A static program's text is a file mapping, and the first touch of each 64 KiB window of it costs one page fault
-// (fault-around maps the window). The functions `page_faults true` runs (keys in the row's `keys=` file, written by
-// `tools/hottext/regen.sh`) must occupy at most `budget-<profile>=` distinct windows of `page_faults.c` linked from the
+// (fault-around maps the window). The functions `page_faults true` runs (keys in the row's `keys=` list, written by
+// the trace of the build, `tools/hottext/regen.sh` run by `cargo xtask so`) must occupy at most `budget-<profile>=` distinct windows of `page_faults.c` linked from the
 // products as `crates/core/tests/hot_text_products.rs` links it, and none outside the hot group (D-X.20) may straddle
 // a window boundary. STARTUP-TEXT-GROUPED (`grouped=error|warn`): every start-up function of `libc.a` lies in the
 // hot group. Products and counters only: no timing, no tracing at check time.
@@ -642,7 +647,7 @@ fn startup_verdict(c: &Contract, t: &StartupText, window: u64, budget: u64, grou
     if !grouped.is_empty() {
         let what = format!("STARTUP-TEXT-GROUPED: {} start-up functions of libc.a outside the hot group 0x{lo:x}-0x{hi:x}: {}", grouped.len(), grouped.join(", "));
         if grouped_error {
-            bad.push(c.broken(&what, "add their keys to crates/libc-so/hot-text.list (tools/hottext/regen.sh)"));
+            bad.push(c.broken(&what, "the trace of this build did not group them (cargo xtask so traces the layout: see target/product/<profile>/trace.log)"));
         } else {
             summary += &format!("\nlayout: {} WARNING {what}", c.id);
         }
@@ -660,8 +665,17 @@ fn startup_verdict(c: &Contract, t: &StartupText, window: u64, budget: u64, grou
     Err(lines)
 }
 
-/// Link `page_faults.c` against the products as `hot_text_products.rs` does, with a link map; `(nm -S, map)` text.
-fn link_startup_probe(pr: &Products) -> Result<(String, String), String> {
+/// The linked start-up probe, as text: `nm -S`, the link map, `readelf -SW`, and (when asked) `objdump -d`.
+struct Probe {
+    nm: String,
+    map: String,
+    sections: String,
+    disasm: String,
+}
+
+/// Link `page_faults.c` against the products as `hot_text_products.rs` does, with a link map; `disasm`: also
+/// disassemble it.
+fn link_startup_probe(pr: &Products, disasm: bool) -> Result<Probe, String> {
     let work = std::env::temp_dir().join(format!("liella-layout-startup-{}", std::process::id()));
     std::fs::create_dir_all(&work).map_err(|e| format!("{}: {e}", work.display()))?;
     let (exe, map) = (work.join("page_faults"), work.join("page_faults.map"));
@@ -678,7 +692,12 @@ fn link_startup_probe(pr: &Products) -> Result<(String, String), String> {
         "cc page_faults.c (the start-up probe)",
     )
     .and_then(|_| tool(Command::new("nm").args(["-S", "--defined-only"]).arg(&exe), "nm -S page_faults"))
-    .and_then(|nm| std::fs::read_to_string(&map).map(|m| (nm, m)).map_err(|e| format!("{}: {e}", map.display())));
+    .and_then(|nm| std::fs::read_to_string(&map).map(|m| (nm, m)).map_err(|e| format!("{}: {e}", map.display())))
+    .and_then(|(nm, map)| tool(Command::new("readelf").arg("-SW").arg(&exe), "readelf -SW page_faults").map(|sections| Probe { nm, map, sections, disasm: String::new() }))
+    .and_then(|p| match disasm {
+        true => tool(Command::new("objdump").args(["-d", "--no-show-raw-insn"]).arg(&exe), "objdump -d page_faults").map(|disasm| Probe { disasm, ..p }),
+        false => Ok(p),
+    });
     let _ = std::fs::remove_dir_all(&work);
     linked
 }
@@ -695,20 +714,246 @@ fn check_startup_windows(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Pr
         g => return Err(one(format!("layout: {}: grouped={g}: want error or warn", c.id))),
     };
     let path = param(p, c, "keys").map_err(one)?;
-    let text = std::fs::read_to_string(pr.root.join(path)).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
+    let text = std::fs::read_to_string(crate::hotlists::rel(pr.root, path).map_err(one)?).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     let keys = startup_keys(&text, &profile).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     if keys.is_empty() {
-        return Err(one(format!("layout: {}: {path}: no start-up key traced in profile {profile} (run tools/hottext/regen.sh)", c.id)));
+        return Err(one(format!("layout: {}: {path}: no start-up key traced in profile {profile} (rebuild: cargo xtask so traces the layout)", c.id)));
     }
     for f in &c.subjects {
         pr.file(f).map_err(|e| one(c.broken(f, &e)))?;
     }
-    let (nm, map) = link_startup_probe(pr).map_err(|e| one(format!("layout: {}: {e}", c.id)))?;
-    let t = startup_text(&keys, &parse_nm(&nm), &parse_map(&map), window).map_err(|e| one(format!("layout: {}: {e}", c.id)))?;
+    let probe = link_startup_probe(pr, false).map_err(|e| one(format!("layout: {}: {e}", c.id)))?;
+    let t = startup_text(&keys, &parse_nm(&probe.nm), &parse_map(&probe.map), window).map_err(|e| one(format!("layout: {}: {e}", c.id)))?;
     if t.missing.len() == keys.len() {
         return Err(one(c.broken("start-up keys", &format!("none of the {} keys of {path} names a function of the probe", keys.len()))));
     }
     startup_verdict(c, &t, window, budget, grouped_error, &profile).map(|s| format!("{s}; {} of {} start-up functions found", keys.len() - t.missing.len(), keys.len()))
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// STARTUP-DATA-WINDOWS (D-X.50): the start-up data objects of the static probe in few windows and pages
+//
+// The read-only objects start-up reads sit in the file mapping: the first touch of each 64 KiB window costs one fault
+// (fault-around), as for text. The writable ones (.data, .bss, .lbss, ...) are private: every 4 KiB page start-up
+// touches costs its own fault. The objects (keys in the row's `keys=` file, written by `tools/hottext/startup_data.py`
+// from `perf record -e page-faults -d` and the start-up functions' RIP-relative operands) must occupy at most
+// `ro-budget-<profile>=` windows and `rw-budget-<profile>=` pages of `page_faults.c` linked as for STARTUP-TEXT-WINDOWS.
+// The kind is the section's in the link being checked, so an object moved between .rodata and .data is counted where
+// it now lies. An object larger than a window or page counts the units of its head only. The start-up functions'
+// RIP-relative operands are also resolved at check time (`text-keys=`), named or not, so an object no key names (a
+// start-up name moved out of STARTUP_NAMES into a literal of its own) is counted too. Over a budget, the objects alone
+// in a window or page are named: each costs a fault of its own.
+
+/// The page the written start-up objects are counted in (bytes). The row's `page=` must equal it.
+const STARTUP_PAGE: u64 = 1 << 12;
+
+/// An allocated section of the linked probe.
+#[derive(Clone, Debug, PartialEq)]
+struct ExeSection {
+    start: u64,
+    end: u64,
+    name: String,
+    writable: bool,
+    /// Code (`X`): not where a data object is counted.
+    skip: bool,
+}
+
+/// `readelf -SW` of the linked probe -> its allocated sections.
+fn parse_exe_sections(text: &str) -> Vec<ExeSection> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let Some((_, rest)) = line.split_once(']') else { continue };
+        let f: Vec<&str> = rest.split_whitespace().collect();
+        // Name Type Address Off Size ES Flg Lk Inf Al: a section without flags has one field fewer.
+        // TLS sections are left out: in a linked program a TLS symbol's value is its offset in the TLS block, and the
+        // section's address range overlaps the next section's.
+        if f.len() != 10 || !f[6].contains('A') || f[6].contains('T') {
+            continue;
+        }
+        let (Ok(start), Ok(size)) = (u64::from_str_radix(f[2], 16), u64::from_str_radix(f[4], 16)) else { continue };
+        out.push(ExeSection { start, end: start + size, name: f[0].to_string(), writable: f[6].contains('W'), skip: f[6].contains('X') });
+    }
+    out
+}
+
+/// A data object of the linked probe: `[start, end)`, its linked name, and whether its section is writable.
+#[derive(Clone, Debug, PartialEq)]
+struct DataObj {
+    start: u64,
+    end: u64,
+    name: String,
+    rw: bool,
+}
+
+/// `nm -S --defined-only` -> the data objects by build-stable key, classed by the section they lie in (TLS and objects
+/// outside an allocated section are not counted).
+fn parse_nm_data(text: &str, secs: &[ExeSection]) -> BTreeMap<String, Vec<DataObj>> {
+    let mut out: BTreeMap<String, Vec<DataObj>> = BTreeMap::new();
+    for line in text.lines() {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        let (addr, size, ty, name) = match f.as_slice() {
+            [a, s, t, n] => (*a, Some(*s), *t, *n),
+            [a, t, n] => (*a, None, *t, *n),
+            _ => continue,
+        };
+        if !matches!(ty, "d" | "D" | "b" | "B" | "r" | "R" | "v" | "V" | "g" | "G" | "s" | "S") {
+            continue;
+        }
+        let (Ok(start), Ok(size)) = (u64::from_str_radix(addr, 16), size.map_or(Ok(0), |s| u64::from_str_radix(s, 16))) else {
+            continue;
+        };
+        let Some(sec) = secs.iter().find(|s| (s.start..s.end).contains(&start)) else { continue };
+        if sec.skip {
+            continue;
+        }
+        out.entry(crate::hottext::key(name)).or_default().push(DataObj { start, end: start + size.max(1), name: name.to_string(), rw: sec.writable });
+    }
+    out
+}
+
+/// What the start-up data objects occupy in the linked probe.
+#[derive(Debug, Default, PartialEq)]
+struct StartupData {
+    /// Every 64 KiB window a read-only start-up object touches, with the objects in it.
+    windows: BTreeMap<u64, Vec<DataObj>>,
+    /// Every 4 KiB page a written start-up object touches, with the objects in it.
+    pages: BTreeMap<u64, Vec<DataObj>>,
+    /// Keys with no object in this link.
+    missing: Vec<String>,
+}
+
+/// The RIP-relative targets (`# <addr>` in `objdump -d`) of the functions whose key is in `fns`: `(address, function)`.
+fn operand_targets(disasm: &str, fns: &BTreeSet<String>) -> Vec<(u64, String)> {
+    let mut out = Vec::new();
+    let mut cur: Option<String> = None;
+    for line in disasm.lines() {
+        if let Some(head) = line.strip_suffix(">:") {
+            cur = head.split_once(" <").map(|(_, n)| n.to_string()).filter(|n| fns.contains(&crate::hottext::key(n)));
+            continue;
+        }
+        let (Some(f), Some((_, t))) = (&cur, line.split_once("# ")) else { continue };
+        if let Some(a) = t.split_whitespace().next().and_then(|h| u64::from_str_radix(h, 16).ok()) {
+            out.push((a, f.clone()));
+        }
+    }
+    out
+}
+
+/// The objects holding `targets`: the smallest named object around each address, else the unnamed byte itself (a
+/// string literal, a constant of no symbol), named by its section and the start-up function that addresses it. Text and
+/// TLS targets are not data.
+fn target_objects(targets: &[(u64, String)], objs: &BTreeMap<String, Vec<DataObj>>, secs: &[ExeSection]) -> Vec<DataObj> {
+    let all: Vec<&DataObj> = objs.values().flatten().collect();
+    let mut out = Vec::new();
+    for (a, f) in targets {
+        let Some(sec) = secs.iter().find(|s| (s.start..s.end).contains(a)) else { continue };
+        if sec.skip {
+            continue;
+        }
+        match all.iter().filter(|o| (o.start..o.end).contains(a)).min_by_key(|o| o.end - o.start) {
+            Some(o) => out.push((*o).clone()),
+            None => out.push(DataObj { start: *a, end: a + 1, name: format!("<unnamed {} byte addressed by {f}>", sec.name), rw: sec.writable }),
+        }
+    }
+    out
+}
+
+/// Count the objects of `keys` and the `operands` objects of the start-up functions in windows (read-only) and pages
+/// (written).
+fn startup_data(keys: &[String], objs: &BTreeMap<String, Vec<DataObj>>, operands: &[DataObj], window: u64, page: u64) -> StartupData {
+    let mut d = StartupData::default();
+    let mut seen = BTreeSet::new();
+    let mut found: Vec<&DataObj> = Vec::new();
+    for k in keys {
+        match objs.get(k) {
+            Some(list) => found.extend(list),
+            None => d.missing.push(k.clone()),
+        }
+    }
+    found.extend(operands);
+    {
+        for o in found {
+            if !seen.insert((o.start, o.name.clone())) {
+                continue;
+            }
+            let (map, unit) = if o.rw { (&mut d.pages, page) } else { (&mut d.windows, window) };
+            // An object larger than the unit counts the units of its first `unit` bytes: start-up touches the head of a
+            // large buffer (the heap's reserve), and counting all of it would hide a one-unit move behind its size.
+            for u in window_of(o.start, unit)..=window_of(o.end.min(o.start + unit) - 1, unit) {
+                map.entry(u).or_default().push(o.clone());
+            }
+        }
+    }
+    d
+}
+
+/// The verdict on `d`: `Ok(summary)` or `Err(lines)` listing every window or page of an over-budget class and naming,
+/// as BROKEN, each object that sits alone in one.
+fn startup_data_verdict(c: &Contract, d: &StartupData, (window, page): (u64, u64), (ro_budget, rw_budget): (u64, u64), profile: &str) -> Result<String, Vec<String>> {
+    let (nro, nrw) = (d.windows.len() as u64, d.pages.len() as u64);
+    let mut summary = format!(
+        "{nro} read-only start-up data windows of {window} bytes (ro-budget-{profile} {ro_budget}), {nrw} written start-up data pages of {page} bytes (rw-budget-{profile} {rw_budget})"
+    );
+    if !d.missing.is_empty() {
+        summary += &format!("; not in this link: {}", d.missing.join(" "));
+    }
+    let mut lines = vec![format!("layout: {}: {summary}", c.id)];
+    let mut bad = Vec::new();
+    for (what, units, unit, n, budget, class) in
+        [("window", &d.windows, window, nro, ro_budget, "ro"), ("page", &d.pages, page, nrw, rw_budget, "rw")]
+    {
+        if n <= budget {
+            continue;
+        }
+        let alone = bad.len();
+        for (u, objs) in units {
+            let names: Vec<String> = objs.iter().map(|o| format!("{} 0x{:x}-0x{:x}", o.name, o.start, o.end)).collect();
+            lines.push(format!("layout: {}:   {what} 0x{:x}: {}", c.id, u * unit, names.join(", ")));
+            if let [o] = objs.as_slice() {
+                bad.push(c.broken(&o.name, &format!("sits alone in the {unit}-byte {what} 0x{:x}: {n} {what}s > {class}-budget-{profile} {budget}", u * unit)));
+            }
+        }
+        if bad.len() == alone {
+            bad.push(c.broken(&format!("{n} {what}s"), &format!("start-up {class} data spans {n} {what}s of {unit} bytes > {class}-budget-{profile} {budget}")));
+        }
+    }
+    if bad.is_empty() {
+        return Ok(summary);
+    }
+    lines.extend(bad);
+    Err(lines)
+}
+
+fn check_startup_data(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Products) -> Result<String, Vec<String>> {
+    let one = |e: String| vec![e];
+    let window = param_num(p, c, "window").map_err(one)?;
+    same(c, "window", window, STARTUP_WINDOW).map_err(one)?;
+    let page = param_num(p, c, "page").map_err(one)?;
+    same(c, "page", page, STARTUP_PAGE).map_err(one)?;
+    let profile = pr.profile.clone().ok_or_else(|| one(format!("layout: {}: the products' profile is unknown (no {}/.profile)", c.id, pr.dir.display())))?;
+    let ro_budget = param_num(p, c, &format!("ro-budget-{profile}")).map_err(one)?;
+    let rw_budget = param_num(p, c, &format!("rw-budget-{profile}")).map_err(one)?;
+    let path = param(p, c, "keys").map_err(one)?;
+    let text = std::fs::read_to_string(crate::hotlists::rel(pr.root, path).map_err(one)?).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
+    let keys = startup_keys(&text, &profile).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
+    if keys.is_empty() {
+        return Err(one(format!("layout: {}: {path}: no start-up object traced in profile {profile} (rebuild: cargo xtask so traces the layout)", c.id)));
+    }
+    for f in &c.subjects {
+        pr.file(f).map_err(|e| one(c.broken(f, &e)))?;
+    }
+    let tpath = param(p, c, "text-keys").map_err(one)?;
+    let ttext = std::fs::read_to_string(crate::hotlists::rel(pr.root, tpath).map_err(one)?).map_err(|e| one(format!("layout: {}: {tpath}: {e}", c.id)))?;
+    let fns: BTreeSet<String> = startup_keys(&ttext, &profile).map_err(|e| one(format!("layout: {}: {tpath}: {e}", c.id)))?.into_iter().collect();
+    let probe = link_startup_probe(pr, true).map_err(|e| one(format!("layout: {}: {e}", c.id)))?;
+    let secs = parse_exe_sections(&probe.sections);
+    let objs = parse_nm_data(&probe.nm, &secs);
+    let operands = target_objects(&operand_targets(&probe.disasm, &fns), &objs, &secs);
+    let d = startup_data(&keys, &objs, &operands, window, page);
+    if d.missing.len() == keys.len() {
+        return Err(one(c.broken("start-up objects", &format!("none of the {} keys of {path} names an object of the probe", keys.len()))));
+    }
+    startup_data_verdict(c, &d, (window, page), (ro_budget, rw_budget), &profile).map(|s| format!("{s}; {} of {} start-up objects found", keys.len() - d.missing.len(), keys.len()))
 }
 
 /// The profile recorded in `<dir>/.profile` (written last by `cargo xtask so`).
@@ -758,9 +1003,28 @@ fn decision_ids(root: &Path) -> Result<BTreeSet<String>, String> {
     Ok(out)
 }
 
-/// Whether `changed` holds a decision change (a file under one of `DECISION_DIRS`).
+/// Where a new record waits for the id the coordinator assigns (D-X.55); CI holds the branch until then.
+const PENDING_DIR: &str = "records/pending/";
+
+/// Whether `changed` holds a decision change: a file under one of `DECISION_DIRS`, or a pending decision record
+/// under `PENDING_DIR` (`rule_d_inputs` keeps only the pending records that are decisions, see
+/// [`pending_is_decision`]).
 fn decision_change(changed: &[String]) -> bool {
-    changed.iter().any(|f| DECISION_DIRS.iter().any(|d| f.starts_with(d)))
+    changed.iter().any(|f| DECISION_DIRS.iter().any(|d| f.starts_with(d)) || f.starts_with(PENDING_DIR))
+}
+
+/// Whether a pending record's text is a decision record: its `id` names a D-id (the placeholder or a reserved one), not
+/// a compatibility flag or a saturation claim.
+fn pending_is_decision(text: &str) -> bool {
+    text.lines().any(|l| {
+        l.strip_prefix("id").map(str::trim_start).and_then(|r| r.strip_prefix('=')).is_some_and(|v| v.trim_start().starts_with("\"D-"))
+    })
+}
+
+/// `changed` without the pending records that are not decision records (`read` gives a file's text; a pending
+/// record that is gone or unreadable is dropped too).
+fn keep_pending_decisions(changed: Vec<String>, read: impl Fn(&str) -> Option<String>) -> Vec<String> {
+    changed.into_iter().filter(|f| !f.starts_with(PENDING_DIR) || read(f).is_some_and(|t| pending_is_decision(&t))).collect()
 }
 
 /// The rows' own problems: kind known, D-row present.
@@ -854,9 +1118,11 @@ fn git(root: &Path, args: &[&str]) -> Option<String> {
 }
 
 /// The base the branch is compared with, as `affected` does: `origin/next` where it exists, else `origin/main`.
+/// A changed pending record stays in the list only when it is a decision record (one that is gone or unreadable
+/// does not count).
 fn rule_d_inputs(root: &Path) -> Result<(Vec<String>, Option<Vec<Contract>>), String> {
     let base = if git(root, &["rev-parse", "--verify", "--quiet", "origin/next"]).is_some() { "origin/next" } else { "origin/main" };
-    let changed = crate::affected::changed_files(root, base)?;
+    let changed = keep_pending_decisions(crate::affected::changed_files(root, base)?, |f| std::fs::read_to_string(root.join(f)).ok());
     if !changed.iter().any(|f| f == MANIFEST) {
         return Ok((changed, Some(Vec::new())));
     }
@@ -910,9 +1176,14 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("--static") => static_check(root),
         Some(d) if d.starts_with('-') => Err(format!("layout-check: unknown option {d} (usage: layout-check [--static | <products dir>])")),
-        Some(d) => check_products(root, Path::new(d), marker_profile(Path::new(d)).as_deref()),
+        // LAYOUT-TRACE-AT-BUILD: products grouped from a trace of their own build are checked against those lists.
+        Some(d) => {
+            crate::hotlists::follow_products(Path::new(d));
+            check_products(root, Path::new(d), marker_profile(Path::new(d)).as_deref())
+        }
         None => {
             let d = root.join("target/liella");
+            crate::hotlists::follow_products(&d);
             check_products(root, &d, marker_profile(&d).as_deref())
         }
     }
@@ -924,15 +1195,6 @@ mod tests {
 
     fn row(id: &str, rule: &str) -> Contract {
         Contract { id: id.into(), kind: "object-align".into(), subjects: vec!["libc.a:X".into()], rule: rule.into(), reason: "r".into(), decision: "D-X.48".into() }
-    }
-
-    #[test]
-    fn only_the_order_contract_is_waived_and_only_in_the_regen_build() {
-        // no spec clause: tooling (D-X.49, HOTTEXT-REGEN-UNBLOCK): a plain build enforces every kind.
-        for k in KINDS {
-            assert!(!waived_in_regen(k, false), "{k} waived outside the regen build");
-            assert_eq!(waived_in_regen(k, true), *k == "startup-text-windows", "{k}");
-        }
     }
 
     #[test]
@@ -975,10 +1237,34 @@ mod tests {
         assert!(rule_d(&rec, Some(&base), &loosened).is_empty(), "with a decision record change (D-X.55)");
         let near = vec![MANIFEST.to_string(), "records/compat/COMPAT-1.toml".to_string()];
         assert_eq!(rule_d(&near, Some(&base), &loosened).len(), 1, "another record is not a decision change");
+        let pend = vec![MANIFEST.to_string(), "records/pending/STORY-1.toml".to_string()];
+        assert!(rule_d(&pend, Some(&base), &loosened).is_empty(), "with a pending decision record (D-X.55)");
+        assert!(rule_d(&pend, None, &loosened).is_empty(), "a pending decision record in a tree without history");
         assert!(rule_d(&other, Some(&base), &loosened).is_empty(), "the manifest did not change");
         assert!(rule_d(&m, Some(&base), &[a.clone(), b.clone(), row("C", "align=8")]).is_empty(), "an added row");
         assert!(rule_d(&m, Some(&[]), &base).is_empty(), "a new manifest");
         assert_eq!(rule_d(&m, None, &base).len(), 1, "unknown base: the change needs a decision change");
+    }
+
+    #[test]
+    fn only_a_pending_decision_record_counts_as_a_decision_change() {
+        // no spec clause: tooling (D-X.48 rule d with D-X.55's pending records).
+        assert!(pending_is_decision("id = \"D-X.91\"\nseries = \"D-X\"\n"));
+        assert!(pending_is_decision("id=\"D-X.90\"\n"));
+        assert!(!pending_is_decision("id = \"COMPAT-7\"\ndecisions = [\"D-X.48\"]\n"), "a compatibility flag");
+        assert!(!pending_is_decision("id = \"SR-4.2\"\n"), "a saturation claim");
+        assert!(!pending_is_decision("ids = \"D-X.91\"\n"), "another key");
+        assert!(!pending_is_decision("id = \"SR-4.2\"\nbody = '''\n  id = \"D-X.91\" quoted\n'''\n"), "an indented line of the body");
+        let read = |f: &str| match f {
+            "records/pending/A-1.toml" => Some("id = \"D-X.91\"\n".to_string()),
+            "records/pending/A-2.toml" => Some("id = \"COMPAT-7\"\n".to_string()),
+            _ => None,
+        };
+        let changed = ["layout/contracts.tsv", "records/pending/A-1.toml", "records/pending/A-2.toml", "records/pending/gone.toml"];
+        let kept = keep_pending_decisions(changed.iter().map(|s| s.to_string()).collect(), read);
+        assert_eq!(kept, ["layout/contracts.tsv", "records/pending/A-1.toml"], "other files stay; only the pending decision record is kept");
+        let compat_only = keep_pending_decisions(vec![MANIFEST.to_string(), "records/pending/A-2.toml".to_string()], read);
+        assert_eq!(rule_d(&compat_only, None, &[]).len(), 1, "a pending compatibility flag is no decision change");
     }
 
     #[test]
@@ -1116,5 +1402,98 @@ mod tests {
         let t = startup_text(&keys(), &parse_nm(&nm), &parse_map(&map), STARTUP_WINDOW).unwrap();
         assert!(t.windows[&0x40].iter().any(|f| f.name == "foo") && t.windows[&0x41].iter().any(|f| f.name == "foo") && t.straddling.is_empty());
         assert!(startup_text(&keys(), &parse_nm(&nm), &[], STARTUP_WINDOW).is_err(), "no hot group: cannot check");
+    }
+
+    /// `readelf -SW` of a probe: text, read-only data, TLS, writable data and bss, and a non-allocated section.
+    const DATA_SECTIONS: &str = "  [Nr] Name              Type            Address          Off    Size   ES Flg Lk Inf Al
+  [ 1] .text             PROGBITS        0000000000401000 001000 0f0000 00  AX  0   0 64
+  [ 2] .rodata           PROGBITS        0000000000500000 100000 020000 00   A  0   0 64
+  [ 3] .rodata1          PROGBITS        0000000000520000 120000 000200 00   A  0   0 64
+  [ 4] .tbss             NOBITS          0000000000600000 200000 000100 00 WAT  0   0 64
+  [ 5] .data             PROGBITS        0000000000600000 200000 003000 00  WA  0   0 64
+  [ 6] .bss              NOBITS          0000000000603000 203000 002000 00  WA  0   0 64
+  [ 7] .comment          PROGBITS        0000000000000000 203000 000020 01  MS  0   0  1
+";
+
+    fn data_nm(nscache_at: u64) -> String {
+        [
+            "0000000000401000 0000000000000010 T _start".to_string(),
+            "0000000000500100 0000000000000040 r _ZN4core3fmt3FMT17h0123456789abcdefE".into(),
+            "0000000000520000 0000000000000200 R _ZN15liella_boundary13startup_names13STARTUP_NAMES17h0123456789abcdefE".into(),
+            "0000000000000008 0000000000000008 B TLS_WORD".into(),
+            "0000000000600040 0000000000000010 D AUXV".into(),
+            format!("{nscache_at:016x} 0000000000000200 d NSCACHE"),
+            "0000000000603100 0000000000000020 b HEAP".into(),
+        ]
+        .join("\n")
+    }
+
+    fn data_keys() -> Vec<String> {
+        ["_ZN4core3fmt3FMTE", "_ZN15liella_boundary13startup_names13STARTUP_NAMESE", "TLS_WORD", "AUXV", "NSCACHE", "HEAP", "_start", "gone"].map(String::from).to_vec()
+    }
+
+    fn data_row() -> Contract {
+        let rule = "keys=k; text-keys=t; window=65536; page=4096; ro-budget-fast=2; rw-budget-fast=2";
+        Contract { kind: "startup-data-windows".into(), subjects: vec!["libc.a".into(), "liella-crt1.o".into()], decision: "D-X.50".into(), ..row("STARTUP-DATA-WINDOWS", rule) }
+    }
+
+    #[test]
+    fn startup_data_objects_are_classed_by_their_section() {
+        // no spec clause: tooling (D-X.50).
+        let secs = parse_exe_sections(DATA_SECTIONS);
+        assert_eq!(secs.len(), 5, "neither the non-allocated .comment nor TLS is read: {secs:?}");
+        assert!(secs[0].skip && !secs[1].writable && secs[3].writable && !secs[3].skip && secs[3].name == ".data");
+        let o = parse_nm_data(&data_nm(0x601f00), &secs);
+        assert!(!o.contains_key("_start"), "text is not data");
+        assert!(!o.contains_key("TLS_WORD"), "a TLS object (its value is a TLS-block offset) lies in no section and is skipped");
+        assert!(!o["_ZN4core3fmt3FMTE"][0].rw && o["NSCACHE"][0].rw && o["HEAP"][0].rw, "keys are hottext keys; .data and .bss are written");
+        let d = startup_data(&data_keys(), &o, &[], STARTUP_WINDOW, STARTUP_PAGE);
+        assert_eq!(d.windows.keys().copied().collect::<Vec<_>>(), [0x50, 0x52]);
+        assert_eq!(d.pages.keys().copied().collect::<Vec<_>>(), [0x600, 0x601, 0x602, 0x603], "NSCACHE across a page boundary counts both");
+        assert_eq!(d.missing, ["TLS_WORD", "_start", "gone"]);
+        let big = parse_nm_data("0000000000600800 0000000000010000 b RESERVE", &secs);
+        let d = startup_data(&["RESERVE".to_string()], &big, &[], STARTUP_WINDOW, STARTUP_PAGE);
+        assert_eq!(d.pages.keys().copied().collect::<Vec<_>>(), [0x600, 0x601], "a large object counts the pages of its first 4 KiB");
+    }
+
+    #[test]
+    fn startup_data_holds_within_the_budget_and_names_the_lone_object_one_below() {
+        // no spec clause: tooling (D-X.50); the UTMP-Y2038-UNSIGNED-2 case (a written object alone on a page).
+        let secs = parse_exe_sections(DATA_SECTIONS);
+        let c = data_row();
+        let packed = startup_data(&data_keys(), &parse_nm_data(&data_nm(0x600100), &secs), &[], STARTUP_WINDOW, STARTUP_PAGE);
+        assert_eq!(packed.pages.keys().copied().collect::<Vec<_>>(), [0x600, 0x603]);
+        let ok = startup_data_verdict(&c, &packed, (STARTUP_WINDOW, STARTUP_PAGE), (2, 2), "fast").unwrap();
+        assert!(ok.contains("2 read-only start-up data windows") && ok.contains("2 written start-up data pages"), "{ok}");
+        let alone = startup_data(&data_keys(), &parse_nm_data(&data_nm(0x601800), &secs), &[], STARTUP_WINDOW, STARTUP_PAGE);
+        let e = startup_data_verdict(&c, &alone, (STARTUP_WINDOW, STARTUP_PAGE), (2, 2), "fast").unwrap_err().join("\n");
+        assert!(e.contains("STARTUP-DATA-WINDOWS BROKEN: NSCACHE: sits alone in the 4096-byte page 0x601000: 3 pages > rw-budget-fast 2"), "{e}");
+        assert!(e.contains("BROKEN: HEAP: sits alone"), "{e}");
+        assert!(e.contains("BROKEN: AUXV: sits alone"), "every lone object of the over-budget class is named: {e}");
+        assert!(e.contains("page 0x601000: NSCACHE 0x601800-0x601a00"), "{e}");
+        let w = startup_data_verdict(&c, &packed, (STARTUP_WINDOW, STARTUP_PAGE), (1, 2), "fast").unwrap_err().join("\n");
+        assert!(w.contains("BROKEN: _ZN15liella_boundary13startup_names13STARTUP_NAMES17h0123456789abcdefE: sits alone in the 65536-byte window 0x520000: 2 windows > ro-budget-fast 1"), "{w}");
+        assert!(!w.contains("pages >"), "the rw class is within its budget: {w}");
+    }
+
+    #[test]
+    fn startup_function_operands_count_unnamed_and_unkeyed_objects() {
+        // no spec clause: tooling (D-X.50); a start-up name moved out of STARTUP_NAMES is an unnamed literal no key names.
+        let secs = parse_exe_sections(DATA_SECTIONS);
+        let objs = parse_nm_data(&data_nm(0x600100), &secs);
+        let disasm = "0000000000401000 <_start>:\n  401000:\tlea    0x1234(%rip),%rdi        # 50f000 <x>\n\n\
+                      0000000000401100 <other>:\n  401100:\tlea    0x1(%rip),%rdi        # 510000 <y>\n\n\
+                      0000000000401200 <_ZN4core3fmt5write17h0123456789abcdefE>:\n  401200:\tmov    0x2(%rip),%rax        # 600048 <AUXV+0x8>\n\
+                        401208:\tmov    0x3(%rip),%rax        # 402000 <_start+0x1000>\n";
+        let fns: BTreeSet<String> = ["_start", "_ZN4core3fmt5writeE"].map(String::from).into();
+        let t = operand_targets(disasm, &fns);
+        assert_eq!(t, [(0x50f000, "_start".to_string()), (0x600048, "_ZN4core3fmt5write17h0123456789abcdefE".to_string()), (0x402000, "_ZN4core3fmt5write17h0123456789abcdefE".to_string())], "functions not in the set are not read");
+        let o = target_objects(&t, &objs, &secs);
+        assert_eq!(o.len(), 2, "a text target is not data: {o:?}");
+        assert_eq!((o[0].start, o[0].name.as_str(), o[0].rw), (0x50f000, "<unnamed .rodata byte addressed by _start>", false));
+        assert_eq!((o[1].name.as_str(), o[1].rw), ("AUXV", true));
+        let d = startup_data(&["HEAP".to_string()], &objs, &o, STARTUP_WINDOW, STARTUP_PAGE);
+        assert_eq!(d.windows.keys().copied().collect::<Vec<_>>(), [0x50]);
+        assert_eq!(d.pages.keys().copied().collect::<Vec<_>>(), [0x600, 0x603]);
     }
 }

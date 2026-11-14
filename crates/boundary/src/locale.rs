@@ -157,56 +157,27 @@ fn view_of_special(loc: usize) -> &'static LocaleView {
 
 /// Whether wide character `c` has a class of `mask` in the calling thread's current locale
 /// (`iswalpha`, ...), as the C `int`: the thread block's class-word table (D-5.11), one `%fs`
-/// load, then the table's resolved block (D-5.10). A thread whose word is not stored, and a
-/// block not resolved yet, take the view's path in a tail call.
-///
-/// D-5.11 safety: the `wclass` word (0x180) lies where a block another `ld.so` made keeps its
-/// own data, so it is read only in a block whose words are stored ([`views_stored`], tested
-/// first), and then without a zero check. Any other block takes the view path, whatever the
-/// word holds.
+/// load, then the table's resolved block (D-5.10). A word that reads 0 (not stored yet, or a
+/// process the runtime did not start) and a block not resolved yet take the view's path.
 #[inline(always)]
 pub fn isw(c: u32, mask: Class) -> i32 {
-    if views_stored()
-        && let Some(r) = tb::class_table_at(tb::read::<tb::WClass>()).test(c, mask.0)
+    let w = class_word();
+    if w != 0
+        && let Some(r) = tb::class_table_at(w).test(c, mask.0)
     {
         return r;
     }
     isw_view(c, mask)
 }
 
-// ------------------------------------------------------------------------------ D-5.11 gates
-//
-// The words at 0x138-0x187 (`view`, `cache`, `wclass`) are Liella's only in a block the runtime
-// made: elsewhere another `ld.so` keeps its own data there. Every read and write of them is gated
-// by the flag word below, read in ONE place ([`block_flags`] for the calling thread,
-// [`block_flags_of`] for a block another thread stores into), so a different ownership test
-// replaces these two bodies only.
-
-/// The calling thread's Liella flags (`FLAG_OWN`, `FLAG_VIEW`), one `%fs` load.
+/// The calling thread's `wclass` word (0x180) in a process the runtime started; 0 in one it did
+/// not start, whatever another library keeps at that offset of its block (D-5.11, ruling #4281:
+/// the gate is the process's ownership word, as [`view_word`], never a flag in the block). The
+/// `and` with a memory operand takes the place of the zero check's `test`. [`store_view`] stores
+/// the word with `view`, so a non-zero word is the current view's class table.
 #[inline(always)]
-fn block_flags() -> u32 {
-    tb::read32::<tb::Flags>()
-}
-
-/// `b`'s Liella flags, as [`block_flags`].
-#[inline(always)]
-fn block_flags_of(b: &liella_rt::tls::ThreadBlock) -> u32 {
-    b.flags.load(Relaxed)
-}
-
-/// Whether the calling thread's block is one the runtime made (`FLAG_OWN`): only such a block's
-/// words at 0x138-0x187 are Liella's to read and write (D-5.11).
-#[inline(always)]
-pub(crate) fn own_block() -> bool {
-    block_flags() & liella_rt::tls::FLAG_OWN != 0
-}
-
-/// Whether the calling thread's `view` and `wclass` words hold its current view and that view's
-/// class table (`FLAG_VIEW`: set by [`store_view`] in a block the runtime made, after both words;
-/// D-5.11). Then neither word needs a zero check.
-#[inline(always)]
-fn views_stored() -> bool {
-    block_flags() & liella_rt::tls::FLAG_VIEW != 0
+fn class_word() -> usize {
+    tb::read::<tb::WClass>() & crate::thread::owned_mask()
 }
 
 /// `iswctype(c, desc)` in the calling thread's current locale: a standard class's mask (or
@@ -232,38 +203,162 @@ fn isw_view(c: u32, mask: Class) -> i32 {
     view().isw_int(c, mask)
 }
 
-/// The calling thread's current locale view (D-7.13): its `view` word, one `%fs` load, in a
-/// block whose words are stored ([`views_stored`], D-5.11); any other thread resolves its
-/// `uselocale` choice, else the global locale, whatever the word holds.
+/// The calling thread's current locale view (D-7.13): its `view` word, one `%fs` load
+/// ([`view_word`]: 0 in a process the runtime did not start, D-X.58); a word that reads 0 resolves
+/// the thread's `uselocale` choice, else the global locale, in one cold call.
 #[inline]
 pub fn view() -> &'static LocaleView {
-    if views_stored() {
-        return tb::view_at(tb::read::<tb::View>());
+    match view_word() {
+        0 => unstored_view_cold(),
+        w => tb::view_at(w),
     }
-    // WCTYPE-TRIE-FILE-4 (negative): the compiler lays this out as the fall-through and the
-    // stored case as a taken branch and a jump; a cold out-of-line call instead (+4) and
-    // `core::hint::cold_path` (the frame setup moved above the test) both measured worse.
-    view_of(tb::read::<tb::Locale>())
 }
 
-/// `f(view())` for a short leaf body (`towupper`, `towctrans`): the stored case inline, every
-/// other case one cold out-of-line call that runs `f` itself, so the caller reaches it with a
-/// tail jump and needs no frame of its own. WCTYPE-TRIE-FILE-5: through [`view`], the resolve
-/// path was laid out as the fall-through (the stored case a taken branch and a jump, +1
-/// instruction); a cold call that only resolved the view made the caller non-leaf (+4).
+/// `f` of the calling thread's current locale view ([`view`]), for an entry whose whole result is
+/// one use of the view (`iswalpha`, `towupper`, `wcwidth`, `MB_CUR_MAX`, ...). The unstored case
+/// (and the foreign one, D-X.58) is a tail call to [`unstored_with_view`], which takes `f` along,
+/// so the stored path stays frameless: with [`view`] the cold call returns into the entry's own
+/// code and costs every call a `push`/`pop` for the call's stack alignment (ruling #4828). Give
+/// `f` its arguments by value (`move`): a closure of at most two words travels in registers, so
+/// the call stays a jump.
 #[inline(always)]
 pub fn with_view<R>(f: impl FnOnce(&'static LocaleView) -> R) -> R {
-    if views_stored() {
-        return f(tb::view_at(tb::read::<tb::View>()));
+    match view_word() {
+        0 => unstored_with_view(f),
+        w => f(tb::view_at(w)),
     }
-    with_resolved_view(f)
 }
 
-/// [`with_view`]'s path for a block whose words are not stored (D-5.11).
+/// `iswalpha(wc)` and its siblings: class `mask` of `wc` in the calling thread's locale. Not
+/// through [`with_view`]: its closure would be one function shared by the twelve entries, which
+/// the compiler then calls instead of inlining; the unstored case is the same tail call.
+#[inline(always)]
+pub fn isw_int(wc: u32, mask: Class) -> i32 {
+    match view_word() {
+        0 => unstored_isw_int(wc, mask),
+        w => tb::view_at(w).isw_int(wc, mask),
+    }
+}
+
+/// [`isw_int`] when the `view` word reads 0 ([`unstored_view`]).
 #[cold]
 #[inline(never)]
-fn with_resolved_view<R>(f: impl FnOnce(&'static LocaleView) -> R) -> R {
-    f(view_of(tb::read::<tb::Locale>()))
+fn unstored_isw_int(wc: u32, mask: Class) -> i32 {
+    unstored_view().isw_int(wc, mask)
+}
+
+/// `towupper(wc)` (`upper`) or `towlower(wc)` in the calling thread's locale (shaped as
+/// [`isw_int`]).
+#[inline(always)]
+pub fn wtrans(wc: u32, upper: bool) -> u32 {
+    match view_word() {
+        0 => unstored_wtrans(wc, upper),
+        w => tb::view_at(w).wtrans(wc, upper),
+    }
+}
+
+/// [`wtrans`] when the `view` word reads 0 ([`unstored_view`]).
+#[cold]
+#[inline(never)]
+fn unstored_wtrans(wc: u32, upper: bool) -> u32 {
+    unstored_view().wtrans(wc, upper)
+}
+
+/// [`with_view`] with the view's locale ([`current`]).
+#[inline(always)]
+pub fn with_current<R>(f: impl FnOnce(&'static Locale) -> R) -> R {
+    with_view(move |v| f(v.locale()))
+}
+
+/// The calling thread's `view` word in a process the runtime started; 0 in one it did not start
+/// (D-X.58), whatever another library keeps at that offset of its block. The word is ANDed with
+/// [`owned_mask`](crate::thread::owned_mask): the `and` with a memory operand takes the place of
+/// the `test` the zero check costs, so the gate adds no instruction to the stored path. Every
+/// caller sends 0 to one cold function ([`unstored_view`]), which tests
+/// [`owned`](crate::thread::owned) there: a test of the same word inline would keep the mask in
+/// a register for it and cost the hot path a load and a move.
+#[inline(always)]
+fn view_word() -> usize {
+    tb::read::<tb::View>() & crate::thread::owned_mask()
+}
+
+/// The view when [`view_word`] reads 0: the `uselocale` choice of a thread whose word is not
+/// stored, in a process the runtime started; the registry words' choice in one it did not start
+/// (D-X.58). Only cold functions call it.
+#[inline(always)]
+fn unstored_view() -> &'static LocaleView {
+    if crate::thread::owned() { view_of(tb::read::<tb::Locale>()) } else { foreign_view() }
+}
+
+/// [`unstored_view`] out of line, for [`view`].
+#[cold]
+#[inline(never)]
+fn unstored_view_cold() -> &'static LocaleView {
+    unstored_view()
+}
+
+/// [`with_view`] when the `view` word reads 0 ([`unstored_view`]).
+#[cold]
+#[inline(never)]
+fn unstored_with_view<R, F: FnOnce(&'static LocaleView) -> R>(f: F) -> R {
+    f(unstored_view())
+}
+
+/// [`view`] in a process the runtime did not start (D-X.58): the thread block's words are not
+/// Liella's, so the choice comes from the thread's registry words (no `view` word is kept there).
+#[cold]
+#[inline(never)]
+fn foreign_view() -> &'static LocaleView {
+    view_of(crate::thread::foreign_words().locale.load(Acquire))
+}
+
+/// The calling thread's ctype word `slot` (0 class, 1 `tolower`, 2 `toupper`; `F` its field):
+/// one `%fs` load in a process the runtime started, the registry words elsewhere (D-X.58).
+#[inline(always)]
+fn ctype_word<F: tb::Field>(slot: usize) -> usize {
+    // 0 elsewhere: the caller's unstored path (one cold call site, so the hot path keeps no
+    // frame) reads the registry word through [`foreign_word_or_zero`].
+    // The word ANDed with the ownership mask: the gate rides on the caller's zero test.
+    let _ = slot;
+    tb::read::<F>() & crate::thread::owned_mask()
+}
+
+/// The registry ctype word `slot` in a process the runtime did not start (D-X.58), 0 in one it
+/// started (the cold paths of [`byte_class`] and [`case_map`] ask it first: a word a program
+/// stored through `__ctype_*_loc` there is honoured as in a block of the runtime's).
+#[inline]
+fn foreign_word_or_zero(slot: usize) -> usize {
+    if crate::thread::owned() { 0 } else { foreign_ctype_word(slot) }
+}
+
+/// The word of [`foreign_ctype_slot`].
+#[cold]
+#[inline(never)]
+fn foreign_ctype_word(slot: usize) -> usize {
+    let b = crate::thread::foreign_words();
+    match slot {
+        0 => &b.ctype_b,
+        1 => &b.ctype_tolower,
+        _ => &b.ctype_toupper,
+    }
+    .load(Acquire)
+}
+
+/// [`ctype_slot`] in a process the runtime did not start: the address of the word in the
+/// thread's registry words, filled on first use.
+#[cold]
+#[inline(never)]
+fn foreign_ctype_slot(slot: usize) -> usize {
+    let b = crate::thread::foreign_words();
+    if b.ctype_b.load(Acquire) == 0 {
+        crate::thread::serialized(|| refresh_words(b));
+    }
+    let w = match slot {
+        0 => &b.ctype_b,
+        1 => &b.ctype_tolower,
+        _ => &b.ctype_toupper,
+    };
+    core::ptr::from_ref(w).expose_provenance()
 }
 
 /// The calling thread's current locale: its `uselocale` choice, else the global locale.
@@ -339,21 +434,17 @@ fn store_words(b: &liella_rt::tls::ThreadBlock, v: &'static LocaleView) {
 }
 
 /// `b`'s `view` word and, with it, its `wclass` word (D-5.11: the class tests read the table
-/// without the view). Every writer of `view` stores both; the first store then sets `FLAG_VIEW`,
-/// after both words, so a reader that sees the flag finds both stored (each word is replaced
-/// whole later: a reader takes the old or the new value of each, both valid). A block the
-/// runtime did not make (`FLAG_OWN` clear) is never written there, flag word included: those
-/// words are not Liella's (D-5.11).
+/// without the view). Every writer of `view` stores both, `wclass` first; each word is replaced
+/// whole, so a reader takes the old or the new value of each, both valid tables or views (a
+/// word that still reads 0 sends the reader to the view path). In a process the runtime did not
+/// start ([`owned`](crate::thread::owned) false) nothing is written: those words are another
+/// library's (D-5.11, ruling #4281).
 fn store_view(b: &liella_rt::tls::ThreadBlock, v: &'static LocaleView) {
-    let flags = block_flags_of(b);
-    if flags & liella_rt::tls::FLAG_OWN == 0 {
+    if !crate::thread::owned() {
         return;
     }
     b.wclass.store(core::ptr::from_ref(v.class_table()).expose_provenance(), Release);
     b.view.store(core::ptr::from_ref(v).expose_provenance(), Release);
-    if flags & liella_rt::tls::FLAG_VIEW == 0 {
-        b.flags.fetch_or(liella_rt::tls::FLAG_VIEW, Release);
-    }
 }
 
 /// After `newlocale` changed the object `loc` in place: the `view` word of every thread that
@@ -388,10 +479,21 @@ pub fn ctype_slot(slot: usize) -> usize {
     // word's offset (`__ctype_b_loc` = two loads and an add, no call). The unfilled case
     // returns `ctype_fill`'s result, a tail call, so the filled path keeps no frame (no
     // push/pop of the stack-alignment slot a call in the middle would cost: PERF-CTYPE-LOC).
-    if tb::read::<tb::CtypeB>() == 0 {
-        return ctype_fill(slot);
+    // D-X.58: one cold call site for both slow cases (another library's block, words not yet
+    // stored); the word ANDed with the ownership mask is 0 in the first, so the gate rides on
+    // the zero test (no `cmpb`, no frame).
+    if tb::read::<tb::CtypeB>() & crate::thread::owned_mask() != 0 {
+        return ctype_off(slot);
     }
-    ctype_off(slot)
+    ctype_slot_slow(slot)
+}
+
+/// [`ctype_slot`]'s slow cases: the registry words in a process the runtime did not start,
+/// else the words filled on first use.
+#[cold]
+#[inline(never)]
+fn ctype_slot_slow(slot: usize) -> usize {
+    if crate::thread::owned() { ctype_fill(slot) } else { foreign_ctype_slot(slot) }
 }
 
 /// The address of the calling thread's pointer `slot`, the words known to be stored.
@@ -435,13 +537,20 @@ fn entry_offset<const UNIT: usize>(c: i32) -> Option<usize> {
 #[cold]
 #[inline(never)]
 fn class_unstored(c: i32) -> Class {
-    ctype_tables::class(c, current())
+    match foreign_word_or_zero(0) {
+        0 => ctype_tables::class(c, current()),
+        w => class_in(w, c),
+    }
 }
 
 /// [`case_map`] for a thread whose ctype words are not stored: the locale's answer.
 #[cold]
 #[inline(never)]
 fn case_unstored(c: i32, upper: bool) -> i32 {
+    let w = foreign_word_or_zero(if upper { 2 } else { 1 });
+    if w != 0 {
+        return case_in(c, w);
+    }
     let l = current();
     if upper { ctype_tables::toupper(c, l) } else { ctype_tables::tolower(c, l) }
 }
@@ -450,10 +559,16 @@ fn case_unstored(c: i32, upper: bool) -> i32 {
 /// (D-5.5); none outside -128...255.
 #[inline]
 pub fn byte_class(c: i32) -> Class {
-    let w = tb::read::<tb::CtypeB>();
+    let w = ctype_word::<tb::CtypeB>(0);
     if w == 0 {
         return class_unstored(c);
     }
+    class_in(w, c)
+}
+
+/// The classes of `c` in the table at the class word `w` (non-zero).
+#[inline(always)]
+fn class_in(w: usize, c: i32) -> Class {
     // The entry's address is the word plus twice the (signed) character: one range test, no
     // rebasing of the word to the table's first entry.
     if entry_offset::<2>(c).is_none() {
@@ -470,6 +585,13 @@ fn case_map(c: i32, w: usize, upper: bool) -> i32 {
     if w == 0 {
         return case_unstored(c, upper);
     }
+    case_in(c, w)
+}
+
+/// `c` through the case table at the word `w` (non-zero); values outside -128...255 map to
+/// themselves.
+#[inline(always)]
+fn case_in(c: i32, w: usize) -> i32 {
     let Some(o) = entry_offset::<4>(c) else { return c };
     table_bytes::<4>(w).get(o..o.wrapping_add(4)).and_then(|b| <[u8; 4]>::try_from(b).ok()).map_or(c, i32::from_ne_bytes)
 }
@@ -521,13 +643,13 @@ pub fn case_map_l(c: i32, loc: usize, upper: bool) -> i32 {
 /// `toupper(c)` in the calling thread's locale (D-5.5).
 #[inline]
 pub fn toupper(c: i32) -> i32 {
-    case_map(c, tb::read::<tb::CtypeToupper>(), true)
+    case_map(c, ctype_word::<tb::CtypeToupper>(2), true)
 }
 
 /// `tolower(c)` in the calling thread's locale (D-5.5).
 #[inline]
 pub fn tolower(c: i32) -> i32 {
-    case_map(c, tb::read::<tb::CtypeTolower>(), false)
+    case_map(c, ctype_word::<tb::CtypeTolower>(1), false)
 }
 
 /// Fill a `locale_t` object for the interned locale `handle`.
@@ -555,9 +677,14 @@ fn new_object(handle: usize) -> usize {
     addr
 }
 
-/// The categories of an `LC_*_MASK` combination, or `EINVAL` for unknown bits.
+/// `1 << LC_ALL` (bit 6): accepted alone as every category; with any other bit it is `EINVAL`.
+const LC_ALL_BIT: i32 = 1 << 6;
+
+/// The categories of an `LC_*_MASK` combination, or `EINVAL` for unknown bits. `1 << LC_ALL`
+/// alone means every category (libstdc++ asks for it at start-up), as the reference answers it.
 fn categories(mask: i32) -> Result<([Cat; 12], usize), liella::error::Errno> {
     let all = Cat::ALL.iter().fold(0i32, |m, c| m | (1 << c.number()));
+    let mask = if mask == LC_ALL_BIT { all } else { mask };
     if mask & !all != 0 {
         return Err(liella::error::Errno::EINVAL);
     }
@@ -579,7 +706,14 @@ pub fn newlocale(mask: i32, name: Option<&[u8]>, base: usize) -> Result<usize, l
     let (cats, n) = categories(mask)?;
     let name = name.ok_or(liella::error::Errno::EINVAL)?;
     let base_locale = if base == 0 { Locale::C } else { *of(base) };
-    let handle = gl::newlocale(&CSys, &Glue, cats.get(..n).unwrap_or(&[]), name, base_locale)?;
+    let cats = cats.get(..n).unwrap_or(&[]);
+    let handle = if name.is_empty() {
+        // `""`: each category from the environment, as `setlocale(cat, "")` takes it.
+        let getenv = |k: &[u8]| -> Option<&'static [u8]> { process::getenv(k).map(strz::env_value) };
+        gl::newlocale_env(&CSys, &Glue, cats, &getenv, base_locale)?
+    } else {
+        gl::newlocale(&CSys, &Glue, cats, name, base_locale)?
+    };
     // `base` is consumed: reuse its block (D-7.3).
     if base != 0 && base != GLOBAL {
         if let Some(w) = tb::locale_object(base) {
@@ -614,10 +748,11 @@ pub fn freelocale(loc: usize) {
 pub fn uselocale(loc: usize) -> usize {
     if loc == 0 {
         // NO-ROW: the query (`ls` asks once per file) is one `%fs` load of the thread's own word.
-        let prev = tb::read::<tb::Locale>();
+        let prev = if crate::thread::owned() { tb::read::<tb::Locale>() } else { crate::thread::foreign_words().locale.load(Relaxed) };
         return if prev == 0 { GLOBAL } else { prev };
     }
-    let b = tb::current();
+    // D-X.58: the thread's own words (its block only in a process the runtime started).
+    let b = crate::thread::words();
     let prev = b.locale.load(Relaxed);
     let new = if loc == GLOBAL { 0 } else { loc };
     if loc != 0 {
@@ -680,7 +815,11 @@ pub fn setlocale(category: i32, name: Option<&[u8]>) -> Option<&'static [u8]> {
         Some(n) => gl::Request::Name(n),
     };
     let before = gl::global_handle();
-    let r = gl::setlocale(&CSys, &Glue, cat, req);
+    // `""` is never answered from the query cache: straight to the locked path.
+    let r = match req {
+        gl::Request::Environment(_) => gl::setlocale_locked(&CSys, &Glue, cat, &req),
+        _ => gl::setlocale(&CSys, &Glue, cat, req),
+    };
     // A changed category may select other message catalogs (§7.7, `_nl_msg_cat_cntr`).
     if gl::global_handle() != before {
         publish_global();
@@ -782,7 +921,7 @@ fn lconv_char(l: &Locale, index: usize) -> u8 {
 
 /// `localeconv()`: the calling thread's `struct lconv`, filled from its current locale.
 pub fn localeconv() -> usize {
-    let w = &tb::current().lconv;
+    let w = &crate::thread::words().lconv;
     // The words are worked out once per locale view (D-7.13) and copied into this thread's
     // `struct lconv`, so that a pointer returned earlier keeps its address (D-7.8).
     for (slot, v) in w.iter().zip(view().lconv(lconv_words)) {
@@ -818,14 +957,26 @@ fn lconv_words(l: &Locale) -> [usize; 12] {
 /// `setlocale` for C: the name's address, or 0.
 pub fn setlocale_c(category: i32, name: liella::error::KResult<Option<&[u8]>>) -> usize {
     match name {
-        Ok(n) => setlocale(category, n).map_or(0, |s| s.as_ptr().expose_provenance()),
+        Ok(n) => setlocale(category, n).map_or_else(|| setlocale_failed(category), |s| s.as_ptr().expose_provenance()),
         Err(_) => 0,
     }
 }
 
+/// A `setlocale` that returns NULL sets `errno` (`spec/behaviour/setlocale-errno.md`): `EINVAL`
+/// for a category number that names no category, otherwise `ENOENT`, the locale data of a name
+/// not being available, as `newlocale` reports it (D-7.18). A successful call leaves `errno`
+/// alone. Out of line: only failures pay for it.
+#[cold]
+#[inline(never)]
+fn setlocale_failed(category: i32) -> usize {
+    let known = category == 6 || Cat::from_number(category).is_some();
+    crate::errno::set(if known { liella::error::Errno::ENOENT } else { liella::error::Errno::EINVAL });
+    0
+}
+
 /// `newlocale` for C (`name` NULL: `EINVAL`).
 pub fn newlocale_c(mask: i32, name: liella::error::KResult<&[u8]>, base: usize) -> liella::error::KResult<usize> {
-    newlocale(mask, Some(name?), base)
+    newlocale(mask, name.ok(), base)
 }
 
 /// The name of category `category` (a C `LC_*` number) of the calling thread's current locale,
@@ -898,8 +1049,8 @@ mod tests {
     use super::*;
 
     /// D-5.11 safety (no spec clause: a Liella design rule, records/decisions/D-5/D-5.11.toml):
-    /// in a thread block the runtime did not make (`FLAG_OWN` clear: this test process's
-    /// threads, made by the system's `ld.so`), the words at 0x138-0x187 (`view`, the cache
+    /// in a process the runtime did not start (this test process, its threads made by the
+    /// system's `ld.so`; ruling #4281), the words at 0x138-0x187 (`view`, the cache
     /// line, `wclass`) are never used as pointers or values and never written. The test fills
     /// them with non-canonical addresses (a dereference faults), asks the class tests, the view
     /// and the time zone period, stores a view the way every writer does, and checks the
@@ -909,8 +1060,8 @@ mod tests {
     fn foreign_block_words_are_never_read_or_written() {
         std::thread::spawn(|| {
             let b = tb::current();
-            if b.flags.load(Relaxed) & liella_rt::tls::FLAG_OWN != 0 {
-                println!("skipped: this thread's block was made by the runtime, not a foreign ld.so");
+            if crate::thread::owned() {
+                println!("skipped: the runtime started this process, so its blocks are not foreign");
                 return;
             }
             let words = || {

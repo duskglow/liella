@@ -1,0 +1,8 @@
+# LAYOUT-TEXT-PIN-12 plants (cargo xtask plants; docs/plants.md).
+# ltp12-child-robust-wrapper: the fork child's robust-list registration back on its own start-up wrapper: the fork
+#   child reads 7 at pre 0x2000 (a second start-up text window), above FORK_BOUND 6.
+# ltp12-unref-check-off: the unreferenced-key error never raised: the xtask unit test catches it.
+# ltp12-ehframe-counted: unwind-table relocations counted as references (every function would be reached).
+ltp12-child-robust-wrapper | crates/boundary/src/thread.rs | lit:let _ = raw::syscall(crate::nr::SET_ROBUST_LIST, [i64::try_from(addr_of(&d.robust)).unwrap_or(0), 24, 0, 0, 0, 0]); ==> let _ = raw::set_robust_list(addr_of(&d.robust), 24); | cargo xtask so && cargo test -p liella --test hot_text_products init_data_clusters_hold_at_every_text_phase | msg:fork child above its bound [0-9]+
+ltp12-unref-check-off | xtask/src/hottext.rs | lit:unreferenced.contains(&e.key) ==> unreferenced.contains(&e.key) && false | cargo test -p xtask dead_key_check_flags_a_key_nothing_references | msg:the dead key is reported
+ltp12-ehframe-counted | xtask/src/hottext.rs | lit:== ".eh_frame" ==> == ".eh_frame_none" | cargo test -p xtask dead_key_check_flags_a_key_nothing_references | msg:unreferenced keys

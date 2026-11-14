@@ -1,0 +1,11 @@
+# HOTLIST-REGEN-CHEAP-2: plants on the parallel trace runner (tools/hottext/runner.sh), run with `cargo xtask plants`.
+# serial: one trace at a time (the subshell runs in the foreground); the rendezvous of the fake tracer catches it.
+serial | tools/hottext/runner.sh | lit:echo $rc > "$log.rc" ) & ==> echo $rc > "$log.rc" ) | cargo test -p xtask regen_runner_runs_traces_together | msg:started alone: the traces did not run together
+# drop-entry: the second trace's names file never reaches the merge (keys.py --tagged), so its keys drop out of the list.
+drop-entry | tools/hottext/runner.sh | lit:    printf '%s=%s\n' "$tier" "$work/names.$n" >> "$work/tagged" ==>     [ "$n" = 2 ] || printf '%s=%s\n' "$tier" "$work/names.$n" >> "$work/tagged" | cargo test -p xtask regen_runner_runs_traces_together | msg:tagged does not name every trace in start order
+# put-always: a list rewritten with equal bytes; the put_changed check catches it.
+put-always | tools/hottext/runner.sh | lit:    if cmp -s "$1" "$2"; then rm -f "$1"; else mv "$1" "$2"; fi ==>     mv "$1" "$2" | cargo test -p xtask regen_runner_runs_traces_together | msg:put_changed rewrote a file whose bytes did not change
+# cargo xtask plants results (3 plants: 3 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# serial: CAUGHT, caught by xtask hottext::tests::regen_runner_runs_traces_together_and_keeps_their_order
+# drop-entry: CAUGHT, caught by xtask hottext::tests::regen_runner_runs_traces_together_and_keeps_their_order
+# put-always: CAUGHT, caught by xtask hottext::tests::regen_runner_runs_traces_together_and_keeps_their_order

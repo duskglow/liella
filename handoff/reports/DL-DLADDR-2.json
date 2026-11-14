@@ -1,0 +1,21 @@
+{"task": "DL-DLADDR-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE (context checkpoint): dladdr/dladdr1/dlinfo conformance programs pass on reference and Liella; records, differences row and compat flag (ruling #5521) written; plants 5/9 CAUGHT at hand-back, rest running; gate not run",
+ "branch": "task/dl-dladdr-2", "head": "3e1dfad4f",
+ "gate": {"affected": "not run (role held by the plants job; context checkpoint)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "dladdr misses vDSO addresses: the vDSO is not in Liella's object chain yet (P-12)",
+   "Liella's dl_iterate_phdr lists only the program and the vDSO until DL-16c",
+   "dlsym(RTLD_DEFAULT, \"__tls_get_addr\") is NULL under Liella in the conformance build (ld.so not in the global scope)",
+   "RTLD_DI_SERINFO of the program: the reference leaves out the program's own DT_RUNPATH; Liella likely lists it (not checked)",
+   "RTLD_DI_ORIGIN of the program is refused by Liella; giving the program's directory is a possible follow-up"],
+ "refused": [],
+ "impact": [
+   {"kind": "correctness", "what": "dladdr, dladdr1, dlinfo answer as the reference on the s27_dladdr / s27_dlinfo corpus (were not exported on next)", "before": null, "after": null, "unit": null, "measured": true},
+   {"kind": "coverage", "what": "conformance programs s27_dladdr and s27_dlinfo (clauses s27_1_c_6, s27_1_c_7) and 9 plants", "before": 0, "after": 2, "unit": "programs", "measured": true},
+   {"kind": "unblock", "what": "AQOURS-SMOKE programs waiting on DL-18 (backtraces, crash handlers, plugin hosts)", "before": null, "after": null, "unit": null, "measured": false}],
+ "improvement": "A plants job run from the role directory holds the role (sync rc 4) for its whole run (~9 min per plant here); running it from a copy's own cwd would let the gate run in parallel",
+ "next_step": "jobwait dl-dladdr-2-plants (all 9 CAUGHT), sync, clippy + static on head, start the gate affected --run --base origin/next",
+ "report_file": "handoff/DL-DLADDR.md",
+ "jobs": ["dl-dladdr-2-conf2", "dl-dladdr-2-plants"]}

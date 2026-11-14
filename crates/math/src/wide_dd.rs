@@ -22,7 +22,13 @@
 //!   `2^-107`, its double-double steps `2^-104` relative each on terms below `|r|`; the table
 //!   entry `2^-106`, the final product and sum `2^-104`: below `2^-103` relative, `b = 100`.
 //!   `expm1` adds the subtraction of 1: relative growth at most `e^x/|e^x − 1| < 2^7.6` for
-//!   `|x| >= ln2/128` (estimate `2^-95.9`, measured `2^-95`: `b = 92`); below `2^-8` the polynomial runs on `x` itself (`b = 100`).
+//!   `|x| >= ln2/128` (estimate `2^-95.9`, measured `2^-95`: `b = 92`). Without the subtraction
+//!   (`|x| < ln2/128`; below `2^-8` the polynomial runs on `x` itself) the error counts against
+//!   `e^x − 1 ≈ x`, not 1, so the `r^6` term (`2^-47.1` of `r`) is in double-double as well
+//!   (`expm1_poly_rel`): `r` within `2^-102.6` relative of `x` (`10·2^-106`: the 106-bit
+//!   conversion, the constant, the product's `7·2^-106` from Joldes, Muller and Popescu, ACM
+//!   TOMS 44(2), 2017), the final sum `3·2^-106`, the `f64` terms from `r^7` below `2^-108` and
+//!   the higher double-double steps scaled by `|r|/2 <= 2^-8.5`: below `2^-102.2`, `b = 100`.
 //! * `log`, `log2`, `log10`, `log1p`: `x = 2^e·m`, `m` in `[0.75, 1.5)` with 113 bits, a
 //!   13-bit reciprocal `c` of `m`'s 1/128-interval, `u = m·c − 1` exact in integers
 //!   (`|u| <= 2^-7`), `ln(1 + u) = 2·atanh(u/(2 + u))` to `s^13`, `ln x = e·ln 2 − ln c +
@@ -224,20 +230,49 @@ fn reduce(n: &Num, c: u128, cs: i32) -> Option<(i64, Dd)> {
     Some((k, f.mul(Dd::of(LN2_64))))
 }
 
-/// `e^r − 1` for `|r| <= 2^-7.5`: degree 11, the terms from `r^6` (below `2^-54`) in `f64`.
+/// `e^r − 1` for `|r| <= 2^-7.5`, its error counted against `e^r` (the exponentials and the
+/// `expm1` branch that subtracts 1): degree 11, the terms from `r^6` (below `2^-54` of 1) in
+/// `f64`.
 fn expm1_poly(r: Dd) -> Dd {
     let x = r.hi;
-    let tail = f64::from_bits(E6)
-        + x * (f64::from_bits(E7)
-            + x * (f64::from_bits(E8) + x * (f64::from_bits(E9) + x * (f64::from_bits(E10) + x * f64::from_bits(E11)))));
-    let mut acc = Dd::of(E5).add_f64(x * tail);
-    acc = acc.mul(r).add(Dd::of(E4));
+    let tail = f64::from_bits(E6[0]) + x * tail7(x);
+    expm1_upper(Dd::of(E5).add_f64(x * tail), r)
+}
+
+/// `e^r − 1` for `|r| <= ln2/128`, its error counted against `e^r − 1` itself (the `expm1`
+/// branches without the subtraction): as [`expm1_poly`] with the `r^6` term in double-double too.
+/// That term is `2^-47.1` of `r` at `|r| = ln2/128`, so each `f64` rounding on it (the
+/// coefficient, the sum, the product, `r.hi` for `r`) would cost up to `2^-100.1` relative, four
+/// of them more than the `2^-100` claimed. The `f64` terms from `r^7` are below `2^-57.4` of `r`,
+/// their roundings below `2^-108` relative.
+fn expm1_poly_rel(r: Dd) -> Dd {
+    let x = r.hi;
+    expm1_upper(Dd::of(E6).add_f64(x * tail7(x)).mul(r).add(Dd::of(E5)), r)
+}
+
+/// `1/7! + x/8! + … + x^4/11!` in `f64`.
+#[inline(always)]
+fn tail7(x: f64) -> f64 {
+    f64::from_bits(E7)
+        + x * (f64::from_bits(E8) + x * (f64::from_bits(E9) + x * (f64::from_bits(E10) + x * f64::from_bits(E11))))
+}
+
+/// `r + r^2·(1/2! + r/3! + r^2/4! + r^3·acc5)` in double-double, `acc5` the value from `1/5!` up.
+#[inline(always)]
+fn expm1_upper(acc5: Dd, r: Dd) -> Dd {
+    let mut acc = acc5.mul(r).add(Dd::of(E4));
     acc = acc.mul(r).add(Dd::of(E3));
     acc = acc.mul(r).add(Dd::of(E2));
     r.add(acc.mul(r).mul(r))
 }
 
 /// `e^x`, `2^x` or `10^x` as `v·2^scale` (`|x| < 2^14`).
+/// `e^x ≈ v·2^scale` within `2^-B_MAIN` relative (the `exp` kernel below, proof in the module
+/// comment), for `cexp`'s middle tier ([`crate::complex_fast`]); `None` outside its ranges.
+pub(crate) fn exp_dd(n: &Num) -> Option<(Dd, i32)> {
+    exp_kernel(Kernel::Exp, n)
+}
+
 fn exp_kernel(k: Kernel, n: &Num) -> Option<(Dd, i32)> {
     if n.top() >= 14 {
         return None;
@@ -258,14 +293,14 @@ fn expm1_kernel(n: &Num) -> Option<(Dd, i32, u32)> {
         return None;
     }
     if n.top() < RAW {
-        return Some((expm1_poly(dd_of_num(n)?), 0, B_MAIN));
+        return Some((expm1_poly_rel(dd_of_num(n)?), 0, B_MAIN));
     }
     let (k, r) = reduce(n, C_E, 121)?;
-    let p = expm1_poly(r);
     if k == 0 {
-        // |x| <= ln2/128 and >= 2^-8: r is within 2^-102 relative of x, no subtraction.
-        return Some((p, 0, B_MAIN));
+        // |x| <= ln2/128 and >= 2^-8: r is within 2^-102.6 relative of x, no subtraction.
+        return Some((expm1_poly_rel(r), 0, B_MAIN));
     }
+    let p = expm1_poly(r);
     let t = Dd::of(EXP2_64[(k & 63) as usize]);
     let w = t.add(t.mul(p));
     let big = (k >> 6) as i32;
@@ -421,7 +456,7 @@ const E2: [u64; 2] = [0x3fe0000000000000, 0x0000000000000000]; // 1/2!
 const E3: [u64; 2] = [0x3fc5555555555555, 0x3c65555555555555]; // 1/3!
 const E4: [u64; 2] = [0x3fa5555555555555, 0x3c45555555555555]; // 1/4!
 const E5: [u64; 2] = [0x3f81111111111111, 0x3c01111111111111]; // 1/5!
-const E6: u64 = 0x3f56c16c16c16c17; // 1/6!
+const E6: [u64; 2] = [0x3f56c16c16c16c17, 0xbbef49f49f49f49f]; // 1/6! (`expm1_poly` uses the leading part)
 const E7: u64 = 0x3f2a01a01a01a01a; // 1/7!
 const E8: u64 = 0x3efa01a01a01a01a; // 1/8!
 const E9: u64 = 0x3ec71de3a556c734; // 1/9!
@@ -626,8 +661,8 @@ mod tests {
         dd_rounded(LOG2E, ln2.recip(), "LOG2E");
         dd_rounded(LOG10E, mp::ln10().recip(), "LOG10E");
         let mut fact = 1u64;
-        let dds = [(2, E2), (3, E3), (4, E4), (5, E5)];
-        let f64s = [(6, E6), (7, E7), (8, E8), (9, E9), (10, E10), (11, E11)];
+        let dds = [(2, E2), (3, E3), (4, E4), (5, E5), (6, E6)];
+        let f64s = [(6, E6[0]), (7, E7), (8, E8), (9, E9), (10, E10), (11, E11)];
         for n in 2..=11u64 {
             fact *= n;
             let want = Mp::from_i64(1).div_u64(fact);
@@ -727,22 +762,29 @@ mod tests {
     const ALL: [Kernel; 8] =
         [Kernel::Exp, Kernel::Exp2, Kernel::Exp10, Kernel::Expm1, Kernel::Log, Kernel::Log2, Kernel::Log10, Kernel::Log1p];
 
-    /// Each kernel within its bound (one bit of margin), and every result the tier decides equal
-    /// to the 384-bit route's in all four modes. Returns the refusals.
+    /// Each kernel within its bound exactly as [`kernel`] states it and [`decide`] uses it
+    /// (`|f(x) − v·2^scale| < 2^-b·|v·2^scale|`, compared in 384 bits, no margin added: a margin
+    /// would test a claim nobody relies on), and every result the tier decides equal to the
+    /// 384-bit route's in all four modes. Prints each kernel's worst error as a fraction of its
+    /// bound. Returns the refusals.
     fn sweep(per_kernel: usize, seed: u64) -> usize {
         let mut g = Rng(seed);
         let mut refused = 0;
         for k in ALL {
-            let mut worst = i64::MIN;
+            let (mut worst, mut at) = (0.0f64, None);
             for _ in 0..per_kernel {
                 let n = draw(k, &mut g);
                 let want = reference(k, &n);
                 let (v, scale, bits) = kernel(k, &n).unwrap();
-                let d = mp_of(v).ldexp(i64::from(scale)).sub(want);
-                // |d|/|want| < 2^(ex(d) − ex(want) + 1).
-                let rel = mp::ex(d) - mp::ex(want) + 1;
-                worst = worst.max(rel + i64::from(bits));
-                assert!(rel < -i64::from(bits), "{k:?} {n:?}: error 2^{rel} against the bound 2^-{bits}");
+                let got = mp_of(v).ldexp(i64::from(scale));
+                let d = got.sub(want);
+                // |d|/|got| in units of the bound 2^-bits (a 53-bit reading, for the message).
+                let frac = d.div(got).ldexp(i64::from(bits)).to_f64().abs();
+                if frac > worst {
+                    (worst, at) = (frac, Some((n.neg, n.sig, n.exp)));
+                }
+                let within = d.cmp_abs(got.ldexp(-i64::from(bits))) == core::cmp::Ordering::Less;
+                assert!(within, "{k:?} {n:?}: error 2^{:.3} against the bound 2^-{bits}", frac.log2() - f64::from(bits));
                 for m in MODES {
                     match eval::<F80>(k, &n, m) {
                         Some(r) => assert_eq!(r, mp::round::<F80>(want, m), "{k:?} {n:?} {m:?}"),
@@ -750,24 +792,42 @@ mod tests {
                     }
                 }
             }
-            println!("{k:?}: worst error 2^{worst} of its bound");
+            println!("{k:?}: worst error {worst:.4} of its bound (2^{:.3}) at (neg, sig, exp) {at:?}", worst.log2());
         }
         refused
     }
 
-    /// Spec §10.3 (correctly rounded wide functions): the tier against the 384-bit route.
+    /// Spec §10.3: `expm1` where the reduction gives `k = 0` (`2^-8 <= |x| <= ln2/128`) and the
+    /// error is at its largest, the reduced argument's relative error and the polynomial's adding
+    /// up: two operands where an `f64` `r^6` term put the error at 0.42 and 1.6 of the bound,
+    /// both signs, held to the bound exactly and to the 384-bit route's rounding in every mode.
     #[test]
-    fn tier_agrees_with_the_wide_route() {
-        let refused = sweep(300, 0x9e37_79b9_7f4a_7c15);
-        // Out-of-range results (subnormal, overflow) and a rare undecided case only.
-        assert!(refused < 300, "refused {refused}");
+    fn expm1_without_subtraction_stays_within_its_bound() {
+        for (neg, sig) in [false, true].into_iter().flat_map(|s| [(s, 11_193_749_041_240_441_045u128), (s, 12_783_431_649_032_223_825)]) {
+            let n = Num { neg, kind: crate::float::Kind::Finite, sig, exp: -71 };
+            let want = reference(Kernel::Expm1, &n);
+            let (v, scale, bits) = kernel(Kernel::Expm1, &n).unwrap();
+            assert_eq!((scale, bits), (0, B_MAIN));
+            let got = mp_of(v);
+            let d = got.sub(want);
+            let frac = d.div(got).ldexp(i64::from(bits)).to_f64().abs();
+            println!("neg {neg} sig {sig}: error {frac:.4} of the bound 2^-{bits}");
+            assert_eq!(d.cmp_abs(got.ldexp(-i64::from(bits))), core::cmp::Ordering::Less, "error {frac} of the bound");
+            for m in MODES {
+                if let Some(r) = eval::<F80>(Kernel::Expm1, &n, m) {
+                    assert_eq!(r, mp::round::<F80>(want, m), "{neg} {m:?}");
+                }
+            }
+        }
     }
 
-    /// The accuracy job's sweep (release build): more operands, every mode.
+    /// Spec §10.3 (correctly rounded wide functions): the tier against the 384-bit route, 40 000
+    /// operands per kernel in every mode (enough to reach the top of `expm1`'s `k = 0` range,
+    /// where its error is largest; a few seconds with this crate's optimised test profile).
     #[test]
-    #[ignore = "long: the accuracy job runs it in release"]
-    fn tier_agrees_with_the_wide_route_long() {
+    fn tier_agrees_with_the_wide_route() {
         let refused = sweep(40_000, 0x2545_f491_4f6c_dd1d);
-        println!("refused {refused}");
+        // Out-of-range results (subnormal, overflow) and a rare undecided case only.
+        assert!(refused < 1000, "refused {refused}");
     }
 }

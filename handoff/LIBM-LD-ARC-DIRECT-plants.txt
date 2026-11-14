@@ -1,0 +1,17 @@
+# LIBM-LD-ARC-DIRECT plants: cargo xtask plants handoff/LIBM-LD-ARC-DIRECT-plants.txt --dir <new RAM dir>
+# Step 1 (crates/math/src/wide_int/arc.rs, D-10.75's root): the seed s0 and its reciprocal read from the double's
+# bits by big_u64 instead of an `as u64` that overflows the signed conversion and raises invalid in hardware.
+# The saturation at 2^64 lost: the root rounded to 2^27 (w just below 2^128) gives s0 = 0.
+sat-lost | crates/math/src/wide_int/arc.rs | lit:if sh >= 12 { u64::MAX } else { m << sh } ==> if sh >= 13 { u64::MAX } else { m << sh } | cargo test -p liella-math --lib wide_int::arc | msg:big_u64_is_the_saturating_conversion.*FAILED|quotient_and_root_meet_their_bounds.*FAILED
+# The exponent bias off by one: every seed and reciprocal halved.
+bias-off | crates/math/src/wide_int/arc.rs | lit:wrapping_sub(1075); ==> wrapping_sub(1076); | cargo test -p liella-math --lib wide_int::arc | msg:quotient_and_root_meet_their_bounds.*FAILED|arc_tier_agrees_with_the_wide_route.*FAILED
+# The significand's top two fraction bits dropped (the mask 2^50 - 1 for 2^52 - 1).
+fraction-mask | crates/math/src/wide_int/arc.rs | lit:let m = (b & ((1 << 52) - 1)) ==> let m = (b & ((1 << 50) - 1)) | cargo test -p liella-math --lib wide_int::arc | msg:quotient_and_root_meet_their_bounds.*FAILED|arc_tier_agrees_with_the_wide_route.*FAILED
+# The reciprocal's conversion reverted to `as u64`: same values, the hardware invalid flag back (a performance
+# regression, measured by idq.ms_uops per call, not a functional one: the envelope's exit drops hardware flags).
+recip-as | crates/math/src/wide_int/arc.rs | lit:big_u64(vd)); ==> vd as u64); | cargo test -p liella-math --lib wide_int::arc | equivalent:identical values (both exact on [2^63, 2^64]); only the hardware invalid flag and its microcode stall differ, which the envelope hides and the idq.ms_uops counts measure
+# cargo xtask plants results (4 plants: 3 CAUGHT, 0 SURVIVED, 1 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# sat-lost: CAUGHT, caught by liella_math wide_int::arc::tests::big_u64_is_the_saturating_conversion
+# bias-off: CAUGHT, caught by liella_math wide_int::arc::tests::big_u64_is_the_saturating_conversion
+# fraction-mask: CAUGHT, caught by liella_math wide_int::arc::tests::big_u64_is_the_saturating_conversion
+# recip-as: EQUIVALENT

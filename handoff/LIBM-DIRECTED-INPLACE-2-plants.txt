@@ -1,0 +1,10 @@
+# LIBM-DIRECTED-INPLACE-2 plants: the double exp quick phase in the caller's directed rounding (D-10.94)
+dir-nearest-test | crates/math/src/fast64/quick.rs | lit:if lo == zh + (zl + e) { Some(lo * sc) } else { None } ==> if zh + zl * $c == zh && lo == lo { Some(zh * sc) } else { None } | cargo test -p liella-boundary --test exp_quick | msg:exp_directed_declines_at_breakpoints.*FAILED|decided .* next to a rounding boundary
+dir-fallback-skipped | crates/math/src/fast64/quick.rs | lit:if lo == zh + (zl + e) { Some(lo * sc) } else { None } ==> Some(lo * sc) | cargo test -p liella-boundary --test exp_quick | msg:exp_directed_declines_at_breakpoints.*FAILED|decided .* next to a rounding boundary
+dir-reduction-sign | crates/boundary/src/hot/exp_log.rs | lit:let h = if matches!(mode, liella_math::Rounding::Up) { -0.5 } else { 0.5 }; ==> let h = if matches!(mode, liella_math::Rounding::Up) { 0.5 } else { -0.5 }; | cargo test -p liella-boundary --test exp_quick | msg:exp_directed_rounds_correctly_in_both_builds.*FAILED|directed quick exp.*correctly rounded
+dir-entry-switch-skipped | crates/boundary/src/mathret.rs | perl:s/(fn elem_directed<.*?)elem_switched\(x, saved, f\)/$1elem_fast_cold::<0x3f, A, R>(x, saved, f)/s | cargo test -p liella-boundary --test exp_quick | msg:exp_directed_.*FAILED|entry exp\(.*correctly rounded
+# cargo xtask plants results (4 plants: 4 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# dir-nearest-test: CAUGHT, caught by exp_quick exp_directed_declines_at_breakpoints_and_the_entry_rounds_them
+# dir-fallback-skipped: CAUGHT, caught by exp_quick exp_directed_declines_at_breakpoints_and_the_entry_rounds_them
+# dir-reduction-sign: CAUGHT, caught by exp_quick exp_directed_rounds_correctly_in_both_builds
+# dir-entry-switch-skipped: CAUGHT, caught by exp_quick exp_directed_rounds_correctly_in_both_builds

@@ -1,0 +1,26 @@
+{
+ "task": "DL-SEARCH-CACHE-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "Run 1 red fixed (lints, trace IDs, ARCH tag, corpus found empty cache paths); ruling #4237 applied (trusted = Arch::SYSTEM_DIRS); --list/trace on a missing dependency matched to the probed reference; rule 11 product test; gate and plants on dcd99fa8b pending",
+ "branch": "task/dl-search-cache-2",
+ "head": "dcd99fa8b",
+ "gate": {
+  "affected": "pending (dl-search-cache-2-gate2)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "Gaps: DF_1_NODEFLIB, $PLATFORM beyond Haswell, --library-path/--inhibit-cache, ld_cache under libFuzzer, cbench_startup counts vs origin/next",
+  "The rule 11 plant cannot run in a plants copy on a nosuid mount (the secure child test skips there); the rule 11 test passed in the role on an earlier head only"
+ ],
+ "refused": [],
+ "improvement": "plants copies on /dev/shm are nosuid, so set-ID tests skip in plants: cargo xtask plants could offer a suid-capable RAM dir",
+ "next_step": "read dl-search-cache-2-gate2 and -plants2; fix red; then DL-10",
+ "report_file": "handoff/DL-SEARCH-CACHE-2-report.md",
+ "jobs": [
+  "dl-search-cache-2-gate2",
+  "dl-search-cache-2-plants2"
+ ]
+}

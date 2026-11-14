@@ -1,0 +1,12 @@
+{"task": "LIBM-SINF-IVB-RATCHET", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: cause narrowed (not alignment/DSB, not cos-chain latency, not stack placement; fits +6 instructions on a throughput-bound loop); Estrin trial measured +0.6% and was reverted; net code change none; sinf IVB still ~1.83x",
+ "branch": "task/libm-sinf-ivb-ratchet", "head": "a8acfbc5e",
+ "gate": {"affected": "not run (no net code change vs the branch start)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "sinf IVB fix needs a cvtss2sd whose destination is its source (no false dependency, 1 instruction): plain Rust cannot pin the register; inline asm in the liella-boundary wrapper changes the trig_core interface", "recommendation": "allow option (a) in handoff/libm-sinf-ivb-ratchet.md: boundary asm conversion passing the double into trig_core, gated on IVB+N100 timing"}],
+ "informational": ["kotori turbo/frequency moves single runs by up to 20% (glibc too): judge by interleaved ratios", "saturation register row for the NEGATIVE Estrin trial not written (budget)"],
+ "refused": [],
+ "improvement": "a one-line perf-stat recipe (DSB vs MITE, RS stalls) on the timing hosts would have ruled out alignment in one call; add it to the timing tool",
+ "next_step": "confirm sinf's base cvtss2sd register choice, then build the operand with cvtss2sd xmm0,xmm0 via boundary asm and time IVB/N100",
+ "report_file": "handoff/libm-sinf-ivb-ratchet.md",
+ "jobs": ["mei:libm-sinf-ivb-ratchet-so", "mei:libm-sinf-ivb-ratchet-stage0", "mei:libm-sinf-ivb-ratchet-stage1", "kotori:libm-sinf-ivb-ratchet-ivb-before", "kotori:libm-sinf-ivb-ratchet-ivb-after", "kotori:libm-sinf-ivb-ratchet-ivb-stack"]}

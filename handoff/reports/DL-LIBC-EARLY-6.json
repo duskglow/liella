@@ -1,0 +1,11 @@
+{"task": "DL-LIBC-EARLY-6", "model": "opus", "tokens": null,
+ "result": "-5's red was its kinstr compare (head max vs next min on noisy rows); fixed compare (head median vs next max, 6 interleaved runs each): all user-mode start-up rows level with next, kernel-mode medians +0.13% (noise; keke's +2% did not repeat); no code change; FULL gate and plants pending",
+ "branch": "task/dl-libc-early-6", "head": "see hand-back",
+ "gate": {"affected": "pending: dl-libc-early-6-gate (FULL, escalated by xtask/src/so.rs)", "peak": null}, "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["-5's dl-libc-early-5-gate (FULL) and dl-libc-early-5-plants did run, both rc 0 on keke after the red verdict; the brief's 'never ran' was off; repeated here on this head as briefed", "startup_kinstr_c on a Haswell host, 6 runs each: next 146168/146396/147151, head 146325/146592/149996 (min/median/max); one high run per side; glibc's own count moved 1.2% over the same runs"],
+ "refused": [],
+ "jobs": ["dl-libc-early-6-lint", "dl-libc-early-6-kinstr", "dl-libc-early-6-gate", "dl-libc-early-6-plants"],
+ "improvement": "start-up compares should be one xtask helper (median vs other side's range over N interleaved runs) instead of per-story awk; two runs of this chain went red on hand-written compares",
+ "next_step": "DL-14: when dynamic threads are allowed, add a thread test that a new thread's rseq area is registered at __rseq_offset",
+ "report_file": "handoff/DL-LIBC-EARLY-6-report.md"}

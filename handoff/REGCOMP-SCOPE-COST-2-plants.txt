@@ -1,0 +1,24 @@
+# REGCOMP-SCOPE-COST-2 plants (cargo xtask plants; docs/plants.md). The fused ENTER/EXIT of a repetition scope.
+# The old per-level cost partly back: the group is no longer fused into ENTER/EXIT (OPEN and CLOSE inside the scope).
+group-fusion-off | crates/core/src/pattern/regex/program.rs | lit:Node::Group(g, body) if it.wrap == 0 && ==> Node::Group(g, body) if false && it.wrap == 0 && | cargo test -p liella --test regex_deep_nesting | msg:test nested_repetitions_compile_to_the_cap \.\.\. FAILED
+# The program's epsilon edges lose ENTER's skip (ranks, first bytes, empty match, one-pass check).
+eps-skip | crates/core/src/pattern/regex/program.rs | lit:if i.c == NONE { none } else { (i.c, j) } ==> none | cargo test -p liella --lib pattern::regex | msg:test [a-z0-9_:]+ \.\.\. FAILED
+# Thread-set search: the skip of an optional iteration is not taken.
+plain-skip | crates/core/src/pattern/regex/exec.rs | lit:self.insert(st, p, prog.node(inst.c, j), start, caps)?; ==> self.insert(st, p, NONE, start, caps)?; | cargo test -p liella --lib pattern::regex && cargo test -p liella --test regex_subpatterns --test regex_corpus_products | msg:test [a-z0-9_:]+ \.\.\. FAILED
+# Thread-set search: a fused group is not closed at EXIT.
+plain-close | crates/core/src/pattern/regex/exec.rs | lit:Self::set_cap(caps, idx(g.saturating_sub(1)) * 2 + 1, pos); ==> | cargo test -p liella --lib pattern::regex && cargo test -p liella --test regex_subpatterns --test regex_corpus_products | msg:test [a-z0-9_:]+ \.\.\. FAILED
+# Every capture path: a fused group is not opened at ENTER.
+enter-open | crates/core/src/pattern/regex/exec.rs | perl:s/(fn enter_caps.*?)Self::set_cap\(caps, at, pos\);/$1/s | cargo test -p liella --lib pattern::regex && cargo test -p liella --test regex_subpatterns --test regex_corpus_products | msg:test [a-z0-9_:]+ \.\.\. FAILED
+# Back-reference walk: the iteration's copy of the captures is not reset/opened.
+walk-copy-caps | crates/core/src/pattern/regex/exec.rs | lit:self.enter_caps(inst, c, at_pos); ==> | cargo test -p liella --lib pattern::regex && cargo test -p liella --test regex_subpatterns --test regex_corpus_products --test regex_backref_seed | msg:test [a-z0-9_:]+ \.\.\. FAILED
+# Back-reference walk: a fused group is not closed at EXIT.
+walk-close | crates/core/src/pattern/regex/exec.rs | lit:Self::set_cap(caps, idx(g.saturating_sub(1)) * 2 + 1, at_pos); ==> | cargo test -p liella --lib pattern::regex && cargo test -p liella --test regex_subpatterns --test regex_corpus_products --test regex_backref_seed | msg:test [a-z0-9_:]+ \.\.\. FAILED
+# Fast search (no captures): the skip is not taken.
+fast-skip | crates/core/src/pattern/regex/exec.rs | lit:self.fast_insert(st, p, prog.node(inst.c, j), start); ==> | cargo test -p liella --lib pattern::regex && cargo test -p liella --test regex_subpatterns --test regex_corpus_products | msg:test [a-z0-9_:]+ \.\.\. FAILED
+# One-pass walk: the skip is not kept as a branch. The answer stays right (the thread-set search takes over when
+# the walk fails), so only the path test sees it.
+onepass-skip | crates/core/src/pattern/regex/exec.rs | lit:w.copy_from_slice(&[inst.c, j, u32::try_from(lp).unwrap_or(0)]); ==> w.copy_from_slice(&[NONE, j, u32::try_from(lp).unwrap_or(0)]); | cargo test -p liella-boundary --test regex_paths | msg:test the_expected_execution_path_runs \.\.\. FAILED
+# Lazy DFA closure: the skip is not followed.
+dfa-skip | crates/core/src/pattern/regex/dfa.rs | lit:push(scr, prog.node(inst.c, j), &mut top); ==> | cargo test -p liella --lib pattern::regex && cargo test -p liella --test regex_subpatterns --test regex_corpus_products | msg:test [a-z0-9_:]+ \.\.\. FAILED
+# Required-bytes scan walks into an iteration that can be skipped.
+required-enter | crates/core/src/pattern/regex/required.rs | lit:OP_ENTER if i.c == NONE => pc = i.b, ==> OP_ENTER => pc = i.b, | cargo test -p liella --lib pattern::regex && cargo test -p liella --test regex_subpatterns --test regex_corpus_products | msg:test [a-z0-9_:]+ \.\.\. FAILED

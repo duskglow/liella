@@ -1,0 +1,172 @@
+mask=0x1 name=NULL: NULL errno=22
+mask=0x1fbf name=NULL: NULL errno=22
+LC_ALL=6 LC_ALL_MASK=0x1fbf LC_CTYPE_MASK=0x1
+bit0 mask=0x1 name="C.UTF-8" base=NULL: ok codeset=UTF-8 dp=. names=C.UTF-8,C,C,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=UTF-8
+bit0 mask=0x1 name="C" base=en_US: ok codeset=ANSI_X3.4-1968 dp=. names=C,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=ANSI_X3.4-1968
+bit1 mask=0x2 name="C.UTF-8" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C.UTF-8,C,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit1 mask=0x2 name="C" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,C,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+bit2 mask=0x4 name="C.UTF-8" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C.UTF-8,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit2 mask=0x4 name="C" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,en_US.UTF-8,C,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+bit3 mask=0x8 name="C.UTF-8" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C.UTF-8,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit3 mask=0x8 name="C" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,C,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+bit4 mask=0x10 name="C.UTF-8" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C.UTF-8,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit4 mask=0x10 name="C" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,C,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+bit5 mask=0x20 name="C.UTF-8" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C.UTF-8,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit5 mask=0x20 name="C" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,C,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+bit6 mask=0x40 name="C.UTF-8" base=NULL: ok codeset=UTF-8 dp=. names=C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8
+  uselocale: codeset=UTF-8
+bit6 mask=0x40 name="C" base=en_US: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit7 mask=0x80 name="C.UTF-8" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C.UTF-8,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit7 mask=0x80 name="C" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,C,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+bit8 mask=0x100 name="C.UTF-8" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C.UTF-8,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit8 mask=0x100 name="C" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,C,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+bit9 mask=0x200 name="C.UTF-8" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C.UTF-8,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit9 mask=0x200 name="C" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,C,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+bit10 mask=0x400 name="C.UTF-8" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C.UTF-8,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit10 mask=0x400 name="C" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,C,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+bit11 mask=0x800 name="C.UTF-8" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C,C.UTF-8,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit11 mask=0x800 name="C" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,C,en_US.UTF-8
+  uselocale: codeset=UTF-8
+bit12 mask=0x1000 name="C.UTF-8" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C,C,C.UTF-8
+  uselocale: codeset=ANSI_X3.4-1968
+bit12 mask=0x1000 name="C" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,C
+  uselocale: codeset=UTF-8
+bit13 mask=0x2000 name="C.UTF-8" base=NULL: NULL errno=22 base_kept=-
+bit13 mask=0x2000 name="C" base=en_US: NULL errno=22 base_kept=yes
+allmask mask=0x1fbf name="C" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+allmask|bit6 mask=0x1fff name="C" base=NULL: NULL errno=22 base_kept=-
+zero mask=0 name="C" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit31 mask=0x80000000 name="C" base=NULL: NULL errno=22 base_kept=-
+bit6|bit13 mask=0x2040 name="C" base=NULL: NULL errno=22 base_kept=-
+allmask mask=0x1fbf name="C" base=en_US: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+allmask|bit6 mask=0x1fff name="C" base=en_US: NULL errno=22 base_kept=yes
+zero mask=0 name="C" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+bit31 mask=0x80000000 name="C" base=en_US: NULL errno=22 base_kept=yes
+bit6|bit13 mask=0x2040 name="C" base=en_US: NULL errno=22 base_kept=yes
+bit6 mask=0x40 name="C" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit6|ctype mask=0x41 name="C" base=NULL: NULL errno=22 base_kept=-
+bit6|numeric|time mask=0x46 name="C" base=NULL: NULL errno=22 base_kept=-
+bit6 mask=0x40 name="C" base=en_US: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit6|ctype mask=0x41 name="C" base=en_US: NULL errno=22 base_kept=yes
+bit6|numeric|time mask=0x46 name="C" base=en_US: NULL errno=22 base_kept=yes
+bit6 mask=0x40 name="POSIX" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit6|ctype mask=0x41 name="POSIX" base=NULL: NULL errno=22 base_kept=-
+bit6|numeric|time mask=0x46 name="POSIX" base=NULL: NULL errno=22 base_kept=-
+bit6 mask=0x40 name="POSIX" base=en_US: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit6|ctype mask=0x41 name="POSIX" base=en_US: NULL errno=22 base_kept=yes
+bit6|numeric|time mask=0x46 name="POSIX" base=en_US: NULL errno=22 base_kept=yes
+bit6 mask=0x40 name="" base=NULL: ok codeset=UTF-8 dp=. names=en_US.UTF-8,C.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+bit6|ctype mask=0x41 name="" base=NULL: NULL errno=22 base_kept=-
+bit6|numeric|time mask=0x46 name="" base=NULL: NULL errno=22 base_kept=-
+bit6 mask=0x40 name="" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,C.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+bit6|ctype mask=0x41 name="" base=en_US: NULL errno=22 base_kept=yes
+bit6|numeric|time mask=0x46 name="" base=en_US: NULL errno=22 base_kept=yes
+bit6 mask=0x40 name="C.UTF-8" base=NULL: ok codeset=UTF-8 dp=. names=C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8
+  uselocale: codeset=UTF-8
+bit6|ctype mask=0x41 name="C.UTF-8" base=NULL: NULL errno=22 base_kept=-
+bit6|numeric|time mask=0x46 name="C.UTF-8" base=NULL: NULL errno=22 base_kept=-
+bit6 mask=0x40 name="C.UTF-8" base=en_US: ok codeset=UTF-8 dp=. names=C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8
+  uselocale: codeset=UTF-8
+bit6|ctype mask=0x41 name="C.UTF-8" base=en_US: NULL errno=22 base_kept=yes
+bit6|numeric|time mask=0x46 name="C.UTF-8" base=en_US: NULL errno=22 base_kept=yes
+bit6 mask=0x40 name="en_US.UTF-8" base=NULL: ok codeset=UTF-8 dp=. names=en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+bit6|ctype mask=0x41 name="en_US.UTF-8" base=NULL: NULL errno=22 base_kept=-
+bit6|numeric|time mask=0x46 name="en_US.UTF-8" base=NULL: NULL errno=22 base_kept=-
+bit6 mask=0x40 name="en_US.UTF-8" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+bit6|ctype mask=0x41 name="en_US.UTF-8" base=en_US: NULL errno=22 base_kept=yes
+bit6|numeric|time mask=0x46 name="en_US.UTF-8" base=en_US: NULL errno=22 base_kept=yes
+bit6 mask=0x40 name="xx_YY.NOPE" base=NULL: NULL errno=2 base_kept=-
+bit6 mask=0x40 name="xx_YY.NOPE" base=en_US: NULL errno=0 base_kept=yes
+allmask mask=0x1fbf name="xx_YY.NOPE" base=en_US: NULL errno=0 base_kept=yes
+ctype mask=0x1 name="xx_YY.NOPE" base=en_US: NULL errno=0 base_kept=yes
+bit6 composite mask=0x40 name="LC_CTYPE=C.UTF-8;LC_NUMERIC=C;LC_TIME=en_US.UTF-8;LC_COLLATE=C;LC_MONETARY=C;LC_MESSAGES=C;LC_PAPER=C;LC_NAME=C;LC_ADDRESS=C;LC_TELEPHONE=C;LC_MEASUREMENT=C;LC_IDENTIFICATION=C" base=NULL: ok codeset=UTF-8 dp=. names=C.UTF-8,C,en_US.UTF-8,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=UTF-8
+allmask composite mask=0x1fbf name="LC_CTYPE=C.UTF-8;LC_NUMERIC=C;LC_TIME=en_US.UTF-8;LC_COLLATE=C;LC_MONETARY=C;LC_MESSAGES=C;LC_PAPER=C;LC_NAME=C;LC_ADDRESS=C;LC_TELEPHONE=C;LC_MEASUREMENT=C;LC_IDENTIFICATION=C" base=NULL: ok codeset=UTF-8 dp=. names=C.UTF-8,C,en_US.UTF-8,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=UTF-8
+bit6 composite mask=0x40 name="LC_CTYPE=C.UTF-8;LC_NUMERIC=C;LC_TIME=en_US.UTF-8;LC_COLLATE=C;LC_MONETARY=C;LC_MESSAGES=C;LC_PAPER=C;LC_NAME=C;LC_ADDRESS=C;LC_TELEPHONE=C;LC_MEASUREMENT=C;LC_IDENTIFICATION=C" base=en_US: ok codeset=UTF-8 dp=. names=C.UTF-8,C,en_US.UTF-8,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=UTF-8
+allmask composite mask=0x1fbf name="LC_CTYPE=C.UTF-8;LC_NUMERIC=C;LC_TIME=en_US.UTF-8;LC_COLLATE=C;LC_MONETARY=C;LC_MESSAGES=C;LC_PAPER=C;LC_NAME=C;LC_ADDRESS=C;LC_TELEPHONE=C;LC_MEASUREMENT=C;LC_IDENTIFICATION=C" base=en_US: ok codeset=UTF-8 dp=. names=C.UTF-8,C,en_US.UTF-8,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=UTF-8
+bit6 name=NULL: NULL errno=22
+env LC_ALL=C.UTF-8 LC_CTYPE=(unset) LANG=en_US.UTF-8
+bit6 mask=0x40 name="" base=NULL: ok codeset=UTF-8 dp=. names=C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8
+  uselocale: codeset=UTF-8
+allmask mask=0x1fbf name="" base=NULL: ok codeset=UTF-8 dp=. names=C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8
+  uselocale: codeset=UTF-8
+numeric|time mask=0x6 name="" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C.UTF-8,C.UTF-8,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit6 mask=0x40 name="" base=en_US: ok codeset=UTF-8 dp=. names=C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8
+  uselocale: codeset=UTF-8
+allmask mask=0x1fbf name="" base=en_US: ok codeset=UTF-8 dp=. names=C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8,C.UTF-8
+  uselocale: codeset=UTF-8
+numeric|time mask=0x6 name="" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,C.UTF-8,C.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+env LC_ALL= LC_CTYPE=C.UTF-8 LANG=en_US.UTF-8
+bit6 mask=0x40 name="" base=NULL: ok codeset=UTF-8 dp=. names=C.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+allmask mask=0x1fbf name="" base=NULL: ok codeset=UTF-8 dp=. names=C.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+numeric|time mask=0x6 name="" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,en_US.UTF-8,en_US.UTF-8,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit6 mask=0x40 name="" base=en_US: ok codeset=UTF-8 dp=. names=C.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+allmask mask=0x1fbf name="" base=en_US: ok codeset=UTF-8 dp=. names=C.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+numeric|time mask=0x6 name="" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+env LC_ALL=(unset) LC_CTYPE=xx_YY.NOPE LANG=en_US.UTF-8
+bit6 mask=0x40 name="" base=NULL: NULL errno=2 base_kept=-
+allmask mask=0x1fbf name="" base=NULL: NULL errno=0 base_kept=-
+numeric|time mask=0x6 name="" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,en_US.UTF-8,en_US.UTF-8,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit6 mask=0x40 name="" base=en_US: NULL errno=0 base_kept=yes
+allmask mask=0x1fbf name="" base=en_US: NULL errno=0 base_kept=yes
+numeric|time mask=0x6 name="" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8
+env LC_ALL=(unset) LC_CTYPE=(unset) LANG=(unset)
+bit6 mask=0x40 name="" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+allmask mask=0x1fbf name="" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+numeric|time mask=0x6 name="" base=NULL: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+bit6 mask=0x40 name="" base=en_US: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+allmask mask=0x1fbf name="" base=en_US: ok codeset=ANSI_X3.4-1968 dp=. names=C,C,C,C,C,C,C,C,C,C,C,C
+  uselocale: codeset=ANSI_X3.4-1968
+numeric|time mask=0x6 name="" base=en_US: ok codeset=UTF-8 dp=. names=en_US.UTF-8,C,C,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8,en_US.UTF-8
+  uselocale: codeset=UTF-8

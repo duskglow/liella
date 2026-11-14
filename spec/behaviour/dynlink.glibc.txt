@@ -329,3 +329,603 @@ dtor F
 
 == bindnow: regular ELF files in /usr/bin (symlinks not followed)
 elf64=681 static=1 dynamic_bind_now=666 dynamic_lazy=14 type_dyn(pie)=667
+
+# DL-16P record (tools/probe/dl/dlopen/run.sh): ldd (Ubuntu GLIBC 2.39-0ubuntu8.9) 2.39; x86_64; gcc 13.3.0
+
+== P-1 mode bits (libU1 references an undefined function; libC1 is plain)
+-- NOW|LAZY on an object with an undefined function
+   ctor U1
+   dlopen(libU1 [undefined function], RTLD_NOW|RTLD_LAZY) -> handle, l_name <dir>/libU1.so
+   then dlopen(libU1, RTLD_NOW) -> handle, l_name <dir>/libU1.so
+-- NOW on the same object (control)
+   dlopen(libU1 [undefined function], RTLD_NOW) alone -> NULL: <dir>/libU1.so: undefined symbol: undefined_symbol_xyz
+-- sweep: every bit outside RTLD_LAZY|NOW|NOLOAD|DEEPBIND|GLOBAL|NODELETE (0x110f) but 0x40000000
+   NOW|0x10 libC1: invalid mode parameter
+   LAZY|0x10 libU1: invalid mode parameter
+   NOW|0x20 libC1: invalid mode parameter
+   LAZY|0x20 libU1: invalid mode parameter
+   NOW|0x40 libC1: invalid mode parameter
+   LAZY|0x40 libU1: invalid mode parameter
+   NOW|0x80 libC1: invalid mode parameter
+   LAZY|0x80 libU1: invalid mode parameter
+   NOW|0x200 libC1: invalid mode parameter
+   LAZY|0x200 libU1: invalid mode parameter
+   NOW|0x400 libC1: invalid mode parameter
+   LAZY|0x400 libU1: invalid mode parameter
+   NOW|0x800 libC1: invalid mode parameter
+   LAZY|0x800 libU1: invalid mode parameter
+   NOW|0x2000 libC1: invalid mode parameter
+   LAZY|0x2000 libU1: invalid mode parameter
+   NOW|0x4000 libC1: invalid mode parameter
+   LAZY|0x4000 libU1: invalid mode parameter
+   NOW|0x8000 libC1: invalid mode parameter
+   LAZY|0x8000 libU1: invalid mode parameter
+   NOW|0x10000 libC1: invalid mode parameter
+   LAZY|0x10000 libU1: invalid mode parameter
+   NOW|0x20000 libC1: invalid mode parameter
+   LAZY|0x20000 libU1: invalid mode parameter
+   NOW|0x40000 libC1: invalid mode parameter
+   LAZY|0x40000 libU1: invalid mode parameter
+   NOW|0x80000 libC1: invalid mode parameter
+   LAZY|0x80000 libU1: invalid mode parameter
+   NOW|0x100000 libC1: invalid mode parameter
+   LAZY|0x100000 libU1: invalid mode parameter
+   NOW|0x200000 libC1: invalid mode parameter
+   LAZY|0x200000 libU1: invalid mode parameter
+   NOW|0x400000 libC1: invalid mode parameter
+   LAZY|0x400000 libU1: invalid mode parameter
+   NOW|0x800000 libC1: invalid mode parameter
+   LAZY|0x800000 libU1: invalid mode parameter
+   NOW|0x1000000 libC1: invalid mode parameter
+   LAZY|0x1000000 libU1: invalid mode parameter
+   NOW|0x2000000 libC1: invalid mode parameter
+   LAZY|0x2000000 libU1: invalid mode parameter
+   NOW|0x4000000 libC1: invalid mode parameter
+   LAZY|0x4000000 libU1: invalid mode parameter
+   NOW|0x8000000 libC1: invalid mode parameter
+   LAZY|0x8000000 libU1: invalid mode parameter
+   NOW|0x10000000 libC1: invalid mode parameter
+   LAZY|0x10000000 libU1: invalid mode parameter
+   NOW|0x20000000 libC1: invalid mode parameter
+   LAZY|0x20000000 libU1: invalid mode parameter
+   NOW|0x80000000 libC1: invalid mode parameter
+   LAZY|0x80000000 libU1: invalid mode parameter
+-- unknown bit without a binding mode (0x10000)
+   0x10000 alone libC1: invalid mode parameter
+-- unknown bit without a binding mode (0x80000000)
+   0x80000000 alone libC1: invalid mode parameter
+-- refused bit on a file that does not exist (which check first)
+   dlopen(missing file, NOW|0x10000): invalid mode parameter
+
+== P-2 identity (id/libId.so.1 has DT_SONAME libId.so.1; id/sym.so symlink, id/hard.so hard link, id2/libId.so.1 a copy)
+-- by DT_SONAME, nothing loaded
+   by DT_SONAME before any load -> libId.so.1: cannot open shared object file: No such file or directory
+-- original path first, then each other name
+   NOLOAD by DT_SONAME before any load -> NULL
+   ctor Id
+   by path id/libId.so.1 -> handle, l_name <dir>/id/libId.so.1
+   symlink id/sym.so -> libId.so.1: same handle, l_name <dir>/id/libId.so.1
+   hard link id/hard.so: same handle, l_name <dir>/id/libId.so.1
+   id/../id/libId.so.1: same handle, l_name <dir>/id/libId.so.1
+   ./libId.so.1 (cwd id): same handle, l_name <dir>/id/libId.so.1
+   by DT_SONAME libId.so.1 (no search path holds it): same handle
+   ctor Id
+   a copy (other inode, same DT_SONAME) by path id2/libId.so.1: different handle, l_name <dir>/id2/libId.so.1
+-- hard link first
+   ctor Id
+   hard link first -> handle, l_name <dir>/id/hard.so
+   then the original path: same handle, l_name <dir>/id/hard.so
+   NOLOAD by file name hard.so (no slash): NULL
+-- copy first
+   ctor Id
+   the copy id2/libId.so.1 first -> handle, l_name <dir>/id2/libId.so.1
+   then by DT_SONAME: same handle
+   ctor Id
+   then the original by path: different handle, l_name <dir>/id/libId.so.1
+-- DT_NEEDED by DT_SONAME while the original is loaded
+   ctor Id
+   by path id/libId.so.1 -> handle, l_name <dir>/id/libId.so.1
+   ctor NeedId
+   libNeedId.so (DT_NEEDED libId.so.1, DT_RUNPATH id2 [a copy]) -> handle, l_name <dir>/libNeedId.so
+   libNeedId's use_Id answers through a definition
+   dlsym(libNeedId, fn_Id) is in <dir>/id/libId.so.1
+
+== P-3 RTLD_GLOBAL (libA3 needs libB3; libZ3 references fn_A3 and fn_B3 without DT_NEEDED)
+-- GLOBAL open: root and dependency in the global scope?
+   ctor B3
+   ctor A3
+   dlopen(libA3 [needs libB3], NOW|GLOBAL) -> handle, l_name <dir>/libA3.so
+   after: RTLD_DEFAULT fn_A3 found, fn_B3 found
+   ctor Z3
+   dlopen(libZ3 [undefined refs to fn_A3, fn_B3], NOW): handle
+-- LOCAL open, then NOLOAD|GLOBAL re-open of the root
+   ctor B3
+   ctor A3
+   dlopen(libA3, NOW|LOCAL) -> handle, l_name <dir>/libA3.so
+   after the local open: RTLD_DEFAULT fn_A3 NULL, fn_B3 NULL
+   dlopen(libZ3 [undefined refs to fn_A3, fn_B3], NOW): <dir>/libZ3.so: undefined symbol: fn_B3
+   dlopen(libA3, NOW|NOLOAD|GLOBAL): same handle
+   after the NOLOAD|GLOBAL re-open: RTLD_DEFAULT fn_A3 found, fn_B3 found
+   ctor Z3
+   dlopen(libZ3 [undefined refs to fn_A3, fn_B3], NOW): handle
+-- LAZY|LOCAL open, then NOW|GLOBAL re-open (no NOLOAD)
+   ctor B3
+   ctor A3
+   dlopen(libA3, LAZY|LOCAL) -> handle, l_name <dir>/libA3.so
+   dlopen(libA3, NOW|GLOBAL) without NOLOAD: same handle
+   after: RTLD_DEFAULT fn_A3 found, fn_B3 found
+   ctor Z3
+   dlopen(libZ3 [undefined refs to fn_A3, fn_B3], NOW): handle
+-- LOCAL open, then NOLOAD|GLOBAL of the dependency only
+   ctor B3
+   ctor A3
+   dlopen(libA3, NOW|LOCAL) -> handle, l_name <dir>/libA3.so
+   dlopen(libB3 [the dependency], NOW|NOLOAD|GLOBAL): handle
+   after: RTLD_DEFAULT fn_A3 NULL, fn_B3 found
+   dlopen(libZ3 [undefined refs to fn_A3, fn_B3], NOW): <dir>/libZ3.so: undefined symbol: fn_A3
+
+== P-4 libA4 needs libB4 then libC4; libB4 references fn_C4 (its sibling) and fn_A4 (the root), linked with neither
+-- RTLD_NOW
+   ctor C4
+   ctor B4
+   ctor A4
+   dlopen(libA4, RTLD_NOW): handle
+   libB4's use_C4() -> C4, use_A4() -> A4
+-- RTLD_LAZY
+   ctor C4
+   ctor B4
+   ctor A4
+   dlopen(libA4, RTLD_LAZY): handle
+   libB4's use_C4() -> C4, use_A4() -> A4
+
+== P-5 RTLD_NEXT/RTLD_DEFAULT from dlopen'd objects (who() in the program, libL5, libM5 and libG5; libL5 needs libM5)
+-- libL5 RTLD_LOCAL
+   ctor M5
+   ctor L5
+   libL5.so -> handle, l_name <dir>/libL5.so
+   RTLD_NEXT from the object(who) -> M5's
+   RTLD_NEXT from the object(fn_M5) -> M5's
+   RTLD_NEXT from the object(fn_L5) -> NULL: <dir>/libL5.so: undefined symbol: fn_L5
+   RTLD_NEXT from the object(fn_G5) -> NULL: <dir>/libL5.so: undefined symbol: fn_G5
+   RTLD_NEXT from the object(puts) -> the RTLD_DEFAULT definition
+   RTLD_NEXT from the object(no_such_symbol_xyz) -> NULL: <dir>/libL5.so: undefined symbol: no_such_symbol_xyz
+   RTLD_DEFAULT from the object(who) -> main's
+   RTLD_DEFAULT from the object(fn_M5) -> M5's
+   RTLD_DEFAULT from the object(fn_L5) -> L5's
+   RTLD_DEFAULT from the object(fn_G5) -> NULL: <dir>/libL5.so: undefined symbol: fn_G5
+   RTLD_DEFAULT from the object(puts) -> the RTLD_DEFAULT definition
+   RTLD_DEFAULT from the object(no_such_symbol_xyz) -> NULL: <dir>/libL5.so: undefined symbol: no_such_symbol_xyz
+   RTLD_NEXT from the program(who) -> NULL: <dir>/probe: undefined symbol: who
+-- libG5 RTLD_GLOBAL: the last object of the global scope
+   ctor G5
+   libG5.so -> handle, l_name <dir>/libG5.so
+   RTLD_NEXT from the object(who) -> NULL: <dir>/libG5.so: undefined symbol: who
+   RTLD_NEXT from the object(fn_M5) -> NULL: <dir>/libG5.so: undefined symbol: fn_M5
+   RTLD_NEXT from the object(fn_L5) -> NULL: <dir>/libG5.so: undefined symbol: fn_L5
+   RTLD_NEXT from the object(fn_G5) -> NULL: <dir>/libG5.so: undefined symbol: fn_G5
+   RTLD_NEXT from the object(puts) -> the RTLD_DEFAULT definition
+   RTLD_NEXT from the object(no_such_symbol_xyz) -> NULL: <dir>/libG5.so: undefined symbol: no_such_symbol_xyz
+   RTLD_DEFAULT from the object(who) -> main's
+   RTLD_DEFAULT from the object(fn_M5) -> NULL: <dir>/libG5.so: undefined symbol: fn_M5
+   RTLD_DEFAULT from the object(fn_L5) -> NULL: <dir>/libG5.so: undefined symbol: fn_L5
+   RTLD_DEFAULT from the object(fn_G5) -> G5's
+   RTLD_DEFAULT from the object(puts) -> the RTLD_DEFAULT definition
+   RTLD_DEFAULT from the object(no_such_symbol_xyz) -> NULL: <dir>/libG5.so: undefined symbol: no_such_symbol_xyz
+   RTLD_NEXT from the program(who) -> G5's
+-- libL5 RTLD_GLOBAL (its dependency libM5 after it)
+   ctor M5
+   ctor L5
+   libL5.so -> handle, l_name <dir>/libL5.so
+   RTLD_NEXT from the object(who) -> M5's
+   RTLD_NEXT from the object(fn_M5) -> M5's
+   RTLD_NEXT from the object(fn_L5) -> NULL: <dir>/libL5.so: undefined symbol: fn_L5
+   RTLD_NEXT from the object(fn_G5) -> NULL: <dir>/libL5.so: undefined symbol: fn_G5
+   RTLD_NEXT from the object(puts) -> the RTLD_DEFAULT definition
+   RTLD_NEXT from the object(no_such_symbol_xyz) -> NULL: <dir>/libL5.so: undefined symbol: no_such_symbol_xyz
+   RTLD_DEFAULT from the object(who) -> main's
+   RTLD_DEFAULT from the object(fn_M5) -> M5's
+   RTLD_DEFAULT from the object(fn_L5) -> L5's
+   RTLD_DEFAULT from the object(fn_G5) -> NULL: <dir>/libL5.so: undefined symbol: fn_G5
+   RTLD_DEFAULT from the object(puts) -> the RTLD_DEFAULT definition
+   RTLD_DEFAULT from the object(no_such_symbol_xyz) -> NULL: <dir>/libL5.so: undefined symbol: no_such_symbol_xyz
+   RTLD_NEXT from the program(who) -> L5's
+
+== P-6 dlerror
+-- failure, success (dlopen), dlerror
+   ctor C1
+   failed dlopen, then a successful dlopen (handle), then dlerror(): (no dlerror text)
+-- failure, success (dlsym), dlerror
+   failed dlopen, then a successful dlsym (found), then dlerror(): (no dlerror text)
+-- failure, success (dlinfo), dlerror
+   failed dlopen, then a successful dlinfo (0), then dlerror(): (no dlerror text)
+-- failure, second failure (dlsym), dlerror twice
+   failed dlopen, then a failed dlsym (NULL), then dlerror(): <dir>/probe: undefined symbol: no_such_symbol_xyz
+   and again: (no dlerror text)
+-- failure in thread A, dlerror in main and in thread B
+   main thread, after A's failed dlopen: dlerror(): (no dlerror text)
+   thread B (created after A's failure): dlerror(): (no dlerror text)
+   thread A, after the others looked: dlerror(): <dir>/no_such_file.so: cannot open shared object file: No such file or directory
+-- failure in an exited thread; failure in main seen from a new thread
+   main thread, after a thread failed and exited: dlerror(): (no dlerror text)
+   thread B (created after A's failure): dlerror(): (no dlerror text)
+   main thread, its own failure kept across the other thread: dlerror(): <dir>/no_such_file.so: cannot open shared object file: No such file or directory
+
+== P-7 a constructor of libA7 dlopens an object that needs libA7 (libB7: DT_NEEDED libA7.so, its constructor calls fn_A7)
+-- constructor dlopens libB7
+   ctor A7 begin depth=1
+   ctor B7
+   ctor B7 A7
+   ctor A7 inner dlopen(B) returned a handle
+   ctor A7 end
+   outer dlopen(libA7) [its constructor dlopens libB7, which needs libA7] -> handle, l_name <dir>/libA7.so
+   inner handle of libB7 vs dlopen(libB7, NOLOAD) now: same handle
+-- constructor dlopens its own object
+   ctor A7 begin depth=1
+   ctor A7 inner dlopen(self, NOLOAD) returned a handle
+   ctor A7 inner dlopen(self) returned a handle
+   ctor A7 end
+   outer dlopen(libA7) [its constructor dlopens itself] -> handle, l_name <dir>/libA7.so
+   inner NOLOAD handle of self vs the outer handle: same handle
+   inner plain handle of self vs the outer handle: same handle
+
+== P-8 thread B calls a dl function while thread A's dlopen runs a constructor that waits for B
+-- dlsym(RTLD_DEFAULT, puts)
+   ctor A8
+   thread B: blocked (no answer within the guard while the constructor waits)
+   ctor A8 released
+   main: dlopen(libA8) returned a handle
+   thread B: dlsym(RTLD_DEFAULT, puts) found, after the constructor was released
+-- dl_iterate_phdr
+   ctor A8
+   thread B: dl_iterate_phdr returned; libA8 listed, during the constructor
+   ctor A8 released
+   main: dlopen(libA8) returned a handle
+-- dlopen(libc.so.6, NOLOAD)
+   ctor A8
+   thread B: blocked (no answer within the guard while the constructor waits)
+   ctor A8 released
+   main: dlopen(libA8) returned a handle
+   thread B: dlopen(libc.so.6, NOLOAD) handle, after the constructor was released
+-- dlopen(libC1) [a new object]
+   ctor A8
+   thread B: blocked (no answer within the guard while the constructor waits)
+   ctor A8 released
+   main: dlopen(libA8) returned a handle
+   ctor C1
+   thread B: dlopen(libC1) handle, after the constructor was released
+-- dlsym(RTLD_DEFAULT) of the object being initialised (GLOBAL)
+   ctor A8
+   thread B: blocked (no answer within the guard while the constructor waits)
+   ctor A8 released
+   main: dlopen(libA8) returned a handle
+   thread B: dlsym(RTLD_DEFAULT, fn_A8 [the object being initialised, GLOBAL]) found, after the constructor was released
+
+== P-9 fork while thread T is inside libA9's constructor (dlopen in progress); the child uses the loader
+-- fork during a constructor; child: dl_iterate_phdr, dlsym, dlopen NOLOAD, dlopen
+   ctor A9
+   parent: fork returned
+   child: started
+   child: dl_iterate_phdr returned, 5 objects, libA9 listed
+   child: dlsym(RTLD_DEFAULT, puts) found
+   child: dlopen(libA9, NOLOAD) handle
+   ctor C1
+   child: dlopen(libC1) handle
+   child: done
+   child status: exit 0
+   ctor A9 released
+   thread T: dlopen(libA9) returned a handle
+-- fork during a constructor; child: dlsym first
+   ctor A9
+   parent: fork returned
+   child: started
+   child: dlsym(RTLD_DEFAULT, puts) found
+   child: dlopen(libA9, NOLOAD) handle
+   ctor C1
+   child: dlopen(libC1) handle
+   child: done
+   child status: exit 0
+   ctor A9 released
+   thread T: dlopen(libA9) returned a handle
+-- fork during a constructor; child: dlopen of a new object first
+   ctor A9
+   parent: fork returned
+   child: started
+   ctor C1
+   child: dlopen(libC1) handle
+   child: done
+   child status: exit 0
+   ctor A9 released
+   thread T: dlopen(libA9) returned a handle
+
+== P-10 libI10 defines the IFUNC ifn (resolver prints); libU10 references an undefined function
+-- libR10a needs libI10 then libU10; calls ifn, RTLD_NOW
+   dlopen(libR10a.so, NOW): <dir>/libU10.so: undefined symbol: undefined_symbol_xyz
+-- libR10a needs libI10 then libU10; calls ifn, RTLD_LAZY
+   ctor U10
+   ctor I10
+   ctor R10a
+   dlopen(libR10a.so, LAZY): handle
+-- libR10b needs libU10 then libI10; calls ifn, RTLD_NOW
+   resolver I10
+   dlopen(libR10b.so, NOW): <dir>/libU10.so: undefined symbol: undefined_symbol_xyz
+-- libR10b needs libU10 then libI10; calls ifn, RTLD_LAZY
+   ctor I10
+   ctor U10
+   ctor R10b
+   dlopen(libR10b.so, LAZY): handle
+-- libR10c needs libU10 only; defines and calls its own IFUNC, RTLD_NOW
+   dlopen(libR10c.so, NOW): <dir>/libU10.so: undefined symbol: undefined_symbol_xyz
+-- libR10c needs libU10 only; defines and calls its own IFUNC, RTLD_LAZY
+   ctor U10
+   ctor R10c
+   dlopen(libR10c.so, LAZY): handle
+
+== P-11 libT11: tv_ie (initial-exec, 42), tv_gd (global-dynamic, 7), tv_bss (0)
+-- threads before and after the dlopen
+   ctor T11
+   dlopen(libT11) -> handle, l_name <dir>/libT11.so
+   thread created before the dlopen: tv_ie=42 tv_gd=7 tv_bss=0; dlsym(tv_ie) is this thread's &tv_ie
+   main thread after the other thread set its tv_ie to 1042: tv_ie=42 tv_gd=7 tv_bss=0; dlsym(tv_ie) is this thread's &tv_ie
+   thread created after the dlopen: tv_ie=42 tv_gd=7 tv_bss=0; dlsym(tv_ie) is this thread's &tv_ie
+
+== P-12 dlinfo(RTLD_DI_LINKMAP) and l_name
+-- link maps
+   dlopen(NULL): dlinfo 0, link map == the handle, l_name ""
+   dlopen(""): dlinfo 0, link map == the handle, l_name ""
+   ctor C1
+   dlopen(libC1 by path): dlinfo 0, link map == the handle, l_name "<dir>/libC1.so"
+   ctor C1b
+   dlopen(./libC1b.so, relative): dlinfo 0, link map == the handle, l_name "./libC1b.so"
+   dlopen(libc.so.6): dlinfo 0, link map == the handle, l_name "/lib/x86_64-linux-gnu/libc.so.6"
+   program link map: l_prev NULL; chain by l_next: "" "linux-vdso.so.1" "/lib/x86_64-linux-gnu/libc.so.6" "/lib64/ld-linux-x86-64.so.2" "<dir>/libC1.so" "./libC1b.so"
+
+== P-13 dlopen of the program, of ld.so, of libc.so.6
+-- program, ld.so, libc
+   start-time l_name: ld.so "/lib64/ld-linux-x86-64.so.2", libc "/lib/x86_64-linux-gnu/libc.so.6"
+   program by its real path: NULL: <dir>/probe: cannot dynamically load position-independent executable
+   program by its real path, NOLOAD: NULL: (no dlerror text)
+   program as /proc/self/exe: NULL: /proc/self/exe: cannot dynamically load position-independent executable
+   ld.so by name ld-linux-x86-64.so.2: same handle as the start-time one, l_name "/lib64/ld-linux-x86-64.so.2"
+   ld.so by /lib64/ld-linux-x86-64.so.2: same handle as the start-time one, l_name "/lib64/ld-linux-x86-64.so.2"
+   ld.so by its real path: a different handle from the start-time one, l_name "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+   libc by name libc.so.6: same handle as the start-time one, l_name "/lib/x86_64-linux-gnu/libc.so.6"
+   libc by name libc.so.6, NOLOAD: same handle as the start-time one, l_name "/lib/x86_64-linux-gnu/libc.so.6"
+   libc by its real path: same handle as the start-time one, l_name "/lib/x86_64-linux-gnu/libc.so.6"
+   libc as /lib/x86_64-linux-gnu/../x86_64-linux-gnu/libc.so.6: same handle as the start-time one, l_name "/lib/x86_64-linux-gnu/libc.so.6"
+
+== P-13 again, the probe built as a non-PIE executable (-no-pie)
+-- program, ld.so, libc
+   start-time l_name: ld.so "/lib64/ld-linux-x86-64.so.2", libc "/lib/x86_64-linux-gnu/libc.so.6"
+   program by its real path: NULL: <dir>/probe_nopie: cannot dynamically load executable
+   program by its real path, NOLOAD: NULL: (no dlerror text)
+   program as /proc/self/exe: NULL: /proc/self/exe: cannot dynamically load executable
+   ld.so by name ld-linux-x86-64.so.2: same handle as the start-time one, l_name "/lib64/ld-linux-x86-64.so.2"
+   ld.so by /lib64/ld-linux-x86-64.so.2: same handle as the start-time one, l_name "/lib64/ld-linux-x86-64.so.2"
+   ld.so by its real path: a different handle from the start-time one, l_name "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+   libc by name libc.so.6: same handle as the start-time one, l_name "/lib/x86_64-linux-gnu/libc.so.6"
+   libc by name libc.so.6, NOLOAD: same handle as the start-time one, l_name "/lib/x86_64-linux-gnu/libc.so.6"
+   libc by its real path: same handle as the start-time one, l_name "/lib/x86_64-linux-gnu/libc.so.6"
+   libc as /lib/x86_64-linux-gnu/../x86_64-linux-gnu/libc.so.6: same handle as the start-time one, l_name "/lib/x86_64-linux-gnu/libc.so.6"
+== gaps
+libok.so: ok
+text64.txt: invalid ELF header
+text4096.txt: invalid ELF header
+text65536.txt: invalid ELF header
+zero4096.bin: invalid ELF header
+class0.so: wrong ELF class: ELFCLASS32
+class3.so: wrong ELF class: ELFCLASS32
+class255.so: wrong ELF class: ELFCLASS32
+identver0.so: ELF file version ident does not match current one
+ever0.so: ELF file version does not match current one
+phentsize32.so: ELF file's phentsize not the expected size
+phnum0.so: object file has no loadable segments
+ehsize0.so: ok
+nodyn.so: object file has no dynamic section
+noload.so: object file has no loadable segments
+misalign.so: ELF load command address/offset not page-aligned
+align3.so: ok
+== noload-pending
+fail then NOLOAD miss: handle NULL, dlerror NULL
+fail then successful open: handle non-NULL, dlerror NULL
+fail then NOLOAD hit: handle non-NULL, dlerror NULL
+== readers (DL-16c)
+R-1 program text: rc 0, range whole PT_LOAD span, flags 0, eh_frame set, link_map == handle
+R-1 program data: rc 0, range whole PT_LOAD span, flags 0, eh_frame set, link_map == handle
+R-1 libc text: rc 0, range whole PT_LOAD span, flags 0, eh_frame set, link_map non-null
+R-1 dlopen'd text: rc 0, range whole PT_LOAD span, flags 0, eh_frame set, link_map == handle
+R-4 stack pc: rc -1
+R-3 object "" name empty adds 5 subs 0 tls_modid 0
+R-3 object linux-vdso.so.1 name as given adds 5 subs 0 tls_modid 0
+R-3 object libc.so.6 name absolute adds 5 subs 0 tls_modid 1
+R-3 object ld-linux-x86-64.so.2 name absolute adds 5 subs 0 tls_modid 0
+R-3 object libR1.so name absolute adds 5 subs 0 tls_modid 0
+R-2 dlopen in a callback: returned 1, the running walk visits it 1, adds first 5 last 6, objects walked 6
+R-2 next walk: visits it 1, objects walked 6, adds 6
+== dladdr-dlinfo (DL-18 DL-DLADDR): sh tools/probe/dl/dladdr/run.sh SCRATCH, Skylake-SP build host, Ubuntu 24.04 glibc 2.39, gcc 13, 2026-11-14; raw addresses (arg0 of requests 2 and 11) vary per run
+== probe (no -rdynamic, DT_RPATH /prog/rp)
+== dladdr in the probe object
+dladdr base                         ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr base+1                       ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr base+64                      ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr s_a                          ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_a] saddr=base+4416
+dladdr s_a+15                       ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_a] saddr=base+4416
+dladdr s_a+16 (local gap)           ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr s_a+47 (local gap end)       ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr s_zero                       ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_zero] saddr=base+4464
+dladdr s_zero+8 (size 0)            ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr s_b (ties)                   ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_b_alias] saddr=base+4480
+dladdr s_b+8                        ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_b_alias] saddr=base+4480
+dladdr s_w1/s_w2 (weak first)       ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_w1] saddr=base+4496
+dladdr s_nt (notype)                ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_nt] saddr=base+4512
+dladdr ifres (IFUNC value)          ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_if] saddr=base+4528
+dladdr ifres+12                     ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_if] saddr=base+4528
+dladdr s_nt+8 (in s_outer)          ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_outer] saddr=base+4516
+dladdr s_impl+4 (in s_outer)        ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_impl] saddr=base+4544
+dladdr s_impl                       ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_impl] saddr=base+4544
+dladdr s_tail                       ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_tail] saddr=base+4560
+dladdr s_tail+15                    ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_tail] saddr=base+4560
+dladdr s_tail+16                    ret=1 fname=[<dir>/libP.so] fbase=base sname=[lib_tls_addr] saddr=base+4576
+dlsym s_if == s_impl 1, dlsym s_impl == base+4544
+dladdr s_obj                        ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_obj] saddr=base+16408
+dladdr s_obj+4                      ret=1 fname=[<dir>/libP.so] fbase=base sname=[s_obj] saddr=base+16408
+dladdr s_obj+8                      ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr .plt start                   ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr .plt last byte               ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr .plt.sec start               ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr .dynsym                      ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr .eh_frame                    ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+dladdr .bss start                   ret=1 fname=[<dir>/libP.so] fbase=base sname=[(null)] saddr=NULL+0
+link_map l_addr == fbase 1
+dynsym s_a        index=13 bind=1 type=2 size=16
+dynsym s_zero     index=18 bind=1 type=2 size=0
+dynsym s_b        index=21 bind=1 type=2 size=16
+dynsym s_b_alias  index=12 bind=1 type=2 size=16
+dynsym s_b_weak   index=19 bind=2 type=2 size=16
+dynsym s_w1       index=10 bind=2 type=2 size=16
+dynsym s_w2       index=15 bind=1 type=2 size=16
+dynsym s_nt       index=14 bind=1 type=0 size=16
+dynsym s_if       index=20 bind=1 type=10 size=16
+dynsym s_impl     index=16 bind=1 type=2 size=16
+dynsym s_tls      index=9 bind=1 type=6 size=8
+dynsym s_outer    index=7 bind=1 type=2 size=40
+== dladdr1
+dladdr1 SYMENT s_a+4 ret=1 sym=non-NULL value=base+4416 size=16 info=0x12
+dladdr1 SYMENT base+1 ret=1 sym=NULL sname=(null)
+dladdr1 LINKMAP s_a ret=1 map==handle 1
+dladdr1 LINKMAP main ret=1 map==dlopen(NULL) 1
+dladdr1 flags=0 ret=1 extra=untouched
+dladdr1 flags=3 ret=1 extra=untouched
+dladdr1 LINKMAP unmapped ret=0 extra=untouched
+dlerror after dladdr miss=[NULL]
+== dladdr elsewhere
+dladdr main (program)               ret=1 fname=[./probe] fbase=base sname=[(null)] saddr=NULL+0
+dladdr probe_exported (program)     ret=0 (info untouched)
+dladdr printf (libc)                ret=1 fname=[/lib/x86_64-linux-gnu/libc.so.6] fbase=base sname=[_IO_printf] saddr=base+393472
+dladdr dladdr (libc)                ret=1 fname=[/lib/x86_64-linux-gnu/libc.so.6] fbase=base sname=[dladdr] saddr=base+621024
+dladdr __tls_get_addr (ld.so)       ret=1 fname=[/lib64/ld-linux-x86-64.so.2] fbase=base sname=[__tls_get_addr] saddr=base+96288
+dladdr _dl_find_object              ret=1 fname=[/lib/x86_64-linux-gnu/libc.so.6] fbase=base sname=[_dl_find_object] saddr=base+1595296
+dladdr vDSO base                    ret=1 fname=[linux-vdso.so.1] fbase=base sname=[(null)] saddr=NULL+0
+vDSO handle found, __vdso_clock_gettime found
+dladdr vDSO clock_gettime           ret=1 fname=[linux-vdso.so.1] fbase=base sname=[clock_gettime] saddr=base+3648
+dladdr vDSO clock_gettime+1         ret=1 fname=[linux-vdso.so.1] fbase=base sname=[clock_gettime] saddr=base+3648
+dladdr NULL                         ret=0 (info untouched)
+dladdr 8                            ret=0 (info untouched)
+dladdr -1                           ret=0 (info untouched)
+dladdr stack                        ret=0 (info untouched)
+dladdr heap                         ret=0 (info untouched)
+== dlinfo
+dlinfo lib          req= 0 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo lib          req= 1 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo lib          req= 2 ret=0 dlerror=[NULL] arg0=0000594f82ca02d0
+dlinfo lib          req= 3 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo lib          req= 6 ret=0 dlerror=[NULL] arg0=2d6c642f706d742f
+dlinfo lib          req= 7 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo lib          req= 8 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo lib          req= 9 ret=0 dlerror=[NULL] arg0=0000000000000002
+dlinfo lib          req=10 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo lib          req=11 ret=12 dlerror=[NULL] arg0=000072ebbc5b6040
+dlinfo lib          req=12 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo program      req= 1 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo program      req= 2 ret=0 dlerror=[NULL] arg0=000072ebbc5f62e0
+dlinfo program      req= 3 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo program      req= 7 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo program      req= 8 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo program      req= 9 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo program      req=10 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo program      req=11 ret=13 dlerror=[NULL] arg0=0000594f5a431040
+dlinfo LMID ret=0 lmid=0
+dlinfo LINKMAP ret=0 ==handle 1 name=[<dir>/libP.so]
+dlinfo ORIGIN lib ret=0 [<dir>]
+dlinfo ORIGIN libc ret=0 [/lib/x86_64-linux-gnu]
+dlinfo TLS_MODID lib ret=0 modid=2
+dlinfo TLS_MODID program ret=0 modid=0
+dlinfo TLS_DATA main thread ret=0 data==&s_tls 0 data=NULL
+dlinfo TLS_DATA new thread, before use: ret=0 data=NULL
+dlinfo TLS_DATA new thread, after use: ret=0 data==&s_tls 1
+dlinfo PHDR ret=12 phdr==base+64 1
+dlinfo lib SERINFOSIZE ret=0 size=142 cnt=4
+dlinfo lib SERINFO ret=0 size=142 cnt=4
+  [0] [/lib/x86_64-linux-gnu] flags=0x0 offset=80
+  [1] [/usr/lib/x86_64-linux-gnu] flags=0x0 offset=102
+  [2] [/lib] flags=0x0 offset=128
+  [3] [/usr/lib] flags=0x0 offset=133
+dlinfo lib SERINFO cnt-1 ret=0 dlerror=[NULL]
+dlinfo program SERINFOSIZE ret=0 size=142 cnt=4
+dlinfo program SERINFO ret=0 size=142 cnt=4
+  [0] [/lib/x86_64-linux-gnu] flags=0x0 offset=80
+  [1] [/usr/lib/x86_64-linux-gnu] flags=0x0 offset=102
+  [2] [/lib] flags=0x0 offset=128
+  [3] [/usr/lib] flags=0x0 offset=133
+dlinfo program SERINFO cnt-1 ret=0 dlerror=[NULL]
+== extra object <dir>/sub/libQ.so
+dlinfo extra        req= 9 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo extra SERINFOSIZE ret=0 size=227 cnt=7
+dlinfo extra SERINFO ret=0 size=227 cnt=7
+  [0] [/r1] flags=0x0 offset=128
+  [1] [<dir>/sub/x] flags=0x0 offset=132
+  [2] [/r2] flags=0x0 offset=161
+  [3] [/lib/x86_64-linux-gnu] flags=0x0 offset=165
+  [4] [/usr/lib/x86_64-linux-gnu] flags=0x0 offset=187
+  [5] [/lib] flags=0x0 offset=213
+  [6] [/usr/lib] flags=0x0 offset=218
+dlinfo extra SERINFO cnt-1 ret=0 dlerror=[NULL]
+dlinfo ORIGIN extra ret=0 [<dir>/sub]
+dladdr extra fname=[<dir>/sub/libQ.so]
+== extra object <dir>/sub/libR.so
+dlinfo extra        req= 9 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo extra SERINFOSIZE ret=0 size=162 cnt=5
+dlinfo extra SERINFO ret=0 size=162 cnt=5
+  [0] [/rp] flags=0x0 offset=96
+  [1] [/lib/x86_64-linux-gnu] flags=0x0 offset=100
+  [2] [/usr/lib/x86_64-linux-gnu] flags=0x0 offset=122
+  [3] [/lib] flags=0x0 offset=148
+  [4] [/usr/lib] flags=0x0 offset=153
+dlinfo extra SERINFO cnt-1 ret=0 dlerror=[NULL]
+dlinfo ORIGIN extra ret=0 [<dir>/sub]
+dladdr extra fname=[<dir>/sub/libR.so]
+== extra object ./sub/libQ.so
+dlinfo extra        req= 9 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo extra SERINFOSIZE ret=0 size=227 cnt=7
+dlinfo extra SERINFO ret=0 size=227 cnt=7
+  [0] [/r1] flags=0x0 offset=128
+  [1] [<dir>/sub/x] flags=0x0 offset=132
+  [2] [/r2] flags=0x0 offset=161
+  [3] [/lib/x86_64-linux-gnu] flags=0x0 offset=165
+  [4] [/usr/lib/x86_64-linux-gnu] flags=0x0 offset=187
+  [5] [/lib] flags=0x0 offset=213
+  [6] [/usr/lib] flags=0x0 offset=218
+dlinfo extra SERINFO cnt-1 ret=0 dlerror=[NULL]
+dlinfo ORIGIN extra ret=0 [<dir>/sub]
+dladdr extra fname=[<dir>/sub/libQ.so]
+== probe_rd (-rdynamic), LD_LIBRARY_PATH=/l1:/l2
+dladdr1 LINKMAP main ret=1 map==dlopen(NULL) 1
+dladdr main (program)               ret=1 fname=[./probe_rd] fbase=base sname=[main] saddr=base+7560
+dladdr probe_exported (program)     ret=1 fname=[./probe_rd] fbase=base sname=[probe_exported] saddr=base+12807
+dlinfo program      req= 1 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo program      req= 2 ret=0 dlerror=[NULL] arg0=00007300b77042e0
+dlinfo program      req= 3 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo program      req= 7 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo program      req= 8 ret=-1 dlerror=[unsupported dlinfo request] arg0=5a5a5a5a5a5a5a5a
+dlinfo program      req= 9 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo program      req=10 ret=0 dlerror=[NULL] arg0=0000000000000000
+dlinfo program      req=11 ret=13 dlerror=[NULL] arg0=00005ead580f1040
+dlinfo TLS_MODID program ret=0 modid=0
+dlinfo TLS_DATA main thread ret=0 data==&s_tls 0 data=NULL
+dlinfo lib SERINFOSIZE ret=0 size=182 cnt=6
+dlinfo lib SERINFO ret=0 size=182 cnt=6
+  [0] [/l1] flags=0x0 offset=112
+  [1] [/l2] flags=0x0 offset=116
+  [2] [/lib/x86_64-linux-gnu] flags=0x0 offset=120
+  [3] [/usr/lib/x86_64-linux-gnu] flags=0x0 offset=142
+  [4] [/lib] flags=0x0 offset=168
+  [5] [/usr/lib] flags=0x0 offset=173
+dlinfo lib SERINFO cnt-1 ret=0 dlerror=[NULL]
+dlinfo program SERINFOSIZE ret=0 size=182 cnt=6
+dlinfo program SERINFO ret=0 size=182 cnt=6
+  [0] [/l1] flags=0x0 offset=112
+  [1] [/l2] flags=0x0 offset=116
+  [2] [/lib/x86_64-linux-gnu] flags=0x0 offset=120
+  [3] [/usr/lib/x86_64-linux-gnu] flags=0x0 offset=142
+  [4] [/lib] flags=0x0 offset=168
+  [5] [/usr/lib] flags=0x0 offset=173
+dlinfo program SERINFO cnt-1 ret=0 dlerror=[NULL]

@@ -1,0 +1,28 @@
+{
+ "task": "LAYOUT-DATA-CLUSTERS-11",
+ "model": "opus",
+ "tokens": null,
+ "result": "ldc9-locale-set diagnosed: after next's merge _nl_msg_cat_cntr was the first setlocale's only write on the last .bss page, so dropping the set cost net +1 inside the bound's slack; _nl_msg_cat_cntr declared (setlocale + printf 51 -> 50, Skylake-SP fast), LOCALE_BOUND 52 -> 51, plant caught",
+ "branch": "task/layout-data-clusters-11",
+ "head": "a2cce5f96",
+ "gate": {
+  "affected": "ldc11-gate (direct tier, --base origin/next) on mei, see hand-back",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "the startup-data.keys do not place the global_locale set; the declared entries still save a fault (not redundant)",
+  "the merged head reads tool 54 (TOOL_BOUND 56, -9 measured 55); the -1 came with next; TOOL_BOUND left at 56 as the brief said, a later story may tighten it to 55",
+  "count bounds keep one fault of slack, so a single-fault loss (plant ldc11-msg-cat-cntr, 50 -> 51) is invisible to them; marked equivalent with that reason; extending init_startup_data_accesses_are_in_the_data1_cluster to relay locale / tool would catch it directly"
+ ],
+ "refused": [],
+ "improvement": "the fault-bound tests print their counts only with --nocapture; printing the count in the assert message on pass/fail (or in the plants log) would have shown 52-vs-52 at -10 and saved a diagnosis run",
+ "next_step": "LAYOUT-TEXT-PIN-14; open: release-profile locale/tool counts (expect 50/54), extend the data1 access test to relay locale/tool",
+ "report_file": "handoff/LAYOUT-DATA-CLUSTERS-11.md",
+ "jobs": [
+  "ldc11-lint",
+  "ldc11-gate",
+  "ldc11-plants"
+ ]
+}

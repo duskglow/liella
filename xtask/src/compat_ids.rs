@@ -3,7 +3,7 @@
 //! Ids come from the ops store (`ops reserve COMPAT`); one file per id makes a duplicate impossible. The check (part
 //! of `cargo xtask static`, alone as `cargo xtask compat-ids`) fails when an id mentioned in `docs/`, `crates/`,
 //! `plan/` or `records/` has no record, or when the ids are not contiguous from 1 (a gap must be listed in
-//! [`LISTED_GAPS`]). The generated view `docs/compat-flags.md` and the compat records themselves are not scanned;
+//! [`LISTED_GAPS`]; an unlisted gap only warns, and fails when `LIELLA_PROMOTE=1`). The generated view `docs/compat-flags.md` and the compat records themselves are not scanned;
 //! handoff notes and reports are history and are not scanned either.
 
 use std::collections::BTreeSet;
@@ -14,6 +14,8 @@ const VIEW: &str = "docs/compat-flags.md";
 const SCANNED: [&str; 4] = ["docs", "crates", "plan", "records"];
 const EXTENSIONS: [&str; 4] = ["rs", "md", "toml", "tsv"];
 const PREFIX: &str = "COMPAT-";
+/// Set to `1` by the next->main promotion run: a gap in the ids is fatal only there (elsewhere a warning).
+const PROMOTE_ENV: &str = "LIELLA_PROMOTE";
 /// Ids deliberately absent from the registry (none).
 const LISTED_GAPS: [u32; 0] = [];
 
@@ -37,21 +39,25 @@ fn ids_in(text: &str) -> Vec<(u32, usize)> {
 }
 
 /// Problems of the record ids plus the references `(file, id, line)` found elsewhere.
-fn check_ids(rows: &BTreeSet<u32>, refs: &[(String, u32, usize)]) -> Vec<String> {
+fn check_ids(rows: &BTreeSet<u32>, refs: &[(String, u32, usize)], promote: bool) -> (Vec<String>, Vec<String>) {
     let mut errors = Vec::new();
+    let mut gaps = Vec::new();
     if let Some(&max) = rows.iter().next_back() {
         for id in 1..max {
             if !rows.contains(&id) && !LISTED_GAPS.contains(&id) {
-                errors.push(format!("{REGISTRY}: {PREFIX}{id} is missing (ids run to {PREFIX}{max}; list a deliberate gap in LISTED_GAPS)"));
+                gaps.push(format!("{REGISTRY}: {PREFIX}{id} is missing (ids run to {PREFIX}{max}; list a deliberate gap in LISTED_GAPS)"));
             }
         }
+    }
+    if promote {
+        errors.append(&mut gaps);
     }
     for (file, id, line) in refs {
         if !rows.contains(id) {
             errors.push(format!("{file}:{line}: {PREFIX}{id} has no record in {REGISTRY}/"));
         }
     }
-    errors
+    (errors, gaps)
 }
 
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -92,7 +98,11 @@ pub fn check(root: &Path) -> Result<(), String> {
             refs.push((rel.clone(), id, line));
         }
     }
-    let errors = check_ids(&rows, &refs);
+    let promote = std::env::var(PROMOTE_ENV).is_ok_and(|v| v == "1");
+    let (errors, gaps) = check_ids(&rows, &refs, promote);
+    for g in &gaps {
+        eprintln!("compat-ids: warning: {g} (ids reserved in order may land in any order; fatal only with {PROMOTE_ENV}=1)");
+    }
     if errors.is_empty() {
         return Ok(());
     }
@@ -112,19 +122,28 @@ mod tests {
 
     #[test]
     fn contiguous_ids_and_known_refs_pass() {
-        assert!(check_ids(&rows(&[1, 2]), &[("a.rs".into(), 2, 3)]).is_empty());
+        let (e, g) = check_ids(&rows(&[1, 2]), &[("a.rs".into(), 2, 3)], true);
+        assert!(e.is_empty() && g.is_empty());
     }
 
     #[test]
-    fn gap_fails() {
-        let e = check_ids(&rows(&[1, 3]), &[]);
+    fn gap_warns_without_promote() {
+        let (e, g) = check_ids(&rows(&[1, 3]), &[], false);
+        assert!(e.is_empty());
+        assert_eq!(g.len(), 1);
+        assert!(g[0].contains("COMPAT-2 is missing"));
+    }
+
+    #[test]
+    fn gap_fails_with_promote() {
+        let (e, _) = check_ids(&rows(&[1, 3]), &[], true);
         assert_eq!(e.len(), 1);
         assert!(e[0].contains("COMPAT-2 is missing"));
     }
 
     #[test]
     fn reference_without_record_fails() {
-        let e = check_ids(&rows(&[1]), &[("a.rs".into(), 9, 4)]);
+        let (e, _) = check_ids(&rows(&[1]), &[("a.rs".into(), 9, 4)], false);
         assert_eq!(e.len(), 1);
         assert!(e[0].contains("has no record"));
     }

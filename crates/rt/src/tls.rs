@@ -85,8 +85,13 @@ pub struct ThreadBlock {
     /// 0x180: the class-word table (`liella::locale::classes::ClassTable`) of the current view's
     /// `LC_CTYPE`, stored with `view` by the same writers; 0 until stored (D-5.11).
     pub wclass: AtomicUsize,
-    /// 0x188–0x300: room for later phases (0x180–0x280 is glibc's reserved area).
-    tail: [AtomicUsize; 47],
+    /// 0x188–0x280: room for later phases (0x180–0x280 is glibc's reserved area).
+    tail: [AtomicUsize; 31],
+    /// 0x280: the thread's dlerror record (DL-16a, plan/ph14/dl-16-dlopen.md §4): 0 until the
+    /// thread's first `dl*` failure, then the address of its record (`dlerror` reads it).
+    pub dlerror: AtomicUsize,
+    /// 0x288–0x300: room for later phases.
+    tail_rest: [AtomicUsize; 15],
 }
 
 /// The number of [`ThreadBlock::cache`] words.
@@ -108,11 +113,6 @@ pub const H_ERRNO_OFFSET: usize = offset_of!(ThreadBlock, h_errno);
 pub const STACK_GUARD_OFFSET: usize = offset_of!(ThreadBlock, stack_guard);
 /// `flags` bit: the runtime set this block up (rather than glibc's `ld.so`).
 pub const FLAG_OWN: u32 = 1;
-/// `flags` bit, set only in a [`FLAG_OWN`] block: its `view` and `wclass` words hold a view and
-/// that view's class table, and every later locale change of the thread stores them (the block
-/// is listed in a process the runtime started). Set once, after the first store of both words;
-/// a block made fresh starts without it (D-5.11).
-pub const FLAG_VIEW: u32 = 2;
 
 const _: () = {
     assert!(offset_of!(ThreadBlock, tcb) == 0x00);
@@ -134,6 +134,7 @@ const _: () = {
     assert!(size_of::<[AtomicUsize; CACHE_WORDS]>() == 64);
     assert!(offset_of!(ThreadBlock, wclass) == 0x180);
     assert!(offset_of!(ThreadBlock, tail) == 0x188);
+    assert!(offset_of!(ThreadBlock, dlerror) == 0x280);
     assert!(size_of::<ThreadBlock>() == 0x300);
 };
 

@@ -1,0 +1,12 @@
+{"task": "LAYOUT-DELETE-LISTS", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE (context checkpoint): committed lists, merge.py, prune.py and the xtask regen/repair/dead-key/pin code deleted; regen.sh reduced to the trace-at-build tracer; xtask does not compile yet; no jobs run",
+ "branch": "task/layout-delete-lists", "head": "55db29860",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "bench v3 measurement build (bench.rs build_archive) grouped from the committed list; with the lists gone it must be traced or ungrouped", "recommendation": "ungrouped (Layout::Ungrouped) for the v3 measurement build, said in the record; trace it only if a v3 start-up row needs it"}],
+ "informational": ["49 Rust keys of the deleted list were required pinned by check_pinned; 15 carry an explicit key-only comment (LAYOUT-HOTKEY-INLINE-STABLE), listed in handoff/LAYOUT-DELETE-LISTS.md step 10"],
+ "refused": [],
+ "impact": [{"kind": "none", "what": "WIP: deletion half-done, not buildable, not landable", "before": null, "after": null, "unit": null, "measured": false}],
+ "improvement": "a deletion story touching ~30 files with a 2,400-line hottext.rs passes a ~150k context checkpoint before the edits finish; split LT-5 into tools+xtask deletion and the pin review, or give it the RETHINK context allowance",
+ "next_step": "continue from handoff/LAYOUT-DELETE-LISTS.md 'Remaining' step 1 (hottext.rs tests/use line), then hotlists.rs rewrite, so.rs, main.rs, contracts paths, tests, docs, record; then clippy/static/gate/plants/proof",
+ "report_file": "handoff/LAYOUT-DELETE-LISTS.md",
+ "jobs": []}

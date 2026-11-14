@@ -1,0 +1,41 @@
+{
+ "task": "LIBM-HYPOT-DIRECTED-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "merged origin/next (LAYOUT-HOTKEY-INLINE-STABLE pins lookup_many) and dropped the --allow-drop hot-list regen: every crates/libc-so list equals next, no key dropped (startup-data.keys keeps global_locale::GLOBAL); hot_text_products 24/24 in both profiles; gate green; plants 3/3; hypot_near_up 329.6 -> 296.6 instr/call (glibc 68.8, 4.31x; target not reached), nearest rows unchanged",
+ "branch": "task/libm-hypot-directed-2",
+ "head": "4c5326b09 (code: the merge; later commits handoff/ only)",
+ "gate": {
+  "affected": "11687 passed / 0 failed (11 suites ok; conformance 132 passed / 0 failed; libm-hypot-directed-2-gate)",
+  "peak": "gate: peak memory 12G (page cache included; reclaimed under the limit) oom_kill=0 rc=0"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "no hot-text regen was needed after the merge: both profiles build and hot_text_products (init_data_clusters_hold_at_every_text_phase, init_short_programs_stay_within_their_page_fault_bounds) passes with next's lists unchanged",
+  "the hypot sweeps job reused the gate's test binaries (1.8 s): s10_math_symbols hypot* (4 passed), invtrig hypot* (2 passed), elem_products (1 passed; hypot in all four rounding directions against the host library)"
+ ],
+ "refused": [],
+ "impact": [
+  {"kind": "perf", "what": "hypot_near_up (FE_UPWARD) per call, Zen 1 build host, base next ca154363f", "before": 329.6, "after": 296.6, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "hypot_typ / hypot_near / hypot_bits per call (round to nearest): unchanged", "before": 105.0, "after": 105.0, "unit": "instr/call", "measured": true},
+  {"kind": "coverage", "what": "hypot hard pairs on the hardware root and through the entry in all four directions; 3 plants", "before": null, "after": 3, "unit": "plants", "measured": true},
+  {"kind": "unblock", "what": "LIBM-HYPOT-DIRECTED-FAST (held until this lands)", "before": null, "after": null, "unit": null, "measured": false}
+ ],
+ "jobs": [
+  "keke:libm-hypot-directed-2-lint1",
+  "keke:libm-hypot-directed-2-hot",
+  "keke:libm-hypot-directed-2-gate",
+  "keke:libm-hypot-directed-2-sweeps",
+  "keke:libm-hypot-directed-2-plants",
+  "keke:libm-hypot-directed-2-percall3"
+ ],
+ "superseded": [
+  "libm-hypot-directed-2-lint0 (inherited head 490dcb9d7, rc 0; step 0)",
+  "libm-hypot-directed-2-percall (short base sha refused)",
+  "libm-hypot-directed-2-percall2 (base not primed on the host)"
+ ],
+ "improvement": "wl_percall.sh could accept a short sha and prime an unprimed base itself (two wasted job starts here)",
+ "next_step": "land; then LIBM-HYPOT-DIRECTED-FAST (directed envelope elem_switched plus the non-FMA kernel)",
+ "report_file": "handoff/LIBM-HYPOT-DIRECTED.md"
+}

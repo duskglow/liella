@@ -53,6 +53,9 @@ fn store(words: &[AtomicUsize], conv: &Conv) {
 }
 
 /// The live descriptor at `cd`, or `EBADF`.
+// LAYOUT-HOTKEY-INLINE-STABLE-4: always inlined into its keyed callers (convert, close), so it has no
+// key a libm growth could kill; a fixed boundary cost 34 instructions per iconv() call (wl_percall).
+#[inline(always)]
 fn load(cd: usize) -> KResult<(&'static [AtomicUsize], Conv)> {
     let words = tb::iconv_object(cd).ok_or(Errno::EBADF)?;
     if words.first().map(|w| w.load(Relaxed)) != Some(TAG) {

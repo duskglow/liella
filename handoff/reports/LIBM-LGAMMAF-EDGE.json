@@ -1,0 +1,12 @@
+{"task": "LIBM-LGAMMAF-EDGE", "model": "opus", "tokens": null,
+ "result": "Stopped at step 1: the base (origin/next d1b3a596c) lacks the brief's prerequisites, lgamma_edge (LIBM-F32-REST-NEXT-3, red at verify, not landed) and F32-BESSEL-LARGE's exception-table tool (held at -4); no product code changed; the x < -42 analysis is recorded in the handoff (no cancellation there, y < -104.5; error budget of the double reflection <= 33 ulp of y)",
+ "branch": "task/libm-lgammaf-edge", "head": "c8531a902",
+ "gate": {"affected": "not run: no code changed (handoff note only)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "The base lacks what the brief builds on: lgamma_edge (task/libm-f32-rest-next-3) and the F32-BESSEL-LARGE exception-table generator are not on origin/next, and the brief allows no merge", "recommendation": "Re-dispatch as LIBM-LGAMMAF-EDGE-2 once LIBM-F32-REST-NEXT-3 (and LIBM-F32-BESSEL-LARGE-4) have landed, or re-cut with a brief that allows merging origin/task/libm-f32-rest-next-3 and names the table tool"}],
+ "informational": ["Below -42 lgammaf has no cancellation: y < -104.5 for every non-integer float, so the brief's near-zero case does not arise there (handoff finding 1)", "fast_gamma::lgamma_kernel (the f64 double-double kernel) covers |x| < 16 only, so it cannot be the second try for x < -42; rounding-test refusals there (about 38 per mode at margin 72) need the exception table or a double-double reflection"],
+ "refused": [],
+ "improvement": "A brief header naming the unlanded stories a brief builds on (for example Needs: LIBM-F32-REST-NEXT-3) would let the dispatcher hold admission until they land, as continuation chains already do; this run spent its first 25 calls finding the gap",
+ "next_step": "Coordinator rules on the base; the continuation then follows 'Next step' in handoff/LIBM-LGAMMAF-EDGE.md on a base that has REST-NEXT-3",
+ "report_file": "handoff/LIBM-LGAMMAF-EDGE.md",
+ "jobs": ["libm-lgammaf-edge-lint"]}

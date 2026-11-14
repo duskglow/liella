@@ -1,0 +1,12 @@
+{"task": "LAYOUT-DATA-CLUSTERS-8", "model": "opus", "tokens": null,
+ "result": "merged next; start-up instructions 2141 vs next 2142 (nothing added); fork 5 on Zen 1 and Skylake-SP (bound 6 holds); fast float = next; release localtime +2 removed (time_compat HEAD/CURRENT declared); locale/tool +1 vs next still open",
+ "branch": "task/layout-data-clusters-8", "head": null,
+ "gate": {"affected": "pending (ldc8-gate-2)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["next 07a4db6ac release products fail init_first_string_calls_after_printf_take_no_text_fault and init_zero_fault_calls_hold_at_every_text_phase on keke (strings 1); this branch fixes it",
+                   "locale/tool read 53/56 against next 52/55 (within bounds 55/58); declaring global_locale::NAME_COUNT did not change it"],
+ "refused": [],
+ "improvement": "measure.sh + probes.py (copied static probes run on another host) give all-probe, both-profile, cross-host counts in one job; a story touching start-up layout should get both from the start",
+ "next_step": "map page_faults locale on 4aec9013d vs next (scratch map.sh) and remove the +1, then tighten LOCALE/TOOL to 52/55",
+ "report_file": "handoff/LAYOUT-DATA-CLUSTERS-8.md",
+ "jobs": ["ldc8-gate-2", "ldc8-plants-2"]}

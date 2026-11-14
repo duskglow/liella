@@ -1,0 +1,18 @@
+{"task": "LAYOUT-TRACE-HOST-CANONICAL-4", "model": "opus", "tokens": null,
+ "result": "COMPLETE: host-canonical hot-text trace proven: regen --replace --build then --both on Zen 1, Skylake-SP and Haswell-EP, each under ~/bin/gate (POSIX) and a plain en_US.UTF-8 job, gives identical lists and identical fast and release products by sha256; bounds green in both profiles; gate green; 10/10 plants caught; pending record updated",
+ "branch": "task/layout-trace-host-canonical-4", "head": null,
+ "gate": {"affected": "32 suites ok; 11692 passed / 0 failed; conformance 130 passed / 0 failed", "peak": "gate: peak memory 11G (page cache included; reclaimed under the limit) oom_kill=0 rc=0"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The pending record records/pending/LAYOUT-TRACE-HOST-CANONICAL-2-1.toml (D-NEW, series D-X) still needs its id from the coordinator."],
+ "refused": [],
+ "impact": [
+   {"kind": "correctness", "what": "hot-text lists and products no longer depend on the build host or the caller's locale: 3 CPU classes x 2 locales, 7 digest rows identical (four lists, hot-text.absent, libc.a, libc.so.6, liella-crt1.o, fast and release)", "before": null, "after": 6, "unit": "identical host/locale runs", "measured": true},
+   {"kind": "coverage", "what": "plants on the tracer, canon_host, runner, prune and regen (all caught on the final head)", "before": null, "after": 10, "unit": "plants", "measured": true},
+   {"kind": "cost", "what": "trace cost of a fast regen --replace --build per host under load (four virtual CPU classes per probe; owner accepted 11-13, later speed goal LT-3 or a trace cache)", "before": null, "after": 1131, "unit": "s (max of 669-1131)", "measured": true},
+   {"kind": "unblock", "what": "LT-1 trace-at-build can rely on host-independent lists", "before": null, "after": null, "unit": null, "measured": false}
+ ],
+ "jobs": ["lthc4-lint1", "lthc4-prod", "lthc4-gate", "lthc4-plants", "lthc4-proof-keke", "mei:lthc4-proof-mei", "shiki:lthc4-proof-shiki"],
+ "improvement": "A proof script should print the locale (and any other caller input) it ran under; run 3's matching digests could not show which locale they came from, so this run had to repeat the proof to answer #5261",
+ "next_step": "Coordinator assigns the pending record's id; then land",
+ "report_file": "handoff/LAYOUT-TRACE-HOST-CANONICAL.md"}

@@ -1,0 +1,12 @@
+# DL-MULTI-WRITABLE(-2) plants (D-27.25): the self-relocator with any number of writable PT_LOADs, and RELRO protected segment by segment. The boot unit tests' memory gives each segment a view that runs past its end, so only the relocator's own checks can refuse a target or pick its segment. The ld.so plants rebuild the product first so a plant in crates/ld/src reaches it.
+wrong-segment-view | crates/ld/src/boot.rs | perl:s/let view = self\.mem\.segment\(vaddr, memsz\);/let first = self.img.writable().next().unwrap_or((vaddr, memsz));\n        let view = self.mem.segment(first.0, first.1);/ | cargo test -p liella-ld --lib boot | msg:boot::tests::writable_segments_each_relocated.*FAILED
+target-bounds-removed | crates/ld/src/boot.rs | perl:s/at >= vaddr && at\.checked_add\(8\)\.is_some_and\(.end. end <= vaddr\.wrapping_add\(memsz\)\)/at >= vaddr/ | cargo test -p liella-ld --lib boot | msg:boot::tests::refusals.*FAILED
+table-overlap-first-only | crates/ld/src/boot.rs | perl:s/img\.writable\(\)\.any\(/img.writable().take(1).any(/ | cargo test -p liella-ld --lib boot | msg:boot::tests::dynamic_and_headers.*FAILED
+relro-piece-unclipped | crates/rt/src/start.rs | lit:& !mask).min(to); ==> & !mask); | cargo test -p liella-rt --lib start | msg:relro_pieces_stop_at_segment_boundaries.*FAILED
+relro-first-segment-only | crates/ld/src/reloc.rs | lit:img.protect(a, n, PROT_READ).map_err(|()| i)?; ==> img.protect(a, n, PROT_READ).map_err(|()| i)?; break; | cargo xtask so && cargo test -p liella-ld --test reloc reloc_ldso_relro | msg:plast: writing RELRO in that segment after relocation must fault
+# cargo xtask plants results (5 plants: 5 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# wrong-segment-view: CAUGHT, caught by liella_ld boot::tests::refusals
+# target-bounds-removed: CAUGHT, caught by liella_ld boot::tests::refusals
+# table-overlap-first-only: CAUGHT, caught by liella_ld boot::tests::dynamic_and_headers
+# relro-piece-unclipped: CAUGHT, caught by liella_rt start::tests::relro_pieces_stop_at_segment_boundaries
+# relro-first-segment-only: CAUGHT, caught by reloc reloc_ldso_relro_across_segments

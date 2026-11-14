@@ -1,0 +1,12 @@
+{"task": "DL-MAP-PROBE-2", "model": "opus", "tokens": null,
+ "result": "PT_LOAD bound removed (reference loads 64..30000), fuzz 227.6M execs clean, moved 2 MiB ET_DYN corpus object added; it exposed and this run fixed ld.so protecting RELRO at bias 0 for programs without PT_PHDR",
+ "branch": "task/dl-map-probe-2", "head": null,
+ "gate": {"affected": "gate4 pending at hand-back (gate2: only the RELRO bug, since fixed; gate3: clippy unused closure, since fixed)", "peak": null},
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["#4257: direct execve of 64/65+ PT_LOAD objects fails in the kernel; out of scope per ruling #4186", "ld.rs kernel-started path still takes the bias from PT_PHDR (0 without one); untested, for a later DL story", "cargo xtask plants reuses baseline products for a mutant in crates/boundary/src/ld.rs; the plant cmd runs cargo xtask so itself"],
+ "refused": [],
+ "improvement": "cargo xtask plants should rebuild the products when a plant touches a file that goes into ld.so/libc (it reported 'baseline products, not rebuilt' and the plant survived)",
+ "next_step": "none if gate4 and plants4 are rc 0; else read their logs",
+ "report_file": "handoff/DL-MAP-PROBE.md",
+ "jobs": ["keke:dl-map-probe-2-gate4", "keke:dl-map-probe-2-plants4", "keke:dl-map-probe-2-ldprobe", "kanon:dl-map-probe-fuzz3"]}

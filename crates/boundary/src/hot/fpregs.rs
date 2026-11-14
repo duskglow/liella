@@ -1,5 +1,5 @@
 //! Machine-register intrinsics (unsafe category *machine-register*, owner ruling 2026-11-07,
-//! D-X.44): the libm envelope's two pieces of inline machine code, and nothing else.
+//! D-X.44): the libm envelope's three pieces of inline machine code, and nothing else.
 //!
 //! * [`mxcsr`]: one `stmxcsr` into a stack local, the MXCSR read of the fast entries
 //!   (`mathret::elem_fast`, `mathret::sincos_fast`) in place of a call to the out-of-line
@@ -9,11 +9,15 @@
 //!   `core::hint::black_box` on the fast path: the arithmetic on the value cannot start before the
 //!   barrier, and the barrier is not hoisted above the branch on the MXCSR value, as with
 //!   `black_box`, but without its store to and load from the stack.
+//! * [`widen`]: one `cvtss2sd` with the destination the source register (coordinator ruling #4434,
+//!   D-10.79), the `float` trig entries' operand: a merge whose old value is the operand itself,
+//!   so it waits for nothing but the operand (D-10.67), in one instruction.
 //!
 //! RULES (checked by `cargo xtask static`, unsafe audit): inline assembly is permitted in this
 //! file and in the one *tb-field* site of `tb.rs` only, and the only templates permitted here are
-//! the MXCSR store (exactly once) and the barrier's assembler comment, which names its operand
-//! (rustc refuses an operand the template does not use) and emits no instruction. Neither may
+//! the MXCSR store (exactly once), the barrier's assembler comment, which names its operand
+//! (rustc refuses an operand the template does not use) and emits no instruction, and the widening
+//! with its one operand as both source and destination. None may
 //! access memory other than
 //! the one local, transfer control, touch the flags or the stack pointer, or write a register
 //! other than its declared output. Everything else that needs the machine stays in `csys/`.
@@ -87,4 +91,30 @@ impl<A: Pin, B: Pin> Pin for (A, B) {
     fn pin(self) -> (A, B) {
         (self.0.pin(), self.1.pin())
     }
+}
+
+/// `x` as a `double`, by one `cvtss2sd` whose destination is `x`'s own register.
+///
+/// The conversion merges into the destination's upper half; with the destination the source, that
+/// half is the operand's own register, so the instruction depends on the operand only and never
+/// on an earlier, unrelated writer of the register (D-10.67). LLVM picks the destination of a plain
+/// `f64::from(x)` freely and ties it to the source only when `x` is dead afterwards (D-10.79).
+///
+/// MAY: convert the low lane in place (`{x}` is source and destination, the declared output).
+/// MAY NOT: access memory, branch, touch the flags or the stack. Not `pure`: the conversion of a
+/// NaN or subnormal raises invalid or denormal-operand, so it must not be hoisted above the
+/// caller's range test; callers convert only a normal, finite `x` (exact, raises nothing).
+#[inline(always)]
+pub(crate) fn widen(x: f32) -> f64 {
+    // `inout` needs one type in and out (f32 and f64 differ in size), so the one register is named:
+    // `%xmm0`, where the psABI passes the export's `float` argument.
+    let y: f64;
+    // UNSAFE(machine-register): the in-place widening (coordinator ruling #4434, D-10.79).
+    #[allow(unsafe_code)]
+    // UNSAFE(machine-register) SAFETY: the template is one register-to-register `cvtss2sd` on the
+    // one `xmm` operand: no memory, flag, stack or control effect, and only that register written.
+    unsafe {
+        core::arch::asm!("cvtss2sd xmm0, xmm0", in("xmm0") x, lateout("xmm0") y, options(nomem, nostack, preserves_flags)); // ARCH(x86_64): SSE2 scalar widening; aarch64 uses `fcvt` (A-4)
+    }
+    y
 }

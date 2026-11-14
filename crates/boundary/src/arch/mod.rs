@@ -15,9 +15,11 @@ pub(crate) fn set_thread_pointer(tb: usize) -> liella_kernel::errno::KResult<()>
 
 /// Hand the process to the program entry point `entry` with the initial stack `sp` (design §0a
 /// "Machine primitives", program entry transfer). The caller has mapped and relocated the program
-/// and laid out argc, argv, envp and the auxiliary vector from `sp` as the kernel does.
-pub(crate) fn enter(sp: usize, entry: usize) -> ! {
-    liella_machine_ld_enter(sp, entry)
+/// and laid out argc, argv, envp and the auxiliary vector from `sp` as the kernel does. `fini` is
+/// the termination function the program registers with `atexit` (psABI process initialisation;
+/// 0 = none): the loader's destructor pass (DL-11, D-27.19).
+pub(crate) fn enter(sp: usize, entry: usize, fini: usize) -> ! {
+    liella_machine_ld_enter(sp, entry, fini)
 }
 
 // UNSAFE(extern): the loader's machine primitives (R14-8), one declaration each.
@@ -29,7 +31,20 @@ unsafe extern "C" {
     // ARCH(x86_64): the primitive's register convention is x86-64's (entry.S); aarch64 has its own (A-4).
     pub(crate) safe fn liella_machine_ld_entry();
     /// `csys/src/machine/entry.S` assembled with `-DLIELLA_LD`: hand the process to a program's
-    /// entry point `entry` with the initial stack `sp` (argc at it). Never returns.
-    // ARCH(x86_64): x86-64 psABI process entry (%rsp, %rdx = 0); aarch64 has its own (A-4).
-    pub(crate) safe fn liella_machine_ld_enter(sp: usize, entry: usize) -> !;
+    /// entry point `entry` with the initial stack `sp` (argc at it) and the termination function
+    /// `fini` (0 = none). Never returns.
+    // ARCH(x86_64): x86-64 psABI process entry (%rsp, %rdx = fini); aarch64 has its own (A-4).
+    pub(crate) safe fn liella_machine_ld_enter(sp: usize, entry: usize, fini: usize) -> !;
+    /// `csys/src/machine/tlsdesc.S`: the TLS descriptor function of a block in the static area
+    /// (DL-15, R14-8). Never called from Rust: its address goes in a descriptor's first word.
+    // ARCH(x86_64): the %rax-only descriptor convention (tlsdesc.S header); aarch64's is AAELF64's (A-12).
+    pub(crate) safe fn liella_machine_ld_tlsdesc_static();
+}
+
+/// The address the relocator stores in a TLS descriptor's function word for a block in the static
+/// area (DL-15, design §7): [`liella_machine_ld_tlsdesc_static`].
+#[allow(clippy::as_conversions)] // a function's address has no conversion other than `as`
+pub(crate) fn tlsdesc_static() -> u64 {
+    let f: extern "C" fn() = liella_machine_ld_tlsdesc_static;
+    u64::try_from((f as *const ()).expose_provenance()).unwrap_or(0)
 }

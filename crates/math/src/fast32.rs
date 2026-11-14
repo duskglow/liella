@@ -29,6 +29,8 @@ use crate::status::{Flags, Rounding, Status};
 
 mod bessel;
 mod cexp;
+mod clog_csqrt;
+mod csinh;
 mod erf;
 mod exp_log;
 mod gamma;
@@ -36,21 +38,24 @@ mod hyperbolic;
 mod inv_trig;
 mod trig;
 
-use bessel::{bessel_core, bessel_finish};
+use bessel::bessel_eval;
+pub(crate) use bessel::bessel_large;
 #[cfg(test)]
 pub(crate) use cexp::{cexp_core, CEXP_DELTA};
 pub use cexp::{cexpf, cexpf_nearest};
-use erf::{erf_core, erfc_core, ERFC_DELTA, ERF_DELTA};
+pub use clog_csqrt::{clogf, clogf_nearest, csqrtf, csqrtf_nearest};
+pub use csinh::{csinf, csinf_nearest, csinhf, csinhf_nearest};
+use erf::{erf_core, erf_refused, erfc_core, erfc_refused, ERFC_DELTA, ERF_DELTA};
 use exp_log::*;
 pub use gamma::{eval_lgamma, eval_tgamma};
-use gamma::{gamma_core, lgamma_core, TGAMMA_DELTA};
+use gamma::{gamma_core, TGAMMA_DELTA};
 use hyperbolic::*;
 use inv_trig::*;
 use trig::*;
 pub use exp_log::{eval_pow, pow};
 pub use hyperbolic::{acosh_nearest_sqrt, asinh_nearest_sqrt};
-pub use inv_trig::{atan2, eval_atan2};
-pub use trig::sincos;
+pub use inv_trig::{acos_onepass_any, asin_onepass_any, atan2, atan2_onepass_any, atan_onepass_any, eval_atan2};
+pub use trig::{cos_nearest_widen, sin_nearest_widen, sincos, sincos_nearest_widen, tan_nearest_widen};
 
 /// The functions with a fast path.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -347,10 +352,10 @@ pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)> {
         Fast::Log2 => (log_core(x)? * INV_LN2, LOG_DELTA, "log2f"),
         Fast::Log10 => (log_core(x)? * INV_LN10, LOG_DELTA, "log10f"),
         Fast::Log1p => (log1p_core(x)?, LOG1P_DELTA, "log1pf"),
-        Fast::Sin => (trig_core(x)?.0, TRIG_DELTA, "sinf"),
-        Fast::Cos => (trig_core(x)?.1, TRIG_DELTA, "cosf"),
+        Fast::Sin => (trig_core_wide(x)?.0, TRIG_DELTA, "sinf"),
+        Fast::Cos => (trig_core_wide(x)?.1, TRIG_DELTA, "cosf"),
         Fast::Tan => {
-            let (s, c) = trig_core(x)?;
+            let (s, c) = trig_core_wide(x)?;
             (s / c, TAN_DELTA, "tanf")
         }
         Fast::Expm1 => (expm1_core(x)?, EXPM1_DELTA, "expm1f"),
@@ -367,14 +372,11 @@ pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)> {
         Fast::Erf => (erf_core(x)?, ERF_DELTA, "erff"),
         Fast::Erfc => (erfc_core(x)?, ERFC_DELTA, "erfcf"),
         Fast::Tgamma => (gamma_core(f64::from(x))?, TGAMMA_DELTA, "tgammaf"),
-        Fast::Lgamma => {
-            let (y, d) = lgamma_core(x)?;
-            (y, d, "lgammaf")
-        }
-        Fast::J0 => return bessel_finish(x, bessel_core(0, x)?, mode, "j0f"),
-        Fast::J1 => return bessel_finish(x, bessel_core(1, x)?, mode, "j1f"),
-        Fast::Y0 => return bessel_finish(x, bessel_core(2, x)?, mode, "y0f"),
-        Fast::Y1 => return bessel_finish(x, bessel_core(3, x)?, mode, "y1f"),
+        Fast::Lgamma => return eval_lgamma(x, mode).map(|r| r.0),
+        Fast::J0 => return bessel_eval(0, x, mode, "j0f"),
+        Fast::J1 => return bessel_eval(1, x, mode, "j1f"),
+        Fast::Y0 => return bessel_eval(2, x, mode, "y0f"),
+        Fast::Y1 => return bessel_eval(3, x, mode, "y1f"),
     };
     finish(x, y, delta, mode, name)
 }
@@ -405,7 +407,7 @@ include!("fast32_tables.rs");
 /// errno. Subnormal results (rare: x < -87.3 for expf) are left to the accurate path, which keeps
 /// this test to one fixed mask (s = 29).
 #[inline(always)]
-fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32> {
+pub(crate) fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32> {
     const LO: u64 = 0x3810_0000_0000_0000;
     let a = y.to_bits() & !(1 << 63);
     // (low + delta) mod 2^28 ≤ 2·delta exactly when low ≤ delta or low ≥ 2^28 - delta.
@@ -455,13 +457,14 @@ pub fn eval_nearest(f: Fast, x: f32) -> Option<f32> {
         Fast::Asinh => (asinh_core(x)?, ASINH_DELTA),
         Fast::Acosh => (acosh_core(x)?, ACOSH_DELTA),
         Fast::Atanh => (atanh_core(x)?, ATANH_DELTA),
-        // trig_core takes only normal x (2^-26 ≤ |x| < 2^19, so no denormal-operand), keeps every
+        // trig_core_wide takes only normal x (2^-26 ≤ |x| < 2^19 converted, so no denormal-operand;
+        // |x| ≥ 2^19 read from its bits by reduce_large, one inexact `cvtsi2sd`), keeps every
         // intermediate a normal `double` or zero (its proof) and |c| ≥ 2^-37, so s/c raises no
         // divide-by-zero, overflow or underflow: inexact only (LIBM-F32-SINF-SHRINK).
-        Fast::Sin => (trig_core(x)?.0, TRIG_DELTA),
-        Fast::Cos => (trig_core(x)?.1, TRIG_DELTA),
+        Fast::Sin => (trig_core_wide(x)?.0, TRIG_DELTA),
+        Fast::Cos => (trig_core_wide(x)?.1, TRIG_DELTA),
         Fast::Tan => {
-            let (s, c) = trig_core(x)?;
+            let (s, c) = trig_core_wide(x)?;
             (s / c, TAN_DELTA)
         }
         // No in-place nearest entry yet (their flags on subnormal operands are unproven here):
@@ -513,6 +516,39 @@ pub fn exp2_onepass_any(x: f32) -> Option<f32> {
     exp_onepass(x, 128.0, 0x42fc_0000) // |x| < 126
 }
 
+/// `exp10f` as [`exp_onepass_any`] (D-10.72): `c` = RN(128·log2 10), |x| < 37.9 (|x·log2 10| <
+/// 125.9, so [`exp_onepass`]'s range and proof hold unchanged: |z| < 2^13.98). 10^n is a `float`
+/// for n = 1..=10 while z = x·c is inexact there, so the operands in [1, 10] with their low 20
+/// bits clear (the integers among them; at most 4 significant bits) are refused on the bits first,
+/// by one compare: d = bits(x) - bits(1) rotated right by 20 is ≤ 0x1a exactly when d's low 20
+/// bits are clear (any set bit lands at 2^12 or above) and d ≤ bits(10) - bits(1) = 0x1a·2^20 (x
+/// below 1 wraps d above). Two separate tests compiled branchless, 5 instructions more (D-10.72).
+#[inline]
+pub fn exp10_onepass_any(x: f32) -> Option<f32> {
+    if x.to_bits().wrapping_sub(0x3f80_0000).rotate_right(20) <= (0x4120_0000 - 0x3f80_0000) >> 20 {
+        return None;
+    }
+    exp_onepass(x, INV_M, 0x4217_999a)
+}
+
+/// `logf` in the caller's rounding direction and MXCSR, unread (D-10.72; proof at [`log_onepass`]).
+#[inline]
+pub fn log_onepass_any(x: f32) -> Option<f32> {
+    log_onepass::<0>(x)
+}
+
+/// `log2f` as [`log_onepass_any`].
+#[inline]
+pub fn log2_onepass_any(x: f32) -> Option<f32> {
+    log_onepass::<1>(x)
+}
+
+/// `log10f` as [`log_onepass_any`].
+#[inline]
+pub fn log10_onepass_any(x: f32) -> Option<f32> {
+    log_onepass::<2>(x)
+}
+
 macro_rules! fast_fn {
     ($name:ident, $f:expr) => {
         fast_fn!($name, $f, exp_log);
@@ -548,8 +584,24 @@ fast_fn!(tanh, Fast::Tanh, hyper);
 fast_fn!(asinh, Fast::Asinh, hyper);
 fast_fn!(acosh, Fast::Acosh, hyper);
 fast_fn!(atanh, Fast::Atanh, hyper);
-fast_fn!(erf, Fast::Erf, special);
-fast_fn!(erfc, Fast::Erfc, special);
+
+/// `erf` for `float`: the fast path, else [`erf_refused`] (the tiny operands' direct path, else
+/// the accurate path). The tiny operands are reached only from the refusal arm, out of line, so
+/// a typical operand runs the fast path's code alone (LIBM-RETHINK-ERFC-3, D-10.107).
+pub fn erf(x: f32, mode: Rounding) -> (f32, Status) {
+    match eval(Fast::Erf, x, mode) {
+        Some(r) => r,
+        None => erf_refused(x, mode),
+    }
+}
+
+/// `erfc` for `float`: the fast path, else [`erfc_refused`] (as [`erf`]).
+pub fn erfc(x: f32, mode: Rounding) -> (f32, Status) {
+    match eval(Fast::Erfc, x, mode) {
+        Some(r) => r,
+        None => erfc_refused(x, mode),
+    }
+}
 
 #[cfg(test)]
 mod tests;

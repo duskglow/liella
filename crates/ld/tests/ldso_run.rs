@@ -193,7 +193,20 @@ fn ldso_run_aux_rewrite_and_env() {
 #[test]
 fn ldso_run_features_only_from_arch() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let mut files: Vec<PathBuf> = std::fs::read_dir(root.join("src")).unwrap().map(|e| e.unwrap().path()).filter(|p| !p.ends_with("arch.rs")).collect();
+    let src = root.join("src");
+    // Every file under src/, module directories (src/cache/) included; only the seam itself is exempt.
+    let (mut files, mut dirs) = (Vec::new(), vec![src.clone()]);
+    while let Some(d) = dirs.pop() {
+        for e in std::fs::read_dir(&d).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                dirs.push(p);
+            } else if p != src.join("arch.rs") {
+                files.push(p);
+            }
+        }
+    }
+    assert!(files.iter().any(|p| p.starts_with(src.join("cache"))), "the walk does not reach src/cache/");
     files.sort(); // FS-ORDER: every file is checked; sorted for a stable first failure
     let ld = root.join("../boundary/src/ld.rs");
     files.push(ld.clone());
@@ -241,7 +254,7 @@ fn ldso_run_as_program_at_random_bases() {
     let needs = d.join("needs");
     let o = Command::new("cc").args(["-fPIE", "-pie", "-O1"]).arg(d.join("prog.c")).args(["-nostartfiles", "-Wl,--no-as-needed", "-lm", "-o"]).arg(&needs).output().unwrap();
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
-    for (arg, msg) in [(d.join("prog.c"), "not a valid ELF"), (needs, "needs shared objects"), (d.join("absent"), "cannot open")] {
+    for (arg, msg) in [(d.join("prog.c"), "not a valid ELF"), (needs, "cannot open shared object file"), (d.join("absent"), "cannot open")] {
         let o = run(Command::new(&ld).arg(&arg));
         assert_eq!(o.status.code(), Some(127), "{}: {o:?}", arg.display());
         assert!(String::from_utf8_lossy(&o.stderr).contains(msg), "{}: {o:?}", arg.display());
@@ -298,6 +311,10 @@ fn ldso_run_secure_child_sees_unsecure_cleared() {
         return eprintln!("SKIP: the kernel did not set AT_SECURE (the file system ignores set-group-ID here)");
     }
     assert!(l.iter().any(|x| x == "secure:1"), "{l:?}");
+    // Threat model rule 11: a secure process ignores LD_TRACE_LOADED_OBJECTS and runs normally.
+    let traced = run(c.env("LD_TRACE_LOADED_OBJECTS", "1"));
+    let t = assert_ran(&traced, "secure, traced");
+    assert!(!t.iter().any(|x| x.contains(" => ") || x.contains("linux-vdso")), "secure: LD_TRACE_LOADED_OBJECTS listed: {t:?}");
     let env: Vec<&str> = l.iter().filter_map(|x| x.strip_prefix("env:")).collect();
     for n in UNSECURE {
         assert!(!env.iter().any(|e| e.split('=').next() == Some(n)), "{n} reached the secure program: {env:?}");

@@ -1,0 +1,12 @@
+{"task": "LIBM-SINCOS-SHARED", "model": "opus", "tokens": null,
+ "result": "sincosf gets an in-place fast entry from one reduction; sincosl and the double envelope path share one reduction; results bit-identical to sin/cos (D-10.89); jobs running, timing not booked",
+ "branch": "task/libm-sincos-shared", "head": null,
+ "gate": {"affected": "running at hand-back (libm-sincos-shared-gate)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["sincos (double) bench row unchanged by design: the in-place tier already shared one reduction; its 1.25x by instructions (Skylake-SP) is the tier itself", "baseline instr/op on origin/next (Skylake-SP): sincosf 251.4 vs glibc 57.6, sincos 188.6 vs 151.3, sincosl 1146.0 vs 1179.1"],
+ "refused": [],
+ "improvement": "plants that rebuild the products per plant (~270 s each) outlast an 80-call budget; a plants mode that rebuilds only the crate under test for liella-math plants would cut that to seconds",
+ "next_step": "read the gate/plants/counts/accuracy jobs on kanon, then book Ivy Bridge and N100 timing for the sincos rows",
+ "report_file": "handoff/LIBM-SINCOS-SHARED.md",
+ "jobs": ["libm-sincos-shared-gate", "libm-sincos-shared-plants", "libm-sincos-shared-counts", "libm-sincos-shared-accuracy"]}

@@ -1,0 +1,11 @@
+{"task": "LIBM-CPLX-POW", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: context checkpoint (145k of 180k) after the design; no code; proved design and file map in handoff/libm-cplx-pow.md",
+ "branch": "task/libm-cplx-pow", "head": null,
+ "gate": {"affected": "not run (no code change)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Transcendence of the parts of z^w (d != 0) is not provable with known theorems (Gelfond-Schneider covers z^w only), so the design uses a strict per-part test (decline when the interval holds a double or a midpoint) instead of the cexp-style argument; cost about 2^-10 declines per part."],
+ "refused": [],
+ "jobs": [],
+ "improvement": "Brief an Effort:max libm story with the kernel APIs it needs (file:line, contracts) or split it (double tier / float tier / boundary): reading the 32-100 KB sources to find them used most of the 180k context before any code.",
+ "next_step": "Continuation with fresh context: write complex_fast_pow.rs per handoff/libm-cplx-pow.md, wire complex.rs and the boundary, tests vs cpow_route in four modes, plants, gate, sweep, percall.",
+ "report_file": "handoff/libm-cplx-pow.md"}

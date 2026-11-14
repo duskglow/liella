@@ -1,0 +1,4 @@
+# SETLOCALE-C-ROWS plants: put the library compare (and with it a frame) back on the "C" no-change path.
+# The count test builds its own static program against the products, so each plant rebuilds them first.
+alias-libcall | crates/legacy/src/global_locale.rs | lit:same_name(s, n) || same_name(s, locale::reported(n)) ==> s == n || s == locale::reported(n) | cargo xtask so && cargo test -p liella-boundary --test setlocale_posix_repeat | msg:LC_(CTYPE|ALL) "C" again [0-9]+ instructions per call, the query again [0-9]+: more than [0-9]+ for the name
+name-libcall | crates/legacy/src/global_locale.rs | lit:same_name(s, n) || same_name ==> s == n || same_name | cargo xtask so && cargo test -p liella-boundary --test setlocale_posix_repeat | msg:LC_(CTYPE|ALL) "C" again [0-9]+ instructions per call, the query again [0-9]+: more than [0-9]+ for the name

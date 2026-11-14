@@ -31,6 +31,9 @@ static GMT: &[u8] = b"GMT\0";
 struct Glue;
 
 impl ZoneObjects for Glue {
+    // Always inlined into `time_compat::select`'s lock-free path (HOTTEXT-TIME-CLUSTER-STABLE): an
+    // out-of-line copy would have no hot-text key and land in cold text.
+    #[inline(always)]
     fn entry_at(&self, addr: usize) -> &'static Entry {
         tb::zone_entry_at(addr)
     }
@@ -92,11 +95,11 @@ pub fn gmtime(t: i64) -> KResult<struct_tm> {
 
 /// Run `f` with the calling thread's [`time::Period`] (its cache words, TB-SLOTS: three
 /// `%fs`-relative loads, and stores only when `f` changed it).
-/// The words are read and written only in a block the runtime made (D-5.11: elsewhere they are
-/// not Liella's); any other thread starts from no period on every call.
+/// The words are read and written only in a process the runtime started (D-5.11, ruling #4281:
+/// elsewhere they are another library's); there every call starts from no period.
 pub(crate) fn with_period<R>(f: impl FnOnce(&mut time::Period) -> R) -> R {
     let w = |v: usize| u64::try_from(v).unwrap_or(0);
-    let own = crate::locale::own_block();
+    let own = crate::thread::owned();
     let words = if own { [w(tb::read::<tb::TzPeriod0>()), w(tb::read::<tb::TzPeriod1>()), w(tb::read::<tb::TzPeriod2>())] } else { [0; 3] };
     let before = time::Period::from_words(&words);
     let mut p = before;

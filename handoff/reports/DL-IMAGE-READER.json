@@ -1,0 +1,12 @@
+{"task": "DL-IMAGE-READER", "model": "opus", "tokens": null,
+ "result": "ld.so reads the program from its memory image (D-27.18): unchanging PT_LOADs sliced in place, phdrs/PT_DYNAMIC/changing table segments copied before the first store; /proc/self/exe read removed",
+ "branch": "task/dl-image-reader", "head": "see hand-back",
+ "gate": {"affected": "pending: kanon:dl-image-reader-gate", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "a dependency naming the program's own file now loads as a separate object (no dev/ino without the file)", "recommendation": "accept for now; fstat the path for ld.so PROGRAM if a case needs it"},
+             {"item": "chroot-without-/proc proof and the proc-self-exe plant need unshare -r, refused on kanon", "recommendation": "run them on a host with unprivileged user namespaces"}],
+ "informational": ["programs with more than 64 PT_LOADs are refused, as libraries already are", "startup counters not run (no cbench row enters ld.so)", "Miri not run; targeted reader test instead"],
+ "refused": [],
+ "improvement": "the plants tool splits lit: fields on ' | ', so a plant on code with '|' needs a rewrite: document an escape in docs/plants.md",
+ "next_step": "run reloc_ldso_kernel_started_without_proc and the parked plant where unshare -r works; add a dynamic startup count row",
+ "report_file": "handoff/DL-IMAGE-READER.md",
+ "jobs": ["kanon:dl-image-reader-gate", "kanon:dl-image-reader-plants2"]}

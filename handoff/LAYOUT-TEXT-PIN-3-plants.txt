@@ -1,0 +1,10 @@
+# LAYOUT-TEXT-PIN-3: plants on so.rs::sections_of / index_names (#4375, ELF-header section names for the alias pass).
+# ltp3-cut-names cuts each name at 256 bytes (what readelf -SW did); ltp3-null-kept keeps the null section 0;
+# ltp3-index-shift numbers the headers from 1 (an alias would land one section off).
+ltp3-cut-names | xtask/src/so.rs | perl:s/\(i\.to_string\(\), h\.name\)\)/(i.to_string(), h.name.chars().take(256).collect::<String>()))/ | cargo test -p xtask --bin xtask so::tests::alias_sections_keep_whole_names_at_their_index | msg:alias_sections_keep_whole_names_at_their_index.*(FAILED|panicked)|assertion .*left == right
+ltp3-null-kept | xtask/src/so.rs | perl:s/\.enumerate\(\)\.skip\(1\)\.map/.enumerate().skip(0).map/ | cargo test -p xtask --bin xtask so::tests::alias_sections_keep_whole_names_at_their_index | msg:alias_sections_keep_whole_names_at_their_index.*(FAILED|panicked)|assertion .*left == right
+ltp3-index-shift | xtask/src/so.rs | perl:s/\.map\(\|\(i, h\)\| \(i\.to_string\(\)/.map(|(i, h)| ((i + 1).to_string()/ | cargo test -p xtask --bin xtask so::tests::alias_sections_keep_whole_names_at_their_index | msg:alias_sections_keep_whole_names_at_their_index.*(FAILED|panicked)|assertion .*left == right
+# cargo xtask plants results (3 plants: 3 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# ltp3-cut-names: CAUGHT, caught by xtask so::tests::alias_sections_keep_whole_names_at_their_index
+# ltp3-null-kept: CAUGHT, caught by xtask so::tests::alias_sections_keep_whole_names_at_their_index
+# ltp3-index-shift: CAUGHT, caught by xtask so::tests::alias_sections_keep_whole_names_at_their_index

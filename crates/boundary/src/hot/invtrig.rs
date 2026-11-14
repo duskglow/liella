@@ -26,3 +26,16 @@ invtrig_nearest! {
     atan2_nearest(y, x) [];
     hypot_nearest(x, y) [sqrtsd];
 }
+
+/// The `double` `csqrt` quick tier (LIBM-CPLX-LOG-SQRT, D-10.74) with the hardware root: both
+/// parts or `None`.
+#[inline(always)]
+pub(crate) fn csqrt_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
+    liella_math::complex_fast::csqrt_nearest(x, y, sqrtsd)
+}
+
+/// The `float` `csqrtf` quick tier (LIBM-CPLX-LOG-SQRT, D-10.74) with the hardware root.
+#[inline(always)]
+pub(crate) fn csqrtf_nearest(x: f32, y: f32) -> Option<(f32, f32)> {
+    liella_math::fast32::csqrtf_nearest(x, y, sqrtsd)
+}

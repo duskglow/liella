@@ -923,8 +923,9 @@ fn s14_9_f_0() {
     assert_eq!(code("*a", E), 13, "REG_BADRPT");
     let nest = |n: usize| "(".repeat(n) + "a" + &")".repeat(n);
     assert_eq!(code(&nest(200), E), 0, "200 nested groups");
-    assert_eq!(code(&nest(300), E), 12, "REG_ESPACE: a tree deeper than the limit (256)");
-    assert_eq!(code(&("a".to_string() + &"*".repeat(300)), E), 12, "REG_ESPACE: 300 repetitions of one operand");
+    // No nesting limit (REGCOMP-DEEP-NESTING): deep trees compile, as the reference's do.
+    assert_eq!(code(&nest(300), E), 0, "300 nested groups");
+    assert_eq!(code(&("a".to_string() + &"*".repeat(300)), E), 0, "300 repetitions of one operand");
     // Stacked `+` levels are compiled as written but grow linearly, one copy of the operand per
     // level (D-14.8 amendment, COMPAT-4); glibc doubles per level and answers REG_ESPACE from 24
     // levels on `b*` (over 30 s on this 17-level pattern, FZ-1). Past 2^21 matcher states the

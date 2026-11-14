@@ -72,7 +72,8 @@ impl Sink for Args<'_> {
 
 /// Scan `input` with `fmt` and the arguments of the `va_list` at `ap`: the assignments made,
 /// `None` (`EOF`) for an input failure before the first conversion; `errno` is set for a read
-/// or encoding error whatever the result.
+/// or encoding error whatever the result, otherwise to `ERANGE` when a floating conversion's
+/// result was out of range (D-12.26).
 fn run<F: FmtUnit>(fmt: &[F], set: Set, ap: usize, input: &mut dyn Input) -> KResult<Option<i32>> {
     let loc = locale::current();
     // ARCH(x86_64): rounding mode read from MXCSR; FPCR on aarch64 (A-9)
@@ -80,6 +81,10 @@ fn run<F: FmtUnit>(fmt: &[F], set: Set, ap: usize, input: &mut dyn Input) -> KRe
     let mut va = CVa(ap);
     let mut args = Args(Pointers::new(&mut va));
     let r = engine::scan(fmt, input, &mut args, ctx)?;
+    liella_legacy::num_compat::raise_signals(&CSys, r.signals);
+    if r.range {
+        errno::set(Errno::ERANGE);
+    }
     if let Some(e) = r.error {
         errno::set(e);
     }

@@ -1,0 +1,17 @@
+erfc-up-neg | crates/math/src/fast32/erf.rs | lit:(Rounding::Up, true) => 0x3f80_0001, ==> (Rounding::Up, true) => 0x3f80_0000, | cargo test -p liella-math --release --lib -- erf oracle | msg:erf_fast_path_agrees_with_the_accurate_path.*(FAILED|panicked)
+erf-c-precision | crates/math/src/fast32/erf.rs | lit:f64::from_bits(0x3ff2_0dd7_5042_9b6d); ==> f64::from_bits(0x3ff2_0dd7_5000_0000); | cargo test -p liella-math --release --lib -- erf oracle | msg:erf_fast_path_agrees_with_the_accurate_path.*(FAILED|panicked)
+erf-zero-step | crates/math/src/fast32/erf.rs | lit:Rounding::Zero if (if neg { back < y } else { back > y }) => b - 1, ==> Rounding::Zero if (if neg { back < y } else { back > y }) => b, | cargo test -p liella-math --release --lib -- erf oracle | msg:erf_fast_path_agrees_with_the_accurate_path.*(FAILED|panicked)
+erf-tiny-flags | crates/math/src/fast32/erf.rs | lit:let f = Flags::INEXACT.union(Flags::UNDERFLOW); ==> let f = Flags::INEXACT; | cargo test -p liella-math --release --lib -- erf oracle | msg:erf_fast_path_agrees_with_the_accurate_path.*(FAILED|panicked)
+erf-tiny-band-end | crates/math/src/fast32/erf.rs | lit:pub(super) const ERF_TINY_MAX: u32 = 0x0071_6fe1; ==> pub(super) const ERF_TINY_MAX: u32 = 0x0071_6fe2; | cargo test -p liella-math --release --lib -- erf oracle | msg:erf_fast_path_agrees_with_the_accurate_path.*(FAILED|panicked)
+erf-entry-skips-direct | crates/math/src/fast32.rs | lit:None => erf_refused(x, mode), ==> None => crate::special::erf(x, mode), | cargo test -p liella-math --release --lib -- erf oracle | msg:erf_fast_path_agrees_with_the_accurate_path.*(FAILED|panicked)
+erfc-entry-skips-direct | crates/math/src/fast32.rs | lit:None => erfc_refused(x, mode), ==> None => crate::special::erfc(x, mode), | cargo test -p liella-math --release --lib -- erf oracle | msg:erf_fast_path_agrees_with_the_accurate_path.*(FAILED|panicked)
+erf-refused-fallback | crates/math/src/fast32/erf.rs | lit:None => crate::special::erf(x, mode), ==> None => crate::special::erfc(x, mode), | cargo test -p liella-math --release --lib -- erf oracle | msg:erf_fast_path_agrees_with_the_accurate_path.*(FAILED|panicked)
+# cargo xtask plants results (8 plants: 8 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# erfc-up-neg: CAUGHT, caught by liella_math fast32::erf::tests::erf_fast_path_agrees_with_the_accurate_path
+# erf-c-precision: CAUGHT, caught by liella_math fast32::erf::tests::erf_fast_path_agrees_with_the_accurate_path
+# erf-zero-step: CAUGHT, caught by liella_math fast32::erf::tests::erf_fast_path_agrees_with_the_accurate_path
+# erf-tiny-flags: CAUGHT, caught by liella_math fast32::erf::tests::erf_fast_path_agrees_with_the_accurate_path
+# erf-tiny-band-end: CAUGHT, caught by liella_math fast32::erf::tests::erf_fast_path_agrees_with_the_accurate_path
+# erf-entry-skips-direct: CAUGHT, caught by liella_math fast32::erf::tests::erf_fast_path_agrees_with_the_accurate_path
+# erfc-entry-skips-direct: CAUGHT, caught by liella_math fast32::erf::tests::erf_fast_path_agrees_with_the_accurate_path
+# erf-refused-fallback: CAUGHT, caught by liella_math fast32::erf::tests::erf_fast_path_agrees_with_the_accurate_path
