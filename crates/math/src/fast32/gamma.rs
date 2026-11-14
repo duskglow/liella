@@ -439,7 +439,9 @@ mod tests {
         let (mut n, mut worst) = (0u32, 0.0f64);
         for x in reflect_sample() {
             let xd = f64::from(x);
-            let Some((y, d, sign, edge)) = lgamma_core_signed(x) else { panic!("reflection refused {x:e}") };
+            let got = lgamma_core_signed(x);
+            assert!(got.is_some(), "reflection refused {x:e}");
+            let Some((y, d, sign, edge)) = got else { continue };
             assert_eq!((d, edge), (LGAMMA_REFLECT_DELTA, false), "{x:e}");
             let ((f, _), fs) = crate::special::lgamma_accurate::<f64>(xd, Rounding::Nearest);
             let ulp = f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
@@ -465,7 +467,9 @@ mod tests {
         let mut n = 0u32;
         for x in xs {
             for m in MODES {
-                let Some(r) = eval_lgamma(x, m) else { panic!("lgammaf({x:e}) refused in {m:?}") };
+                let got = eval_lgamma(x, m);
+                assert!(got.is_some(), "lgammaf({x:e}) refused in {m:?}");
+                let Some(r) = got else { continue };
                 let want = crate::special::lgamma_accurate::<f32>(x, m);
                 assert_eq!((x.to_bits(), m, r.0.0.to_bits(), r.0.1, r.1), (x.to_bits(), m, want.0.0.to_bits(), want.0.1, want.1), "lgammaf below -42");
                 n += 1;
@@ -491,7 +495,9 @@ mod tests {
         }
         for &x in &found {
             for m in MODES {
-                let Some(r) = eval_lgamma(x, m) else { panic!("lgammaf({x:e}) refused in {m:?}") };
+                let got = eval_lgamma(x, m);
+                assert!(got.is_some(), "lgammaf({x:e}) refused in {m:?}");
+                let Some(r) = got else { continue };
                 let want = crate::special::lgamma_accurate::<f32>(x, m);
                 assert_eq!((x.to_bits(), m, r.0.0.to_bits(), r.0.1, r.1), (x.to_bits(), m, want.0.0.to_bits(), want.0.1, want.1), "second try");
             }
@@ -511,7 +517,9 @@ mod tests {
             let x = f32::from_bits((e >> 32) as u32);
             assert_eq!(lgammaf_last_try_refused(x), Some(true), "{x:e} is a refused operand");
             for m in MODES {
-                let Some(r) = eval_lgamma(x, m) else { panic!("lgammaf({x:e}) refused in {m:?}") };
+                let got = eval_lgamma(x, m);
+                assert!(got.is_some(), "lgammaf({x:e}) refused in {m:?}");
+                let Some(r) = got else { continue };
                 let want = crate::special::lgamma_accurate::<f32>(x, m);
                 assert_eq!((x.to_bits(), m, r.0.0.to_bits(), r.0.1, r.1), (x.to_bits(), m, want.0.0.to_bits(), want.0.1, want.1), "table entry");
             }
@@ -576,7 +584,8 @@ mod tests {
             text += "];\n";
             std::print!("{text}");
             if let Ok(p) = std::env::var("LIELLA_LGAMMAF_TABLE_OUT") {
-                std::fs::write(&p, &text).unwrap_or_else(|e| panic!("{p}: {e}"));
+                let w = std::fs::write(&p, &text);
+                assert!(w.is_ok(), "{p}: {w:?}");
             }
         }
         assert!(ok, "lgammaf's table is not the refused set");

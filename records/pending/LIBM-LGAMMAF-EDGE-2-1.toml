@@ -1,8 +1,9 @@
 id = "D-NEW"
+series = "D-10"
 section = "s10"
 spec = "§10.3"
 ann = "—"
-status = "pending"
+status = "active"
 story = "LIBM-LGAMMAF-EDGE-2"
 date = "2026-11-14"
 body = '''
