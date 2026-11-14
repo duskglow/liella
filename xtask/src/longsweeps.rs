@@ -164,6 +164,8 @@ pub const SWEEPS: &[Sweep] = &[
     lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::j1f_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::y0f_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::y1f_fast_path_agrees_exhaustively", Group::Exhaustive),
+    // jnf/ynf orders 0 and ±1 against j0f..y1f, every float in every mode (LIBM-JNF-LARGE).
+    lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::jnf_ynf_low_orders_are_the_order_functions_exhaustively", Group::Exhaustive),
     // Every float of 2^19..2^128 through the large-band core, once per function, but no oracle: about 40 s at
     // opt-level 2 on a Haswell-EP host (26 vCPU), so it runs with the long group (D-10.109).
     lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::bessel_large_table_is_the_refused_set", Group::Long),
