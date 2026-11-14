@@ -41,6 +41,15 @@ pub(crate) const NONE: u32 = u32::MAX;
 /// recursion stays within a few tens of KiB on any thread.
 const RECURSE_DEPTH: u32 = 64;
 
+/// What the tests observe of the compiler's paths.
+#[cfg(test)]
+pub(crate) mod counters {
+    std::thread_local! {
+        /// Subtrees [`super::Builder::node`] handed to the explicit-stack compiler.
+        pub(crate) static HANDOFFS: core::cell::Cell<u64> = const { core::cell::Cell::new(0) };
+    }
+}
+
 pub(crate) const OP_BYTE: u32 = 1;
 pub(crate) const OP_SET: u32 = 2;
 pub(crate) const OP_SPLIT: u32 = 3;
@@ -358,17 +367,24 @@ impl Builder {
             Node::Set(k) => self.emit(OP_SET, k, next, 0, chain)?,
             Node::Assert(a) => self.emit(OP_ASSERT, assert_code(a), next, 0, chain)?,
             Node::Backref(g) => self.emit(OP_BACKREF, g, next, 0, chain)?,
+            // A concatenation's or an alternation's leaves are compiled in place, without a call.
             Node::Cat(s, l) => {
                 let mut pc = next;
                 for &k in t.kids(s, l).iter().rev() {
-                    pc = self.node(t, k, pc, chain, NONE, d)?;
+                    pc = match self.quick(t, k, pc, chain)? {
+                        Some(pc) => pc,
+                        None => self.node(t, k, pc, chain, NONE, d)?,
+                    };
                 }
                 pc
             }
             Node::Alt(s, l) => {
                 let base = self.entries.len();
                 for &k in t.kids(s, l) {
-                    let e = self.node(t, k, next, chain, NONE, d)?;
+                    let e = match self.quick(t, k, next, chain)? {
+                        Some(pc) => pc,
+                        None => self.node(t, k, next, chain, NONE, d)?,
+                    };
                     self.entries.push(e)?;
                 }
                 let mut pc = if self.entries.len() > base { self.entries.pop().unwrap_or(next) } else { next };
@@ -492,6 +508,8 @@ impl Builder {
     #[cold]
     #[inline(never)]
     fn compile(&mut self, t: &Parsed, c: Call) -> Result<u32, ReError> {
+        #[cfg(test)]
+        counters::HANDOFFS.with(|n| n.set(n.get() + 1));
         let mut frames: Stack<Frame, 8> = Stack::new(Frame::Open { g: 0, chain: 0 });
         let mut step = self.start(t, c, &mut frames)?;
         loop {
@@ -2081,5 +2099,34 @@ mod class_tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod recursion_tests {
+    use super::*;
+    use crate::locale::Locale;
+    use crate::pattern::regex::cflags;
+
+    /// The subtrees handed to the explicit-stack compiler while `n` nested groups around `a`
+    /// compile (ERE). The tree is the groups, outermost first, then the byte at depth `n`.
+    fn handoffs(n: usize) -> u64 {
+        let pat = std::format!("{}a{}", "(".repeat(n), ")".repeat(n));
+        counters::HANDOFFS.with(|c| c.set(0));
+        super::super::compile(pat.as_bytes(), super::super::regcomp_syntax(cflags::EXTENDED), &Locale::C).unwrap();
+        counters::HANDOFFS.with(core::cell::Cell::get)
+    }
+
+    #[test]
+    fn compiler_recurses_below_its_bound_and_hands_off_at_it() {
+        // Trace: no spec clause (resource bound of the implementation, ruling #5529: a tree
+        // shallower than RECURSE_DEPTH compiles by native recursion alone, the cheap path of
+        // ordinary patterns; the node at that depth goes to the explicit stack, which bounds the
+        // native stack whatever the nesting).
+        let d = usize::try_from(RECURSE_DEPTH).unwrap();
+        assert_eq!(handoffs(d - 1), 0, "a tree {} deep left the recursion", d - 1);
+        assert_eq!(handoffs(d), 1, "the node at depth {d} did not go to the explicit stack");
+        assert_eq!(handoffs(4), 0, "a shallow tree left the recursion");
     }
 }
