@@ -34,8 +34,10 @@ In a process another C library started, `thread::words()` / `foreign_words()` gi
 - 10301e40c: tb_foreign_words sets the global locale to C.UTF-8 first (MB_CUR_MAX 6), restores "C" at the end; a
   view resolved from the block's word now answers 1. gate-1 (FULL, on 8cb30e97a) stopped as stale (kill-label).
 - Final jobs on 10301e40c (mei): tb-foreign-safety-12-lint-3 (workspace clippy --all-features, xtask clippy, static)
-  rc 0; tb-foreign-safety-12-plants-2; tb-foreign-safety-12-gate-2 (`affected --run --base origin/next`, escalates
-  to FULL as every run of this story).
+  rc 0; tb-foreign-safety-12-plants-2 rc 0: 5 caught (`view-unstored-ungated` now caught), 1 WARN-NO-MSG
+  (`mask-always-owned` ended the test process with SIGABRT, a signal the plant's msg regex does not list; a later
+  plants file should add `SIGABRT|signal: 6` to it); tb-foreign-safety-12-gate-2 (`affected --run --base
+  origin/next`, escalates to FULL as every run of this story), pending at hand-back.
 
 ## Counts (instructions:u per call, validation/percall/locale.c, Release, mei Skylake-SP, base = next d53c0d551)
 mei tb-foreign-safety-12-percall-2 on 8cb30e97a (percall on 15e4256d4 in brackets):
