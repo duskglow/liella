@@ -6,8 +6,8 @@
 //! and with the limit still in force a small pattern must still compile and match.
 //!
 //! A second child shows that the process's limit is the only size bound (no fixed cap): deep
-//! nested repetitions, exponential bounded repeats and regexec's tables for a big program all
-//! answer `REG_ESPACE` under it, without an abort or a signal.
+//! nested repetitions, exponential bounded repeats and regexec's subexpression search on a big
+//! program all answer `REG_ESPACE` under it, without an abort or a signal.
 //!
 //! The limit is process-wide and permanent, so each test runs in a re-executed child.
 #![allow(clippy::arithmetic_side_effects, clippy::unwrap_used, clippy::indexing_slicing, clippy::as_conversions, missing_docs)]
@@ -135,8 +135,9 @@ const LIMIT_HEADROOM: u64 = 8 << 20;
 fn limit_body() -> i32 {
     pin_to_current_cpu();
     // Before the limit: a program of about 2 million states (depth 1446; it compiled under the
-    // former cap too) whose search tables need tens of MiB. The trailing `b` makes it
-    // non-nullable, so no search can answer from the empty match without those tables.
+    // former cap too). Its search with subexpressions needs far more than the headroom; the
+    // search without them needs only a few tables per node and fits it. The trailing `b` makes
+    // the program non-nullable, so no search can answer from the empty match.
     let (mut big, rc) = compile(&(nested_rep("a", 1446) + "b"));
     if rc != 0 {
         eprintln!("depth 1446 without a limit: {rc}");
@@ -164,17 +165,20 @@ fn limit_body() -> i32 {
             return 22;
         }
     }
-    // regexec's tables for the big program do not fit either: REG_ESPACE, with and without
-    // subexpressions, and the program stays usable.
+    // regexec with subexpressions on the big program does not fit: REG_ESPACE. The program
+    // stays usable: the search without subexpressions, which fits, then finds the match.
     // The subject holds the required `b`, so the prefilter cannot answer before the engine.
     let subject = std::ffi::CString::new("xaby").unwrap();
     let mut m = [liella_abi::layout::regmatch_t { rm_so: -1, rm_eo: -1 }; 2];
-    for nmatch in [0usize, 2] {
-        let rc = rx::regexec(Some(&big), subject.as_ptr(), nmatch, m.as_mut_ptr(), 0);
-        if rc != REG_ESPACE {
-            eprintln!("regexec (nmatch {nmatch}) of the depth-1446 program under the limit: {rc}, not REG_ESPACE");
-            return 23;
-        }
+    let rc = rx::regexec(Some(&big), subject.as_ptr(), 2, m.as_mut_ptr(), 0);
+    if rc != REG_ESPACE {
+        eprintln!("regexec (nmatch 2) of the depth-1446 program under the limit: {rc}, not REG_ESPACE");
+        return 23;
+    }
+    let rc = rx::regexec(Some(&big), subject.as_ptr(), 0, core::ptr::null_mut(), 0);
+    if rc != 0 {
+        eprintln!("regexec (nmatch 0) of the depth-1446 program after REG_ESPACE: {rc}, not a match");
+        return 25;
     }
     rx::regfree(Some(&mut big));
     // The limit is still on: a small pattern still compiles and matches.

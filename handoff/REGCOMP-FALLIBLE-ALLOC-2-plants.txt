@@ -1,0 +1,8 @@
+# REGCOMP-FALLIBLE-ALLOC-2 plants (cargo xtask plants; docs/plants.md). No fixed program-size cap; every
+# allocation of the compiler and the matcher fallible, the process's limits the only bound (D-14.8 as amended).
+# The fixed node cap back (2^21 states): the depth-1447 and depth-3000 nested repetitions are refused.
+node-cap | crates/core/src/pattern/regex/program.rs | lit:limit: limit.min(NODES_REPRESENTABLE) ==> limit: limit.min(1 << 21) | cargo test -p liella --test regex_deep_nesting | msg:nested_repetitions_compile_without_a_size_cap.*(panicked|FAILED)
+# regcomp: the first table sized by the node count grows infallibly (a panic, not REG_ESPACE, under the limit).
+derive-owner-infallible | crates/core/src/pattern/regex/program.rs | lit:nomem(owner.resize(nodes, (0, 0)))?; ==> owner.resize(nodes, (0, 0)).expect("plant"); | cargo test -p liella-boundary --test regex_enomem | msg:the limit child failed
+# regexec: the search's own heap pools grow infallibly (a panic, not REG_ESPACE, when the subexpression search does not fit).
+exec-heap-infallible | crates/core/src/pattern/regex/scratch.rs | lit:v.resize(n, T::default()).map_err(|_| ())?; ==> v.resize(n, T::default()).expect("plant"); | cargo test -p liella-boundary --test regex_enomem | msg:the limit child failed
