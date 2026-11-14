@@ -18,11 +18,13 @@
 //! * **Texts:** `<object>: undefined symbol: <name>[, version <v>]`, where the object is the
 //!   handle's, or the caller's for the special handles (P-5); the program is named by `argv[0]`. A
 //!   success clears the calling thread's pending text (#5127).
-//! * **Lock.** The call takes the loader's re-entrant writer lock (a constructor may call `dlsym`):
-//!   the first call builds the loader's state and a unique binding records an entry. Lock-free
-//!   readers are DL-16c's (plan §4, `read_section`).
+//! * **Lock.** The call takes the loader's re-entrant writer lock `CALL` and, inside it, its state
+//!   lock `STATE` (a constructor may call `dlsym`): the first call builds the loader's state and a
+//!   unique binding records an entry. `STATE` is released before an IFUNC resolver runs, as
+//!   `dlopen` releases it before its constructors (lock order at `CALL`). Lock-free readers are
+//!   DL-16c's (plan §4, `read_section`).
 
-use super::{c_string, dlerr, file_id, lock, loader, objs_of, scope_of, start_arg, syms_of, tb, unlock, Env, Loader, Node, Uniq, CAP, SHN_ABS};
+use super::{c_string, dlerr, file_id, loader, objs_of, scope_of, start_arg, syms_of, tb, Env, Loader, Node, Uniq, CALL, CAP, SHN_ABS, STATE};
 use liella_ld::arch::Native;
 use liella_ld::elf::{STB_GNU_UNIQUE, STT_GNU_IFUNC, STT_TLS};
 use liella_ld::search::{self, PathBuf};
@@ -50,9 +52,12 @@ enum Answer {
 /// `dlsym(handle, name)` (`version` 0) or `dlvsym(handle, name, version)` called from `caller`: the
 /// address, or 0 with the calling thread's dlerror text set.
 extern "C" fn entry(handle: usize, name: usize, version: usize, caller: usize) -> usize {
-    lock();
+    CALL.lock();
+    STATE.lock();
     let answer = find_locked(handle, name, version, caller);
-    // The loader borrow has ended: a resolver may call back into the loader.
+    // The loader borrow has ended: a resolver may call back into the loader, and `fork` (which
+    // takes `STATE` only) never waits for one.
+    STATE.unlock();
     let at = match answer {
         Some(Answer::At(a)) => {
             dlerr::clear();
@@ -64,7 +69,7 @@ extern "C" fn entry(handle: usize, name: usize, version: usize, caller: usize) -
         }
         None => 0,
     };
-    unlock();
+    CALL.unlock();
     at
 }
 

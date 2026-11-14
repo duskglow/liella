@@ -358,6 +358,14 @@ pub mod private {
         /// The loader's `dlsym`/`dlvsym` entry (DL-16b, plan §2): `(handle, name, version, caller)`
         /// (`version` NULL for `dlsym`) to an address or NULL with the failure text set; 0: none.
         pub dlsym: usize,
+        /// The loader's readers (DL-16c, plan/ph14/dl-16-dlopen.md §4): `dl_iterate_phdr`'s walk,
+        /// `(callback, data)` to the walk's result, over every loaded object; 0: none.
+        pub dl_iterate: usize,
+        /// `_dl_find_object`'s lookup, `(pc, result)` to 0 or -1, over every loaded object; 0: none.
+        pub dl_find_object: usize,
+        /// `fork`'s step (DL-16c): `(0)` before the clone (waits for a `dlopen` that is changing
+        /// the loader's state), `(1)` in the parent and `(2)` in the child after it; 0: none.
+        pub dl_fork: usize,
     }
 
     #[cfg(test)]

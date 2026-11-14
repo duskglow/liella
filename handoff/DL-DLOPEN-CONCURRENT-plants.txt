@@ -1,0 +1,16 @@
+# DL-DLOPEN-CONCURRENT (DL-16c): plants on the lock-free readers, the publication point and the fork step.
+publish-before-pass-2 | crates/boundary/src/ld/dlopen.rs | lit:    // Pass 2: the IFUNC resolvers, only now (ruling #5125). ==>     super::readers::publish(k, k - base); // Pass 2: the IFUNC resolvers, only now (ruling #5125). | cargo xtask so && cargo test -p liella-ld --test dlopen_concurrent s27_1_c_8_readers | msg:readers check Some\(15\) failed
+walk-snapshot | crates/boundary/src/ld/readers.rs | lit:        while i < v.len() { ==>         let len = v.len(); while i < len { | cargo xtask so && cargo test -p liella-ld --test dlopen_concurrent s27_1_c_8_readers | msg:readers check Some\(22\) failed
+failed-attempt-not-counted | crates/boundary/src/ld/dlopen.rs | lit:    super::readers::count_unmapped(k.saturating_sub(base)); ==>     super::readers::count_unmapped(0); | cargo xtask so && cargo test -p liella-ld --test dlopen_concurrent s27_1_c_8_readers | msg:readers check Some\(21\) failed
+vdso-not-second | crates/boundary/src/ld/readers.rs | lit:            if i == 0 && vd != 0 { ==>             if i == 1 && vd != 0 { | cargo xtask so && cargo test -p liella-ld --test dlopen_concurrent s27_1_c_8_readers | msg:readers check Some\(10\) failed
+find-no-link-map | crates/boundary/src/ld/readers.rs | lit:(lo, hi, eh, node_address(i)) ==> (lo, hi, eh, 0) | cargo xtask so && cargo test -p liella-ld --test dlopen_concurrent s27_1_c_8_readers | msg:readers check Some\((16|18)\) failed
+libc-no-forward | crates/boundary/src/posix/s27_dynlink.rs | lit:    if walk != 0 { ==>     if walk == usize::MAX { | cargo xtask so && cargo test -p liella-ld --test dlopen_concurrent s27_1_c_8_readers | msg:readers check Some\(10\) failed
+child-keeps-writer-lock | crates/boundary/src/ld/dlopen.rs | lit:            CALL.reset_in_child(); ==>             let _ = &CALL; | cargo xtask so && cargo test -p liella-ld --test dlopen_concurrent s27_1_c_1_fork | msg:fork check Some\([0-9]+\) failed|fork check None failed
+# cargo xtask plants results (7 plants: 7 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# publish-before-pass-2: CAUGHT, caught by dlopen_concurrent s27_1_c_8_readers_see_published_objects_only
+# walk-snapshot: CAUGHT, caught by dlopen_concurrent s27_1_c_8_readers_see_published_objects_only
+# failed-attempt-not-counted: CAUGHT, caught by dlopen_concurrent s27_1_c_8_readers_see_published_objects_only
+# vdso-not-second: CAUGHT, caught by dlopen_concurrent s27_1_c_8_readers_see_published_objects_only
+# find-no-link-map: CAUGHT, caught by dlopen_concurrent s27_1_c_8_readers_see_published_objects_only
+# libc-no-forward: CAUGHT, caught by dlopen_concurrent s27_1_c_8_readers_see_published_objects_only
+# child-keeps-writer-lock: CAUGHT, caught by dlopen_concurrent s27_1_c_1_fork_during_dlopen_child_can_load

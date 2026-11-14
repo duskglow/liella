@@ -73,6 +73,15 @@ unmapped (`dlclose` of A unmaps A and B, +2, while C is still held). A `dlopen` 
 header (`text.so`) changes neither; one that maps the object and then fails on a dependency
 (`libMissingDep.so`) bumps both by one. `RTLD_NODELETE` objects stay in the list after `dlclose`.
 
+**Readers in a dynamic program** (record `== readers (DL-16c)`, probe `tools/probe/dl/readers/run.sh SCRATCH`,
+same reference and conditions as the P-n probes). R-1: `_dl_find_object` of a pc in the program's text or data, in
+libc and in a `dlopen`'d object reports the object's **whole `PT_LOAD` span** (not the segment, unlike a static
+program), `dlfo_flags` 0, `dlfo_eh_frame` set, and `dlfo_link_map` equal to the object's handle (`dlopen(NULL)` for
+the program). R-4: a stack address gives -1. R-3: `dlpi_name` is `""` for the program, `linux-vdso.so.1`, then
+libc and `ld.so` by absolute path, a `dlopen`'d object by the name it was opened with; libc has TLS module 1. R-2: a
+`dl_iterate_phdr` callback that calls `dlopen` of a new object returns, the running walk then visits that object
+(one more callback), and `dlpi_adds` grows by one within the walk.
+
 **Static-TLS surplus** (record `== tls`): with default tunables, one `dlopen` of an object with an
 initial-exec TLS block of 1664 bytes succeeds and 1728 fails (64-byte steps); thirteen distinct
 128-byte blocks load one after another and the fourteenth fails. The text is

@@ -1,0 +1,4 @@
+# LIBM-F32-BESSEL-LARGE plants (D-10.109): the brief's three, on the large band of crates/math/src/fast32/bessel.rs.
+table | crates/math/src/fast32/bessel_tab.rs | perl:s/(const LG_Y1: \[u64; )57(\] = \[\n)    0x[0-9a-f]{16},\n/${1}56$2/ | cargo test -p liella-math --lib bessel_large_table_is_the_refused_set -- --include-ignored | msg:large band's table is not the refused set
+margin | crates/math/src/fast32/bessel.rs | perl:s/const LG_B: f64 = 8\.0;/const LG_B: f64 = 4.0;/ | cargo test -p liella-math --lib bessel_large_table_entries | msg:entry 0x[0-9a-f]+ is not refused
+phase3 | crates/math/src/fast32/bessel.rs | perl:s/let dq = r \* \(LG_D1\[nu\] \+ LG_D3\[nu\] \* z\);/let dq = r * LG_D1[nu];/ | cargo test -p liella-math --lib bessel_large_core_is_within_its_bound | msg:error [0-9.]+ > bound [0-9.]+

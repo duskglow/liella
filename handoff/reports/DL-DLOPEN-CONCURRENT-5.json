@@ -1,0 +1,18 @@
+{"task": "DL-DLOPEN-CONCURRENT-5", "model": "opus", "tokens": null,
+ "result": "Merged origin/next into DL-16c (additive conflicts kept both sides; next's dlsym moved onto the CALL/STATE lock pair); gate 7730/0, conformance 54/0, plants 7/7 CAUGHT",
+ "branch": "task/dl-dlopen-concurrent-5", "head": "43fc828dc",
+ "gate": {"affected": "7730 passed / 0 failed", "peak": "11G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "DL-16b follow-up: dlsym waits for another thread's slow dlopen constructor (writer lock, as on next); probe P-8 covers dlopen only: recommend DL-16b probes dlsym during a slow constructor",
+   "The brief named DL-16d as the conflicting change; the conflicts came from DL-16b's dlsym (DL-16d was already merged in run 3)"],
+ "refused": [],
+ "impact": [
+   {"kind": "unblock", "what": "DL-16c (lock-free readers, D-27.44, COMPAT-28) mergeable with next; DL-17 and dlclose wait on it", "before": null, "after": null, "unit": null, "measured": false},
+   {"kind": "correctness", "what": "dlsym under the split loader locks: fork no longer waits for a dlsym IFUNC resolver; dlsym checked against another thread's dlopen and in a forked child", "before": null, "after": null, "unit": null, "measured": true},
+   {"kind": "coverage", "what": "plants added on the merge resolution (dlsym lock pair, StartInfo entries)", "before": 0, "after": 4, "unit": "plants", "measured": true}],
+ "improvement": "git only flags textual conflicts: when a merge brings a module that calls into code the branch replaced (dlsym -> lock()), grep the incoming files for every removed name before building; the coordinator's conflict note should name the commit series it saw, not the story it expects",
+ "next_step": "Land; then DL-17 (epochs in read_section, sorted address index)",
+ "report_file": "handoff/DL-DLOPEN-CONCURRENT-5-report.md",
+ "jobs": ["dl-dlopen-concurrent-5-gate", "dl-dlopen-concurrent-5-plants", "dl-dlopen-concurrent-5-lint2"]}
