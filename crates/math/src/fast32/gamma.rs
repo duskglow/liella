@@ -233,15 +233,15 @@ fn lgamma_edge(xd: f64) -> Option<(f64, u64, i32, bool)> {
 ///   at X = 42), X - 1/2 exact, the product u: T within 5.27u·T, T ≤ L; RN(ln(2π)/2 - 1/2) 0.25u,
 ///   its sum with the series 0.42u, the series' own rounding < 0.01u, the omitted 1/(1680X⁷) ≤
 ///   2.3·10^-15 < 21u absolute; the last sum u·L: L within 6.27u·L + 21.7u.
-/// * y = -(a + L), rounded u·|y|. Total ≤ 6.27u·(|y| + 9.47) + 21.7u + 37.6u + u·|y| = 7.27u·|y|
-///   + 118.7u; with u·|y| < ulp(y) and ulp(y) ≥ 2^-46 = 128u (|y| ≥ 64): ≤ 8.2 ulp(y)
+/// * y = -(a + L), rounded u·|y|. Total ≤ 6.27u·(|y| + 9.47) + 21.7u + 37.6u + u·|y|, that is
+///   7.27u·|y| plus 118.7u; with u·|y| < ulp(y) and ulp(y) ≥ 2^-46 = 128u (|y| ≥ 64): ≤ 8.2 ulp(y)
 ///   ([`LGAMMA_REFLECT_BOUND`]; the margin 16 ≥ 1.5·8.2 + 1, as [`super::round`] wants).
 ///
 /// Every intermediate is a normal `double` (s ≥ sin(π·2^-18), the Taylor terms ≥ 2^-34·10^-14),
 /// so the hardware raises inexact only, as [`super::finish`] reports.
 #[inline(always)]
 fn lgamma_reflect(xd: f64) -> Option<(f64, u64, i32, bool)> {
-    if !(xd > -8_388_608.0) {
+    if xd.is_nan() || xd <= -8_388_608.0 {
         return None;
     }
     let r = xd - 2.0 * crate::dd::nearest_int(0.5 * xd);
