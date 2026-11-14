@@ -81,9 +81,11 @@ pub(super) fn handle_index(l: &Loader, handle: usize) -> Option<usize> {
     (off.checked_rem(size)? == 0).then_some(off.checked_div(size)?).filter(|&i| i < l.n && !l.gone(i))
 }
 
-/// The object containing `caller` (the program when none does).
-fn caller_index(l: &Loader, caller: usize) -> usize {
-    l.nodes.get(..l.n).and_then(|ns| ns.iter().position(|nd| (nd.lo..nd.hi).contains(&caller))).unwrap_or(0)
+/// The loaded object containing `caller` (the program when none does), for `dlsym` and `dlopen`.
+/// An unloaded node keeps its range until its slot is reused (D-27.50 (3)) while a later object
+/// may be mapped over that range, so `gone` ones are skipped.
+pub(super) fn caller_index(l: &Loader, caller: usize) -> usize {
+    l.nodes.get(..l.n).and_then(|ns| ns.iter().position(|nd| !nd.gone && (nd.lo..nd.hi).contains(&caller))).unwrap_or(0)
 }
 
 /// One lookup under the lock (module documentation); `None` after setting the text.

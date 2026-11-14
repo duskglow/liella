@@ -5,7 +5,10 @@
 //!
 //! * **Readers.** Both read the published objects through [`read_section`] and take no lock
 //!   (D-27.1): a crash handler or profiler may call `dladdr` while another thread is in `dlopen`.
-//!   Only the process's first loader call builds the loader's state under the lock.
+//!   Only the process's first loader call builds the loader's state under the lock. The section
+//!   counts them as readers (DL-17, D-27.50 (3)): an object `dlclose` unloads leaves the chain at
+//!   once, so neither finds it afterwards, and stays mapped until every reader that may stand on
+//!   it has left.
 //! * **The object** holding an address: the first object in chain order whose mapped range (lowest
 //!   to highest `PT_LOAD` address) holds it. `dli_fname` is its path (a start-time object's as the
 //!   start found it, a `dlopen`ed one's as opened), the program's `argv[0]`; `dli_fbase` the page

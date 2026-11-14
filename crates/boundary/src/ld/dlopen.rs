@@ -337,15 +337,19 @@ pub(super) mod dlsym;
 /// One reader's view of the published objects (plan §4 `read_section`, D-27.1, D-27.30). It reads
 /// only what publication made final: the chain (`l_next`, Acquire), and each published node's
 /// range, names and path, object and symbol tables, all written before the Release store that
-/// linked them and never written again (DL-16 never unloads; a failed attempt rewrites only
-/// unpublished indices). It never forms a reference to the [`Loader`] or a [`Node`], whose other
-/// fields (`opens`, `global`) the writer may change under the lock.
+/// linked them and not written again until the slot is reused (a failed attempt rewrites only
+/// unpublished indices). `dlclose` ([`unload`]) unlinks a node by storing its predecessor's
+/// `l_next` and leaves the node's own `l_next`, range and path as they were, so a reader standing
+/// on it walks on to the live chain; the slot is reused only after every reader counted before
+/// the unlink has left ([`reclaim`]). It never forms a reference to the [`Loader`] or a [`Node`],
+/// whose other fields (`opens`, `global`, `gone`) the writer may change under the lock.
 pub(super) struct View {
     at: usize,
 }
 
-/// Run `f` over the published objects without the writer lock (D-27.1). DL-16 never unloads, so the
-/// section needs no grace period yet; DL-17 adds the per-thread reader epochs here. The process's
+/// Run `f` over the published objects without the writer lock (D-27.1), counted as a reader in
+/// [`readers::read_section`](super::readers::read_section) (DL-17): nothing it may reach is
+/// unmapped or its slot reused before it leaves. `f` must not wait for another thread. The process's
 /// first loader call builds the loader's state under [`STATE`] (the lock every state change holds;
 /// taking it without [`CALL`] keeps the lock order, as `fork` does); `None` when it cannot be
 /// built, or when the calling thread holds [`STATE`] (a signal handler that interrupted the first
@@ -364,7 +368,7 @@ pub(super) fn read_section<R>(f: impl FnOnce(&View) -> R) -> Option<R> {
             return None;
         }
     }
-    Some(f(&View { at }))
+    Some(super::readers::read_section(|_| f(&View { at })))
 }
 
 impl View {
@@ -378,10 +382,10 @@ impl View {
         let at = self.node_addr(i).wrapping_add(off);
         // UNSAFE(slice): one field of a published node in the loader's own mapping.
         #[allow(unsafe_code)]
-        // SAFETY: `i` came from the published chain (below CAP), so the node lies in the loader's
-        // mapping, which is never unmapped; `off` is a field's offset, so `at` is aligned for `T`;
-        // the field was written before the Release store that published the node and is never
-        // written again, so this read does not race with the writer.
+        // SAFETY: `i` came from the published chain (below CAP): the node is in the loader's mapping,
+        // never unmapped; `off` is a field's offset (aligned for `T`); the field was written before
+        // the node's publication and not again (`unload` keeps it) until `reclaim` reuses the slot
+        // after this counted reader has left, so this read does not race with the writer.
         unsafe { core::ptr::with_exposed_provenance::<T>(at).read() }
     }
 
@@ -439,8 +443,8 @@ impl View {
         // UNSAFE(slice): a published object record in the loader's own mapping.
         #[allow(unsafe_code)]
         // SAFETY: `i` came from the published chain, so `objs[i]` was initialised before the Release
-        // store that published it and is never written again (no unloading in DL-16), and the
-        // mapping outlives the view.
+        // store that published it and is not written again until the slot is reused, after this
+        // counted reader has left (`reclaim`), and the mapping outlives the view.
         unsafe { &*core::ptr::with_exposed_provenance::<Obj<'static>>(at) }
     }
 
@@ -1031,13 +1035,14 @@ fn unload(l: &mut Loader, j: usize) -> Option<u64> {
     }
     l.n_log.store(w, Release);
     let tls = l.objs_upto(l.n).get(j).and_then(|o| o.tls);
+    // The node's own `l_next`, range and path stay as they were until the slot is reused: a
+    // `dladdr` reader standing on it ([`View`]) walks on to the live chain. Lookups under the lock
+    // skip it by `gone`.
     if let Some(nd) = l.nodes.get_mut(j) {
         nd.gone = true;
         nd.global = false;
         nd.opens = 0;
         (nd.dev, nd.ino) = (u64::MAX, u64::MAX.wrapping_sub(1));
-        (nd.lo, nd.hi) = (0, 0);
-        nd.l_next.store(0, Relaxed);
     }
     let p = tls?;
     let _ = l.surplus.free(p.tp_offset);
@@ -1257,10 +1262,11 @@ fn scope_of(l: &Loader, i: usize) -> Scope<'static> {
     let Some(o) = l.objs_upto(l.n.max(i.saturating_add(1))).get(i).copied() else { return Scope::default() };
     let path = l.path(i);
     let origin = path.iter().rposition(|&b| b == b'/').and_then(|p| path.get(..p.max(1)));
-    // UNSAFE(slice): a span of the loader's path arena, which only grows (DL-16 never frees).
+    // UNSAFE(slice): a span of the loader's path arena, which rewinds only past freed objects.
     #[allow(unsafe_code)]
     // SAFETY: the bytes stay in the loader's mapping for the process's lifetime and a written span
-    // is never rewritten while it is in use: a failed attempt rewinds only past its own spans.
+    // is never rewritten while it is in use: a failed attempt rewinds only past its own spans, and
+    // `reclaim` only past the spans of objects already unmapped.
     let origin: Option<&'static [u8]> = origin.map(|s| unsafe { conv::bytes_at(s.as_ptr().expose_provenance(), s.len()) });
     Scope { rpath: dyn_string(&o.dynm, DT_RPATH), runpath: dyn_string(&o.dynm, DT_RUNPATH), origin }
 }
@@ -1601,7 +1607,7 @@ fn load_set(l: &mut Loader, given: &'static [u8], m: Mode, caller: usize) -> Res
     let (names_top, deps_top) = (l.names_top, l.deps_top);
     l.unique_mark = l.unique.len();
     l.tls_mark = l.surplus.len();
-    let who = (0..base).find(|&i| (l.nodes[i].lo..l.nodes[i].hi).contains(&caller)).unwrap_or(0);
+    let who = dlsym::caller_index(l, caller);
     let env = Env::read();
     let chain = [scope_of(l, who), scope_of(l, 0)];
     let chain = if who == 0 { &chain[..1] } else { &chain[..] };

@@ -117,6 +117,12 @@ int r_fn(void) { return 6; }
 extern void k_ctor(void);
 __attribute__((constructor)) static void kc(void) { k_ctor(); }
 #endif
+#ifdef KIND_Q
+void *q_open(void) { return dlopen("libZ.so", RTLD_NOW); }
+#endif
+#ifdef KIND_Z
+int z_fn(void) { return 8; }
+#endif
 #ifdef KIND_P
 __attribute__((constructor)) static void pc(void) { pctor++; }
 __attribute__((destructor)) static void pd(void) { pdtor++; }
@@ -149,15 +155,19 @@ static char pbuf[4200];
 static const char *P(const char *n) { snprintf(pbuf, sizeof pbuf, "%s/%s", dir, n); return pbuf; }
 static int loaded(const char *n) { void *h = dlopen(P(n), RTLD_NOW | RTLD_NOLOAD); if (h) dlclose(h); return h != NULL; }
 static int mapped(void *a) { long pg = sysconf(_SC_PAGESIZE); return msync((void *)((unsigned long)a & -(unsigned long)pg), pg, MS_ASYNC) == 0 || errno != ENOMEM; }
-struct cnt { int n; unsigned long long adds, subs; const char *want; size_t modid; void *close_first, *close; long sum; int seen; };
+struct cnt { int n; unsigned long long adds, subs; const char *want; size_t modid; void *close_first, *close; long sum; int seen; void *probe; int dl_before, dl_after; };
 static int cb(struct dl_phdr_info *i, size_t s, void *d) {
     struct cnt *c = d; (void)s;
     c->n++; c->adds = i->dlpi_adds; c->subs = i->dlpi_subs;
     if (c->want && i->dlpi_name && strstr(i->dlpi_name, c->want)) {
         c->modid = i->dlpi_tls_modid;
         c->seen = 1;
+        Dl_info di;
+        if (c->probe) c->dl_before = dladdr(c->probe, &di);
         if (c->close_first) { dlclose(c->close_first); c->close_first = NULL; }
         if (c->close) { dlclose(c->close); c->close = NULL; }
+        /* Unpublished at once, though still mapped while this walk is inside. */
+        if (c->probe) c->dl_after = dladdr(c->probe, &di);
         /* Read the object's program headers after a dlclose in this callback: still mapped. */
         for (int k = 0; k < i->dlpi_phnum; k++) c->sum += i->dlpi_phdr[k].p_type + i->dlpi_phdr[k].p_memsz;
     }
@@ -180,6 +190,9 @@ static void basic(void) {
     struct cnt c1 = walk(NULL);
     CHECK(6, c1.n == c0.n && c1.subs == c0.subs + 2 && c1.adds == c0.adds + 2, "counters n %d subs %llu adds %llu", c1.n, c1.subs, c1.adds);
     CHECK(7, afn && !mapped(afn), "A's text still mapped after dlclose");
+    /* dladdr (DL-18) sees the unpublication: an address inside the unloaded object is in none. */
+    Dl_info di;
+    CHECK(40, dladdr(afn, &di) == 0, "dladdr of A's text after dlclose: %s", di.dli_fname);
     /* Invalid handles: -1 and a text, never a crash (D-27.32). */
     int local = 0;
     CHECK(8, dlclose(a) == -1 && strstr(err(), "invalid handle"), "double dlclose");
@@ -194,8 +207,16 @@ static void basic(void) {
     /* A shared dependency stays while another object needs it. */
     a = dlopen(P("libA.so"), RTLD_NOW);
     void *cc = dlopen(P("libC.so"), RTLD_NOW);
+    afn = dlsym(a, "a_fn");
+    void *cfn = dlsym(cc, "c_fn");
     evlog[0] = 0;
     CHECK(14, dlclose(a) == 0 && !loaded("libA.so") && loaded("libB.so") && strcmp(evlog, "dA fA ") == 0, "B with C open: %s", evlog);
+    /* A left the chain between objects that stay: dladdr finds C after it, not A; dlinfo refuses
+       A's handle. */
+    CHECK(41, afn && dladdr(afn, &di) == 0, "dladdr of A's text with B and C loaded");
+    CHECK(42, cfn && dladdr(cfn, &di) == 1 && di.dli_fname && strstr(di.dli_fname, "/libC.so") && di.dli_sname && strcmp(di.dli_sname, "c_fn") == 0, "dladdr of C's c_fn: %s", di.dli_fname);
+    struct link_map *lm;
+    CHECK(43, dlinfo(a, RTLD_DI_LINKMAP, &lm) == -1 && strstr(err(), "invalid handle"), "dlinfo of A's closed handle");
     evlog[0] = 0;
     CHECK(15, dlclose(cc) == 0 && !loaded("libB.so") && strcmp(evlog, "dC fC dB fB ") == 0, "C then B: %s", evlog);
     /* C-3: a global definer bound by a later object stays until that object is closed. */
@@ -252,11 +273,26 @@ static void basic(void) {
     c.want = "libR.so";
     c.close_first = dlopen(P("libY.so"), RTLD_NOW);
     c.close = r;
+    c.probe = rfn;
     dl_iterate_phdr(cb, &c);
     CHECK(33, c.seen && c.close_first == NULL && c.close == NULL && c.sum > 0, "callback close");
+    CHECK(44, c.dl_before == 1 && c.dl_after == 0, "dladdr of R's text in the walk: %d before its dlclose, %d after", c.dl_before, c.dl_after);
     CHECK(34, !loaded("libR.so"), "R still loaded");
     dlopen(P("libR.so"), RTLD_NOW | RTLD_NOLOAD);
     CHECK(35, !mapped(rfn), "R never unmapped after the walk left");
+    /* An unloaded object keeps its node (and its range) while a live one sits above it; a caller
+       in an object mapped over that range later is still that object. sub/libQ.so, a copy of
+       libQ.so (DT_RUNPATH $ORIGIN), opens libZ.so, which only sub/ holds. */
+    void *j = dlopen(P("libQ.so"), RTLD_NOW);
+    void *keep = dlopen(P("libG.so"), RTLD_NOW);
+    void *jfn = j ? dlsym(j, "q_open") : NULL;
+    CHECK(45, jfn && keep && dlclose(j) == 0 && !mapped(jfn), "libQ.so: %s", err());
+    void *q = dlopen(P("sub/libQ.so"), RTLD_NOW);
+    void *(*q_open)(void) = q ? (void *(*)(void))dlsym(q, "q_open") : NULL;
+    if ((void *)q_open != jfn) fprintf(stderr, "note: sub/libQ.so is not mapped over the closed copy; check 46 is weaker\n");
+    void *z = q_open ? q_open() : NULL;
+    CHECK(46, z != NULL, "sub/libQ.so's dlopen(libZ.so) (its $ORIGIN): %s", err());
+    CHECK(47, dlclose(z) == 0 && dlclose(q) == 0 && dlclose(keep) == 0, "close Z, Q, G: %s", err());
     /* Slot and arena reuse: more opens than the 512-object table. */
     for (int i = 0; i < 600; i++) {
         void *p = dlopen(P("libP.so"), RTLD_NOW);
@@ -268,6 +304,11 @@ static void basic(void) {
 }
 
 static volatile int done;
+/* dladdr (DL-18) walks the chain while an object before the one it looks for leaves it: while A
+   is open (`a_gen` odd, from before P's dlclose to before A's), a dladdr of A's a_fn finds A. */
+static unsigned long a_gen;
+static void *a_text;
+static long dl_wrong = -1;
 static void *reader(void *arg) {
     long k = 0, budget = (long)arg;
     while (!done && k < budget) {
@@ -276,24 +317,51 @@ static void *reader(void *arg) {
         dl_iterate_phdr(cb, &c);
         void *f = dlsym(RTLD_DEFAULT, "p_fn");
         if (f) { struct dl_find_object o; _dl_find_object(f, &o); }
+        unsigned long g = __atomic_load_n(&a_gen, __ATOMIC_SEQ_CST);
+        if (g & 1) {
+            Dl_info di;
+            int r = dladdr(__atomic_load_n(&a_text, __ATOMIC_SEQ_CST), &di);
+            if (__atomic_load_n(&a_gen, __ATOMIC_SEQ_CST) == g && !(r == 1 && di.dli_fname && strstr(di.dli_fname, "/libA.so")))
+                __atomic_store_n(&dl_wrong, (long)g, __ATOMIC_SEQ_CST);
+        }
+        k++;
+    }
+    return NULL;
+}
+/* Only dladdr, of A's latest a_fn whether A is open or not: it reads A's tables while A's dlclose
+   unloads it, and must be counted as a reader for them to stay mapped. */
+static void *addr_reader(void *arg) {
+    long k = 0, budget = (long)arg;
+    while (!done && k < budget) {
+        unsigned long g = __atomic_load_n(&a_gen, __ATOMIC_SEQ_CST);
+        Dl_info di;
+        int r = dladdr(__atomic_load_n(&a_text, __ATOMIC_SEQ_CST), &di);
+        if ((g & 1) && __atomic_load_n(&a_gen, __ATOMIC_SEQ_CST) == g && !(r == 1 && di.dli_fname && strstr(di.dli_fname, "/libA.so")))
+            __atomic_store_n(&dl_wrong, (long)g, __ATOMIC_SEQ_CST);
         k++;
     }
     return NULL;
 }
 
 static void concurrent(void) {
-    pthread_t th[3];
+    pthread_t th[4];
     for (int i = 0; i < 3; i++) CHECK(50, pthread_create(&th[i], NULL, reader, (void *)200000L) == 0, "pthread_create");
+    CHECK(50, pthread_create(&th[3], NULL, addr_reader, (void *)20000000L) == 0, "pthread_create");
     for (int i = 0; i < 3000; i++) {
         evlog[0] = 0; /* A's and B's constructors and destructors log here (this thread only). */
         void *p = dlopen(P("libP.so"), RTLD_NOW | RTLD_GLOBAL);
         void *a = dlopen(P("libA.so"), RTLD_NOW);
         CHECK(51, p && a, "open %d: %s", i, err());
-        CHECK(52, dlclose(p) == 0 && dlclose(a) == 0, "close %d", i);
+        __atomic_store_n(&a_text, dlsym(a, "a_fn"), __ATOMIC_SEQ_CST);
+        __atomic_store_n(&a_gen, 2UL * (unsigned long)i + 1, __ATOMIC_SEQ_CST);
+        int cp = dlclose(p);
+        __atomic_store_n(&a_gen, 2UL * (unsigned long)i + 2, __ATOMIC_SEQ_CST);
+        CHECK(52, cp == 0 && dlclose(a) == 0, "close %d", i);
     }
     done = 1;
-    for (int i = 0; i < 3; i++) pthread_join(th[i], NULL);
+    for (int i = 0; i < 4; i++) pthread_join(th[i], NULL);
     CHECK(53, !loaded("libP.so") && !loaded("libA.so"), "still loaded");
+    CHECK(54, dl_wrong < 0, "dladdr missed open libA.so (generation %ld)", dl_wrong);
 }
 
 /* Ruling #5651: past a retired threshold (a quarter of the 512-object table) dlopen and dlclose
@@ -519,6 +587,11 @@ fn corpus(d: &Path, ld: &Path, libc: &Path, crt1: &Path) -> PathBuf {
     for (out, kind) in [("libT.so", "-DKIND_T"), ("libT2.so", "-DKIND_T2"), ("libT3.so", "-DKIND_T3"), ("libR.so", "-DKIND_R"), ("libP.so", "-DKIND_P"), ("libK.so", "-DKIND_K")] {
         build(d, out, LIB, &["-nostdlib", "-fPIC", "-shared", kind]);
     }
+    // libQ.so and its copy sub/libQ.so search their own directory (`$ORIGIN`); only sub/ has libZ.so.
+    std::fs::create_dir_all(d.join("sub")).unwrap();
+    build(d, "libQ.so", LIB, &["-nostdlib", "-fPIC", "-shared", "-DKIND_Q", "-Wl,--enable-new-dtags,-rpath,$ORIGIN"]);
+    std::fs::copy(d.join("libQ.so"), d.join("sub/libQ.so")).unwrap();
+    build(d, "sub/libZ.so", LIB, &["-nostdlib", "-fPIC", "-shared", "-DKIND_Z"]);
     let interp = format!("-Wl,--dynamic-linker={}", ld.display());
     build(d, "prog", PROG, &["-nostdlib", "-fPIE", "-pie", "-Wl,--export-dynamic", &interp, crt1.to_str().unwrap(), libc.to_str().unwrap(), ld.to_str().unwrap(), "-lgcc"])
 }
@@ -541,7 +614,11 @@ fn run(d: &Path, ld: &Path, prog: &Path, mode: &str) {
 /// (D-27.32); a success clears a pending text; the program's handle closes with 0; a
 /// TLS module's ID is reused with a fresh block and its surplus place freed; a `dl_iterate_phdr`
 /// callback that closes the object it visits can still read its headers, and the object is unmapped
-/// after the walk; 600 open/close pairs reuse the 512-object table.
+/// after the walk; 600 open/close pairs reuse the 512-object table. `dladdr`/`dlinfo` (DL-18,
+/// D-27.50 (3)) see the unpublication: an address inside an object `dlclose` unloaded is in no
+/// object (also inside a walk that still keeps it mapped), a later object is still found, the
+/// closed handle is refused; a caller in an object mapped over an unloaded one's range is that
+/// object (its `$ORIGIN` finds the library it opens).
 #[test]
 fn s27_1_c_4_dlclose_unloads_finalises_and_reclaims() {
     let Some((d, ld, libc, crt1)) = setup("basic") else { return };
@@ -552,7 +629,9 @@ fn s27_1_c_4_dlclose_unloads_finalises_and_reclaims() {
 
 /// s27_1_c_8, s27_1_c_4 (D-27.1, plan §4): three reader threads walk `dl_iterate_phdr` (reading every
 /// visited object's headers), `dlsym` and `_dl_find_object` while the main thread opens and closes
-/// two objects 3000 times (iteration budgets): no reader faults and nothing stays loaded.
+/// two objects 3000 times (iteration budgets): no reader faults and nothing stays loaded; a
+/// `dladdr` of the second object while the first is closed finds it (D-27.50 (3)), and a fourth
+/// thread calling only `dladdr` on it while it is closed never faults.
 #[test]
 fn s27_1_c_4_dlclose_concurrent_with_readers() {
     let Some((d, ld, libc, crt1)) = setup("concurrent") else { return };
