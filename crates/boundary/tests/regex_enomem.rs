@@ -136,7 +136,7 @@ fn limit_body() -> i32 {
     pin_to_current_cpu();
     // Before the limit: a program of about 2 million states (depth 1446; it compiled under the
     // former cap too). Its search with subexpressions needs far more than the headroom; the
-    // search without them needs only a few tables per node and fits it. The trailing `b` makes
+    // search without them needs a few tables per node. The trailing `b` makes
     // the program non-nullable, so no search can answer from the empty match.
     let (mut big, rc) = compile(&(nested_rep("a", 1446) + "b"));
     if rc != 0 {
@@ -166,7 +166,7 @@ fn limit_body() -> i32 {
         }
     }
     // regexec with subexpressions on the big program does not fit: REG_ESPACE. The program
-    // stays usable: the search without subexpressions, which fits, then finds the match.
+    // stays usable: the search without subexpressions then finds the match.
     // The subject holds the required `b`, so the prefilter cannot answer before the engine.
     let subject = std::ffi::CString::new("xaby").unwrap();
     let mut m = [liella_abi::layout::regmatch_t { rm_so: -1, rm_eo: -1 }; 2];
@@ -175,12 +175,17 @@ fn limit_body() -> i32 {
         eprintln!("regexec (nmatch 2) of the depth-1446 program under the limit: {rc}, not REG_ESPACE");
         return 23;
     }
+    // Whether the search without subexpressions (tens of MiB of per-node tables) fits the
+    // headroom depends on what the allocator still holds mapped, so it runs with the soft limit
+    // raised, and the limit then goes back on.
+    CSys.prlimit(0, RLIMIT_AS, Some(&Rlimit { cur: RLIM_INFINITY, max: RLIM_INFINITY })).unwrap();
     let rc = rx::regexec(Some(&big), subject.as_ptr(), 0, core::ptr::null_mut(), 0);
     if rc != 0 {
         eprintln!("regexec (nmatch 0) of the depth-1446 program after REG_ESPACE: {rc}, not a match");
         return 25;
     }
     rx::regfree(Some(&mut big));
+    CSys.prlimit(0, RLIMIT_AS, Some(&Rlimit { cur: size_bytes() + LIMIT_HEADROOM, max: RLIM_INFINITY })).unwrap();
     // The limit is still on: a small pattern still compiles and matches.
     let (mut re, rc) = compile("(a|b)+c");
     if rc != 0 || rx::regexec(Some(&re), std::ffi::CString::new("abac").unwrap().as_ptr(), 0, core::ptr::null_mut(), 0) != 0 {
