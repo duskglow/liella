@@ -1,0 +1,16 @@
+# LAYOUT-DELETE-LISTS-2 plants: the anti-creep check of the retired lists, the layout switch without the committed
+# mode, the bare list names of the readers, the v3 measurement layout (ruling #5463) and order.py. xtask unit tests.
+# A tracked hot-text.list no longer refused (the plant of brief step 4: a re-added list must fail static).
+ldl-retired-drop | xtask/src/hottext.rs | lit:pub const RETIRED: [&str; 6] = ["hot-text.list", ==> pub const RETIRED: [&str; 6] = ["hot-text.list.retired", | cargo test -p xtask committed_list | msg:test hottext::tests::(retired_lists_refuse_a_committed_list|static_refuses_a_readded_committed_list) \.\.\. FAILED
+# Only a list at the tree root refused (the full path compared, not the file name).
+ldl-retired-fullpath | xtask/src/hottext.rs | lit:.filter(|p| RETIRED.contains(&p.rsplit('/').next().unwrap_or(p))) ==> .filter(|p| RETIRED.contains(p)) | cargo test -p xtask committed_list | msg:test hottext::tests::(retired_lists_refuse_a_committed_list|static_refuses_a_readded_committed_list) \.\.\. FAILED
+# static passes whatever it found.
+ldl-static-ignores | xtask/src/hottext.rs | lit:if errs.is_empty() { Ok(()) } ==> if errs.len() < 9 { Ok(()) } | cargo test -p xtask committed_list | msg:test hottext::tests::static_refuses_a_readded_committed_list \.\.\. FAILED
+# LIELLA_LAYOUT_TRACE=0 silently accepted again.
+ldl-trace-zero | xtask/src/hotlists.rs | perl:s/"" \| "1" => Ok\(Layout::Traced\),/""|"1"|"0" => Ok(Layout::Traced),/ | cargo test -p xtask layout_switch_defaults_to_the_trace_and_is_strict | msg:test hotlists::tests::layout_switch_defaults_to_the_trace_and_is_strict \.\.\. FAILED
+# The old crates/libc-so/<list> path read from the tree instead of refused.
+ldl-rel-committed | xtask/src/hotlists.rs | lit:.is_some_and(|n| GENERATED.contains(&n)) ==> .is_some_and(|n| n.is_empty()) | cargo test -p xtask rel_reads_the_traced_lists | msg:test hotlists::tests::rel_reads_the_traced_lists_and_refuses_the_committed_paths \.\.\. FAILED
+# The v3 measurement build ungrouped on a host that can trace it.
+ldl-v3-ungrouped | xtask/src/bench.rs | lit:    if runs_v3 { ==>     if !runs_v3 { | cargo test -p xtask v3_measurement | msg:test bench::tests::v3_measurement_build_is_traced_unless_the_host_cannot_run_it \.\.\. FAILED
+# order.py --startup-head no longer moves the start-up tier to the head.
+ldl-order-head | tools/hottext/order.py | lit:out = [k for k in out if tier[k] == "startup"] + [k for k in out if tier[k] != "startup"] ==> out = list(out) | cargo test -p xtask order_moves_startup_text_keys | msg:test hottext::tests::order_moves_startup_text_keys_to_the_head \.\.\. FAILED

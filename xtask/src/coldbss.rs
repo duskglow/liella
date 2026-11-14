@@ -274,7 +274,7 @@ pub(crate) fn order_sections(obj: &mut [u8], want: &[String]) -> Result<usize, S
 /// startup only 17 -> 18 (Haswell-EP build host, perf page-fault map of both builds).
 /// LAYOUT-DATA-CLUSTERS (D-X.64): `timer::EPOLL`, which the fork child reads (`fork::child_reset`):
 /// on a page the parent's start-up never touched, it cost the child a fault of its own. Every other
-/// writable start-up key of `crates/libc-so/startup-data.keys` joined too (now [`STATE_LIST_FILE`]), and the
+/// writable start-up key of `startup-data.keys` (then committed) joined too (now [`STATE_LIST_FILE`]), and the
 /// start object aligns the cluster to the smallest power of two not below its size
 /// (`startup_ro::cluster_aligns`), so it takes the fewest pages wherever `.data` ends.
 /// LAYOUT-DATA-CLUSTERS-2 (D-X.64): `heap::HEAP` (5376 bytes, above the 4 KiB keyed limit of the time), whose head and
