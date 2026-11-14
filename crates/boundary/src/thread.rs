@@ -399,7 +399,17 @@ pub(crate) fn foreign_errno() -> *mut core::ffi::c_int {
 /// a thread allocates with no cache).
 #[inline]
 pub(crate) fn heap_cache_slot() -> Option<&'static AtomicUsize> {
-    let w = words();
+    if owned() { Some(&tb::current().heap_cache) } else { foreign_heap_cache_slot() }
+}
+
+/// [`heap_cache_slot`] in a process the runtime did not start. Out of line so that only this cold
+/// path addresses [`SPARE`]: inlined into the heap's start-up allocation, the test put SPARE's page
+/// among the written start-up pages (STARTUP-DATA-WINDOWS, D-X.62) although only a foreign thread
+/// can be given it.
+#[cold]
+#[inline(never)]
+fn foreign_heap_cache_slot() -> Option<&'static AtomicUsize> {
+    let w = foreign_words();
     (!is_spare(w)).then_some(&w.heap_cache)
 }
 
