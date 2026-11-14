@@ -16,7 +16,8 @@
    {"kind": "cost", "what": "start-up text group end vs first fault-around window, fast (next +436 bytes margin); fix-forward: move the D-X.60 heap foreign branches out of line (handoff next step 1)", "before": 436, "after": -268, "unit": "bytes margin", "measured": true},
    {"kind": "coverage", "what": "plants on the heap cache lookup split", "before": 0, "after": 2, "unit": "plants", "measured": true}
  ],
- "jobs": ["tb-foreign-words-low-7-checks", "tb-foreign-words-low-7-plants", "tb-foreign-words-low-7-nextso", "tb-foreign-words-low-7-nextpages", "tb-foreign-words-low-7-exp", "tb-foreign-words-low-7-nextfast", "tb-foreign-words-low-7-sizes"],
+ "superseded": ["tb-foreign-words-low-7-checks (rc 1 on this head: fast hot_text_products 3 failed, the INCOMPLETE reason)", "tb-foreign-words-low-7-plants (rc 1 on this head: slow-path-own-copy survived)", "tb-foreign-words-low-7-step1 (merge head before the SPARE fix)", "tb-foreign-words-low-7-rel (merge head before the SPARE fix)", "tb-foreign-words-low-7-percall (rc 2: base not primed)"],
+ "jobs": ["tb-foreign-words-low-7-nextso", "tb-foreign-words-low-7-nextpages", "tb-foreign-words-low-7-exp", "tb-foreign-words-low-7-nextfast", "tb-foreign-words-low-7-sizes"],
  "improvement": "A continuation brief that says 'no code change is needed, rerun the tests' should still budget for a fix: the new traced contracts (data windows, first window) are tighter than the ones the earlier runs passed.",
  "next_step": "Shrink the start-up text group by >= 268 bytes (D-X.60 heap foreign branches to cold helpers), then percall, plants, FULL tier.",
  "report_file": "handoff/TB-FOREIGN-WORDS-LOW.md"}
