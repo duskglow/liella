@@ -35,6 +35,11 @@ const MAX_INSTS: usize = 1 << 20;
 const MAX_NODES: usize = 1 << 21;
 /// No instruction / no node.
 pub(crate) const NONE: u32 = u32::MAX;
+/// How many nested calls the compiler makes on the native stack ([`Builder::node`]) before it
+/// hands the subtree to its explicit-stack form ([`Builder::compile`]). Each level holds one
+/// `node` frame and at most one `rep_rec` frame (`body` is inlined), a few hundred bytes, so the
+/// recursion stays within a few tens of KiB on any thread.
+const RECURSE_DEPTH: u32 = 64;
 
 pub(crate) const OP_BYTE: u32 = 1;
 pub(crate) const OP_SET: u32 = 2;
@@ -322,13 +327,173 @@ impl Builder {
         Ok(id)
     }
 
-    /// Compile node `root` followed by `next`, inside scope chain `chain`; the entry
-    /// instruction. A node waiting for its parts waits on an explicit stack, so how deep the
-    /// tree nests costs heap, never native stack. The instructions come out in the order of the
-    /// natural recursion (a node's parts last first where it builds backwards).
-    fn compile(&mut self, t: &Parsed, root: u32, next: u32, chain: u32) -> Result<u32, ReError> {
+    /// Compile node `id` followed by `next`, inside scope chain `chain` (`share`: see [`Call`]);
+    /// the entry instruction. `depth`: the calls of this function enclosing this one. Below
+    /// [`RECURSE_DEPTH`] it recurses on the native stack, the cheapest walk for the shallow trees
+    /// of ordinary patterns; a subtree deeper than that goes to [`Self::compile`], whose explicit
+    /// stack is on the heap, so the native stack this pass uses is bounded whatever the nesting.
+    /// Both emit the same instructions in the same order.
+    fn node(&mut self, t: &Parsed, id: u32, next: u32, chain: u32, share: u32, depth: u32) -> Result<u32, ReError> {
+        if depth >= RECURSE_DEPTH {
+            return self.compile(t, Call { id, next, chain, share, bare: false });
+        }
+        let it = t.item(id);
+        if it.wrap != 0 {
+            // The hidden group: compiled as a group whose body is the node.
+            let close = self.emit(OP_CLOSE, it.wrap, next, 0, chain)?;
+            let body = self.body(t, it, close, chain, NONE, depth)?;
+            return self.emit(OP_OPEN, it.wrap, body, 0, chain);
+        }
+        self.body(t, it, next, chain, share, depth)
+    }
+
+    /// Node `it` (its hidden group, if any, compiled around it already) followed by `next`: the
+    /// entry instruction ([`Self::node`]).
+    #[inline(always)]
+    fn body(&mut self, t: &Parsed, it: Item, next: u32, chain: u32, share: u32, depth: u32) -> Result<u32, ReError> {
+        let d = depth + 1;
+        Ok(match it.node {
+            Node::Empty => next,
+            Node::Byte(b) => self.emit(OP_BYTE, u32::from(b), next, 0, chain)?,
+            Node::Set(k) => self.emit(OP_SET, k, next, 0, chain)?,
+            Node::Assert(a) => self.emit(OP_ASSERT, assert_code(a), next, 0, chain)?,
+            Node::Backref(g) => self.emit(OP_BACKREF, g, next, 0, chain)?,
+            Node::Cat(s, l) => {
+                let mut pc = next;
+                for &k in t.kids(s, l).iter().rev() {
+                    pc = self.node(t, k, pc, chain, NONE, d)?;
+                }
+                pc
+            }
+            Node::Alt(s, l) => {
+                let base = self.entries.len();
+                for &k in t.kids(s, l) {
+                    let e = self.node(t, k, next, chain, NONE, d)?;
+                    self.entries.push(e)?;
+                }
+                let mut pc = if self.entries.len() > base { self.entries.pop().unwrap_or(next) } else { next };
+                while self.entries.len() > base {
+                    let e = self.entries.pop().unwrap_or(NONE);
+                    pc = self.emit(OP_SPLIT, e, pc, 0, chain)?;
+                }
+                pc
+            }
+            Node::Group(g, x) => {
+                let close = self.emit(OP_CLOSE, g, next, 0, chain)?;
+                let body = self.node(t, x, close, chain, NONE, d)?;
+                self.emit(OP_OPEN, g, body, 0, chain)?
+            }
+            Node::Rep(x, m, n) => self.rep_rec(t, x, m, n, next, chain, share, d)?,
+        })
+    }
+
+    /// A repetition `x{m,n}` followed by `next` ([`Self::node`]'s recursion; [`Self::rep`] is
+    /// the same compilation one step at a time).
+    #[allow(clippy::too_many_arguments)] // the repetition, where it goes, and the recursion's depth
+    fn rep_rec(&mut self, t: &Parsed, x: u32, m: u32, n: Option<u32>, next: u32, chain: u32, share: u32, d: u32) -> Result<u32, ReError> {
+        if n == Some(0) {
+            return Ok(next);
+        }
+        if m == 1 && n == Some(1) {
+            // The operand itself, in the repetition's place.
+            return self.node(t, x, next, chain, share, d);
+        }
+        let groups = t.item(x).groups;
+        let grouped = groups.0 != NONE;
+        let scoped = t.item(x).nullable || grouped;
+        if m == 0 && n == Some(1) {
+            // `X?`: one optional pass; with no later iteration there is nothing to gate or to
+            // reset (an enclosing repetition resets the groups at its own iterations).
+            let body = self.node(t, x, next, chain, share, d)?;
+            return self.emit(OP_SPLIT, body, next, 0, chain);
+        }
+        if !scoped {
+            // A body that consumes and has no groups: plain copies and a plain loop.
+            let opt = match n {
+                None => {
+                    let l = self.emit(OP_SPLIT, NONE, next, 0, chain)?;
+                    let body = self.node(t, x, l, chain, NONE, d)?;
+                    self.patch(l, Inst { op: OP_SPLIT, a: body, b: next, c: 0 });
+                    if m >= 1 {
+                        // `X{m,}`: the loop's body is the last mandatory copy too (D-14.8).
+                        let mut entry = body;
+                        for _ in 1..m {
+                            entry = self.node(t, x, entry, chain, NONE, d)?;
+                        }
+                        return Ok(entry);
+                    }
+                    l
+                }
+                Some(n) => {
+                    let mut cont = next;
+                    for _ in m..n {
+                        let body = self.node(t, x, cont, chain, NONE, d)?;
+                        cont = self.emit(OP_SPLIT, body, next, 0, chain)?;
+                    }
+                    cont
+                }
+            };
+            let mut entry = opt;
+            for _ in 0..m {
+                entry = self.node(t, x, entry, chain, NONE, d)?;
+            }
+            return Ok(entry);
+        }
+        let scope = u32::try_from(self.scopes.len()).map_err(|_| ReError::ESpace)?;
+        nomem(self.scopes.push(if grouped { groups } else { (1, 0) }))?;
+        // Shared, and the optional part before the mandatory copies: see [`Self::rep_init`].
+        let shared = !grouped && n.is_none() && share != NONE && share == chain;
+        let (exit_a, enter_c) = if shared { (scope | SHARED_EXIT, SHARED) } else { (scope, 0) };
+        let inner_share = |inner: u32| if grouped { NONE } else { inner };
+        let mut last = m;
+        let opt = match n {
+            None => {
+                let l = self.emit(OP_SPLIT, NONE, next, 0, chain)?;
+                let inner = if shared { self.chain_shared(chain, scope)? } else { self.chain(chain, scope)? };
+                let ex = self.emit(OP_EXIT, exit_a, next, l, inner)?;
+                let body = self.node(t, x, ex, inner, inner_share(inner), d)?;
+                let en = self.emit(OP_ENTER, scope, body, enter_c, chain)?;
+                self.patch(l, Inst { op: OP_SPLIT, a: en, b: next, c: 0 });
+                if m >= 1 {
+                    last = m - 1;
+                    en
+                } else {
+                    l
+                }
+            }
+            Some(n) => {
+                let mut cont = next;
+                for _ in m..n {
+                    let inner = self.chain(chain, scope)?;
+                    let ex = self.emit(OP_EXIT, scope, next, cont, inner)?;
+                    let body = self.node(t, x, ex, inner, inner_share(inner), d)?;
+                    let en = self.emit(OP_ENTER, scope, body, 0, chain)?;
+                    cont = self.emit(OP_SPLIT, en, next, 0, chain)?;
+                }
+                cont
+            }
+        };
+        // The mandatory copies, last first. After the last one an empty iteration stops the
+        // repetition; before it, the next copy follows whatever the iteration matched.
+        let mut entry = opt;
+        for k in (1..=last).rev() {
+            let inner = if shared { self.chain_shared(chain, scope)? } else { self.chain(chain, scope)? };
+            let ex = if k == m { self.emit(OP_EXIT, exit_a, next, opt, inner)? } else { self.emit(OP_EXIT, exit_a, entry, entry, inner)? };
+            let body = self.node(t, x, ex, inner, inner_share(inner), d)?;
+            entry = self.emit(OP_ENTER, scope, body, enter_c, chain)?;
+        }
+        Ok(entry)
+    }
+
+    /// Compile `c`: [`Self::node`]'s work for a subtree past its recursion bound. A node waiting
+    /// for its parts waits on an explicit stack, so how deep the tree nests costs heap, never
+    /// native stack. The instructions come out in the order of the natural recursion (a node's
+    /// parts last first where it builds backwards).
+    #[cold]
+    #[inline(never)]
+    fn compile(&mut self, t: &Parsed, c: Call) -> Result<u32, ReError> {
         let mut frames: Stack<Frame, 8> = Stack::new(Frame::Open { g: 0, chain: 0 });
-        let mut step = self.start(t, Call { id: root, next, chain, share: NONE, bare: false }, &mut frames)?;
+        let mut step = self.start(t, c, &mut frames)?;
         loop {
             let ret = match step {
                 Step::Call(c) => {
@@ -712,7 +877,7 @@ impl Built {
     fn build(parsed: Parsed, loc: &Locale, icase: bool) -> Result<Built, ReError> {
         let mut b = Builder { insts: TryVec::new(), inst_chain: TryVec::new(), chains: TryVec::new(), scopes: TryVec::new(), nodes: 0, entries: Stack::new(0) };
         let m = b.emit(OP_MATCH, 0, 0, 0, NONE)?;
-        let start = b.compile(&parsed, parsed.root, m, NONE)?;
+        let start = b.node(&parsed, parsed.root, m, NONE, NONE, 0)?;
         let can_be_null = parsed.item(parsed.root).nullable;
         let mut p = Built {
             insts: b.insts,
