@@ -1008,9 +1008,19 @@ pub fn jn<F: Float>(n: i32, x: F, mode: Rounding) -> (F, Status) {
 /// orders share the large band (D-10.109) and agree with `j0f`/`j1f` bit for bit. The tier
 /// already answers every operand `j0f`/`j1f`'s fast path answers (the same `fast32::eval`), so
 /// the test sits on its refusal only and every answered call runs next's code unchanged; out of
-/// line, so [`jn`]'s frame does not grow for the inlined order functions (LIBM-JNF-LARGE-2).
+/// line, so [`jn`]'s frame does not grow for the inlined order functions (LIBM-JNF-LARGE-2). A
+/// normal `x` was refused by that very `eval`, so it goes straight on to what the order function
+/// does next, [`bessel32_rest`] (at `−x` for order −1); the tier tried no `eval` on the rest.
+#[cold]
 #[inline(never)]
 fn jn_low<F: Float>(n: i32, x: F, mode: Rounding) -> (F, Status) {
+    if f32::from_bits(x.to_bits() as u32).is_normal() {
+        return match n {
+            0 => bessel32_rest(0, "j0f", x, mode),
+            1 => bessel32_rest(1, "j1f", x, mode),
+            _ => bessel32_rest(1, "j1f", F::from_bits(x.to_bits() ^ 0x8000_0000), mode),
+        };
+    }
     match n {
         0 => j0(x, mode),
         1 => j1(x, mode),
@@ -1040,10 +1050,22 @@ pub fn yn<F: Float>(n: i32, x: F, mode: Rounding) -> (F, Status) {
 
 /// `float` `yn` of orders 0 and ±1 after the recurrence tier refused `x`, as [`jn_low`]: [`y0`]
 /// and [`y1`] themselves; `Y_{−1} = −Y_1` (mirrored mode) for finite x > 0, the rest of order −1
-/// on the accurate path.
+/// on the accurate path. The tier tried `fast32::eval` exactly on normal x > 0, so those go
+/// straight on to [`bessel32_rest`].
+#[cold]
 #[inline(never)]
 fn yn_low<F: Float>(n: i32, x: F, mode: Rounding) -> (F, Status) {
     let xf = f32::from_bits(x.to_bits() as u32);
+    if xf.is_normal() && xf > 0.0 {
+        return match n {
+            0 => bessel32_rest(2, "y0f", x, mode),
+            1 => bessel32_rest(3, "y1f", x, mode),
+            _ => {
+                let (v, st) = bessel32_rest(3, "y1f", x, fast_bessel::mirrored(mode));
+                (F::from_bits(v.to_bits() ^ 0x8000_0000), st)
+            }
+        };
+    }
     match n {
         0 => y0(x, mode),
         1 => y1(x, mode),

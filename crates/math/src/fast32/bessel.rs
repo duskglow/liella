@@ -810,12 +810,15 @@ mod tests {
         let band = |name: &str, x: f32, call: &dyn Fn() -> (f32, Status)| {
             let before = stats::counts(name).fast;
             let r = call();
-            if x.abs() >= 524_288.0 {
+            if x.abs() >= 524_288.0 && x.is_finite() {
                 assert!(stats::counts(name).fast > before, "{name} band not taken at {x:e}");
             }
             r
         };
-        for x in [3.5f32, 524_288.0, 1e30, -524_288.0, -1e30] {
+        // Band and mid operands go on from the tier's refusal or answer; zeros, subnormals and
+        // infinities take the order functions' own entry.
+        let xs = [3.5f32, 524_288.0, 1e30, -524_288.0, -1e30, 0.0, -0.0, 1e-40, -1e-40, f32::INFINITY, f32::NEG_INFINITY];
+        for x in xs {
             for n in [-1, 0, 1] {
                 for m in MODES {
                     let jname = if n == 0 { "j0f" } else { "j1f" };
