@@ -15,3 +15,10 @@ Inherited head was already fixed (walk-dir fixture adds a non-.pyc file inside _
 (TRACE-PYCACHE-2-lint), `cargo test -p xtask --bin xtask` rc 0 (TRACE-PYCACHE-2-gate; affected escalates to FULL for tools/hottext/*.sh),
 plants 3/3 CAUGHT (TRACE-PYCACHE-2-plants2; handoff/TRACE-PYCACHE-plants.txt). TRACE-PYCACHE-2-plants (rc 2) was SUPERSEDED: its baseline
 `cargo xtask so` hit the 600 s per-command timeout on a loaded host; rerun with --timeout 1800.
+
+## Run 3 (TRACE-PYCACHE-3)
+CI conflict: next rewrote tools/hottext/regen.sh and probe_text.sh (merge.py/prune.py became order.py). Merged origin/next, took next's
+two scripts and re-applied `python3 -B` to every python3 call in them (startup_data.sh merged cleanly). Code head b2c83ebc8.
+On that tree (keke role): lint (clippy + static) rc 0 (trace-pycache-3-lint), `cargo test -p xtask --bin xtask` rc 0 (trace-pycache-3-xtest),
+plants 3/3 CAUGHT, same file (trace-pycache-3-plants). Not run: affected (escalates to FULL for tools/hottext/*.sh, as before).
+Next: land.
