@@ -34,7 +34,7 @@
 * Lint/gate: `lslp-lint-1` superseded (records shape: view `x` has only id/body, body one line;
   fixed), then the final jobs named in the report json.
 * Scripts and data: `~/work/LIELLA-SYSTEM-LIBC-PLAN/{scan.py,meta.sh,data/}` on keke. Local copy
-  in the agent scratch `/home/claude/w/.scratch/LIELLA-SYSTEM-LIBC-PLAN/`. Not committed: they name
+  in the story's agent scratch directory (`~/w/.scratch/LIELLA-SYSTEM-LIBC-PLAN/`). Not committed: they name
   the LAN mirror. Rerun: `python3 scan.py data <keyring> versions.tsv index|debs|sample 100`.
 
 ## RULING NEEDED (owner; recommendations in plan §5)
