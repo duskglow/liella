@@ -123,6 +123,16 @@ pub(super) fn lgamma_core(x: f32) -> Option<(f64, u64, bool)> {
 /// [`lgamma_edge`] answered (its [`Status::hw`] stays conservative, see there).
 #[inline(always)]
 fn lgamma_core_signed(x: f32) -> Option<(f64, u64, i32, bool)> {
+    lgamma_core_pieces::<true>(x)
+}
+
+/// [`lgamma_core_signed`] (`EDGE`), or without [`lgamma_edge`]'s pieces (`!EDGE`: x < -42 still
+/// by [`lgamma_reflect`], the rest of [`lgamma_edge`]'s operands `None`). [`lgamma_rest`] takes the
+/// latter: it covers no refusal of those pieces, and recomputing them (the double-double kernel)
+/// to find that out cost the cbench row beside the zero at -3.14382577 5 instructions per call
+/// (LIBM-LGAMMAF-EDGE-3).
+#[inline(always)]
+fn lgamma_core_pieces<const EDGE: bool>(x: f32) -> Option<(f64, u64, i32, bool)> {
     let xd = f64::from(x);
     let z = xd - 1.0;
     if crate::dd::abs(z) <= 0.125 {
@@ -139,15 +149,19 @@ fn lgamma_core_signed(x: f32) -> Option<(f64, u64, i32, bool)> {
         let s = w * (1.0 / 12.0 + w2 * (-1.0 / 360.0 + w2 * (1.0 / 1260.0)));
         return Some(((xd - 0.5) * (lx - 1.0) + (HALF_LN_2PI_M_HALF + s), LGAMMA_DELTA, 1, false));
     }
-    let Some(g) = gamma_core(xd) else { return lgamma_wide(xd) };
+    let Some(g) = gamma_core(xd) else {
+        return if EDGE { lgamma_wide(xd) } else if xd < -42.0 { lgamma_reflect(xd) } else { None };
+    };
     let y = ln64(crate::dd::abs(g));
     let a = crate::dd::abs(y);
     if a >= 1.0 {
         Some((y, LGAMMA_DELTA, (g.to_bits() as i64 >> 63) as i32 | 1, false))
     } else if a >= 1.0 / 256.0 {
         Some((y, LGAMMA_SMALL_DELTA, (g.to_bits() as i64 >> 63) as i32 | 1, false))
-    } else {
+    } else if EDGE {
         lgamma_edge(xd)
+    } else {
+        None
     }
 }
 
@@ -323,7 +337,7 @@ pub fn lgamma_first(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
 #[cold]
 #[inline(never)]
 pub fn lgamma_rest(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
-    let (y, d, sign, edge) = lgamma_core_signed(x)?;
+    let (y, d, sign, edge) = lgamma_core_pieces::<false>(x)?;
     if !lgamma_tabled(d, edge) {
         return None;
     }
