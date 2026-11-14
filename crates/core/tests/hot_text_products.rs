@@ -1227,8 +1227,8 @@ fn output_fill(map: &str, name: &str) -> u64 {
 /// unrelated change ahead of the cluster would; LIBM-F32-BESSEL-LARGE-6 moved the start-up relro objects by 0x4d0
 /// bytes and two pages) and of `.lbss` (`lbss`): the start-up relro cluster (`.data.rel.ro.local.liella_startup*`,
 /// xtask/src/startup_ro.rs) starts on a page boundary and spans the same number of pages at every pad and unpadded,
-/// and `heap::RESERVE_MEM` starts on a page boundary (its head is the start-up part). No spec clause (layout of the
-/// products).
+/// and `heap::RESERVE_MEM` and `global_locale::SLOTS` start on a page boundary (their heads are the start-up part).
+/// No spec clause (layout of the products).
 #[test]
 fn init_startup_data_pages_hold_at_every_data_phase() {
     let base = std::env::temp_dir().join(format!("liella-startup-pages-{}", std::process::id()));
@@ -1257,13 +1257,18 @@ fn init_startup_data_pages_hold_at_every_data_phase() {
         if fill >= 4096 {
             bad.push(format!("{region} {pad:#x}: .data.rel.ro holds {fill:#x} bytes of fill, a page or more"));
         }
-        let reserve: Vec<(String, u64, u64)> = map_inputs(&map, ".lbss").into_iter().filter(|s| s.0.ends_with("4heap11RESERVE_MEM")).collect();
-        if reserve.is_empty() {
-            bad.push(format!("{region} {pad:#x}: heap::RESERVE_MEM not found in .lbss"));
-        }
-        for (name, a, _) in reserve {
-            if a & 0xfff != 0 {
-                bad.push(format!("{region} {pad:#x}: {name} at {a:#x}, not on a page boundary"));
+        // The written start-up objects of a page or more: RESERVE_MEM, and (STARTUP-DATA-PAGE-ALIGN-3) the locale
+        // table global_locale::SLOTS, whose first records start-up writes.
+        let lbss = map_inputs(&map, ".lbss");
+        for (suffix, what) in [("4heap11RESERVE_MEM", "heap::RESERVE_MEM"), ("13global_locale5SLOTS", "global_locale::SLOTS")] {
+            let found: Vec<&(String, u64, u64)> = lbss.iter().filter(|s| s.0.ends_with(suffix)).collect();
+            if found.is_empty() {
+                bad.push(format!("{region} {pad:#x}: {what} not found in .lbss"));
+            }
+            for (name, a, _) in found {
+                if a & 0xfff != 0 {
+                    bad.push(format!("{region} {pad:#x}: {name} at {a:#x}, not on a page boundary"));
+                }
             }
         }
     }
