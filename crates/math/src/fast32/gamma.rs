@@ -282,11 +282,10 @@ fn lgamma_tabled(d: u64, edge: bool) -> bool {
 }
 
 /// `lgammaf` by the fast path with the sign of Γ(x) (`signgam`), or `None` (see [`eval`]): the
-/// value as `eval(Fast::Lgamma, ..)`, the sign from Γ(x) itself ([`lgamma_core_signed`]). Any
-/// refusal goes to [`lgamma_rest`] with x and `mode` only: the callers keep both for the accurate
-/// path anyway, so the answered path ([`lgamma_first`]) holds nothing more across the rounding test
-/// (passing y, the margin, the sign and `edge` to the cold call cost the typical rows 4 to 13
-/// instructions, LIBM-LGAMMAF-EDGE-3).
+/// value as `eval(Fast::Lgamma, ..)`, the sign from Γ(x) itself ([`lgamma_core_signed`]): the
+/// first try ([`lgamma_first`]), then on any refusal the second tries ([`lgamma_rest`], from x and
+/// `mode` alone). `lgammaf` itself ([`crate::special::lgamma`]) calls the two apart, so that its
+/// refusal path makes one cold call.
 #[inline(always)]
 pub fn eval_lgamma(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
     match lgamma_first(x, mode) {
@@ -297,7 +296,7 @@ pub fn eval_lgamma(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
 
 /// The first try: the pieces of [`lgamma_core_signed`] and one rounding test.
 #[inline(always)]
-fn lgamma_first(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
+pub fn lgamma_first(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
     let (y, d, sign, edge) = lgamma_core_signed(x)?;
     let (v, st) = super::finish(x, y, d, mode, "lgammaf")?;
     Some(((v, if edge { st.hw(Status::HW_ANY) } else { st }), sign))
@@ -313,7 +312,7 @@ fn lgamma_first(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
 /// [`Status::HW_ANY`] (the kernel's intermediates are not tracked here; cold).
 #[cold]
 #[inline(never)]
-fn lgamma_rest(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
+pub fn lgamma_rest(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
     let (y, d, sign, edge) = lgamma_core_signed(x)?;
     if !lgamma_tabled(d, edge) {
         return None;

@@ -47,7 +47,7 @@ pub use clog_csqrt::{clogf, clogf_nearest, csqrtf, csqrtf_nearest};
 pub use csinh::{csinf, csinf_nearest, csinhf, csinhf_nearest};
 use erf::{erf_core, erf_refused, erfc_core, erfc_refused, ERFC_DELTA, ERF_DELTA};
 use exp_log::*;
-pub use gamma::{eval_lgamma, eval_tgamma};
+pub use gamma::{eval_lgamma, eval_tgamma, lgamma_first, lgamma_rest};
 use gamma::{gamma_core, TGAMMA_DELTA};
 use hyperbolic::*;
 use inv_trig::*;
