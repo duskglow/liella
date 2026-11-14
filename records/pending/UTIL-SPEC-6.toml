@@ -1,0 +1,11 @@
+id = "D-NEW"
+series = "D-31"
+section = "s31"
+spec = "§31.2"
+ann = "—"
+status = "active"
+story = "UTIL-SPEC"
+date = "2026-11-14"
+body = '''
+**`ldconfig -c old` and `-c compat` are refused (`plan/utilities.md` Q5, owner's approval 2026-11-14; #941).** ldconfig prints a message naming the new format as the one it writes and exits nonzero without writing anything; `-c new` (the default) is accepted. No compatibility option: Liella's loader reads only the new format (D-27.16, #941), so an old-format cache would be ignored by the loader it serves. The reference writes the old format on request (probe `ldconfig-c-old`).
+'''

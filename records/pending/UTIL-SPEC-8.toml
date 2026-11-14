@@ -1,0 +1,11 @@
+id = "D-NEW"
+series = "D-31"
+section = "s31"
+spec = "§31.14"
+ann = "—"
+status = "active"
+story = "UTIL-SPEC"
+date = "2026-11-14"
+body = '''
+**The `locales` commands are Liella's own (`plan/utilities.md` Q8, owner's approval 2026-11-14; R1).** `locale-gen`, `update-locale` and `validlocale` are reimplemented inside `liella-locale` from their man pages (locale-gen(8), update-locale(8)) and the files they use (`/etc/locale.gen`, `/etc/default/locale`, `SUPPORTED`); they compile in process, one parse of each charmap and shared source for all requested locales, in parallel. Counters per locale against one `localedef` process per locale decide any speed claim (UTIL-13). Their interface clauses are added with UTIL-13.
+'''

@@ -1,0 +1,11 @@
+id = "D-NEW"
+series = "D-31"
+section = "s31"
+spec = "§31.2"
+ann = "SEC"
+status = "active"
+story = "UTIL-SPEC"
+date = "2026-11-14"
+body = '''
+**ldconfig writes a deterministic cache, replaces it atomically, and treats every file it reads as untrusted (`plan/utilities.md` §4; owner's approval 2026-11-14).** Entries are in the Appendix D.3.3 order, ties broken by configuration order and then path bytes, and directory listings are sorted, so identical trees give byte-identical caches on any file system. The cache is written to a temporary file in its own directory, synced, and renamed over the old one. Every ELF file is bounds-checked and never mapped executable. `-r ROOT` resolves every path inside ROOT with `openat2(RESOLVE_IN_ROOT)` and needs no privilege (the reference also succeeds for an ordinary user, probe `ldconfig-r-user`); `chroot` only where `openat2` is missing. An auxiliary cache (under `/var/cache/ldconfig/`, Liella's own file) only if UTIL-3's counters show a gain.
+'''

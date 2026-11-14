@@ -1,0 +1,11 @@
+id = "D-NEW"
+series = "D-31"
+section = "s31"
+spec = "§31"
+ann = "—"
+status = "active"
+story = "UTIL-SPEC"
+date = "2026-11-14"
+body = '''
+**Shape of the utilities: a library per domain holding both sides of each file format, one executable per domain, ldconfig freestanding and static (`plan/utilities.md` §3-§4, Q1 and Q2; owner's approval 2026-11-14).** Each format's writer lives in the crate of its reader (the loader cache in `liella-ld`, TZif in a `liella-tz` crate shared with the C library's reader, locales in a `liella-locale` crate, catalogs beside `catopen`'s reader), so reader and writer are tested against each other. `liella-tz` answers as zic, zdump and tzselect and `liella-locale` as locale, localedef, locale-gen, update-locale and validlocale, chosen by `argv[0]`; a domain with one command is a plain program. ldconfig is a freestanding static program with no C library dependency (dpkg needs it before any package operation and while `libc6` is replaced); Liella's `libc-bin` declares interest in the dpkg `ldconfig` trigger. UTIL-SHAPE measures the domain executables against separate programs (start-up instructions, faults, size); a domain that costs more falls back to separate programs (a build change only). Public interfaces: the commands and the file formats; a public Rust `tz` API in `liella-native` after UTIL-10 (UTIL-16); a `locale` API deferred; no new C ABI until a C consumer asks (D-X.10).
+'''
