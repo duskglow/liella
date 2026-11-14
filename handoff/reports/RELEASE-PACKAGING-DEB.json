@@ -1,0 +1,29 @@
+{"task": "RELEASE-PACKAGING-DEB", "model": "opus", "tokens": null,
+ "result": "Reference .debs liella6/liella6-dev in sysroot /usr/lib/liella: one-command reproducible build, static check, trixie chroot proof (15 pass, 0 fail, 5 wait on loader, 1 known libc defect); Devuan proof blocked on keyring",
+ "branch": "task/release-packaging-deb", "head": "b5b4df832",
+ "gate": {"affected": "459 passed / 0 failed", "peak": "1.2G"},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "Devuan excalibur proof needs an authenticated Devuan keyring on mei (deb.devuan.org is HTTP only; not in Ubuntu or Debian archives)", "recommendation": "owner installs devuan-keyring after checking its fingerprint against devuan.org (sudo dpkg -i devuan-keyring_<ver>_all.deb), then run tools/deb/proof.sh target/deb excalibur"},
+  {"item": "Maintainer address of the packages (lintian bogus-mail-host; placeholder liella-packaging@invalid)", "recommendation": "owner names a project address; DEB_MAINTAINER overrides"},
+  {"item": "Pending record RELEASE-PACKAGING-DEB-2: loader pinned/default/trusted directory from compile-time LIELLA_LIBDIR (amends D-27.16)", "recommendation": "accept: compile-time only, default lib keeps every build unchanged"},
+  {"item": "newlocale(1<<LC_ALL, \"C\", 0): reference returns a locale, Liella NULL/EINVAL; libstdc++ uses it, so C++ iostream programs abort at start; spec 7.3 silent (spec gap)", "recommendation": "new story: probe the reference's meaning of that bit and match it in crates/boundary/src/locale.rs categories"}
+ ],
+ "informational": [
+  "Dynamic smoke programs wait for the loader's start-time DT_NEEDED search (no story id found on the board); dlopen smoke waits for dlsym (DL-16b) and dlclose (DL-17)",
+  "Liella ships no C headers and no crti.o/crtn.o: the wrapper compiles with the system headers (liella6-dev depends on libc6-dev) and links without crti/crtn",
+  "Conformance dynamic programs were not run in the chroot (by-path libc and cargo needed); the snapshot rerun should add them once start-time search lands",
+  "mmdebstrap 1.5.7 and debian-archive-keyring were unpacked user-locally from deb.debian.org (nothing installed as root)",
+  "Own rule slips: one sed -i on a scratch job script, one heredoc to edit the plants file"
+ ],
+ "refused": [],
+ "impact": [
+  {"kind": "tooling", "what": "tools/deb/build.sh: release .debs in one command, byte-identical across two build directories", "before": null, "after": null, "unit": null, "measured": true},
+  {"kind": "coverage", "what": "plants added (coexistence check, wrapper interpreter, three LIBDIR sites), all CAUGHT", "before": 0, "after": 5, "unit": "plants", "measured": true},
+  {"kind": "coverage", "what": "trixie chroot proof checks passing (install, PT_INTERP, ld.so --list pinning, static smoke x3, system programs x3, dpkg --verify x3, purge, file list, sysroot gone)", "before": 0, "after": 15, "unit": "checks", "measured": true},
+  {"kind": "unblock", "what": "snapshot release packaging step (owner ruling RELEASE PACKAGING); Aqours reference layout", "before": null, "after": null, "unit": null, "measured": false}
+ ],
+ "improvement": "A start-time library search story should be on the board: every dynamic program waits on it, and no brief names it",
+ "next_step": "Owner rulings (Devuan keyring, maintainer address, record -2, newlocale story); then the snapshot runs build/check/proof for both suites on its tag",
+ "report_file": "handoff/RELEASE-PACKAGING-DEB.md",
+ "jobs": ["rpd-gate-2", "rpd-plants-2", "rpd-lint-3", "rpd-deb-2"]}
