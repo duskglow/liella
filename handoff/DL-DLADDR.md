@@ -1,57 +1,48 @@
-# DL-DLADDR (DL-18): handoff (run 3, DL-DLADDR-3)
+# DL-DLADDR (DL-18): handoff (run 4, DL-DLADDR-4)
 
-**State.** Branch `task/dl-dladdr-3` (contains all of `task/dl-dladdr-2`, which continues `task/dl-dladdr`, cut from
-origin/next 06d7940b1; no merge). HEAD: see handoff/reports/DL-DLADDR-3.json. Role kanon:~/w/kn1. dladdr, dladdr1 and
-dlinfo are exported by Liella's libc (GLIBC_2.34, compat GLIBC_2.2.5 / GLIBC_2.3.3) and answered in `ld.so`
-(`crates/boundary/src/ld/dlopen/dladdr.rs`). The work is done and verified; the branch is ready to land once the
-coordinator assigns ids to the pending records below.
+**State.** Branch `task/dl-dladdr-4` (all of `task/dl-dladdr-3`, plus a merge of origin/next b60c73ac6 and the fixes
+below). HEAD: see handoff/reports/DL-DLADDR-4.json. Role keke:~/w/n1. dladdr, dladdr1 and dlinfo are exported by
+Liella's libc (GLIBC_2.34, compat GLIBC_2.2.5 / GLIBC_2.3.3) and answered in `ld.so`
+(`crates/boundary/src/ld/dlopen/dladdr.rs`). Work done and verified in runs 1-3; run 4 only merged next and wrote the
+reserved ids.
 
-**Earlier commits (runs 1-2).** The code; `8d2936a0d` regenerated `csys/src/machine/compat_aliases.S`; conformance
-programs `s27_dladdr`, `s27_dlinfo` with helpers `dla_syms`/`dla_run`/`dla_rp` (clause tests `s27_1_c_6`, `s27_1_c_7`);
-records and docs (pending D-27 decisions `records/pending/DL-DLADDR-2-1..5`, compat `DL-DLADDR-2-6`, a
-docs/differences-from-glibc.md row, dynlink.md "dladdr and dlinfo", the probe record in dynlink.glibc.txt).
+**Run 4 commits.**
+- `dabcd9b8b` merge origin/next (DL-16c DL-DLOPEN-CONCURRENT, DL-16d DL-DLOPEN-TLS-SURPLUS). Conflicts were all
+  additive and keep both sides: `StartInfo` has next's `dl_iterate`, `dl_find_object`, `dl_fork`, then `dladdr`,
+  `dlinfo` (ld.rs fills, runtime.rs stores); next's dl_iterate_phdr differences row, then the TLS_DATA row; next's
+  `== readers (DL-16c)` probe record, then `== dladdr-dlinfo`.
+- `a1cb371fc` dlinfo's `RTLD_DI_TLS_MODID`/`TLS_DATA` come from the published module table (`THREAD_MODS` through
+  `ld::initial_place`), the table every thread's static area is filled from and `dl_iterate_phdr`'s `tls_of` reads;
+  a dlopen appends to it before publication, so a published object always has its entry.
+- `e2d5ea80e` reserved ids: pending DL-DLADDR-2-1..5 -> D-27.45 (dladdr object/symbol), D-27.46 (lock-free readers),
+  D-27.47 (dlinfo requests/failures), D-27.48 (SERINFO sizing), D-27.49 (TLS_DATA); DL-DLADDR-2-6 -> COMPAT-29
+  (decisions D-27.49, D-27.39). Series lines dropped; citations in the records, the differences row and dladdr.rs
+  name the ids.
+- `2c16e89e1` the merged `read_section` (dlopen.rs) used the old single lock (`lock`/`unlock`/`OWNER`), gone in
+  DL-16c: a first reader now builds the state under `STATE` alone (lock order kept, as fork's prepare), and refuses
+  when the calling thread holds `STATE` (signal handler during the first build).
+- `0461f75a5` s27_dladdr checks dladdr as the process's first loader call (no test reached that path before); plants
+  file `handoff/DL-DLADDR-4-plants.txt` (2 plants on this run's changed sites).
 
-**Run 3.** Run 2's plants job `dl-dladdr-2-plants` ended rc 124 with 8 of 9 CAUGHT: the cause is the 150-min cap
-on shared jobs (`~/bin/slots`, SLOT_MAX_MIN), not a test. Each plant costs about 16.5 min: the plants tool rebuilds
-the products with the mutant (~8.7 min), then the plant's command (`cargo xtask affected --only conformance:...
---with-exports --run`) builds them again (~7.2 min, "433.5s ok products" in each plant log). Nine plants plus the
-baseline need about 167 min. Run 3 split the same nine plants, unchanged, into `handoff/DL-DLADDR-3-plants-a.txt`
-(5) and `-b.txt` (4, the unjudged phdr-count-short first) and ran them as two jobs. No product code changed.
+**Results.** See handoff/DL-DLADDR-4-report.md (jobs, rc, counts).
 
-**Results (head 5d7461be1, kanon).**
-- `dl-dladdr-3-clippy0`: `cargo xtask clippy` + `cargo xtask static` on the inherited head ef6eacb2d: rc 0.
-- `dl-dladdr-3-gate`: `cargo xtask affected --run --base origin/next`, escalated to FULL (compat_aliases.S is
-  generated): rc 0; suites 32 ok, tests 11767 passed / 0 failed / 1269 ignored; conformance 131 passed / 0 failed;
-  peak 16G (page cache included), oom_kill 0.
-- `dl-dladdr-3-plants-a` (`--dir /mnt/zram/claude/DL-DLADDR-3/plants-a1`): rc 0, 5 CAUGHT, 0 SURVIVED, 0 WARN, 103 min.
-- `dl-dladdr-3-plants-b` (`--dir /mnt/zram/claude/DL-DLADDR-3/plants-b1`): rc 0, 4 CAUGHT (phdr-count-short included),
-  0 SURVIVED, 0 WARN, 87 min. All nine plants are caught by the msg each names.
-- SUPERSEDED: `dl-dladdr-2-plants` (rc 124 at the cap, 8 of 9 judged), `dl-dladdr-2-static1` (older tree).
+**Decisions in force.** D-27.1, D-27.39, D-27.45..D-27.49, COMPAT-29 (registered, not implemented).
 
-**Decisions in force.** D-27.1 (readers take no lock), D-27.39 (dlopen'd TLS in the static surplus), the five pending
-records (symbol rule; lock-free readers; dlinfo requests and failures; SERINFO sizing; TLS_DATA per ruling #5521, with
-the registered compat option `DL-DLADDR-2-6` and the differences row).
+**Probe-settled.** spec/behaviour/dynlink.md "dladdr and dlinfo"; `== dladdr-dlinfo` in dynlink.glibc.txt.
 
-**Probe-settled.** spec/behaviour/dynlink.md "dladdr and dlinfo" (table) and the `== dladdr-dlinfo` record at the end
-of dynlink.glibc.txt.
+**Open / INFORMATIONAL (not in this story's scope).**
+- Two read paths now exist: `ld::readers` (DL-16c: its own table `TABLE`/`PUBLISHED`, for dl_iterate_phdr and
+  _dl_find_object) and `ld::dlopen::read_section`/`View` (the chain, for dlsym's RTLD_NEXT, dladdr, dlinfo). Both
+  are empty sections today; DL-17 (dlclose, reader epochs) must give both the same epoch, or fold one into the other.
+- The vDSO is not in the loader's chain: `dladdr` of a vDSO address returns 0 (the reference finds `linux-vdso.so.1`);
+  `dl_iterate_phdr` (DL-16c) lists it apart.
+- `RTLD_DI_SERINFO` on the program: the reference leaves out the program's own `DT_RUNPATH` (probe `/prog/rp`);
+  Liella's likely lists it. Not checked. Follow-up: probe DT_RPATH vs DT_RUNPATH programs, align `serinfo` for i == 0.
+- `RTLD_DI_ORIGIN` of the program and of ld.so is refused; the reference's answer is not recorded.
 
-**Open / INFORMATIONAL (carried from run 2, not in this story's scope).**
-- The vDSO is not in Liella's chain (P-12): `dladdr` of a vDSO address returns 0 (the reference finds `linux-vdso.so.1`).
-- Liella's `dl_iterate_phdr` lists only the program and the vDSO (DL-16c walks the chain); the tests take a helper's
-  base from its file instead.
-- In the conformance build `dlsym(RTLD_DEFAULT, "__tls_get_addr")` is NULL under Liella (ld.so not in the global
-  scope); the reference finds it. The test reaches `__tls_get_addr` through the helper.
-- `RTLD_DI_SERINFO` on the program: the reference's list leaves out the program's own `DT_RUNPATH` (probe `/prog/rp`);
-  Liella's `serinfo` uses the program's scope, so it likely lists it. Not checked. Follow-up: probe the program with
-  DT_RPATH and with DT_RUNPATH, then align `serinfo` for `i == 0`.
-- `RTLD_DI_ORIGIN` of the program and of ld.so is refused; giving the program's directory (AT_EXECFN) is a possible
-  follow-up; the reference's answer is not recorded.
-- When DL-DLOPEN-CONCURRENT (DL-16c) lands: fold its reader into `read_section`/`View` in `dlopen.rs` (or this into it).
+**Do not redo.** The probe and its record; compat-gen regeneration; the conformance programs; the nine plants of run 3
+(handoff/DL-DLADDR-3-plants-a/b.txt, all CAUGHT); the id assignment.
 
-**Do not redo.** The probe (tools/probe/dl/dladdr/) and its record; the compat-gen regeneration; the conformance
-programs; the plants (all nine judged in run 3).
+**Exact next step.** Land. Optional follow-up story: the SERINFO-of-the-program probe above.
 
-**Exact next step.** Coordinator: assign ids to `records/pending/DL-DLADDR-2-1..6`, then land. A follow-up story may
-take the SERINFO-of-the-program probe above.
-
-**Plan rows.** plan/ph14/design.md §8, §10; plan/ph14/dl-16-dlopen.md §4; D-27.1, D-27.30, D-27.32, D-27.39; dynlink.md P-6, P-12.
+**Plan rows.** plan/ph14/design.md §8, §10; plan/ph14/dl-16-dlopen.md §4; D-27.1, D-27.30, D-27.39, D-27.45..49.

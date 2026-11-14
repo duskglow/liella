@@ -2,3 +2,6 @@
 # table; the first reader's build under STATE). The nine earlier plants (DL-DLADDR-3-plants-a/b) still apply.
 tls-place-no-bias | crates/boundary/src/ld/dlopen/dladdr.rs | lit:let image = o.bias.wrapping_add(o.elf.find(pt::TLS)?.vaddr); ==> let image = o.elf.find(pt::TLS)?.vaddr; | cargo xtask affected --only conformance:s27_dladdr,conformance:s27_dlinfo --with-exports --run | msg:s27_dlinfo: line [0-9]+: dlinfo\(syms, RTLD_DI_TLS_MODID, &modid\) == 0 && modid != 0
 first-reader-refuses | crates/boundary/src/ld/dlopen.rs | lit:if STATE.owner.load(Relaxed) == tb::tp() { ==> if STATE.owner.load(Relaxed) != tb::tp() { | cargo xtask affected --only conformance:s27_dladdr,conformance:s27_dlinfo --with-exports --run | msg:s27_dladdr: line [0-9]+: dladdr\(\(void \*\)main, &first\)
+# cargo xtask plants results (2 plants: 2 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG, 0 BUILD-TIMEOUT):
+# tls-place-no-bias: CAUGHT, caught by no test the log names
+# first-reader-refuses: CAUGHT, caught by no test the log names
