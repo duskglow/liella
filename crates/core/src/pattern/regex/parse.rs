@@ -164,16 +164,6 @@ impl<T: Copy, const N: usize> Stack<T, N> {
         }
     }
 
-    pub(crate) fn get(&self, i: usize) -> Option<T> {
-        if i >= self.len {
-            None
-        } else if i < N {
-            self.inline.get(i).copied()
-        } else {
-            self.heap.get(i - N).copied()
-        }
-    }
-
     /// Append the entries from `from` up to `out`, in order.
     pub(crate) fn copy_from(&self, from: usize, out: &mut TryVec<T>) -> Result<(), ReError> {
         let inline = self.inline.get(from.min(N)..self.len.min(N)).unwrap_or(&[]);
