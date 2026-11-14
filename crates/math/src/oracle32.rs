@@ -341,17 +341,18 @@ fn gamma_unknown(xd: f64) -> bool {
     !(xd.abs() > 0.0) || xd.abs() >= 8_388_608.0 || xd == dd::nearest_int(xd)
 }
 
-/// Whether lgamma's tier must not answer the `float` x: ±0, ±∞, NaN, x < −64, the poles (x ≤ 0
-/// an integer) and lnΓ(1) = lnΓ(2) = 0 (exact). Every other positive integer n ≥ 3 is estimated:
+/// Whether lgamma's tier must not answer the `float` x: ±0, ±∞, NaN, the poles (x ≤ 0 an
+/// integer, which includes every x ≤ −2^23) and lnΓ(1) = lnΓ(2) = 0 (exact). Every other positive integer n ≥ 3 is estimated:
 /// lnΓ(n) = ln((n − 1)!) is the logarithm of an integer ≥ 2, transcendental (Lindemann), so
 /// never a `float` or a midpoint, and [`stirling`]'s bound holds for every x > 0. (Sending the
 /// integers and every |x| ≥ 2^23 to the accurate path put about 0.9·10^9 operands, 4 modes each,
-/// of the exhaustive lgammaf sweep on mp: the fast path takes all of x ≥ 36 up to overflow.)
+/// of the exhaustive lgammaf sweep on mp: the fast path takes all of x ≥ 36 up to overflow; likewise
+/// the reflection below −42, LIBM-LGAMMAF-EDGE-2, so the tier covers every x < 0 too.)
 fn lgamma_unknown(xd: f64) -> bool {
-    !(xd.abs() > 0.0 && xd.abs() < f64::INFINITY) || xd < -64.0 || xd == 1.0 || xd == 2.0 || (xd < 0.0 && xd == dd::nearest_int(xd))
+    !(xd.abs() > 0.0 && xd.abs() < f64::INFINITY) || xd <= -8_388_608.0 || xd == 1.0 || xd == 2.0 || (xd < 0.0 && xd == dd::nearest_int(xd))
 }
 
-/// The oracle's estimate of `lgammaf(x)`: [`stirling`] for x > 0; for −64 < x < 0 the reflection
+/// The oracle's estimate of `lgammaf(x)`: [`stirling`] for x > 0; for −2^23 < x < 0 the reflection
 /// lnΓ(x) = ln π − ln|sin πx| − lnΓ(1 − x) (1 − x exact; sin πx = ±sin π|r|, r = x − [x] exact).
 pub(crate) fn lgamma_est(x: f32) -> Est {
     let xd = f64::from(x);

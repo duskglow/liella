@@ -22,7 +22,7 @@ const BES_MIN: f64 = 9.536_743_164_062_5e-7; // 2^-20
 const U53: f64 = 1.110_223_024_625_156_5e-16; // 2^-53
 const TWO53: f64 = 9_007_199_254_740_992.0;
 const TWO_OVER_PI: f64 = f64::from_bits(0x3fe4_5f30_6dc9_c883); // RN(2/π)
-const INV_PI_D: f64 = f64::from_bits(0x3fd4_5f30_6dc9_c883); // RN(1/π)
+pub(super) const INV_PI_D: f64 = f64::from_bits(0x3fd4_5f30_6dc9_c883); // RN(1/π)
 /// The bounds, in units of 2^-53 (absolute unless stated), each ≥ the bound proved in
 /// `bessel_bounds_hold` from the coefficients (Horner: γ_2n·Σ|a_i||t|^i plus the fit's error).
 const BES_SMALL_E: f64 = 64.0; // J0 on [0, 2) (|J0| ≤ 1), and J1/x·|x| scaled by |x|
@@ -314,8 +314,9 @@ const fn lg_taylor(odd: bool) -> [f64; 10] {
     }
     c
 }
-const LG_SIN: [f64; 10] = lg_taylor(true);
-const LG_COS: [f64; 10] = lg_taylor(false);
+/// Shared with lgammaf's reflection (`gamma::lgamma_reflect`, sin πt by an octant).
+pub(super) const LG_SIN: [f64; 10] = lg_taylor(true);
+pub(super) const LG_COS: [f64; 10] = lg_taylor(false);
 
 // The operands the rounding test refuses, per function, sorted: bits 32..63 |x|, 0..31 the
 // nearest `float` F of the value at |x|, bit 31 of the high word set when the value lies above F.
@@ -394,7 +395,7 @@ fn large_core(f: usize, a: u32) -> (f64, f64) {
 }
 
 #[inline(always)]
-fn horner_f10(c: &[f64; 10], t: f64) -> f64 {
+pub(super) fn horner_f10(c: &[f64; 10], t: f64) -> f64 {
     let mut y = c[9];
     let mut i = 9;
     while i > 0 {

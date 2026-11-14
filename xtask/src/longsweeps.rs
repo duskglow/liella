@@ -167,6 +167,9 @@ pub const SWEEPS: &[Sweep] = &[
     // Every float of 2^19..2^128 through the large-band core, once per function, but no oracle: about 40 s at
     // opt-level 2 on a Haswell-EP host (26 vCPU), so it runs with the long group (D-10.109).
     lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::bessel_large_table_is_the_refused_set", Group::Long),
+    // Every float through lgammaf's pieces and its second try, no oracle: the exception table's
+    // enumeration (LIBM-LGAMMAF-EDGE-2).
+    lib("crates/math/src/fast32/gamma.rs", "fast32::gamma::tests::lgammaf_table_is_the_refused_set", Group::Long),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::asinf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::acosf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::atanf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
