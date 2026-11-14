@@ -73,3 +73,26 @@ CASE(hypot_near_up, 0, 1) {
     pc_sink += (long)(acc != 0);
     PC_CHECKING { pc_check("%a %a", c1, c2); }
 }
+
+/* hypot_near_down, hypot_near_zero: hypot_near's pairs in the other two directed modes (LIBM-HYPOT-DIRECTED-FAST). */
+CASE(hypot_near_down, 0, 1) {
+    hyp_fill();
+    double acc = 0;
+    fesetround(FE_DOWNWARD);
+    for (long i = 0; i < n; i++) acc += hypot(nx[i & 63], ny[i & 63]);
+    double c1 = hypot(nx[5], ny[7]), c2 = hypot(nx[9], ny[11]);
+    fesetround(FE_TONEAREST);
+    pc_sink += (long)(acc != 0);
+    PC_CHECKING { pc_check("%a %a", c1, c2); }
+}
+
+CASE(hypot_near_zero, 0, 1) {
+    hyp_fill();
+    double acc = 0;
+    fesetround(FE_TOWARDZERO);
+    for (long i = 0; i < n; i++) acc += hypot(nx[i & 63], ny[i & 63]);
+    double c1 = hypot(nx[5], ny[7]), c2 = hypot(nx[9], ny[11]);
+    fesetround(FE_TONEAREST);
+    pc_sink += (long)(acc != 0);
+    PC_CHECKING { pc_check("%a %a", c1, c2); }
+}
