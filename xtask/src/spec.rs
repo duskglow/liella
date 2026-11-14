@@ -636,7 +636,7 @@ mod tests {
     /// section after it (§31, the utilities) does; the appendices end the body.
     #[test]
     fn the_catalogue_gives_no_clauses_and_the_section_after_it_does() {
-        let spec = "## 29. A\n\n### 29.1 F\n\n**Contract.** a.\n\n## 30. Catalogue\n\n| # | Pattern |\n|---|---|\n| H1 | text |\n\n\
+        let spec = "## 29. A\n\n### 29.1 F\n\n**Contract.** the last clause before the catalogue.\n\n## 30. Catalogue\n\n| # | Pattern |\n|---|---|\n| H1 | text |\n\n\
                     **Contract.** not a clause.\n\n## 31. Utilities\n\n### 31.2 ldconfig\n\n**Contract.**\n\n* first.\n\n\
                     | Name | Source |\n|---|---|\n| x | probe |\n\n## Appendix A. K\n\n**Contract.** not a clause.\n";
         let c = clauses(spec);
