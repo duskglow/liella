@@ -67,6 +67,26 @@ fn nested_repetitions(n: usize) -> Result<(), ReError> {
     Ok(())
 }
 
+/// The depth sweep (REGCOMP-SCOPE-COST-2, spec/behaviour/regex-nesting-depth.md): `((a)*)*` and
+/// `((a*)*)*` of n levels compile at 914 (the last depth when a level cost five instructions),
+/// at 1000 (which glibc 2.39 compiles) and at 1446, the last depth whose program fits the 2^21
+/// nodes of D-14.8 now that a level is one `ENTER` and one `EXIT` (n^2 + 3n + 2 and
+/// n^2 + 4n + 3 nodes); at 1447 the answer is the cap's `REG_ESPACE`.
+#[test]
+fn nested_repetitions_compile_to_the_cap() {
+    // Trace: D-14.8 (the program-size cap answers REG_ESPACE past it, and only past it).
+    for mid in ["a", "a*"] {
+        for n in [914, 1000, 1446] {
+            let r = comp(&nested("(", mid, ")*", n), cflags::EXTENDED);
+            assert!(r.is_ok(), "(({mid})*)* depth {n}: {:?}", r.err());
+        }
+        let r = comp(&nested("(", mid, ")*", 1447), cflags::EXTENDED);
+        assert!(matches!(r, Err(ReError::ESpace)), "(({mid})*)* depth 1447: {:?}", r.err());
+    }
+    // A search at the reference's depth: the empty match at the start.
+    assert_eq!(nested_repetitions(1000), Ok(()));
+}
+
 #[test]
 fn deep_nesting_runs_on_a_small_stack() {
     // Trace: no spec clause (resource bound of the implementation: nesting depth costs heap, not
