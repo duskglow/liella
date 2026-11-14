@@ -405,6 +405,7 @@ fn run_logged(cwd: &Path, argv: &[String], log: &Path, timeout: u64) -> Result<i
     // The child leads its own process group (timeout(1) makes the same group), so one group signal reaches every
     // grandchild, such as the gdb and probes a build-time trace starts, however the step ended.
     let mut child = Command::new("timeout")
+        .args(["-k", "10"])
         .arg(timeout.to_string())
         .args(argv)
         .current_dir(cwd)
@@ -1149,14 +1150,14 @@ mod tests {
         let _ = fs::remove_dir_all(src.parent().unwrap());
     }
 
-    // no spec clause: a step that ends at its limit leaves no process of its group alive (a grandchild that ignores TERM too)
+    // no spec clause: a step that ends at its limit leaves no process of its group alive (a grandchild that ignores TERM, as the step's own leader does not)
     #[test]
     fn a_timed_out_step_leaves_no_process_of_its_group() {
         let (src, dir) = toy("killtree");
         fs::create_dir_all(&dir).unwrap();
         let pidfile = dir.join("grandchild.pid");
         let log = dir.join("step.log");
-        let cmd = format!("trap '' TERM; sleep 300 & echo $! > {}; wait", pidfile.display());
+        let cmd = format!("(trap '' TERM; exec sleep 300) & echo $! > {}; wait", pidfile.display());
         let rc = run_logged(&dir, &sh(&cmd), &log, 1).unwrap();
         assert_eq!(rc, TIMED_OUT);
         let pid = fs::read_to_string(&pidfile).unwrap().trim().to_string();
