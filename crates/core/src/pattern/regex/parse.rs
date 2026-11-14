@@ -273,7 +273,7 @@ struct Parser<'a> {
     kids: TryVec<u32>,
     /// The branches of the open alternations and the items of their current branches, the
     /// innermost on top.
-    work: Stack<u32, 32>,
+    work: Stack<u32, 16>,
     /// An interval brace that `RE_INVALID_INTERVAL_ORD` made an ordinary character.
     lit_brace: Option<usize>,
 }
@@ -659,7 +659,7 @@ impl<'a> Parser<'a> {
     /// recursion: an open group's level waits on `levels`, and the branches and items of every
     /// open level on [`Self::work`].
     fn tree(&mut self) -> Result<u32, ReError> {
-        let mut levels: Stack<Level, 16> = Stack::new(Level { n: 0, level_visible: 0, alts: 0, items: 0 });
+        let mut levels: Stack<Level, 4> =Stack::new(Level { n: 0, level_visible: 0, alts: 0, items: 0 });
         // The innermost level: the visible groups when its alternation began, and where its
         // branches and its current branch's items begin on `work`.
         let mut level_visible = self.visible;
@@ -930,7 +930,7 @@ fn hide_subpatterns(p: &mut Parsed) -> Result<(), ReError> {
     const BODY: u8 = 1;
     const ALT: u8 = 2;
     const REP: u8 = 4;
-    let mut stack: Stack<(u32, u8), 32> = Stack::new((0, 0));
+    let mut stack: Stack<(u32, u8), 16> =Stack::new((0, 0));
     stack.push((p.root, 0))?;
     while let Some((id, how)) = stack.pop() {
         let it = p.item(id);

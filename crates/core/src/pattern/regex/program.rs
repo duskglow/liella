@@ -344,6 +344,7 @@ impl Builder {
 
     /// A node without parts (a leaf), compiled followed by `next`: its entry instruction;
     /// `None` for any other node.
+    #[inline]
     fn leaf(&mut self, it: Item, next: u32, chain: u32) -> Result<Option<u32>, ReError> {
         Ok(Some(match it.node {
             Node::Empty => next,
@@ -358,6 +359,7 @@ impl Builder {
     /// Part `id` of a node compiled at once when it is a leaf without a hidden group: what
     /// [`Self::start`] would make of it, with no frame and no step. Ordinary patterns are mostly
     /// such parts, so the explicit stack costs them nothing.
+    #[inline]
     fn quick(&mut self, t: &Parsed, id: u32, next: u32, chain: u32) -> Result<Option<u32>, ReError> {
         let it = t.item(id);
         if it.wrap != 0 {
