@@ -159,53 +159,60 @@ fn view_of_special(loc: usize) -> &'static LocaleView {
 /// whose word is not stored (0) resolves its `uselocale` choice, else the global locale.
 #[inline]
 pub fn view() -> &'static LocaleView {
-    match owned_view() {
-        Some(v) => v,
-        None => foreign_view(),
+    match view_word() {
+        0 => unstored_view_cold(),
+        w => tb::view_at(w),
     }
 }
 
 /// `f` of the calling thread's current locale view ([`view`]), for an entry whose whole result is
-/// one use of the view (`iswalpha`, `towupper`, `wcwidth`, `MB_CUR_MAX`, ...). The foreign case
-/// (D-X.58) is a tail call to [`foreign_with_view`], which takes `f` along, so the owned path
-/// stays frameless: with [`view`] the cold call returns into the entry's own code and costs every
-/// call a `push`/`pop` for the call's stack alignment (ruling #4828). Give `f` its arguments by
-/// value (`move`): a closure of at most two words travels in registers, so the call stays a jump.
+/// one use of the view (`iswalpha`, `towupper`, `wcwidth`, `MB_CUR_MAX`, ...). The unstored case
+/// (and the foreign one, D-X.58) is a tail call to [`unstored_with_view`], which takes `f` along,
+/// so the stored path stays frameless: with [`view`] the cold call returns into the entry's own
+/// code and costs every call a `push`/`pop` for the call's stack alignment (ruling #4828). Give
+/// `f` its arguments by value (`move`): a closure of at most two words travels in registers, so
+/// the call stays a jump.
 #[inline(always)]
 pub fn with_view<R>(f: impl FnOnce(&'static LocaleView) -> R) -> R {
-    let Some(v) = owned_view() else { return foreign_with_view(f) };
-    f(v)
+    match view_word() {
+        0 => unstored_with_view(f),
+        w => f(tb::view_at(w)),
+    }
 }
 
 /// `iswalpha(wc)` and its siblings: class `mask` of `wc` in the calling thread's locale. Not
 /// through [`with_view`]: its closure would be one function shared by the twelve entries, which
-/// the compiler then calls instead of inlining; the foreign case is the same tail call.
+/// the compiler then calls instead of inlining; the unstored case is the same tail call.
 #[inline(always)]
 pub fn isw_int(wc: u32, mask: Class) -> i32 {
-    let Some(v) = owned_view() else { return foreign_isw_int(wc, mask) };
-    v.isw_int(wc, mask)
+    match view_word() {
+        0 => unstored_isw_int(wc, mask),
+        w => tb::view_at(w).isw_int(wc, mask),
+    }
 }
 
-/// [`isw_int`] in a process the runtime did not start (D-X.58).
+/// [`isw_int`] when the `view` word reads 0 ([`unstored_view`]).
 #[cold]
 #[inline(never)]
-fn foreign_isw_int(wc: u32, mask: Class) -> i32 {
-    foreign_view().isw_int(wc, mask)
+fn unstored_isw_int(wc: u32, mask: Class) -> i32 {
+    unstored_view().isw_int(wc, mask)
 }
 
 /// `towupper(wc)` (`upper`) or `towlower(wc)` in the calling thread's locale (shaped as
 /// [`isw_int`]).
 #[inline(always)]
 pub fn wtrans(wc: u32, upper: bool) -> u32 {
-    let Some(v) = owned_view() else { return foreign_wtrans(wc, upper) };
-    v.wtrans(wc, upper)
+    match view_word() {
+        0 => unstored_wtrans(wc, upper),
+        w => tb::view_at(w).wtrans(wc, upper),
+    }
 }
 
-/// [`wtrans`] in a process the runtime did not start (D-X.58).
+/// [`wtrans`] when the `view` word reads 0 ([`unstored_view`]).
 #[cold]
 #[inline(never)]
-fn foreign_wtrans(wc: u32, upper: bool) -> u32 {
-    foreign_view().wtrans(wc, upper)
+fn unstored_wtrans(wc: u32, upper: bool) -> u32 {
+    unstored_view().wtrans(wc, upper)
 }
 
 /// [`with_view`] with the view's locale ([`current`]).
@@ -214,25 +221,38 @@ pub fn with_current<R>(f: impl FnOnce(&'static Locale) -> R) -> R {
     with_view(move |v| f(v.locale()))
 }
 
-/// [`view`] in a process the runtime started: the `view` word, else the `uselocale` choice;
-/// `None` in a process it did not start (D-X.58). The word is read ANDed with
-/// [`owned_mask`](crate::thread::owned_mask), so the gate rides on the word's zero test (no
-/// `cmpb` on the hot path) and another library's data there is 0, never a view; the test of
-/// [`owned`](crate::thread::owned) is on the unstored path only.
+/// The calling thread's `view` word in a process the runtime started; 0 in one it did not start
+/// (D-X.58), whatever another library keeps at that offset of its block. The word is ANDed with
+/// [`owned_mask`](crate::thread::owned_mask): the `and` with a memory operand takes the place of
+/// the `test` the zero check costs, so the gate adds no instruction to the stored path. Every
+/// caller sends 0 to one cold function ([`unstored_view`]), which tests
+/// [`owned`](crate::thread::owned) there: a test of the same word inline would keep the mask in
+/// a register for it and cost the hot path a load and a move.
 #[inline(always)]
-fn owned_view() -> Option<&'static LocaleView> {
-    match tb::read::<tb::View>() & crate::thread::owned_mask() {
-        0 if !crate::thread::owned() => None,
-        0 => Some(view_of(tb::read::<tb::Locale>())),
-        w => Some(tb::view_at(w)),
-    }
+fn view_word() -> usize {
+    tb::read::<tb::View>() & crate::thread::owned_mask()
 }
 
-/// [`with_view`] in a process the runtime did not start (D-X.58).
+/// The view when [`view_word`] reads 0: the `uselocale` choice of a thread whose word is not
+/// stored, in a process the runtime started; the registry words' choice in one it did not start
+/// (D-X.58). Only cold functions call it.
+#[inline(always)]
+fn unstored_view() -> &'static LocaleView {
+    if crate::thread::owned() { view_of(tb::read::<tb::Locale>()) } else { foreign_view() }
+}
+
+/// [`unstored_view`] out of line, for [`view`].
 #[cold]
 #[inline(never)]
-fn foreign_with_view<R, F: FnOnce(&'static LocaleView) -> R>(f: F) -> R {
-    f(foreign_view())
+fn unstored_view_cold() -> &'static LocaleView {
+    unstored_view()
+}
+
+/// [`with_view`] when the `view` word reads 0 ([`unstored_view`]).
+#[cold]
+#[inline(never)]
+fn unstored_with_view<R, F: FnOnce(&'static LocaleView) -> R>(f: F) -> R {
+    f(unstored_view())
 }
 
 /// [`view`] in a process the runtime did not start (D-X.58): the thread block's words are not
