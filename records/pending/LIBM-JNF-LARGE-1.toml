@@ -3,9 +3,9 @@ series = "D-10"
 section = "s10"
 spec = "§10.3"
 ann = "—"
-status = "pending"
+status = "active"
 story = "LIBM-JNF-LARGE"
 date = "2026-11-14"
 body = '''
-**`jnf` and `ynf` of orders 0 and ±1 are `j0f`, `j1f`, `y0f` and `y1f`** (LIBM-JNF-LARGE, #4994; extends D-10.109). The `float` forms of `special::jn` and `special::yn` answer |n| ≤ 1 by the order functions themselves behind one range test: J_{−1}(x) = J_1(−x) (a NaN operand stays on the accurate path, which keeps its sign) and Y_{−1}(x) = −Y_1(x), rounded in the mirrored mode, for finite x > 0 (the rest of order −1 stays on the accurate path). They share the large band and its exception table, so 2^19 ≤ |x| no longer runs the multi-precision path for these orders, and agree with the order functions bit for bit and flag for flag (`jnf_ynf_low_orders_are_the_order_functions_exhaustively`, every `float` in four modes; `jnf_ynf_low_orders_take_the_large_band` against the accurate path). Measured (instructions a call, validation/percall/libm_bessel.c, Zen 1): large rows 434.5 to 447.5 against 1.75e5 to 1.78e5 on next 630f3afb2. Open at this record: two typical rows are 2.0 (`jnf(3)` mid) and 4.1 (`ynf(1)` mid) instructions slower than next; the form is not final until they are level.
+**`jnf` and `ynf` of orders 0 and ±1 are `j0f`, `j1f`, `y0f` and `y1f`** (LIBM-JNF-LARGE, #4994; extends D-10.109). The `float` forms of `special::jn` and `special::yn` answer \|n\| ≤ 1 by the order functions themselves behind one range test: J_{−1}(x) = J_1(−x) (a NaN operand stays on the accurate path, which keeps its sign) and Y_{−1}(x) = −Y_1(x), rounded in the mirrored mode, for finite x > 0 (the rest of order −1 stays on the accurate path). They share the large band and its exception table, so 2^19 ≤ |x| no longer runs the multi-precision path for these orders, and agree with the order functions bit for bit and flag for flag (`jnf_ynf_low_orders_are_the_order_functions_exhaustively`, every `float` in four modes; `jnf_ynf_low_orders_take_the_large_band` against the accurate path). Measured (instructions a call, validation/percall/libm_bessel.c, Zen 1): large rows 434.5 to 447.5 against 1.75e5 to 1.78e5 on next 630f3afb2. Open at this record: two typical rows are 2.0 (`jnf(3)` mid) and 4.1 (`ynf(1)` mid) instructions slower than next; the form is not final until they are level.
 '''
