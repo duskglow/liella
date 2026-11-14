@@ -1,6 +1,6 @@
 {"task": "PLANTS-UNGROUPED-MUTANTS", "model": "opus", "tokens": null,
  "result": "cargo xtask plants builds ordinary mutants (and their baseline) ungrouped and layout plants traced (auto-detected or layout:traced); DL-DLADDR-2's per-mutant rebuild on keke 779 s traced -> ~172 s ungrouped",
- "branch": "task/plants-ungrouped-mutants", "head": "HEAD_SHA",
+ "branch": "task/plants-ungrouped-mutants", "head": "35466247c (code; later commits are handoff-only)",
  "gate": {"affected": "394 passed / 0 failed", "peak": "1.1G"},
  "accepted_first_attempt": null,
  "rulings": [],
@@ -19,4 +19,5 @@
  "improvement": "A plant whose command builds the products itself (cargo xtask affected --run) should not also be rebuilt by the tool: today that is two product builds per mutant.",
  "next_step": "Land; then drop the interim brief rule that sets LIELLA_LAYOUT_TRACE=ungrouped by hand for plants jobs.",
  "report_file": "handoff/PLANTS-UNGROUPED-MUTANTS.md",
- "jobs": ["pum-clippy", "pum-static", "pum-gate", "pum-plants", "pum-dladdr2", "pum-unit1", "pum-dladdr"]}
+ "superseded": ["pum-dladdr (rc 2: the traced variant's baseline command traced twice and hit the 600 s limit; its so-traced time is the 'before' figure)"],
+ "jobs": ["pum-clippy", "pum-static", "pum-gate", "pum-plants", "pum-dladdr2"]}
