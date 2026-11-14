@@ -1178,7 +1178,7 @@ impl<P: Policy> Matcher<'_, P> {
                         let skip = prog.node(inst.c, j);
                         let mut copy = [0i32; EPS_LOCAL];
                         match copy.get_mut(..caps.len()) {
-                            Some(c) if depth < EPS_DEPTH => {
+                            Some(c) if depth < EPS_DEPTH && Self::inlined(st, body) => {
                                 copy_caps(c, caps);
                                 if st.run.caps {
                                     self.enter_caps(inst, c, at_pos);
@@ -1191,8 +1191,9 @@ impl<P: Policy> Matcher<'_, P> {
                                 skip
                             }
                             _ => {
-                                // No copy: the skip takes its bucket with the captures as they
-                                // are, then the iteration changes them in place.
+                                // No copy (the iteration takes a bucket anyway, or no copy fits):
+                                // the skip takes its bucket with the captures as they are, then
+                                // the iteration changes them in place.
                                 self.insert(st, pos, skip, start, caps)?;
                                 st.carry = None;
                                 if st.run.caps {

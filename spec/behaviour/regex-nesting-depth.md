@@ -42,7 +42,30 @@ not settled by this probe.
 plus and bnd grow by about 4.6x per level from 10 on; within 4 GiB the reference compiles 16 and answers
 REG_ESPACE from 20.
 
-## Liella (origin/next 239a714a5)
+## Liella after the fusion (REGCOMP-SCOPE-COST-2, same probe and limits, Skylake-SP host)
+
+A level is one `ENTER` (with the loop's split and the group's open) in the enclosing scope and one `EXIT` (with the
+group's close) in its own: 2k + 1 nodes at depth k. The cap is still 2^21 nodes (D-14.8).
+
+| shape | compiles through | REG_ESPACE from | at the last accepted depth | at 1000 |
+|---|---|---|---|---|
+| rep | 1446 | 1447 | 0.29 s, 164944 KiB | 0.13 s, 79580 KiB |
+| rep2 | 1446 | 1447 | 0.29 s, 165076 KiB | 0.13 s, 79620 KiB |
+| plus | 1181 | 1182 | 0.25 s, 154264 KiB | 0.17 s, 111024 KiB |
+| opt | every depth probed (3000) | - | 0.003 s, 3072 KiB at 3000 | - |
+| bnd | 14 | 15 | 0.15 s, 77568 KiB | - |
+
+Nodes: rep n^2 + 3n + 2 (1446: 2,095,256; 1447: 2,098,152 > 2^21), rep2 n^2 + 4n + 3. Peak RSS is about 80 bytes
+per node (164944 KiB / 2,095,256 nodes), so the reference's 2000 and 3000 would need about 4.0 M and 9.0 M nodes, 320
+and 720 MB at that rate (the reference: 553 MiB and 1.26 GiB). Earlier depths: rep 250 5892 KiB, 500 20596 KiB, 914
+66608 KiB (was 146056 KiB). `X+` keeps its loop split (its `ENTER` is also the mandatory copy's entry): 3k + 1 nodes.
+
+Remaining gaps: rep and rep2 from 1447 to at least 3000, the cap's (ruling #5594: the cap is removed with fully
+fallible allocation in REGCOMP-FALLIBLE-ALLOC). bnd at 15 and 16: bounded repeats of bounded repeats are exponential
+in both libraries (about 2.1x per level here, 4.6x in the reference); refusing them past the cap is D-14.8 working as
+intended (ruling #5595).
+
+## Liella before the fusion (origin/next 239a714a5)
 
 | shape | compiles through | REG_ESPACE from | at the last accepted depth |
 |---|---|---|---|
