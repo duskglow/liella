@@ -168,7 +168,7 @@ fn write_round_trip_in_comparison_order() {
     }
 }
 
-/// No spec clause. Not a check: writes the seeds of the reader's fuzz target (`fuzz/seeds/ld_cache`, mutated
+/// no spec clause: not a check; writes the seeds of the reader's fuzz target (`fuzz/seeds/ld_cache`, mutated
 /// writer output, plan/utilities.md §5) from the writer, so they stay in the format the writer
 /// makes. Run with `cargo test -p liella-ld --test cache_write -- --ignored write_reader_fuzz_seeds`.
 #[test]
