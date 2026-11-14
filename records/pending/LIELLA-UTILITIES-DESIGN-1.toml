@@ -1,0 +1,9 @@
+id = "D-NEW"
+series = "D-X"
+section = "x"
+status = "active"
+story = "LIELLA-UTILITIES-DESIGN"
+date = "2026-11-14"
+body = '''
+**Proposed: how Liella provides the libc utilities** (LIELLA-UTILITIES-DESIGN, plan/utilities.md; owner rulings R1 and R5 to R8 of 2026-11-14, #941). Proposed for the owner's review, not yet in force: one library per domain holds both sides of each file format (the cache writer beside `liella-ld`'s reader, the TZif writer beside the TZif reader, the locale writer beside the locale reader); the commands are thin front ends, one executable per domain chosen by `argv[0]` (`liella-tz`: zic, zdump, tzselect; `liella-locale`: locale, localedef and the `locales` commands); ldconfig is a freestanding static binary of its own. Public interfaces: the commands and the file formats only; a Rust `tz` API in `liella-native` once zic and zdump are proven, on the owner's yes; no new C ABI. Why: one implementation per format with round-trip tests and one fuzz target per parser, start-up cost and attack surface per domain rather than per suite, and an ldconfig that works before any C library is installed (dpkg refuses to unpack or configure without `ldconfig` in `PATH`, probed).
+'''
