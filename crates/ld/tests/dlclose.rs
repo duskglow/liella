@@ -312,26 +312,46 @@ static int fill_cb(struct dl_phdr_info *i, size_t s, void *d) {
 static sem_t in_cb, go;
 static volatile int progress, released_at = -1;
 static pid_t main_tid;
-/* Stay inside the walk until the main thread is seen asleep (state S) with its progress frozen
-   over 20 polls, or has finished: only a wait for this reader puts it to sleep. */
-static int watch_cb(struct dl_phdr_info *i, size_t s, void *d) {
-    (void)i; (void)s; (void)d;
+/* Whether the main thread has been seen asleep (state S) with its progress `p` frozen over 20
+   polls: in these loops only a wait for a reader puts it to sleep. */
+static int main_asleep(int p, int *last, int *still) {
     char path[64], buf[512];
     snprintf(path, sizeof path, "/proc/self/task/%d/stat", (int)main_tid);
+    int fd = open(path, O_RDONLY);
+    ssize_t n = fd >= 0 ? read(fd, buf, sizeof buf - 1) : -1;
+    if (fd >= 0) close(fd);
+    char st = 0;
+    if (n > 0) { buf[n] = 0; char *e = strrchr(buf, ')'); if (e && e[1] && e[2]) st = e[2]; }
+    if (p == *last && st == 'S') ++*still; else *still = 0;
+    *last = p;
+    return *still >= 20;
+}
+/* Stay inside the walk until the main thread is seen waiting, or has finished. */
+static int watch_cb(struct dl_phdr_info *i, size_t s, void *d) {
+    (void)i; (void)s; (void)d;
     int last = -1, still = 0;
     sem_post(&in_cb);
     while (progress < 600) {
-        int p = progress, fd = open(path, O_RDONLY);
-        ssize_t n = fd >= 0 ? read(fd, buf, sizeof buf - 1) : -1;
-        if (fd >= 0) close(fd);
-        char st = 0;
-        if (n > 0) { buf[n] = 0; char *e = strrchr(buf, ')'); if (e && e[1] && e[2]) st = e[2]; }
-        if (p == last && st == 'S') { if (++still >= 20) { released_at = p; break; } } else still = 0;
-        last = p;
+        int p = progress;
+        if (main_asleep(p, &last, &still)) { released_at = p; break; }
         sched_yield();
     }
     return 1;
 }
+/* A reader always inside some walk: it leaves its walk and enters the next when the main thread
+   asks (every 10 pairs) or is seen waiting. */
+static volatile int sw_req, entered = -1, cyc_stop, cyc_waits;
+static int cyc_cb(struct dl_phdr_info *i, size_t s, void *d) {
+    (void)i; (void)s; (void)d;
+    int t = sw_req, last = -1, still = 0;
+    entered = t;
+    while (!cyc_stop && sw_req == t) {
+        if (main_asleep(progress, &last, &still)) { cyc_waits++; break; }
+        sched_yield();
+    }
+    return 1;
+}
+static void *cycler(void *a) { (void)a; while (!cyc_stop) dl_iterate_phdr(cyc_cb, NULL); return NULL; }
 static void *watcher(void *a) { (void)a; dl_iterate_phdr(watch_cb, NULL); return NULL; }
 static void *r_open;
 static int k_pairs, k_fail;
@@ -405,6 +425,20 @@ static void room(void) {
     CHECK(67, k && k_pairs == 40 && !k_fail, "constructor's opens: %d done, failed at %d: %s", k_pairs, k_fail, err());
     pthread_join(th, NULL);
     CHECK(68, r_open && dlclose(r_open) == 0 && dlclose(k) == 0, "the reader's dlopen: %s", err());
+    /* A reader always inside some walk: each reclaim frees only the round before's objects while
+       the newest stay at the top, and the freed slots below them become holes (slots are reused
+       from the top). Few are retired at a time; past three quarters of the table the opens wait. */
+    progress = 0;
+    CHECK(70, pthread_create(&th, NULL, cycler, NULL) == 0, "pthread_create");
+    for (int i = 0; i < 600; i++) {
+        void *q = dlopen(P("libP.so"), RTLD_NOW);
+        CHECK(71, q && dlclose(q) == 0, "open %d behind an ever-present reader: %s", i, err());
+        progress = i + 1;
+        if ((i + 1) % 10 == 0) { sw_req++; while (entered != sw_req) sched_yield(); }
+    }
+    cyc_stop = 1;
+    pthread_join(th, NULL);
+    CHECK(72, cyc_waits > 0, "never waited for the ever-present reader");
 }
 
 int main(int argc, char **argv) {
@@ -536,7 +570,10 @@ fn s27_1_c_4_dlclose_concurrent_with_readers() {
 /// (holding the writer lock) that passes the threshold while a stalled reader's callback is
 /// blocked on that lock never waits (a deadlock otherwise; `alarm` is the hang guard). A child
 /// forked from inside a walk while another thread is stalled in its own runs 600 pairs: the gone
-/// thread's count is cleared and the child's own is kept until its walk ends.
+/// thread's count is cleared and the child's own is kept until its walk ends. A reader that is
+/// always inside some walk (it re-enters every 10 pairs) leaves holes below the newest retired
+/// objects with few retired at a time: past three quarters of the table the opens wait, and all
+/// 600 pairs succeed.
 #[test]
 fn s27_1_c_4_dlopen_waits_for_readers_only_outside_them() {
     let Some((d, ld, libc, crt1)) = setup("room") else { return };

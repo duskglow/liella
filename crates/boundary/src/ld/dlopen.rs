@@ -966,6 +966,7 @@ fn reclaim(l: &mut Loader) {
         l.names_top = live.iter().filter(|nd| !nd.gone && nd.path.1 > 0).map(|nd| end(nd.path).saturating_add(1)).max().unwrap_or(0);
     }
     RETIRED.store(l.n_retired, Relaxed);
+    TOP.store(l.n, Relaxed);
 }
 
 /// Retired objects past which a `dlopen` or `dlclose` first waits for the readers to drain
@@ -973,21 +974,32 @@ fn reclaim(l: &mut Loader) {
 /// unmap, so without the wait a loop of opens and closes would fill the table and refuse a valid
 /// load.
 const RETIRED_WAIT: usize = CAP / 4;
-/// `Loader::n_retired` as [`reclaim`] last left it, read without the locks by [`room_wait`].
+/// `Loader::n_retired` and `Loader::n` as [`reclaim`] last left them, read without the locks by
+/// [`room_wait`].
 static RETIRED: AtomicUsize = AtomicUsize::new(0);
+static TOP: AtomicUsize = AtomicUsize::new(0);
+
+/// Whether a `dlopen`/`dlclose` must make room first: more than [`RETIRED_WAIT`] objects retired,
+/// or any retired while the table's top is past three quarters. The second case is readers that
+/// are always inside some walk: each reclaim then frees only the objects retired before the
+/// previous flip while the newest stay at the top, slots are reused from the top only, and the
+/// freed slots below become holes, so the top climbs by every epoch's opens with few retired.
+fn room_short() -> bool {
+    let r = RETIRED.load(Relaxed);
+    r > RETIRED_WAIT || (r > 0 && TOP.load(Relaxed) > CAP.saturating_sub(RETIRED_WAIT))
+}
 /// The poll interval of [`room_wait`] (`CLOCK_MONOTONIC`, nanoseconds).
 const ROOM_POLL_NS: i64 = 50_000;
 const CLOCK_MONOTONIC: i64 = 1;
 
-/// At the entry of `dlopen` and `dlclose`, holding no loader lock: while more than
-/// [`RETIRED_WAIT`] objects are retired, reclaim, and wait (poll) for the readers to drain when
-/// that freed too few. Never waits when the calling thread holds [`CALL`] (a constructor or
+/// At the entry of `dlopen` and `dlclose`, holding no loader lock: while [`room_short`], reclaim,
+/// and wait (poll) for the readers to drain when that was not enough. Never waits when the calling thread holds [`CALL`] (a constructor or
 /// destructor: a reader may be blocked on that lock) or is inside a read section (it may be the
 /// reader); the call then goes on and fails as it would have (`cannot load more objects`) only
 /// if the table is full. Each drain lets [`reclaim`] unmap what was flipped before it, so the loop
 /// ends once the readers present now have left.
 fn room_wait() {
-    while RETIRED.load(Relaxed) > RETIRED_WAIT {
+    while room_short() {
         if CALL.held_by_caller() || super::readers::inside() {
             return;
         }
@@ -998,7 +1010,7 @@ fn room_wait() {
         }
         STATE.unlock();
         CALL.unlock();
-        if RETIRED.load(Relaxed) <= RETIRED_WAIT {
+        if !room_short() {
             return;
         }
         while !super::readers::drained() {
