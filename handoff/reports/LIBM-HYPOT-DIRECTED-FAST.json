@@ -1,0 +1,19 @@
+{"task": "LIBM-HYPOT-DIRECTED-FAST", "model": "opus", "tokens": null,
+ "result": "directed hypot 296.6 -> 228.6 instr/call (glibc 68.8, 4.31x -> 3.32x) via a two-write directed envelope and an FMA build of hypot_rounded; nearest rows unchanged; target small factor not reached",
+ "branch": "task/libm-hypot-directed-fast", "head": "187811b29",
+ "gate": {"affected": "4541 passed / 0 failed (12 suites, conformance 8/0)", "peak": "13G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "decision id for records/pending/LIBM-HYPOT-DIRECTED-FAST-1.toml (D-NEW, series D-10)", "recommendation": "assign the next D-10 id"}],
+ "informational": ["the two-write envelope applies to every elem_fast/elem_fast_dir function's directed path (exp, log, pow, ...); their directed rows were not measured", "direction C (kernel inlined into the directed path) not measured: needs the directed envelope as one FMA-build function; ~43 instructions of call glue to remove"],
+ "refused": [],
+ "impact": [
+  {"kind": "perf", "what": "hypot_near_up per call (Skylake-SP)", "before": 296.6, "after": 228.6, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "hypot_near_down per call (Skylake-SP)", "before": 296.6, "after": 228.6, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "hypot_near_zero per call (Skylake-SP)", "before": 296.6, "after": 228.6, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "hypot_typ / hypot_near / hypot_bits per call (unchanged)", "before": 105.0, "after": 105.0, "unit": "instr/call", "measured": true},
+  {"kind": "coverage", "what": "tests: FMA-selection count test for directed hypot; directed entry in both builds in the kernel sweep; 2 plants CAUGHT; 2 percall rows", "before": null, "after": 2, "unit": "tests", "measured": true}
+ ],
+ "improvement": "wl_trace --list on stripped release products prints raw addresses only; grouping I-lines by address prefix gave the per-part split, a symbolised mode (nm of the unstripped staticlib) would save a step",
+ "next_step": "follow-up story: a directed-mode quick decision in the hypot kernel (root + residual decides unless within ~2^-98 of a double) and the envelope as one FMA-build function (direction C)",
+ "report_file": "handoff/LIBM-HYPOT-DIRECTED-FAST.md",
+ "jobs": ["libm-hypot-directed-fast-lint", "libm-hypot-directed-fast-gate", "libm-hypot-directed-fast-plants", "libm-hypot-directed-fast-sweeps", "libm-hypot-directed-fast-percall"]}

@@ -1,3 +1,6 @@
 # LIBM-HYPOT-DIRECTED-FAST plants: the two-write directed envelope's restore, and the FMA-build selection of the hypot kernel.
 envelope-restore-default | crates/boundary/src/mathret.rs | lit:crate::ffi::liella_machine_mxcsr_set(fpu::with_flags(saved, st.flags)); ==> crate::ffi::liella_machine_mxcsr_set(fpu::with_flags(fpu::MX_DEFAULT_WORD, st.flags)); | cargo test -p liella-boundary --test s10_math_symbols hypot | msg:(directed entry|hardware kernel) FAILED|hypot[a-z_]+.*panicked|panicked at
 fma-select-inverted | crates/boundary/src/hot/invtrig.rs | perl:s/if crate::dispatch::fma\(\) (\{\s*\/\/[^\n]*\n\s*#\[allow\(unsafe_code\)\]\s*return unsafe \{ liella_math::invtrig::fused::hypot_rounded)/if !crate::dispatch::fma() $1/s | cargo xtask so && cargo test -p liella-boundary --test libm_fma_select hypot | msg:hypot FMA selection: default [0-9]+ instructions
+# cargo xtask plants results (2 plants: 2 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG, 0 BUILD-TIMEOUT):
+# envelope-restore-default: CAUGHT, caught by s10_math_symbols hypot_on_the_hardware_root_is_the_exact_path_in_every_direction
+# fma-select-inverted: CAUGHT, caught by libm_fma_select libm_product_selects_the_fma_hypot_kernel_in_a_directed_mode
