@@ -143,7 +143,8 @@ const IMAGE_MANIFEST: &str = "crates/libc-so/Cargo.toml";
 /// `libc.a` can move start-up pages (CI trains 582/583: a libm change pushed two fault bounds over), so every change
 /// that reaches the image selects them. They need the products, so `cargo xtask so` runs first, and its end runs
 /// every layout contract (`layout::check_products`, D-X.48/D-X.49) as well.
-const LAYOUT_TESTS: &[(&str, &str)] = &[("liella", "hot_text_products"), ("liella", "heap_meta_products"), ("liella", "cold_bss_products")];
+/// `cargo xtask plants` builds a plant whose command names one of them traced (PLANTS-UNGROUPED-MUTANTS).
+pub(crate) const LAYOUT_TESTS: &[(&str, &str)] = &[("liella", "hot_text_products"), ("liella", "heap_meta_products"), ("liella", "cold_bss_products")];
 
 /// XTASK-AFFECTED-LAYOUT: xtask sources that shape the image itself (the hot-text grouping, the start-up state
 /// move, the archive build). They escalate to FULL anyway; named so the rule says what it covers.
