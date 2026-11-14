@@ -57,10 +57,16 @@ if [ -z "$products" ]; then
         if [ -n "$(git -C "$root" status --porcelain --untracked-files=no)" ]; then
             echo "build.sh: note: the tree has uncommitted changes; they are not packaged (HEAD $commit is)"
         fi
-        git -C "$root" archive --format=tar HEAD | tar -x -C "$work/src"
+        # Through a file, not a pipe: a failed export stops the build (set -e).
+        git -C "$root" archive --format=tar -o "$work/src.tar" HEAD
+        tar -x -C "$work/src" -f "$work/src.tar"
+        rm -f "$work/src.tar"
     else
         # A synced copy without .git (a build host's role directory): the caller names the commit
-        # it holds and its time; the files are packaged as they are, target/ left out.
+        # it holds and its time; the files are packaged as they are, without target/ and without
+        # any other build directory (cargo tags each with CACHEDIR.TAG, e.g. fuzz/target): another
+        # job may be writing one while it is copied, and the build never reads them. Through a file
+        # again, so that a failed copy stops the build instead of packaging part of the tree.
         if [ -z "${LIELLA_DEB_COMMIT:-}" ] || [ -z "${SOURCE_DATE_EPOCH:-}" ]; then
             echo "build.sh: $root is not a git tree: set LIELLA_DEB_COMMIT and SOURCE_DATE_EPOCH" >&2
             exit 2
@@ -68,7 +74,9 @@ if [ -z "$products" ]; then
         commit=$(printf '%.12s' "$LIELLA_DEB_COMMIT")
         epoch=$SOURCE_DATE_EPOCH
         echo "build.sh: note: $root is not a git tree; packaging its files as commit $commit"
-        tar -C "$root" --exclude=./target --exclude=./.git -cf - . | tar -x -C "$work/src"
+        tar -C "$root" --exclude=./target --exclude=./.git --exclude-caches-all -cf "$work/src.tar" .
+        tar -x -C "$work/src" -f "$work/src.tar"
+        rm -f "$work/src.tar"
     fi
     version=0.0~snapshot$(date -u -d "@$epoch" +%Y%m%d)+$commit
     echo "build.sh: building the products of $commit (release profile) in $work/src"
