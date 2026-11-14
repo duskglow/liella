@@ -23,14 +23,17 @@
 //!   reader that may have seen it has left: every read goes through [`read_section`], which counts
 //!   the reader in a two-parity counter striped by thread pointer; the writer flips the parity
 //!   ([`flip`]) after unpublishing and unmaps once the old parity's counters are drained
-//!   ([`drained`]), never waiting (a callback may call `dlclose`). A slot is reused only after that.
+//!   ([`drained`]), never waiting under the loader's locks (a callback may call `dlclose`). A slot
+//!   is reused only after that. Past a retired threshold a `dlopen`/`dlclose` waits for the drain
+//!   at its entry, holding no lock, unless its thread is itself inside a read section ([`inside`],
+//!   the thread block's `dl_reading` depth) or holds the writer lock (ruling #5651).
 
 use super::dlopen::{node_address, CAP};
 use super::{read_auxv, read_image, AUXV_WORDS_MAX, OWN_BASE, START_ARGS, START_INTERP, START_N, START_OBJS, THREAD_MODS, THREAD_MODS_LEN};
 use crate::posix::s27_dynlink::{find_in, int_result, vdso_headers};
 use crate::{conv, tb};
 use core::sync::atomic::Ordering::{Acquire, Relaxed, Release, SeqCst};
-use core::sync::atomic::{AtomicU64, AtomicUsize};
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
 use liella_abi::layout::{struct_dl_find_object, struct_dl_phdr_info};
 use liella_kernel::auxv::Auxv;
 use liella_kernel::uapi::AT_SYSINFO_EHDR;
@@ -68,6 +71,9 @@ pub(super) fn read_section<R>(f: impl FnOnce(&View) -> R) -> R {
     // Fibonacci hashing of the thread pointer: its top 5 bits pick one of the 32 stripes.
     let h = (u64::try_from(tb::tp()).unwrap_or(0) >> 6).wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 59;
     let Some(stripe) = READERS.get(usize::try_from(h).unwrap_or(0) % STRIPES) else { return f(&View { start: fill_start() }) };
+    // The thread's own depth first ([`inside`]): written by this thread only.
+    let depth = &tb::current().dl_reading;
+    depth.store(depth.load(Relaxed).wrapping_add(1), Relaxed);
     let mut p = PARITY.load(SeqCst) & 1;
     loop {
         let Some(c) = stripe.0.get(p) else { return f(&View { start: fill_start() }) };
@@ -85,7 +91,40 @@ pub(super) fn read_section<R>(f: impl FnOnce(&View) -> R) -> R {
     if let Some(c) = stripe.0.get(p) {
         c.fetch_sub(1, Release);
     }
+    depth.store(depth.load(Relaxed).wrapping_sub(1), Relaxed);
     r
+}
+
+/// Whether the calling thread is inside a [`read_section`] (a `dl_iterate_phdr` callback, at any
+/// depth). Such a thread must never wait for [`drained`]: it may be the reader it waits for.
+pub(super) fn inside() -> bool {
+    tb::current().dl_reading.load(Relaxed) != 0
+}
+
+/// In a `fork` child (its only thread is the caller): the readers other threads counted are gone
+/// with them, so their counts are cleared; otherwise no parity would ever drain again and every
+/// unloaded object would stay mapped (and a `dlopen` past the retired threshold would wait for
+/// ever). When the caller itself forked from inside a read section its own count cannot be told
+/// apart from the others: the counts stay, and the child never waits instead ([`NEVER_WAIT`]).
+pub(super) fn after_fork_child() {
+    if inside() {
+        NEVER_WAIT.store(true, Relaxed);
+        return;
+    }
+    for s in &READERS {
+        for c in &s.0 {
+            c.store(0, Relaxed);
+        }
+    }
+}
+
+/// Set in a `fork` child whose reader counts could not be cleared ([`after_fork_child`]).
+static NEVER_WAIT: AtomicBool = AtomicBool::new(false);
+
+/// Whether a `dlopen`/`dlclose` of the calling thread may wait for [`drained`]: not from inside a
+/// read section, and not in a child that kept stale counts.
+pub(super) fn may_wait() -> bool {
+    !inside() && !NEVER_WAIT.load(Relaxed)
 }
 
 /// The writer's step (under the loader's locks, only once [`drained`]): readers entering from now on

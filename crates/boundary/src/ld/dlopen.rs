@@ -297,6 +297,11 @@ impl Reentrant {
         }
     }
 
+    /// Whether the calling thread holds the lock (at any depth).
+    fn held_by_caller(&self) -> bool {
+        self.owner.load(Relaxed) == tb::tp()
+    }
+
     /// In a `fork` child, whose only thread is the caller: free the lock when another thread (one
     /// that does not exist here) held it; the caller's own hold stays.
     fn reset_in_child(&self) {
@@ -342,7 +347,8 @@ pub(super) fn fork_address() -> usize {
 
 /// `fork`'s loader step (`crate::fork::lock_all`/`unlock_all`, while other threads exist): 0 takes
 /// [`STATE`] before the clone, 1 (parent) releases it, 2 (child) releases it and frees [`CALL`]
-/// when a thread that is gone held it. The child keeps every published object, those whose
+/// when a thread that is gone held it, and clears the gone threads' reader counts
+/// (`readers::after_fork_child`). The child keeps every published object, those whose
 /// constructors that thread was running included (probe P-9: listed, `RTLD_NOLOAD` finds them).
 extern "C" fn fork_step(step: usize) -> usize {
     match step {
@@ -351,6 +357,7 @@ extern "C" fn fork_step(step: usize) -> usize {
         _ => {
             STATE.unlock();
             CALL.reset_in_child();
+            super::readers::after_fork_child();
         }
     }
     0
@@ -359,6 +366,7 @@ extern "C" fn fork_step(step: usize) -> usize {
 /// `dlopen(file, mode)` called from `caller` (a return address in the calling object): the handle,
 /// or 0 with the calling thread's dlerror text set (none for an `RTLD_NOLOAD` miss).
 extern "C" fn entry(file: usize, mode: i32, caller: usize) -> usize {
+    room_wait();
     CALL.lock();
     STATE.lock();
     let (handle, ctors) = open_locked(file, mode, caller);
@@ -711,6 +719,7 @@ pub(super) fn close_address() -> usize {
 /// handle` for NULL, a pointer that is not a handle, or a handle with no open left (pending
 /// DL-16-PLAN-3, ruling #5006). A success clears a pending text (probe `== close` C-2).
 extern "C" fn close_entry(handle: usize) -> i64 {
+    room_wait();
     CALL.lock();
     STATE.lock();
     let mut f = Finis::NONE;
@@ -955,6 +964,47 @@ fn reclaim(l: &mut Loader) {
         let live = l.nodes.get(..n).unwrap_or(&[]);
         l.deps_top = live.iter().filter(|nd| !nd.gone).map(|nd| end(nd.deps).max(end(nd.binds))).max().unwrap_or(0);
         l.names_top = live.iter().filter(|nd| !nd.gone && nd.path.1 > 0).map(|nd| end(nd.path).saturating_add(1)).max().unwrap_or(0);
+    }
+    RETIRED.store(l.n_retired, Relaxed);
+}
+
+/// Retired objects past which a `dlopen` or `dlclose` first waits for the readers to drain
+/// (ruling #5651): a quarter of the table. A reader preempted inside `dl_iterate_phdr` stalls every
+/// unmap, so without the wait a loop of opens and closes would fill the table and refuse a valid
+/// load.
+const RETIRED_WAIT: usize = CAP / 4;
+/// `Loader::n_retired` as [`reclaim`] last left it, read without the locks by [`room_wait`].
+static RETIRED: AtomicUsize = AtomicUsize::new(0);
+/// The poll interval of [`room_wait`] (`CLOCK_MONOTONIC`, nanoseconds).
+const ROOM_POLL_NS: i64 = 50_000;
+const CLOCK_MONOTONIC: i64 = 1;
+
+/// At the entry of `dlopen` and `dlclose`, holding no loader lock: while more than
+/// [`RETIRED_WAIT`] objects are retired, reclaim, and wait (poll) for the readers to drain when
+/// that freed too few. Never waits when the calling thread holds [`CALL`] (a constructor or
+/// destructor: a reader may be blocked on that lock) or is inside a read section (it may be the
+/// reader); the call then goes on and fails as it would have (`cannot load more objects`) only
+/// if the table is full. Each drain lets [`reclaim`] unmap what was flipped before it, so the loop
+/// ends once the readers present now have left.
+fn room_wait() {
+    while RETIRED.load(Relaxed) > RETIRED_WAIT {
+        if CALL.held_by_caller() || !super::readers::may_wait() {
+            return;
+        }
+        CALL.lock();
+        STATE.lock();
+        if let Some(l) = loader() {
+            reclaim(l);
+        }
+        STATE.unlock();
+        CALL.unlock();
+        if RETIRED.load(Relaxed) <= RETIRED_WAIT {
+            return;
+        }
+        while !super::readers::drained() {
+            let ts = [0i64, ROOM_POLL_NS];
+            let _ = crate::ffi_sys::liella_sys_clock_nanosleep(CLOCK_MONOTONIC, 0, ts.as_ptr().cast::<c_void>(), core::ptr::null_mut());
+        }
     }
 }
 

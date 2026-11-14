@@ -113,6 +113,10 @@ long *t_addr(void) { return t_var; }
 #ifdef KIND_R
 int r_fn(void) { return 6; }
 #endif
+#ifdef KIND_K
+extern void k_ctor(void);
+__attribute__((constructor)) static void kc(void) { k_ctor(); }
+#endif
 #ifdef KIND_P
 __attribute__((constructor)) static void pc(void) { pctor++; }
 __attribute__((destructor)) static void pd(void) { pdtor++; }
@@ -120,16 +124,20 @@ int p_fn(void) { return 7; }
 #endif
 "#;
 
-/// The program: `prog DIR MODE` (`basic`, `concurrent`); exit 0 or the failed check's number.
+/// The program: `prog DIR MODE` (`basic`, `concurrent`, `room`); exit 0 or the failed check's number.
 const PROG: &str = r#"#define _GNU_SOURCE
 #include <dlfcn.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <link.h>
 #include <pthread.h>
+#include <sched.h>
+#include <semaphore.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 char dir[4096];
 int pctor, pdtor;
@@ -287,12 +295,109 @@ static void concurrent(void) {
     CHECK(53, !loaded("libP.so") && !loaded("libA.so"), "still loaded");
 }
 
+/* Ruling #5651: past a retired threshold (a quarter of the 512-object table) dlopen and dlclose
+   wait at entry for the readers to drain, never from inside a read section or a constructor. */
+static int fill_n = -1, fill_full, fill_close;
+static int fill_cb(struct dl_phdr_info *i, size_t s, void *d) {
+    (void)i; (void)s; (void)d;
+    for (int k = 0; k < 600; k++) {
+        void *p = dlopen(P("libP.so"), RTLD_NOW);
+        if (!p) { fill_n = k; fill_full = strstr(err(), "cannot load more objects") != NULL; return 1; }
+        if (dlclose(p) != 0) { fill_close = k + 1; return 1; }
+    }
+    fill_n = 600;
+    return 1;
+}
+static sem_t in_cb, go;
+static volatile int progress, released_at = -1;
+static pid_t main_tid;
+/* Stay inside the walk until the main thread is seen asleep (state S) with its progress frozen
+   over 20 polls, or has finished: only a wait for this reader puts it to sleep. */
+static int watch_cb(struct dl_phdr_info *i, size_t s, void *d) {
+    (void)i; (void)s; (void)d;
+    char path[64], buf[512];
+    snprintf(path, sizeof path, "/proc/self/task/%d/stat", (int)main_tid);
+    int last = -1, still = 0;
+    sem_post(&in_cb);
+    while (progress < 600) {
+        int p = progress, fd = open(path, O_RDONLY);
+        ssize_t n = fd >= 0 ? read(fd, buf, sizeof buf - 1) : -1;
+        if (fd >= 0) close(fd);
+        char st = 0;
+        if (n > 0) { buf[n] = 0; char *e = strrchr(buf, ')'); if (e && e[1] && e[2]) st = e[2]; }
+        if (p == last && st == 'S') { if (++still >= 20) { released_at = p; break; } } else still = 0;
+        last = p;
+        sched_yield();
+    }
+    return 1;
+}
+static void *watcher(void *a) { (void)a; dl_iterate_phdr(watch_cb, NULL); return NULL; }
+static void *r_open;
+static int k_pairs, k_fail;
+/* libK's constructor (holding the loader's writer lock): lets the stalled reader call dlopen (it
+   then blocks on that lock) and passes the threshold itself. */
+void k_ctor(void) {
+    sem_post(&go);
+    for (int i = 0; i < 40; i++) {
+        void *p = dlopen(P("libP.so"), RTLD_NOW);
+        if (!p || dlclose(p) != 0) { k_fail = i + 1; return; }
+        k_pairs++;
+    }
+}
+static int stall_cb(struct dl_phdr_info *i, size_t s, void *d) {
+    (void)i; (void)s; (void)d;
+    char path[4200];
+    snprintf(path, sizeof path, "%s/libR.so", dir);
+    sem_post(&in_cb);
+    while (sem_wait(&go) != 0) {}
+    r_open = dlopen(path, RTLD_NOW);
+    return 1;
+}
+static void *staller(void *a) { (void)a; dl_iterate_phdr(stall_cb, NULL); return NULL; }
+
+static void room(void) {
+    /* A callback opening and closing: each close stays retired (its own thread is the reader), the
+       threshold passes and its calls never wait on themselves; dlopen fails once the table is full. */
+    dl_iterate_phdr(fill_cb, NULL);
+    CHECK(60, fill_full && fill_n > 128 && fill_n < 512 && !fill_close, "callback opens: %d (full %d, close failed at %d)", fill_n, fill_full, fill_close);
+    void *p = dlopen(P("libP.so"), RTLD_NOW);
+    CHECK(61, p && dlclose(p) == 0, "open after the walk: %s", err());
+    /* A reader stalled inside a walk: the main thread's opens wait for it past the threshold
+       instead of filling the table. */
+    sem_init(&in_cb, 0, 0);
+    sem_init(&go, 0, 0);
+    main_tid = (pid_t)syscall(SYS_gettid);
+    pthread_t th;
+    CHECK(62, pthread_create(&th, NULL, watcher, NULL) == 0, "pthread_create");
+    while (sem_wait(&in_cb) != 0) {}
+    for (int i = 0; i < 600; i++) {
+        void *q = dlopen(P("libP.so"), RTLD_NOW);
+        CHECK(63, q && dlclose(q) == 0, "open %d behind a stalled reader: %s", i, err());
+        progress = i + 1;
+    }
+    pthread_join(th, NULL);
+    CHECK(64, released_at >= 100 && released_at <= 200, "waited after %d opens", released_at);
+    /* A constructor (holding the writer lock) passes the threshold behind a stalled reader whose
+       callback calls dlopen, which blocks on that lock: the constructor's calls must not wait. */
+    CHECK(65, pthread_create(&th, NULL, staller, NULL) == 0, "pthread_create");
+    while (sem_wait(&in_cb) != 0) {}
+    for (int i = 0; i < 100; i++) {
+        void *q = dlopen(P("libP.so"), RTLD_NOW);
+        CHECK(66, q && dlclose(q) == 0, "open %d: %s", i, err());
+    }
+    void *k = dlopen(P("libK.so"), RTLD_NOW);
+    CHECK(67, k && k_pairs == 40 && !k_fail, "constructor's opens: %d done, failed at %d: %s", k_pairs, k_fail, err());
+    pthread_join(th, NULL);
+    CHECK(68, r_open && dlclose(r_open) == 0 && dlclose(k) == 0, "the reader's dlopen: %s", err());
+}
+
 int main(int argc, char **argv) {
     if (argc < 3) return 2;
     alarm(300);
     strncpy(dir, argv[1], sizeof dir - 1);
     if (!strcmp(argv[2], "basic")) basic();
     else if (!strcmp(argv[2], "concurrent")) concurrent();
+    else if (!strcmp(argv[2], "room")) room();
     else return 2;
     return 0;
 }
@@ -361,7 +466,7 @@ fn corpus(d: &Path, ld: &Path, libc: &Path, crt1: &Path) -> PathBuf {
     for (out, kind) in [("libG.so", "-DKIND_G"), ("libU.so", "-DKIND_U"), ("libN.so", "-DKIND_N"), ("libY.so", "-DKIND_Y"), ("libX.so", "-DKIND_X")] {
         lib(out, kind, &[]);
     }
-    for (out, kind) in [("libT.so", "-DKIND_T"), ("libT2.so", "-DKIND_T2"), ("libT3.so", "-DKIND_T3"), ("libR.so", "-DKIND_R"), ("libP.so", "-DKIND_P")] {
+    for (out, kind) in [("libT.so", "-DKIND_T"), ("libT2.so", "-DKIND_T2"), ("libT3.so", "-DKIND_T3"), ("libR.so", "-DKIND_R"), ("libP.so", "-DKIND_P"), ("libK.so", "-DKIND_K")] {
         build(d, out, LIB, &["-nostdlib", "-fPIC", "-shared", kind]);
     }
     let interp = format!("-Wl,--dynamic-linker={}", ld.display());
@@ -403,6 +508,22 @@ fn s27_1_c_4_dlclose_concurrent_with_readers() {
     let Some((d, ld, libc, crt1)) = setup("concurrent") else { return };
     let prog = corpus(&d, &ld, &libc, &crt1);
     run(&d, &ld, &prog, "concurrent");
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// s27_1_c_4, s27_1_c_8 (ruling #5651, the D-27 dlclose record's amendment): past a quarter of the
+/// table in retired objects, `dlopen`/`dlclose` wait at entry for the readers to drain. A
+/// `dl_iterate_phdr` callback that opens and closes in a loop never waits on itself: its `dlopen`
+/// fails with `cannot load more objects` once the table is full, and the next call outside the walk
+/// reclaims everything. A reader stalled inside a walk makes the main thread's 600 open/close
+/// pairs wait (seen asleep after 100..200 pairs) instead of filling the table. A constructor
+/// (holding the writer lock) that passes the threshold while a stalled reader's callback is
+/// blocked on that lock never waits (a deadlock otherwise; `alarm` is the hang guard).
+#[test]
+fn s27_1_c_4_dlopen_waits_for_readers_only_outside_them() {
+    let Some((d, ld, libc, crt1)) = setup("room") else { return };
+    let prog = corpus(&d, &ld, &libc, &crt1);
+    run(&d, &ld, &prog, "room");
     std::fs::remove_dir_all(&d).ok();
 }
 
