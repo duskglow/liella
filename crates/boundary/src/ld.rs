@@ -639,8 +639,8 @@ pub(super) fn module_id(k: usize) -> Option<u64> {
     (id <= slots && id <= u64::try_from(ltls::MODULES_MAX).ok()?).then_some(id)
 }
 
-/// The place of the initially loaded module whose image starts at `image` (its object's bias +
-/// `p_vaddr`).
+/// The place of the module whose image starts at `image` (its object's bias + `p_vaddr`): an
+/// initially loaded one, or (for `dlinfo`) a `dlopen`ed one [`tls_visit`] has appended.
 pub(super) fn initial_place(image: u64) -> Option<Placed> {
     (0..THREAD_MODS_LEN.load(Acquire)).filter_map(module_words).find(|w| w[0] == image).map(|w| Placed { module: w[3], tp_offset: i64::from_ne_bytes(w[4].to_ne_bytes()) })
 }

@@ -25,6 +25,7 @@ use liella_ld::arch::Native;
 use liella_ld::elf::{dt, pt, Sym, SHN_UNDEF, STT_TLS};
 use liella_ld::search::{self, PathBuf, Scope};
 use liella_ld::symbols::Object;
+use liella_ld::tls::Placed;
 
 /// `dladdr1` flags (`<dlfcn.h>`).
 const RTLD_DL_SYMENT: i32 = 1;
@@ -231,6 +232,15 @@ fn phdr(v: &View, i: usize) -> (usize, usize) {
     (load.map_or(0, |p| at(p.vaddr.wrapping_add(off.wrapping_sub(p.offset)))), n)
 }
 
+/// Object `i`'s TLS module ID and block offset from the published module table every thread's
+/// static area is filled from (DL-15, DL-16d), the source `dl_iterate_phdr` reads too; `None`
+/// without `PT_TLS`.
+fn tls_place(v: &View, i: usize) -> Option<Placed> {
+    let o = v.obj(i);
+    let image = o.bias.wrapping_add(o.elf.find(pt::TLS)?.vaddr);
+    super::super::initial_place(image)
+}
+
 /// One `dlinfo` request on object `i`: its result, or the failure text.
 fn request(v: &View, i: usize, req: i32, arg: usize) -> Result<i32, &'static [u8]> {
     match req {
@@ -238,9 +248,9 @@ fn request(v: &View, i: usize, req: i32, arg: usize) -> Result<i32, &'static [u8
         RTLD_DI_LINKMAP => put(arg, v.node_addr(i)),
         RTLD_DI_SERINFO | RTLD_DI_SERINFOSIZE => serinfo(v, i, arg, req == RTLD_DI_SERINFO),
         RTLD_DI_ORIGIN => put_str(arg, origin(v, i).ok_or(&b"dlinfo: the origin of the object is unknown"[..])?),
-        RTLD_DI_TLS_MODID => put(arg, v.obj(i).tls.map_or(0, |p| usize::try_from(p.module).unwrap_or(0))),
+        RTLD_DI_TLS_MODID => put(arg, tls_place(v, i).map_or(0, |p| usize::try_from(p.module).unwrap_or(0))),
         RTLD_DI_TLS_DATA => {
-            let data = v.obj(i).tls.map_or(0, |p| tb::tp().wrapping_add_signed(isize::try_from(p.tp_offset).unwrap_or(0)));
+            let data = tls_place(v, i).map_or(0, |p| tb::tp().wrapping_add_signed(isize::try_from(p.tp_offset).unwrap_or(0)));
             put(arg, data);
         }
         RTLD_DI_PHDR => {
