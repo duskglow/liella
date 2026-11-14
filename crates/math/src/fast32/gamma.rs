@@ -172,16 +172,26 @@ const EDGE_MAX_MARGIN: f64 = 67_108_864.0;
 
 /// lnΓ(x) for x < -42 by [`lgamma_reflect`] (its margin is not [`lgamma_edge`]'s: the fourth
 /// value is false), `None` for every other x (NaN included). Reached only where the `double`
-/// pieces and [`lgamma_edge`]'s kernel's domain have refused x: a test ahead of [`lgamma_edge`]
-/// in [`lgamma_core_signed`] split its two refusal calls into two call sites, and a test first
-/// in [`lgamma_edge`] sat on the path of every operand it takes; each cost the cbench row beside
-/// the zero at -3.14382577 4 to 6 instructions per call (LIBM-LGAMMAF-EDGE-3, -4).
+/// pieces have refused x: inline in [`lgamma_rest`]'s recompute, and from [`lgamma_edge`] (x
+/// outside its kernel's domain) through [`lgamma_wide_cold`].
 #[inline(always)]
 fn lgamma_wide(xd: f64) -> Option<(f64, u64, i32, bool)> {
     if xd < -42.0 {
         return lgamma_reflect(xd);
     }
     None
+}
+
+/// [`lgamma_wide`] as its own function, for [`lgamma_edge`]. The cbench row beside the zero at
+/// -3.14382577 (its operands answered by [`lgamma_edge`]'s kernel) measured, in instructions per
+/// call: a test ahead of [`lgamma_edge`] in [`lgamma_core_signed`] (two refusal call sites where
+/// one did) +4 (LIBM-LGAMMAF-EDGE-3), the reflection inlined into [`lgamma_edge`] +3 (its prologue,
+/// LIBM-LGAMMAF-EDGE-4), this call on the kernel's refusal branch 0. The rows below -42 pay the
+/// domain test and this call (about 18 instructions on 350).
+#[cold]
+#[inline(never)]
+fn lgamma_wide_cold(xd: f64) -> Option<(f64, u64, i32, bool)> {
+    lgamma_wide(xd)
 }
 
 /// lnΓ(x) for the operands [`lgamma_core_signed`]'s `double` pieces refuse, as its (y, margin in
@@ -218,7 +228,7 @@ fn lgamma_edge(xd: f64) -> Option<(f64, u64, i32, bool)> {
         return Some((-ln64(a), LGAMMA_DELTA, if xd < 0.0 { -1 } else { 1 }, true));
     }
     if !crate::fast_gamma::domain(xd, false) {
-        return lgamma_wide(xd);
+        return lgamma_wide_cold(xd);
     }
     let (y, eps, sign) = crate::fast_gamma::lgamma_kernel(xd)?;
     let v = y.hi + y.lo;
