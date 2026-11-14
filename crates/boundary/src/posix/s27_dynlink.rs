@@ -290,7 +290,7 @@ export! { "GLIBC_2.34";
 /// `dlclose(handle)` (§27.1, s27_1_c_4, dlclose(3); phase 14 DL-17): in a program `ld.so` started,
 /// the loader drops one open of `handle` and unloads what is no longer used
 /// (`crates/boundary/src/ld/dlopen.rs`): 0. NULL, a pointer that is not a handle, or a handle with no
-/// open left: -1 with the text `dlclose: invalid handle` (pending DL-16-PLAN-3, ruling #5006), never
+/// open left: -1 with the text `dlclose: invalid handle` (D-27.32, ruling #5006), never
 /// a crash. In a static program no handle exists (ruling #5005): the same failure.
 pub extern "C" fn dlclose(handle: *mut c_void) -> c_int {
     let f = LOADER_DLCLOSE.load(Ordering::Acquire);

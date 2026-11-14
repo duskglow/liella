@@ -717,7 +717,7 @@ pub(super) fn close_address() -> usize {
 
 /// `dlclose(handle)` (DL-17; module documentation): 0, or -1 with the text `dlclose: invalid
 /// handle` for NULL, a pointer that is not a handle, or a handle with no open left (pending
-/// DL-16-PLAN-3, ruling #5006). A success clears a pending text (probe `== close` C-2).
+/// D-27.32, ruling #5006). A success clears a pending text (probe `== close` C-2).
 extern "C" fn close_entry(handle: usize) -> i64 {
     room_wait();
     CALL.lock();

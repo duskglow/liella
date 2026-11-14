@@ -179,7 +179,7 @@ static void basic(void) {
     struct cnt c1 = walk(NULL);
     CHECK(6, c1.n == c0.n && c1.subs == c0.subs + 2 && c1.adds == c0.adds + 2, "counters n %d subs %llu adds %llu", c1.n, c1.subs, c1.adds);
     CHECK(7, afn && !mapped(afn), "A's text still mapped after dlclose");
-    /* Invalid handles: -1 and a text, never a crash (pending DL-16-PLAN-3). */
+    /* Invalid handles: -1 and a text, never a crash (D-27.32). */
     int local = 0;
     CHECK(8, dlclose(a) == -1 && strstr(err(), "invalid handle"), "double dlclose");
     CHECK(9, dlclose(NULL) == -1 && strstr(err(), "invalid handle"), "dlclose(NULL)");
@@ -488,7 +488,7 @@ fn run(d: &Path, ld: &Path, prog: &Path, mode: &str) {
 /// `dlpi_subs` and unmaps; two opens need two closes; a shared dependency stays while another object
 /// holds it; a global definer bound by a later object stays until that object closes; `RTLD_NODELETE`
 /// stays; a destructor may call `dlclose`; NULL, a closed and a foreign handle give -1 and a text
-/// (pending DL-16-PLAN-3); a success clears a pending text; the program's handle closes with 0; a
+/// (D-27.32); a success clears a pending text; the program's handle closes with 0; a
 /// TLS module's ID is reused with a fresh block and its surplus place freed; a `dl_iterate_phdr`
 /// callback that closes the object it visits can still read its headers, and the object is unmapped
 /// after the walk; 600 open/close pairs reuse the 512-object table.
