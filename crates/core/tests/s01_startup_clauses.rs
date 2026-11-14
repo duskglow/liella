@@ -404,6 +404,10 @@ impl CCall for Calls<'_> {
 struct NoPages;
 
 impl Pages for NoPages {
+    type General = Self;
+    fn general(&self) -> &Self {
+        self
+    }
     fn map(&self, _: usize, _: usize, _: Option<u32>) -> Option<usize> {
         None
     }

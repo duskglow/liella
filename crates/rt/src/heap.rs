@@ -82,6 +82,12 @@ pub trait Pages {
     fn shard(&self) -> usize {
         0
     }
+    /// The memory source the heap's slow paths take (`alloc_slow`, `free_slow`, `resize_slow`).
+    /// A source whose fast-path reads skip a test the general paths keep names the general source
+    /// here, so each slow path exists once in the products (D-X.60); otherwise `Self`.
+    type General: Pages;
+    /// The [`Self::General`] source.
+    fn general(&self) -> &Self::General;
     /// The calling thread's cache word (the address of its cache, 0 for none yet). Each
     /// thread has its own; the heap is the only writer. `None`: the thread has no word of its
     /// own (D-X.60: a thread another library made whose words could not be placed), so it runs
@@ -1627,7 +1633,7 @@ impl Heap {
         if let Some(b) = Self::alloc_fast(pages, size, align) {
             return Some(b);
         }
-        self.alloc_slow(sys, pages, size, align)
+        self.alloc_slow(sys, pages.general(), size, align)
     }
 
     /// [`Heap::alloc`]'s fast path alone: a block from the current slab's hint word, or `None`
@@ -1802,7 +1808,7 @@ impl Heap {
         if Self::free_fast(pages, addr) {
             return Ok(());
         }
-        self.free_slow(sys, pages, addr)
+        self.free_slow(sys, pages.general(), addr)
     }
 
     /// [`Heap::free`]'s fast path alone: true if the block at `addr` was released (a live block
@@ -1994,7 +2000,7 @@ impl Heap {
         match Self::fit(pages, addr, size) {
             Fit::Same(usable) => Ok(Some(Block { addr, usable, zeroed: false })),
             Fit::Held(h) => self.resize_held(sys, pages, addr, size, h, copy),
-            Fit::Other => self.resize_slow(sys, pages, addr, size, copy),
+            Fit::Other => self.resize_slow(sys, pages.general(), addr, size, copy),
         }
     }
 
@@ -2069,7 +2075,7 @@ impl Heap {
                 }
             }
         }
-        self.resize_slow(sys, pages, addr, size, copy)
+        self.resize_slow(sys, pages.general(), addr, size, copy)
     }
 
     /// The size a small block of `usable` bytes resized to `size` moves into: the growth

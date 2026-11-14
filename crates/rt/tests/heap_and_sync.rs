@@ -107,6 +107,10 @@ impl FakePages {
 }
 
 impl Pages for FakePages {
+    type General = Self;
+    fn general(&self) -> &Self {
+        self
+    }
     fn address_limit(&self) -> Option<usize> {
         self.limit.get()
     }

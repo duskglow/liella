@@ -246,10 +246,11 @@ pub fn errno_location() -> *mut c_int {
 }
 
 /// The library's own `errno` stores and loads in the products (`crate::errno`): the same test
-/// as machine/tp.S, in Rust, so that it inlines (D-X.60). A call to the assembly entry, which
-/// link-time optimisation cannot see into, would add a call and a return to every failing
-/// call and change how the small callers that set `errno` are inlined. The two read the same
-/// state: [`crate::thread::owned`]'s byte is stored with the one tp.S reads, in `init_initial`.
+/// as machine/tp.S, in Rust (D-X.60). Used only inside `crate::errno`'s two out-of-line entries:
+/// inlined at the library's ~1200 `errno` sites, the test and its cold call cost about 23 bytes
+/// each and pushed the coreutils-shaped program's text into one more 64 KiB window (51 faults
+/// against 50 on the Skylake-SP host). The two read the same state: [`crate::thread::owned`]'s
+/// byte is stored with the one tp.S reads, in `init_initial`.
 #[cfg(feature = "runtime")]
 #[inline(always)]
 pub(crate) fn errno_inline() -> *mut c_int {

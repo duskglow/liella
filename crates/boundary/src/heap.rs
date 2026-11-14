@@ -33,6 +33,11 @@ pub static HEAP: Heap = Heap::new();
 pub struct KernelPages;
 
 impl Pages for KernelPages {
+    type General = Self;
+    #[inline(always)]
+    fn general(&self) -> &Self {
+        self
+    }
     // LAYOUT-HOTKEY-INLINE-STABLE: a fixed boundary for its start-up/fork hot-text key (off the hot paths: the call is free).
     #[inline(never)]
     fn map(&self, len: usize, align: usize, node: Option<u32>) -> Option<usize> {
@@ -126,9 +131,11 @@ impl Pages for KernelPages {
 /// calling thread's block is Liella's, and the cache word is read with no further test (the
 /// heap fast paths pay nothing for the foreign case). Everything else is [`KernelPages`]'s,
 /// including the heap's slow paths (`alloc_slow`, `free_slow`, `resize_held`) even with the word
-/// clear: one copy of each, the one start-up already runs. A second copy for this type put the
-/// first allocation of a new size class on a text page of its own (one more fault for 14 new
-/// classes, `heap_meta_products`); its test there saves nothing measurable.
+/// clear: one copy of each, the one start-up already runs ([`Pages::General`] is
+/// [`KernelPages`], so `Heap::alloc`/`free`/`resize` reached through the plain `c_*` paths call
+/// the same slow paths). Their second copies for this type were about 6 KiB of text ahead of the
+/// 32 KiB-aligned string kernels and, with the inlined `errno` test, moved those kernels and the
+/// text after them by 32 KiB (the coreutils-shaped program 51 faults against 50, Skylake-SP).
 pub struct OwnPages;
 
 /// `len` bytes at a multiple of `align` without mapping `len + align` first (T14): the kernel
@@ -972,6 +979,11 @@ pub(crate) fn free_words(addr: usize) {
 // The last impl of the module on purpose: the mangled names of a module's impls number them in
 // source order, and the hot-text list keys the functions of the impls above by those numbers.
 impl Pages for OwnPages {
+    type General = KernelPages;
+    #[inline(always)]
+    fn general(&self) -> &KernelPages {
+        &KernelPages
+    }
     #[inline(always)]
     fn map(&self, len: usize, align: usize, node: Option<u32>) -> Option<usize> {
         KernelPages.map(len, align, node)
