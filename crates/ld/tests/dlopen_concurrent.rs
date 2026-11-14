@@ -154,9 +154,12 @@ static int opening_cb(struct dl_phdr_info *i, size_t s, void *d) {
     return 0;
 }
 static int in_main(void) { return 1; }
-struct tls_seen { size_t modid; void *data; };
+/* The program's own TLS: a start-time module listed before any dlopen'd one. */
+__thread int prog_tls = 3;
+struct tls_seen { size_t modid, prog_modid; void *data, *prog_data; };
 static int tls_cb(struct dl_phdr_info *i, size_t s, void *d) {
     struct tls_seen *t = d; (void)s;
+    if (!i->dlpi_name[0]) { t->prog_modid = i->dlpi_tls_modid; t->prog_data = i->dlpi_tls_data; }
     if (!strstr(i->dlpi_name, "/libtls.so")) return 0;
     t->modid = i->dlpi_tls_modid; t->data = i->dlpi_tls_data;
     return 1;
@@ -196,8 +199,9 @@ static int readers(void) {
     /* A dlopen'd object with PT_TLS is listed with its module ID and this thread's block, the
        one its own code reaches (the module is given to every thread before publication). */
     if (!dlopen(at("libtls.so"), RTLD_NOW) || !tls_addr) FAIL(25, "dlopen libtls: %s", dlerror());
-    struct tls_seen t = { 0, 0 };
+    struct tls_seen t = { 0, 0, 0, 0 };
     if (dl_iterate_phdr(tls_cb, &t) != 1 || t.modid == 0 || t.data != tls_addr || *(int *)t.data != 6) FAIL(26, "libtls listed with module %zu block %p, its variable at %p", t.modid, t.data, tls_addr);
+    if (t.prog_modid == 0 || t.prog_modid == t.modid || t.prog_data != (void *)&prog_tls) FAIL(27, "the program listed with module %zu block %p, its variable at %p (libtls module %zu)", t.prog_modid, t.prog_data, (void *)&prog_tls, t.modid);
     return 0;
 }
 
@@ -335,7 +339,8 @@ fn run(d: &Path, ld: &Path, prog: &Path, mode: &str) {
 /// `_dl_find_object` finds it with its link map); a callback may call `dlopen` and the running walk
 /// visits the new object; constructors call malloc, stdio, `dlopen` (P-7) and start and join a
 /// thread that reads; a `dlopen`'d `PT_TLS` object is listed with its module ID and the calling
-/// thread's block (`dlpi_tls_modid`, `dlpi_tls_data`, DL-16d).
+/// thread's block (`dlpi_tls_modid`, `dlpi_tls_data`, DL-16d), the program's own TLS module (start
+/// time) with its own ID and block.
 #[test]
 fn s27_1_c_8_readers_see_published_objects_only() {
     let Some((d, ld, libc, crt1)) = setup("readers") else { return };
