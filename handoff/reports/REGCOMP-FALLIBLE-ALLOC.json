@@ -1,14 +1,43 @@
-{"task": "REGCOMP-FALLIBLE-ALLOC", "model": "opus", "tokens": null,
- "result": "WIP at context checkpoint: fixed regex size caps removed (u32 guard kept), harness limit API, tests; docs, plants, gate, percall pending",
- "branch": "task/regcomp-fallible-alloc", "head": null,
- "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+{
+ "task": "REGCOMP-FALLIBLE-ALLOC",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE at context checkpoint: fixed regex size caps removed (u32 guard kept), harness limit API, tests; regex_enomem limit child regexec case still red, docs/plants/gate/percall pending",
+ "branch": "task/regcomp-fallible-alloc",
+ "head": null,
+ "gate": {
+  "affected": "not run (dev checks: core regex tests green; regex_enomem 1 passed / 1 failed)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
  "rulings": [],
- "informational": ["Every regex compiler/matcher allocation was already fallible (TryVec/InlineVec/scratch pools); no conversion needed, list in handoff/regex-fallible-alloc.md",
-                   "fuzz targets, oracle diff and the seed-replay test use compile_limited(HARNESS_MAX_NODES = 2^21): libFuzzer treats one huge allocation as a failure"],
+ "informational": [
+  "Every regex compiler/matcher allocation was already fallible (TryVec/InlineVec/scratch pools); no conversion needed, list in handoff/regex-fallible-alloc.md",
+  "fuzz targets, oracle diff and the seed-replay test use compile_limited(HARNESS_MAX_NODES = 2^21): libFuzzer treats one huge allocation as a failure"
+ ],
  "refused": [],
- "impact": [{"kind": "correctness", "what": "((a)*)* and ((a*)*)* nested 1447..3000 deep compiled REG_ESPACE; now compile and match (depth 3000 in the core test)", "before": null, "after": null, "unit": null, "measured": true},
-            {"kind": "unblock", "what": "D-14.8 amendment (ruling #5594)", "before": null, "after": null, "unit": null, "measured": false}],
+ "impact": [
+  {
+   "kind": "correctness",
+   "what": "((a)*)* and ((a*)*)* nested 1447..3000 deep compiled REG_ESPACE; now compile and match (depth 3000 in the core test)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": true
+  },
+  {
+   "kind": "unblock",
+   "what": "D-14.8 amendment (ruling #5594)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  }
+ ],
  "improvement": "the context checkpoint (~150k) arrives near half the brief's 280k budget on an M story; a brief for an audit-plus-docs story could say which budget applies",
- "next_step": "rerun regex_enomem limit child, sweep, pending D-14 record + differences/COMPAT-4 text, plants, gate, percall (handoff/regex-fallible-alloc.md)",
+ "next_step": "fix the limit child regexec case at its cause (retained compile memory), then sweep, pending D-14 record, docs, plants, gate, percall (handoff/regex-fallible-alloc.md)",
  "report_file": "handoff/regex-fallible-alloc.md",
- "jobs": ["regcomp-fallible-alloc-lint"]}
+ "jobs": [
+  "regcomp-fallible-alloc-lint4"
+ ]
+}

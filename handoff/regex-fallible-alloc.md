@@ -37,10 +37,22 @@ D-14.4; rulings #5594 (remove the cap, fully fallible allocation) and #5595 (bou
   regex_stacked green; the limit child passed every compile case and failed code 23: regexec nmatch 0 returned 0 on the
   nullable depth-1446 program (answered without the tables). Fixed in 325019699 (trailing `b`), NOT re-run.
 
+## Later in run 1 (heads 56d7e2ac0, fb1474b9f)
+* D-14.23's `tests` list had lost its ", " separator (static records check red in lint); fixed 56d7e2ac0.
+* Job regcomp-fallible-alloc-lint3 on fb1474b9f: workspace clippy -D warnings, xtask clippy and xtask static all
+  PASSED; then regex_enomem: the old test passes, the new limit child fails code 23 only: every compile case
+  (depth 3000 rep/rep2, `a{2,}`x24, 20 nested `{1,2}`) gives REG_ESPACE under the limit, but regexec nmatch 0 of the
+  depth-1446 program on "xaby" returns 0 (a correct match) within the limit. (lint2: on "xay" it was REG_NOMATCH from
+  the required-bytes prefilter, hence the `b` in the subject now.)
+* Likely cause (not yet verified): the limit is set as current size + 8 MiB right after the depth-1446 compile, whose
+  ~165 MB of freed temporaries the test binary's allocator keeps mapped, so the search tables fit in retained memory.
+
 ## Next step (continuation)
-1. Sync, run `cargo test -p liella-boundary --test regex_enomem` (confirm the limit child passes; if regexec still
-   answers, inspect which path skips the tables, e.g. required-bytes prefilter on `b`: then use a subject containing
-   `b`, such as "xaby").
+1. Fix the limit child's regexec case at its cause: measure what the search allocates (e.g. print `size_bytes()`
+   around the call without the limit), then make the limit bite: trim or re-measure after the compile's memory is
+   returned, or compile the big program in an earlier child state so its temporaries are gone, or set the limit from
+   the program's own size plus less than its search tables. Do not drop the case: regexec's REG_ESPACE is part of the
+   brief's proof. Then rerun `cargo test -p liella-boundary --test regex_enomem`.
 2. Sweep (scripts ready on mei: ~/work/REGCOMP-FALLIBLE-ALLOC/sweep.sh + depth.c; copies in the scratch dir): jobrun
    label regcomp-fallible-alloc-sweep; record rep 3000 time/maxrss (no limit) and the REG_ESPACE/exit0 rows under
    512 MiB into spec/behaviour/regex-nesting-depth.md.
