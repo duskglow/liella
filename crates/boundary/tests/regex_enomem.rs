@@ -166,7 +166,8 @@ fn limit_body() -> i32 {
     }
     // regexec's tables for the big program do not fit either: REG_ESPACE, with and without
     // subexpressions, and the program stays usable.
-    let subject = std::ffi::CString::new("xay").unwrap();
+    // The subject holds the required `b`, so the prefilter cannot answer before the engine.
+    let subject = std::ffi::CString::new("xaby").unwrap();
     let mut m = [liella_abi::layout::regmatch_t { rm_so: -1, rm_eo: -1 }; 2];
     for nmatch in [0usize, 2] {
         let rc = rx::regexec(Some(&big), subject.as_ptr(), nmatch, m.as_mut_ptr(), 0);
