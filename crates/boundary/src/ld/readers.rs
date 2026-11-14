@@ -88,16 +88,19 @@ pub(super) fn read_section<R>(f: impl FnOnce(&View) -> R) -> R {
     r
 }
 
-/// The writer's step after unpublishing (under the loader's state lock): readers entering from now
-/// on cannot see what was unpublished; the parity the earlier readers counted in (for [`drained`]).
-pub(super) fn flip() -> usize {
-    PARITY.fetch_add(1, SeqCst) & 1
+/// The writer's step (under the loader's locks, only once [`drained`]): readers entering from now on
+/// count in the other parity and cannot see what was unpublished before.
+pub(super) fn flip() {
+    PARITY.fetch_add(1, SeqCst);
 }
 
-/// Whether every reader counted in parity `p` has left (each one that entered before the [`flip`]
-/// that returned `p`): what was unpublished before that flip may be unmapped.
-pub(super) fn drained(p: usize) -> bool {
-    READERS.iter().all(|s| s.0.get(p & 1).is_none_or(|c| c.load(SeqCst) == 0))
+/// Whether every reader that entered before the last [`flip`] has left: the parity readers no
+/// longer enter with is empty. What was unpublished before that flip may then be unmapped, and only
+/// then may the parity flip again: a second flip while that parity still counts an early reader
+/// would make new readers count in it too, and that reader would be taken for a new one.
+pub(super) fn drained() -> bool {
+    let old = (PARITY.load(SeqCst) & 1) ^ 1;
+    READERS.iter().all(|s| s.0.get(old).is_none_or(|c| c.load(SeqCst) == 0))
 }
 
 /// A reader's view (see [`read_section`]).

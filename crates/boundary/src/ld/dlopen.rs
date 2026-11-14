@@ -239,9 +239,10 @@ struct Loader {
     thread_walk: usize,
     /// The TLS module IDs of `dlopen`ed modules (DL-17: an unloaded module's ID is reused).
     ids: ltls::ModuleIds,
-    /// Unloaded objects still mapped: (index, the reader parity they were unpublished in).
+    /// Unloaded objects still mapped: (index, whether the reader parity flipped since it was
+    /// unpublished; [`reclaim`]).
     n_retired: usize,
-    retired: [(u16, u8); CAP],
+    retired: [(u16, bool); CAP],
 }
 
 /// The loader's address (0: not made yet).
@@ -855,10 +856,9 @@ fn close_end(f: &Finis) {
     if tls.len > 0 {
         super::release_tls(thread_walk(l), &mut tls, generation);
     }
-    let parity = u8::try_from(super::readers::flip()).unwrap_or(0);
     for &j in out.get(..n_out).unwrap_or(&[]) {
         if let Some(r) = l.retired.get_mut(l.n_retired) {
-            *r = (j, parity);
+            *r = (j, false);
             l.n_retired = l.n_retired.saturating_add(1);
         }
     }
@@ -913,26 +913,38 @@ fn unload(l: &mut Loader, j: usize) -> Option<u64> {
     Some(p.module)
 }
 
-/// Unmap every retired object no reader can still see (its parity drained), then give the slots at
-/// the end of the table back: `n` and the arenas shrink over freed slots. Never waits.
+/// Unmap every retired object no reader can still see, then give the slots at the end of the table
+/// back: `n` and the arenas shrink over freed slots. Never waits. Two steps per object: the parity
+/// flips once the readers of the one before have left ([`readers::drained`](super::readers::drained)),
+/// and the object is unmapped when the readers counted before that flip have left in turn. With no
+/// reader inside, both steps happen at once; otherwise at a later `dlopen`/`dlclose`.
 fn reclaim(l: &mut Loader) {
-    let mut w = 0usize;
-    for r in 0..l.n_retired.min(CAP) {
-        let (j, p) = l.retired.get(r).copied().unwrap_or((0, 0));
-        if super::readers::drained(usize::from(p)) {
-            if let Some(nd) = l.nodes.get_mut(usize::from(j)) {
-                map::Mapper::unmap(&mut SysMapper { fd: -1 }, nd.reserve.0, nd.reserve.1);
-                let _ = raw::munmap(nd.file.0, nd.file.1);
-                nd.freed = true;
-            }
-        } else {
-            if let Some(slot) = l.retired.get_mut(w) {
-                *slot = (j, p);
-            }
-            w = w.saturating_add(1);
+    for _ in 0..2 {
+        if !super::readers::drained() {
+            break;
         }
+        let (mut w, mut waiting) = (0usize, false);
+        for r in 0..l.n_retired.min(CAP) {
+            let (j, flipped) = l.retired.get(r).copied().unwrap_or((0, false));
+            if flipped {
+                if let Some(nd) = l.nodes.get_mut(usize::from(j)) {
+                    map::Mapper::unmap(&mut SysMapper { fd: -1 }, nd.reserve.0, nd.reserve.1);
+                    let _ = raw::munmap(nd.file.0, nd.file.1);
+                    nd.freed = true;
+                }
+                continue;
+            }
+            if let Some(slot) = l.retired.get_mut(w) {
+                *slot = (j, true);
+            }
+            (w, waiting) = (w.saturating_add(1), true);
+        }
+        l.n_retired = w;
+        if !waiting {
+            break;
+        }
+        super::readers::flip();
     }
-    l.n_retired = w;
     let mut n = l.n;
     while n > l.n_start && l.nodes.get(n.wrapping_sub(1)).is_some_and(|nd| nd.gone && nd.freed) {
         n = n.wrapping_sub(1);

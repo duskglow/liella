@@ -140,13 +140,14 @@ static char pbuf[4200];
 static const char *P(const char *n) { snprintf(pbuf, sizeof pbuf, "%s/%s", dir, n); return pbuf; }
 static int loaded(const char *n) { void *h = dlopen(P(n), RTLD_NOW | RTLD_NOLOAD); if (h) dlclose(h); return h != NULL; }
 static int mapped(void *a) { long pg = sysconf(_SC_PAGESIZE); return msync((void *)((unsigned long)a & -(unsigned long)pg), pg, MS_ASYNC) == 0 || errno != ENOMEM; }
-struct cnt { int n; unsigned long long adds, subs; const char *want; size_t modid; void *close; long sum; int seen; };
+struct cnt { int n; unsigned long long adds, subs; const char *want; size_t modid; void *close_first, *close; long sum; int seen; };
 static int cb(struct dl_phdr_info *i, size_t s, void *d) {
     struct cnt *c = d; (void)s;
     c->n++; c->adds = i->dlpi_adds; c->subs = i->dlpi_subs;
     if (c->want && i->dlpi_name && strstr(i->dlpi_name, c->want)) {
         c->modid = i->dlpi_tls_modid;
         c->seen = 1;
+        if (c->close_first) { dlclose(c->close_first); c->close_first = NULL; }
         if (c->close) { dlclose(c->close); c->close = NULL; }
         /* Read the object's program headers after a dlclose in this callback: still mapped. */
         for (int k = 0; k < i->dlpi_phnum; k++) c->sum += i->dlpi_phdr[k].p_type + i->dlpi_phdr[k].p_memsz;
@@ -233,15 +234,17 @@ static void basic(void) {
     ta = (int *(*)(void))dlsym(t, "t_addr");
     CHECK(32, walk("libT.so").modid == id1 && *ta() == 7, "re-open: id %zu value %d", walk("libT.so").modid, *ta());
     dlclose(t);
-    /* A dl_iterate_phdr callback closes the object it is visiting and reads its headers after:
-       the object stays mapped until the walk has left, and is unmapped by a later call. */
+    /* A dl_iterate_phdr callback closes another object, then the object it is visiting, and reads
+       the visited object's headers after: two unloads inside one walk, and the visited object stays
+       mapped until the walk has left; a later call unmaps it. */
     void *r = dlopen(P("libR.so"), RTLD_NOW);
     void *rfn = dlsym(r, "r_fn");
     struct cnt c = {0};
     c.want = "libR.so";
+    c.close_first = dlopen(P("libY.so"), RTLD_NOW);
     c.close = r;
     dl_iterate_phdr(cb, &c);
-    CHECK(33, c.seen && c.close == NULL && c.sum > 0, "callback close");
+    CHECK(33, c.seen && c.close_first == NULL && c.close == NULL && c.sum > 0, "callback close");
     CHECK(34, !loaded("libR.so"), "R still loaded");
     dlopen(P("libR.so"), RTLD_NOW | RTLD_NOLOAD);
     CHECK(35, !mapped(rfn), "R never unmapped after the walk left");
