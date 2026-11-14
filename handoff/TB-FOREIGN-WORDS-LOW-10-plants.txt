@@ -1,0 +1,4 @@
+# TB-FOREIGN-WORDS-LOW-10 plants: the out-of-line errno entries (crates/boundary/src/errno.rs) and the heap's
+# General source for the slow paths (crates/boundary/src/heap.rs, crates/rt/src/heap.rs).
+errno-set-raw-value | crates/boundary/src/errno.rs | perl:s/cell\.store\(v, Ordering::Relaxed\)/cell.store(v ^ 1, Ordering::Relaxed)/ | cargo test -p liella --test s02_diagnostics_clauses | msg:s2_1_c_\w+.*(panicked|FAILED)|status [0-9]+, expected 0|errno
+errno-get-value | crates/boundary/src/errno.rs | perl:s/map_or\(0, \|c\| c\.load\(Ordering::Relaxed\)\)/map_or(0, |c| c.load(Ordering::Relaxed) ^ 1)/ | cargo test -p liella --test s02_diagnostics_clauses | msg:s2_1_c_\w+.*(panicked|FAILED)|status [0-9]+, expected 0|errno
