@@ -1,0 +1,15 @@
+{"task": "LIBM-LGAMMAF-EDGE-2", "model": "opus", "tokens": null,
+ "result": "PENDING JOBS: lgammaf x < -42 by double reflection (8.2 ulp bound, worst 3.0 measured), lgamma_edge second try for 2^-8<=|y|<1, 18-entry generated exception table; gate/plants/sweep/percall running",
+ "branch": "task/libm-lgammaf-edge-2", "head": "1d1a7e435",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["lgamma_edge's own refusals (608 operands, |x| < 2^-20) still take the accurate path; a margin of 5 for the tiny piece would cut 594 of them to about 40 (follow-up)"],
+ "refused": [],
+ "impact": [
+  {"kind": "perf", "what": "lgammaf x < -42 and refused operands leave the 384-bit path (percall lgammaf_big/tab/retry)", "before": null, "after": null, "unit": "instr/call", "measured": false},
+  {"kind": "coverage", "what": "tests added (reflection bound, below -42 in all modes, table entries, second try, table enumeration)", "before": 0, "after": 5, "unit": "tests", "measured": true},
+  {"kind": "coverage", "what": "plants written", "before": 0, "after": 9, "unit": "plants", "measured": true},
+  {"kind": "size", "what": "lgammaf exception table", "before": 0, "after": 144, "unit": "bytes", "measured": true}],
+ "jobs": ["libm-lgammaf-edge-2-lint3", "libm-lgammaf-edge-2-gen3", "libm-lgammaf-edge-2-gate", "libm-lgammaf-edge-2-plants", "libm-lgammaf-edge-2-sweep", "libm-lgammaf-edge-2-percall"],
+ "improvement": "a pending-record template (id D-NEW, series, status active) in the brief would have saved two lint rounds",
+ "next_step": "collect gate, plants, sweep, percall on shiki; fix and rerun only a red job",
+ "report_file": "handoff/LIBM-LGAMMAF-EDGE.md"}
