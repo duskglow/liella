@@ -188,6 +188,11 @@ pub const GLIBC_TUNABLE_TYPES: [(&[u8], TunableType); 41] = [
 ];
 
 /// The type of the glibc tunable `name` (exact bytes), or `None` for a name glibc does not know.
+// Out of line: the one function whose code addresses `GLIBC_TUNABLE_TYPES` (1640 bytes of
+// `.data.rel.ro`). Inlined into a start-up function, the table would join the start-up relro
+// cluster (xtask/src/startup_ro.rs) and push it over a page (STARTUP-DATA-WINDOWS), although
+// start-up reads it only when `GLIBC_TUNABLES` is set (TB-FOREIGN-WORDS-LOW-12).
+#[inline(never)]
 pub fn glibc_tunable_type(name: &[u8]) -> Option<TunableType> {
     if !name.starts_with(b"glibc.") {
         return None; // most names: rejected without a table walk
@@ -208,6 +213,9 @@ fn well_formed(text: &[u8]) -> bool {
 /// each entry naming a numeric glibc tunable with a malformed value gives one line, in order,
 /// repeats included. Unknown names, string tunables and out-of-range numbers give none. The
 /// caller decides when they apply (not in secure mode, not when a loader already printed them).
+// Out of line: start-up calls this only when `GLIBC_TUNABLES` is set, so its constants stay out
+// of the start-up data the layout counts through `runtime::start`'s operands.
+#[inline(never)]
 pub fn warnings(text: &[u8], mut emit: impl FnMut(&[&[u8]])) {
     const HEAD: &[u8] = b"WARNING: ld.so: invalid GLIBC_TUNABLES ";
     if !well_formed(text) {
