@@ -1,0 +1,31 @@
+{
+ "task": "LIBM-F32-BESSEL-LARGE-7",
+ "model": "opus",
+ "tokens": null,
+ "result": "COMPLETE: merged origin/next 24a434a17 (with STARTUP-DATA-PAGE-ALIGN-3, clean); lints green; direct gate rc 0 (1639 passed / 0 failed); all 12 layout contracts hold, STARTUP-DATA-WINDOWS 7 written pages against rw-budget-fast 7",
+ "branch": "task/libm-f32-bessel-large-7",
+ "head": "88b65f024",
+ "gate": {
+  "affected": "1639 passed / 0 failed (259 ignored), 6 suites; products step: 12 of 12 layout contracts hold",
+  "peak": "gate: peak memory 3.0G (page cache included; reclaimed under the limit) oom_kill=0 rc=0"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "head 88b65f024 is the merge the gate proves; later commits are handoff/ only",
+  "plants (6/6 CAUGHT) and percall are run 5's on 42c5541ce (keke); the band's code is unchanged since and was not rerun, as the release note asked"
+ ],
+ "refused": [],
+ "impact": [
+  {"kind": "perf", "what": "j0f large (|x| >= 2^19) per call (run 5 measurement, code unchanged)", "before": 175440.4, "after": 405.5, "unit": "instr/call", "measured": false},
+  {"kind": "perf", "what": "y1f large per call (run 5 measurement, code unchanged)", "before": 178328.1, "after": 417.5, "unit": "instr/call", "measured": false},
+  {"kind": "none", "what": "written start-up data pages (STARTUP-DATA-WINDOWS fast, Zen 1 host): 7 against budget 7 on the merged head, no regression", "before": null, "after": 7, "unit": "pages", "measured": true}
+ ],
+ "improvement": "a held story whose only red was a contract another story fixes could be re-gated by the dispatcher after the fix lands (merge + gate is mechanical), no agent run needed when the merge is clean",
+ "next_step": "land; follow-up story: jnf(0|1, x) for |x| >= 2^19 one-call rest path after measuring the jnf rows",
+ "report_file": "handoff/LIBM-F32-BESSEL-LARGE.md",
+ "jobs": [
+  "libm-f32-bessel-large-7-gate",
+  "libm-f32-bessel-large-7-lint1"
+ ]
+}

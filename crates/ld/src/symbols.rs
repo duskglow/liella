@@ -92,8 +92,8 @@ pub enum Want<'n> {
     /// A lookup by name alone (`dlsym`): a base or default (not hidden) definition only.
     Default,
     /// A named version (a reference's `vna_other` resolved to its name, or `dlvsym`): the definition of
-    /// exactly that version, hidden or not. A base (index 1) definition never matches a name. In an
-    /// object without `versym` every definition matches.
+    /// exactly that version, hidden or not. A base (index 1) definition never matches a name, and
+    /// nothing in an object without `versym` does.
     Version(&'n [u8]),
     /// A relocation's reference with a version (its `versym` index names one): the definition of exactly
     /// that version, hidden or not, or else a base (index 1) definition, so an unversioned definition
@@ -347,12 +347,13 @@ impl<'a> Object<'a> {
                     Ok(ok)
                 }
                 Want::Version(name) => {
-                    // An object without `versym` matches any request here; a program that needs a
-                    // version from such an object is refused earlier, by the load-time version
-                    // check (D-27.11).
-                    let ok = self.versym.is_none()
-                        || (version > VER_NDX_GLOBAL
-                            && self.def_version_name(version)?.ok_or(LookupError::UnknownVersion { sym: i, index: version })? == name);
+                    // An object without `versym` defines no version (each definition reads as
+                    // base, index 1), so a named version never matches there (`dlvsym`:
+                    // spec/behaviour/dynlink.md, "dlvsym missing version ... also for an object
+                    // without versions"). Relocations use `Reference`, which stays permissive
+                    // (D-27.11).
+                    let ok = version > VER_NDX_GLOBAL
+                        && self.def_version_name(version)?.ok_or(LookupError::UnknownVersion { sym: i, index: version })? == name;
                     if ok {
                         best = Some(def);
                     }

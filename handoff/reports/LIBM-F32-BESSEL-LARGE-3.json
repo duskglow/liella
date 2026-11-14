@@ -1,0 +1,13 @@
+{"task": "LIBM-F32-BESSEL-LARGE-3", "model": "opus", "tokens": null,
+ "result": "f32 Bessel large band 405.5-423.5 instr/call (1.33-1.39x reference, from 1.77e5) with mid/tiny rows equal to next; layout test green (tool 54 at every phase) after the slice-pointer table became plain words",
+ "branch": "task/libm-f32-bessel-large-3", "head": null,
+ "gate": {"affected": "pending: libm-f32-bessel-large-3-gate on kanon", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["jnf(0|1, x) for |x| >= 2^19 still takes the accurate path, as on next (fast_bessel_n::jnf calls fast32::eval only)",
+                   "init_data_clusters_hold_at_every_text_phase: tool faults 54 at all 10 phases on the final code (kanon), 55 with 54 at data 0x3000 on the inherited head"],
+ "refused": [],
+ "improvement": "a const table of slices silently becomes relocated writable data in PIC builds; a static check for .data.rel.ro growth per crate would catch it before a layout gate",
+ "next_step": "if a named job is red, fix it with new commits; follow-up: the same one-call rest path for jnf(0|1, x) refusals",
+ "report_file": "handoff/LIBM-F32-BESSEL-LARGE.md",
+ "jobs": ["kanon:libm-f32-bessel-large-3-gate", "kanon:libm-f32-bessel-large-3-plants", "kanon:libm-f32-bessel-large-3-percall", "kanon:libm-f32-bessel-large-3-sweeps"]}

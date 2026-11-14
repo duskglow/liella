@@ -54,7 +54,6 @@ fn build(out: &Path, liella: bool) -> bool {
     oracle::build_quiet(cmd, out)
 }
 
-const D13_2: &str = "D-13.2 (owner ruling 2026-10-03): readdir and its variants report the kernel's ENOENT for a directory removed while open, after the entries already buffered; the reference ends the stream silently (getdents64 itself fails with ENOENT, as the record shows)";
 const D13_5: &str = "D-13.5: canonicalization has no length limit internally, so the allocating forms resolve a path whose result is longer than PATH_MAX; the reference fails with ENAMETOOLONG";
 const D13_13_CHDIR: &str = "D-13.13 (owner ruling): nftw with FTW_CHDIR walks paths of any length (D-13.4: descriptor-relative, no depth limit); the reference aborts on an internal assertion past about 4.2 KB";
 const D13_4_NOPENFD: &str = "D-13.4 (P-lift): nopenfd does not bound the walk; one descriptor is held per directory level, so a 25-level tree is walked whole with any nopenfd and 26 descriptors are open at the bottom";
@@ -63,11 +62,10 @@ const FTS_SET: &str = "fts(3): fts_set returns -1 on an error (an invalid instru
 
 /// Lines that differ from the reference by decision: text the reference's line starts with, and
 /// why. A recorded line that no longer differs fails the test.
-const KNOWN: [(&str, &str); 39] = [
+const KNOWN: [(&str, &str); 20] = [
     ("PWD=<dir>/c/./sub: <dir>/c/./sub", "D-13.14 (owner ruling 2026-10-03): get_current_dir_name accepts $PWD only when it is absolute and has no . or .. component; the reference returns any $PWD that names the working directory"),
     ("PWD=<dir>/c/../c/sub: <dir>/c/../c/sub", "D-13.14 (owner ruling 2026-10-03): get_current_dir_name accepts $PWD only when it is absolute and has no . or .. component; the reference returns any $PWD that names the working directory"),
     ("PWD=. (relative, names cwd): .", "D-13.14 (owner ruling 2026-10-03): get_current_dir_name accepts $PWD only when it is absolute and has no . or .. component; the reference returns any $PWD that names the working directory"),
-    ("opendir(.): ok, readdir entries=0 errno=0", "D-13.2: in a removed working directory getdents64 fails with ENOENT, and readdir reports it"),
     ("getwd: NULL errno=ERANGE buf=[untouched]", "getwd(3): a working directory longer than PATH_MAX is ENAMETOOLONG (the caller cannot pass a size, so ERANGE would name a remedy it cannot apply); the reference gives ERANGE"),
     ("realpath(bottom, NULL): ENAMETOOLONG", D13_5),
     ("canonicalize_file_name(bottom): ENAMETOOLONG", D13_5),
@@ -75,24 +73,6 @@ const KNOWN: [(&str, &str); 39] = [
     ("canonicalize_file_name(rel): ENAMETOOLONG", D13_5),
     ("realpath(in, NULL): ENAMETOOLONG", D13_5),
     ("canonicalize_file_name(in): ENAMETOOLONG", D13_5),
-    ("readdir of a directory removed after opendir: 0 entries errno=0", D13_2),
-    ("[fs *] readdir, empty directory removed", D13_2),
-    ("[fs *] readdir, 3 files, emptied and removed", D13_2),
-    ("[fs *] readdir, 2000 files, emptied and removed", D13_2),
-    ("[fs *] readdir64, empty directory removed", D13_2),
-    ("[fs *] readdir64, 3 files, emptied and removed", D13_2),
-    ("[fs *] readdir64, 2000 files, emptied and removed", D13_2),
-    ("[fs *] readdir_r, empty directory removed", D13_2),
-    ("[fs *] readdir_r, 3 files, emptied and removed", D13_2),
-    ("[fs *] readdir_r, 2000 files, emptied and removed", D13_2),
-    ("[fs *] readdir64_r, empty directory removed", D13_2),
-    ("[fs *] readdir64_r, 3 files, emptied and removed", D13_2),
-    ("[fs *] readdir64_r, 2000 files, emptied and removed", D13_2),
-    ("[fs *] rewinddir after removal", D13_2),
-    ("[fs *] seekdir(0) after that", D13_2),
-    ("[fs *] rewinddir on a stream whose directory was removed", D13_2),
-    ("[fs *] fdopendir(descriptor of a removed directory)", D13_2),
-    ("[fs *] fdopendir, then the directory removed", D13_2),
     ("  the process was killed by signal 6 (SIGABRT)", D13_13_CHDIR),
     ("  callbacks=22 maxlevel=21 maxpathlen=4024", "D-13.13: every callback receives the entry's path (the reference passes an empty path at level 21 with FTW_CHDIR)"),
     ("nftw(deep, nopenfd=1, FTW_PHYS): callbacks=21 -> -1 errno=ENAMETOOLONG", D13_4_NOPENFD),

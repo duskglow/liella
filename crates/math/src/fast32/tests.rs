@@ -11,6 +11,20 @@ const CHEAP: usize = 21;
 const TRIG: [Fast; 3] = [Fast::Sin, Fast::Cos, Fast::Tan];
 pub(super) const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
 
+/// [`eval`], and for the Bessel functions the large band after its refusal, the order
+/// `special::j0` and its siblings take (D-10.109): what the `float` functions answer without the
+/// accurate path.
+pub(super) fn fast(f: Fast, x: f32, m: Rounding) -> Option<(f32, Status)> {
+    let (n, name) = match f {
+        Fast::J0 => (0, "j0f"),
+        Fast::J1 => (1, "j1f"),
+        Fast::Y0 => (2, "y0f"),
+        Fast::Y1 => (3, "y1f"),
+        _ => return eval(f, x, m),
+    };
+    eval(f, x, m).or_else(|| bessel_large(n, x, m, name))
+}
+
 pub(super) fn accurate(f: Fast, x: f32, m: Rounding) -> (f32, Status) {
     match f {
         Fast::Exp => acc::exp(x, m),
@@ -1032,13 +1046,14 @@ pub(super) fn agree_oracle(f: Fast, get: impl Fn(f32, Rounding) -> Option<(f32, 
 }
 
 /// `f` on every `float` operand in every mode against the tiered oracle (`est` its family's
-/// estimator; `LIELLA_SWEEP_STRIDE` thins the sweep); prints the calls taken and how often the
+/// estimator; `LIELLA_SWEEP_STRIDE` thins the sweep) through [`fast`] (for the Bessel functions
+/// the large band after the fast path, D-10.109); prints the calls taken and how often the
 /// oracle needed the mp path.
 pub(super) fn exhaustive_oracle(f: Fast, name: &str, est: impl Fn(f32) -> crate::oracle32::Est + Sync) {
-    exhaustive_oracle_by(f, name, est, |x, m| eval(f, x, m));
+    exhaustive_oracle_by(f, name, est, |x, m| fast(f, x, m));
 }
 
-/// [`exhaustive_oracle`] with `get` in place of [`eval`]: the fast path and what its entry adds
+/// [`exhaustive_oracle`] with `get` in place of [`fast`]: the fast path and what its entry adds
 /// before the accurate path (erff and erfcf: the tiny operands' direct paths, D-10.107).
 pub(super) fn exhaustive_oracle_by(f: Fast, name: &str, est: impl Fn(f32) -> crate::oracle32::Est + Sync, get: impl Fn(f32, Rounding) -> Option<(f32, Status)> + Sync) {
     let tally = crate::oracle32::Tally::default();

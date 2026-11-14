@@ -1,0 +1,10 @@
+id = "D-31.3"
+section = "s31"
+spec = "§31, App. D"
+ann = "—"
+status = "active"
+story = "UTIL-SPEC"
+date = "2026-11-14"
+body = '''
+**On-disk formats stay compatible (owner's ruling 2026-11-14).** The utilities write TZif per RFC 8536 (zic, §31.9), the loader cache in the Appendix D.3.1 new format with the D.3.2 extensions (ldconfig, §31.2), the locale directory and archive of D.1 (localedef, §31.8), and the catalog format of D.2 (gencat, §31.12), so files written by Liella's tools and by the reference's are interchangeable, and coexistence systems and direct readers keep working. A Liella-native format (for example for the CLDR-derived locale set) is proposed only with a measured gain and a decision of its own.
+'''

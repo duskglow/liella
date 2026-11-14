@@ -223,3 +223,10 @@ path = "fuzz_targets/ld_cache.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "ld_cache_write"
+path = "fuzz_targets/ld_cache_write.rs"
+test = false
+doc = false
+bench = false

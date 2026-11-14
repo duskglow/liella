@@ -13,7 +13,6 @@
  * Each failed check prints its line; the exit status is the number of failed checks. */
 /* LINK-HELPERS: dlh_handle1 dlh_handle2 */
 /* LINK-EXPORT-DYNAMIC: yes */
-/* PENDING-LIELLA: DL-16b (DL-DLSYM; dlopen from DL-16a) */
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <stdio.h>
