@@ -74,7 +74,8 @@ fn nested_repetitions(n: usize) -> Result<(), ReError> {
 /// n^2 + 4n + 3 nodes); at 1447 the answer is the cap's `REG_ESPACE`.
 #[test]
 fn nested_repetitions_compile_to_the_cap() {
-    // Trace: D-14.8 (the program-size cap answers REG_ESPACE past it, and only past it).
+    // Trace: s14_9_c_1_1, s14_9_c_1_2 (regcomp's REG_ESPACE), D-14.8 (the program-size cap
+    // answers REG_ESPACE past it, and only past it).
     for mid in ["a", "a*"] {
         for n in [914, 1000, 1446] {
             let r = comp(&nested("(", mid, ")*", n), cflags::EXTENDED);
