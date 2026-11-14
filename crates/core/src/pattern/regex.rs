@@ -300,10 +300,28 @@ pub fn message(code: i32) -> &'static [u8] {
 
 /// Compile `pattern` under the syntax bits `syntax` in `loc` (whose character set and
 /// collation the program keeps using: pass the same locale to [`exec`]).
+///
+/// No size limit of its own: a pattern of any size compiles when its memory can be had, and
+/// every allocation is fallible, so running out (the process's `RLIMIT_AS`, `RLIMIT_DATA` or
+/// cgroup limit) is [`ReError::ESpace`] with nothing left behind.
 pub fn compile(pattern: &[u8], syntax: u64, loc: &Locale) -> Result<Program, ReError> {
     let parsed = parse::parse(pattern, syntax, loc)?;
-    Program::build(parsed, loc, syntax & syntax::ICASE != 0)
+    Program::build(parsed, loc, syntax & syntax::ICASE != 0, program::NODES_REPRESENTABLE)
 }
+
+/// [`compile`] with a caller's limit on the program's size: more than `max_nodes` matcher
+/// states (an instruction counts once per enclosing repetition scope, plus one) is
+/// [`ReError::ESpace`], found while the program is built, before its memory is spent. For
+/// callers that bound their own work (the fuzz targets and test harnesses, whose allocator
+/// treats one huge request as a failure); `regcomp` uses [`compile`].
+pub fn compile_limited(pattern: &[u8], syntax: u64, loc: &Locale, max_nodes: usize) -> Result<Program, ReError> {
+    let parsed = parse::parse(pattern, syntax, loc)?;
+    Program::build(parsed, loc, syntax & syntax::ICASE != 0, max_nodes)
+}
+
+/// The size limit the fuzz targets and test harnesses pass to [`compile_limited`]: 2^21 matcher
+/// states, the size regcomp refused beyond before its limit became the process's own.
+pub const HARNESS_MAX_NODES: usize = 1 << 21;
 
 /// How a search sees the subject.
 #[derive(Clone, Copy, Debug, Default)]

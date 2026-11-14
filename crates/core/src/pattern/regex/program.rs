@@ -18,7 +18,7 @@
 //! between these states form an acyclic graph: a loop can only be re-entered after a non-empty
 //! iteration, that is, after consuming. The topological order of that graph, computed here,
 //! is the order in which the matcher processes the states of a position.
-#![allow(clippy::arithmetic_side_effects)] // instruction counts are bounded by MAX_INSTS; group numbers by the pattern's length
+#![allow(clippy::arithmetic_side_effects)] // instruction and node counts are u32 (checked where they are made, NODES_REPRESENTABLE); group numbers by the pattern's length
 
 use crate::locale::Locale;
 use crate::mem::TryVec;
@@ -27,14 +27,12 @@ use super::parse::{Assert, Item, Node, Parsed, Stack};
 use super::text::{is_word, set_matches, CharSet, Mode, SetDef};
 use super::ReError;
 
-/// The largest automaton (instructions) a pattern may expand to; beyond it, `REG_ESPACE`.
-const MAX_INSTS: usize = 1 << 20;
 /// The most matcher states (nodes: an instruction counts once per enclosing scope, plus one) a
-/// pattern may expand to; beyond it, `REG_ESPACE`. Stacked repetitions of a nullable body
-/// (`b*++++`) double the copies at each level and deepen the scopes, so the states grow faster
-/// than the instructions; the matcher's tables are per state (about 200 bytes each), so this
-/// bounds a search's memory to a few hundred MiB, as `MAX_INSTS` did before scopes nested.
-const MAX_NODES: usize = 1 << 21;
+/// program can number: node ids are u32 below [`NONE`]. This is a representation guard, not a
+/// size policy: a pattern is never refused for its size alone, only when its memory cannot be
+/// had (every allocation is fallible: `REG_ESPACE`) or its states cannot be numbered. The
+/// bound on memory is the process's own limits (`RLIMIT_AS`, `RLIMIT_DATA`, cgroups).
+pub(crate) const NODES_REPRESENTABLE: usize = usize::MAX >> (usize::BITS - u32::BITS); // u32::MAX = NONE
 /// No instruction / no node.
 pub(crate) const NONE: u32 = u32::MAX;
 /// How many nested calls the compiler makes on the native stack ([`Builder::node`]) before it
@@ -321,24 +319,25 @@ struct Builder {
     inst_chain: TryVec<u32>,
     chains: TryVec<Chain>,
     scopes: TryVec<(u32, u32)>,
-    /// The nodes of the instructions emitted so far (see [`MAX_NODES`]).
+    /// The nodes of the instructions emitted so far.
     nodes: usize,
+    /// The most nodes the program may have: [`NODES_REPRESENTABLE`], or a caller's lower limit
+    /// ([`super::compile_limited`]); beyond it, `REG_ESPACE` before anything more is built.
+    limit: usize,
     /// The entries of the alternations' compiled branches, the innermost on top.
     entries: Stack<u32, 16>,
 }
 
 impl Builder {
-    fn new() -> Builder {
-        Builder { insts: TryVec::new(), inst_chain: TryVec::new(), chains: TryVec::new(), scopes: TryVec::new(), nodes: 0, entries: Stack::new(0) }
+    fn new(limit: usize) -> Builder {
+        Builder { insts: TryVec::new(), inst_chain: TryVec::new(), chains: TryVec::new(), scopes: TryVec::new(), nodes: 0, limit: limit.min(NODES_REPRESENTABLE), entries: Stack::new(0) }
     }
 
     fn emit(&mut self, op: u32, a: u32, b: u32, c: u32, chain: u32) -> Result<u32, ReError> {
-        if self.insts.len() >= MAX_INSTS {
-            return Err(ReError::ESpace);
-        }
         let depth = if chain == NONE { 0 } else { self.chains.get(usize::try_from(chain).unwrap_or(usize::MAX)).map_or(0, |c| c.depth) };
+        // At most 2^32 per instruction and stopped once past `limit` (< 2^32): no overflow.
         self.nodes += usize::try_from(depth).map_err(|_| ReError::ESpace)? + 1;
-        if self.nodes > MAX_NODES {
+        if self.nodes > self.limit {
             return Err(ReError::ESpace);
         }
         let pc = u32::try_from(self.insts.len()).map_err(|_| ReError::ESpace)?;
@@ -950,8 +949,8 @@ pub(crate) fn assert_code(a: Assert) -> u32 {
 
 impl Built {
     /// Build the automaton of a parsed pattern.
-    fn build(parsed: Parsed, loc: &Locale, icase: bool) -> Result<Built, ReError> {
-        let mut b = Builder::new();
+    fn build(parsed: Parsed, loc: &Locale, icase: bool, limit: usize) -> Result<Built, ReError> {
+        let mut b = Builder::new(limit);
         let m = b.emit(OP_MATCH, 0, 0, 0, NONE)?;
         let start = b.node(&parsed, parsed.root, m, NONE, NONE, 0)?;
         let can_be_null = parsed.item(parsed.root).nullable;
@@ -1158,10 +1157,8 @@ impl Built {
         for pc in 0..n {
             nomem(base.push(total))?;
             let d = self.depth(u32::try_from(pc).map_err(|_| ReError::ESpace)?);
-            total = total.checked_add(d + 1).ok_or(ReError::ESpace)?;
-        }
-        if usize::try_from(total).unwrap_or(usize::MAX) > MAX_NODES {
-            return Err(ReError::ESpace);
+            // Node ids stay below NONE: a total past u32 is REG_ESPACE, never a wrap.
+            total = total.checked_add(d).and_then(|t| t.checked_add(1)).ok_or(ReError::ESpace)?;
         }
         self.node_base = base;
         self.nodes = total;
@@ -1594,8 +1591,10 @@ pub struct Program {
 
 impl Program {
     /// Build the automaton of a parsed pattern, derive the matcher's tables and serialise.
-    pub(crate) fn build(parsed: Parsed, loc: &Locale, icase: bool) -> Result<Program, ReError> {
-        let bytes = Built::build(parsed, loc, icase)?.to_bytes()?;
+    /// `limit`: the most matcher states the program may have ([`NODES_REPRESENTABLE`] for none
+    /// below the representable; see [`super::compile_limited`]).
+    pub(crate) fn build(parsed: Parsed, loc: &Locale, icase: bool, limit: usize) -> Result<Program, ReError> {
+        let bytes = Built::build(parsed, loc, icase, limit)?.to_bytes()?;
         if ProgRef::from_bytes(&bytes).is_none() {
             return Err(ReError::ESpace);
         }
@@ -1811,7 +1810,8 @@ impl<'a> ProgRef<'a> {
         let c = |n: usize| h(n).and_then(|v| usize::try_from(v).ok());
         let (nreport, ninst, nchains, nscopes, nsets, ndata, nmasks) = (c(15)?, c(16)?, c(17)?, c(18)?, c(19)?, c(20)?, c(21)?);
         let nodes = h(6)?;
-        let n = usize::try_from(nodes).ok().filter(|&n| n <= MAX_NODES)?;
+        // Any u32 count: the section sizes below must fill `b` exactly, which bounds it.
+        let n = usize::try_from(nodes).ok()?;
         // Section sizes in words, in order.
         // The 12 counted sections, then the fixed byte-class section (D-14.12).
         let sizes = [nreport, ninst.checked_mul(5)?, nchains.checked_mul(3)?, nscopes.checked_mul(2)?, nsets.checked_mul(SET_WORDS)?, ndata, ninst, n.checked_mul(2)?, n, n, nchains.checked_mul(2)?, nmasks.checked_mul(2)?, CLASS_WORDS];
@@ -2205,7 +2205,7 @@ mod recursion_tests {
     #[allow(clippy::type_complexity)]
     fn program(pat: &[u8], flags: i32, explicit: bool) -> (Vec<Inst>, Vec<u32>, Vec<(u32, u32, u32)>, Vec<(u32, u32)>, u32) {
         let t = crate::pattern::regex::parse::parse(pat, super::super::regcomp_syntax(flags), &Locale::C).unwrap();
-        let mut b = Builder::new();
+        let mut b = Builder::new(NODES_REPRESENTABLE);
         let m = b.emit(OP_MATCH, 0, 0, 0, NONE).unwrap();
         let start = if explicit {
             b.compile(&t, Call { id: t.root, next: m, chain: NONE, share: NONE, bare: false })

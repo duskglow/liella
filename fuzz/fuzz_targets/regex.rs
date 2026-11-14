@@ -34,7 +34,9 @@ fuzz_target!(|data: &[u8]| {
 
     let loc = liella_fuzz::locale(cflags & 0x10 != 0);
     let syntax = regex::regcomp_syntax(i32::from(cflags & 0x0f)) ^ xor;
-    let prog = match regex::compile(pattern, syntax, &loc) {
+    // The harness bounds its own work: regcomp has no size limit (the process's limits are the
+    // bound), and libFuzzer reports one huge allocation as a failure.
+    let prog = match regex::compile_limited(pattern, syntax, &loc, regex::HARNESS_MAX_NODES) {
         Ok(p) => p,
         Err(e) => {
             let code = regex::regcomp_code(e);

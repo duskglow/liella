@@ -67,7 +67,8 @@ const STARTEND: i32 = 4;
 
 fn compile(new: bool, pat: &[u8], cf: i32, loc: &Locale) -> Result<Prog, i32> {
     if new {
-        let p = regex::compile(pat, regex::regcomp_syntax(cf), loc).map_err(regex::regcomp_code)?;
+        // The harness limit: the oracle keeps its own size cap, and the two must refuse alike.
+        let p = regex::compile_limited(pat, regex::regcomp_syntax(cf), loc, regex::HARNESS_MAX_NODES).map_err(regex::regcomp_code)?;
         let lead = regex::required_string(&p, loc).map(|(b, w)| (b.as_slice().to_vec(), w));
         Ok(Prog::New(p, lead))
     } else {
@@ -523,7 +524,7 @@ fn stacked_repetitions_agree_with_the_oracle() {
 /// A compiled pattern of either engine from raw syntax bits (the GNU interfaces).
 fn compile_syntax(new: bool, pat: &[u8], syntax: u64, loc: &Locale) -> Result<Prog, i32> {
     if new {
-        let p = regex::compile(pat, syntax, loc).map_err(regex::regcomp_code)?;
+        let p = regex::compile_limited(pat, syntax, loc, regex::HARNESS_MAX_NODES).map_err(regex::regcomp_code)?;
         let lead = regex::required_string(&p, loc).map(|(b, w)| (b.as_slice().to_vec(), w));
         Ok(Prog::New(p, lead))
     } else {

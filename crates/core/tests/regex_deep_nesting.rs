@@ -1,6 +1,7 @@
 //! Deeply nested regular expressions (REGCOMP-DEEP-NESTING, AQOURS-SMOKE F2): the parser, the
 //! tree passes and the compiler keep their work on heap stacks, so nesting depth is bounded by
-//! memory and by the program-size cap (D-14.8), never by the native stack. The expected results
+//! memory (the process's limits; regcomp has no program-size cap of its own, D-14.8 as amended),
+//! never by the native stack. The expected results
 //! are glibc 2.39's, probed on the main thread (ERE, C locale) for depths 255 to 10,000; 100,000
 //! shows that memory is the only bound and is checked on Liella alone.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic, missing_docs)]
@@ -58,8 +59,9 @@ fn deep_groups_and_alternations_compile_and_match() {
 }
 
 /// Nested repetitions `((a)*)*...`: each one deepens the repetition scopes, so the program grows
-/// with the square of the depth and meets the size cap (D-14.8); past it the answer is
-/// `REG_ESPACE`, the cap's, never a failure of the stack.
+/// with the square of the depth. There is no size cap: memory is the bound (`REG_ESPACE` when
+/// it cannot be had), and a program whose matcher states cannot be numbered in 32 bits is
+/// `REG_ESPACE` as well (found while it is built), never a failure of the stack.
 fn nested_repetitions(n: usize) -> Result<(), ReError> {
     let prog = comp(&nested("(", "a", ")*", n), cflags::EXTENDED)?;
     let m = search(&prog, "xay", false).unwrap();
@@ -67,25 +69,23 @@ fn nested_repetitions(n: usize) -> Result<(), ReError> {
     Ok(())
 }
 
-/// The depth sweep (REGCOMP-SCOPE-COST-2, spec/behaviour/regex-nesting-depth.md): `((a)*)*` and
-/// `((a*)*)*` of n levels compile at 914 (the last depth when a level cost five instructions),
-/// at 1000 (which glibc 2.39 compiles) and at 1446, the last depth whose program fits the 2^21
-/// nodes of D-14.8 now that a level is one `ENTER` and one `EXIT` (n^2 + 3n + 2 and
-/// n^2 + 4n + 3 nodes); at 1447 the answer is the cap's `REG_ESPACE`.
+/// The depth sweep (REGCOMP-FALLIBLE-ALLOC, spec/behaviour/regex-nesting-depth.md): `((a)*)*`
+/// and `((a*)*)*` of n levels (n^2 + 3n + 2 and n^2 + 4n + 3 matcher states) compile at 1446 and
+/// 1447 (the last depth inside, and the first past, the 2^21-state cap regcomp had) and at 3000
+/// (which glibc 2.39 compiles; about 9 million states): no pattern is refused for its size alone.
 #[test]
-fn nested_repetitions_compile_to_the_cap() {
-    // Trace: s14_9_c_1_1, s14_9_c_1_2 (regcomp's REG_ESPACE), D-14.8 (the program-size cap
-    // answers REG_ESPACE past it, and only past it).
+fn nested_repetitions_compile_without_a_size_cap() {
+    // Trace: s14_9_c_1_1, s14_9_c_1_2 (regcomp's REG_ESPACE only when memory runs out), D-14.8
+    // as amended (no fixed program-size cap; the process's limits are the bound).
     for mid in ["a", "a*"] {
-        for n in [914, 1000, 1446] {
+        for n in [1446, 1447] {
             let r = comp(&nested("(", mid, ")*", n), cflags::EXTENDED);
             assert!(r.is_ok(), "(({mid})*)* depth {n}: {:?}", r.err());
         }
-        let r = comp(&nested("(", mid, ")*", 1447), cflags::EXTENDED);
-        assert!(matches!(r, Err(ReError::ESpace)), "(({mid})*)* depth 1447: {:?}", r.err());
     }
-    // A search at the reference's depth: the empty match at the start.
+    // The reference's depths, compiled and searched: the empty match at the start.
     assert_eq!(nested_repetitions(1000), Ok(()));
+    assert_eq!(nested_repetitions(3000), Ok(()));
 }
 
 #[test]
@@ -95,6 +95,8 @@ fn deep_nesting_runs_on_a_small_stack() {
     let t = std::thread::Builder::new().stack_size(64 << 10).spawn(|| {
         groups_and_alternations(100_000);
         assert_eq!(nested_repetitions(256), Ok(()));
+        // About 10^10 states: more than 32-bit node ids can number, so REG_ESPACE, found while
+        // the instructions are emitted (about 65,000 levels in), before the tables are built.
         assert_eq!(nested_repetitions(100_000), Err(ReError::ESpace));
     });
     t.unwrap().join().unwrap();

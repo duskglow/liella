@@ -45,7 +45,8 @@ fn backref_budget_bounds_time_on_pinned_fuzz_inputs() {
         }
         let loc = if cflags & 0x10 != 0 { Locale::c_utf8(b"C.UTF-8") } else { Locale::C };
         let syntax = regex::regcomp_syntax(i32::from(cflags & 0x0f)) ^ xor;
-        let Ok(prog) = regex::compile(pattern, syntax, &loc) else { continue };
+        // The fuzz target's limit, as the inputs were found under it (regcomp itself has none).
+        let Ok(prog) = regex::compile_limited(pattern, syntax, &loc, regex::HARNESS_MAX_NODES) else { continue };
         let opts = Options { not_bol: eflags & 1 != 0, not_eol: eflags & 2 != 0, newline_anchor: eflags & 4 != 0, budget: 16 * regex::BUDGET_PER_FAILURE, accel: Accel::OFF };
         let w = Window { first: 0, last: subject.len(), backward: false };
         for caps in [false, true] {

@@ -928,13 +928,17 @@ fn s14_9_f_0() {
     assert_eq!(code(&("a".to_string() + &"*".repeat(300)), E), 0, "300 repetitions of one operand");
     // Stacked `+` levels are compiled as written but grow linearly, one copy of the operand per
     // level (D-14.8 amendment, COMPAT-4); glibc doubles per level and answers REG_ESPACE from 24
-    // levels on `b*` (over 30 s on this 17-level pattern, FZ-1). Past 2^21 matcher states the
-    // builder still stops with REG_ESPACE.
+    // levels on `b*` (over 30 s on this 17-level pattern, FZ-1). regcomp has no size cap of its
+    // own: memory is the bound (REG_ESPACE when the process's limit is reached; the boundary
+    // test regex_enomem proves it in a child under RLIMIT_AS). A caller's limit stops it early.
     assert_eq!(code(&("b*".to_string() + &"+".repeat(10)), E), 0, "10 stacked levels compile");
     assert_eq!(code(")++++b*+++++++++++++++++h", E), 0, "17 stacked levels compile (D-14.8 amendment)");
     assert_eq!(code(&("(b*)".to_string() + &"+".repeat(24)), E), 0, "24 stacked levels over a group compile (D-14.8 amendment)");
-    // Stacked minimums above 1 still need distinct copies per level, so they reach the cap.
-    assert_eq!(code(&("a".to_string() + &"{2,}".repeat(24)), E), 12, "REG_ESPACE: 24 stacked {{2,}} levels");
+    // Stacked minimums above 1 still need distinct copies per level (2^24 here), so a caller's
+    // limit answers REG_ESPACE while the program is built.
+    let stacked = "a".to_string() + &"{2,}".repeat(24);
+    let limited = regex::compile_limited(stacked.as_bytes(), regex::regcomp_syntax(E), &liella::locale::Locale::C, regex::HARNESS_MAX_NODES);
+    assert_eq!(limited.err(), Some(ReError::ESpace), "REG_ESPACE: 24 stacked {{2,}} levels under a caller's limit");
     // regexec: REG_NOMATCH, and REG_ESPACE when a search with back-references exceeds its budget.
     assert_eq!(m("abc", E, "xyz"), None);
     let c = liella::locale::Locale::C;
