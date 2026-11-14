@@ -1,9 +1,36 @@
-# SETLOCALE-CTYPE-ENV: handoff (after SETLOCALE-CTYPE-ENV-3)
+# SETLOCALE-CTYPE-ENV: handoff (after SETLOCALE-CTYPE-ENV-4)
 
-State: branch `task/setlocale-ctype-env-3` (runs 1 and 2 plus this run; from origin/next 19c0ea167). Build role
-kanon:~/w/kn1. Decision: records/pending/SETLOCALE-CTYPE-ENV-1.toml (D-NEW, series D-X; the coordinator assigns
-the id). Percall spec: validation/percall/setlocale.c (10 rows plus `setlocale_all_empty_lcall_empty`).
+State: branch `task/setlocale-ctype-env-4` (runs 1-3 plus a merge of origin/next 8f3e2993e, merge commit
+5a7f7b999). Build role keke:~/w/n1. Decision: records/decisions/D-X/D-X.93.toml. Percall spec:
+validation/percall/setlocale.c (10 rows plus `setlocale_all_empty_lcall_empty`).
 Ruling #5298 (coordinator): no EnvMemo for setlocale(cat, ""); the environment is read on every call.
+
+## SETLOCALE-CTYPE-ENV-4 (this run): merge with trace-at-build next; one start-up bound red in fast
+
+- Step 0 (clippy + static on the inherited head a224aa144): green (job setlocale-ctype-env-4-lint0).
+- Merged origin/next 8f3e2993e. next had deleted crates/libc-so/hot-text.list and hot-text.unpinned (the build
+  now groups from a trace of itself); taking next's side means deleting both. Every crates/libc-so file now
+  equals next's. No keys regenerated or pinned, no bound changed.
+- Start-up layout tests (hot_text_products, heap_meta_products, cold_bss_products), keke (Zen 1), traced default,
+  minor faults, lowest of 5 (every run identical):
+
+  | program            | bound | branch fast | branch release | next 8f3e2993e fast |
+  |--------------------|-------|-------------|----------------|---------------------|
+  | startup only       | 11    | 11          | 10             | 11                  |
+  | setlocale + printf | 47    | 47          | 47             | 46                  |
+  | coreutils-shaped   | 50    | **51 RED**  | 49             | 50                  |
+  | fork child         | 5     | 5           | 5              | 5                   |
+
+  Jobs: setlocale-ctype-env-4-layout (fast, rc 101: only init_coreutils_shaped), setlocale-ctype-env-4-layout-rel
+  (release, rc 0, 26 passed), setlocale-ctype-env-4-nextfaults (next, fast, rc 0). heap_meta: first malloc 5/6
+  (bound 12), 14 classes 9 (bound 9).
+- Gate setlocale-ctype-env-4-gate (`affected --run --base origin/next`, merge head): rc 1, the same single test
+  (fast, plain and exports-interposed); every other step ok (conformance 125/125, liella-boundary,
+  liella-legacy, liella-math, xtask unit tests, clippy).
+- Reading: in fast products this branch adds one start-up page to both setlocale programs (next sits at the
+  coreutils bound already, 50/50, so the +1 goes over). The branch does change code those programs run
+  (setlocale_env, its getenv walk, setlocale_locked), so this is not unrelated jitter; under ALWAYS FORWARD the
+  code has to fit. Not investigated further in this run (the brief: report the table, do not change bounds).
 
 ## SETLOCALE-CTYPE-ENV-3 (this run): start-up faults
 
@@ -32,6 +59,12 @@ all "" LC_ALL empty 22281.4/9514.4/4831.0; all "" LANG only 21763.4/8458.8/4296.
 lower too. No row slower. This run changed only the layout lists, so those counts still stand.
 
 ## Open / next step
+
+- FIRST: bring the fast coreutils-shaped count back to <= 50 without touching the bound. Look in the fast
+  products' trace (target/product/fast/trace.log) and a link map of page_faults.c (xtask/src/layout.rs
+  near line 676 links it that way) for the page the new setlocale_env path adds in fast; candidates: CText::read_at or the
+  setlocale_env closure out of line in fast (release inlines them), or new code past the first fault-around
+  window. Measure next and the branch with the same job (one-line diff of the fault-address lists).
 
 - A cost bound in setlocale_env_repeat (the counts are printed only).
 - The LANG-only LC_ALL "" row (4,296) is the walk over every entry for 13 names. Ruling #5298 rules out a

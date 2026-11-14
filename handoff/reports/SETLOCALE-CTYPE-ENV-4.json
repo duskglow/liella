@@ -1,0 +1,47 @@
+{
+  "task": "SETLOCALE-CTYPE-ENV-4",
+  "model": "opus",
+  "tokens": null,
+  "result": "merged origin/next 8f3e2993e (hot-text.list and hot-text.unpinned deleted, taking next's side); release start-up layout green, but in fast products the coreutils-shaped program takes 51 faults (bound 50; next 50) and setlocale+printf 47 (bound 47; next 46): gate red on that one test",
+  "branch": "task/setlocale-ctype-env-4",
+  "head": "5a7f7b999",
+  "gate": {
+    "affected": "setlocale-ctype-env-4-gate rc 1: 1 failed (hot_text_products init_coreutils_shaped, fast, plain and interposed), all other steps ok, conformance 125/125",
+    "peak": "12G"
+  },
+  "accepted_first_attempt": null,
+  "rulings": [],
+  "informational": [
+    "fault table (keke, Zen 1, traced default, lowest of 5): startup 11/10/11, setlocale+printf 47/47/46, coreutils-shaped 51/49/50, fork 5/5/5 for branch fast / branch release / next fast; bounds 11, 47, 50, 5",
+    "the +1 in fast comes with this branch's setlocale code (setlocale_env path), so it is not unrelated layout jitter; no bound was changed"
+  ],
+  "refused": [],
+  "impact": [
+    {
+      "kind": "cost",
+      "what": "fast-profile start-up faults, coreutils-shaped and setlocale+printf programs (next -> branch); release within bounds (49, 47)",
+      "before": 50,
+      "after": 51,
+      "unit": "faults",
+      "measured": true
+    },
+    {
+      "kind": "perf",
+      "what": "setlocale(LC_ALL, \"\") repeated, LANG only, release per call (run 2's measurement, not re-measured)",
+      "before": 7180,
+      "after": 4296,
+      "unit": "instr/call",
+      "measured": false
+    }
+  ],
+  "improvement": "a continuation that merges next could start with the start-up layout test of the profile CI checks; release alone would have passed here, fast is the one that goes red",
+  "next_step": "find the page the setlocale_env path adds to fast products (trace.log and link map, branch against next) and fit it back under 50 / 47 without a bound change",
+  "report_file": "handoff/SETLOCALE-CTYPE-ENV.md",
+  "jobs": [
+    "setlocale-ctype-env-4-gate",
+    "setlocale-ctype-env-4-layout",
+    "setlocale-ctype-env-4-layout-rel",
+    "setlocale-ctype-env-4-nextfaults",
+    "setlocale-ctype-env-4-lint0"
+  ]
+}
