@@ -1,75 +1,66 @@
 # DL-DLOPEN-CONCURRENT (DL-16c): lock-free loader readers, safe against dlopen
 
-**State (DL-DLOPEN-CONCURRENT-2, 2026-11-13).** Branch `task/dl-dlopen-concurrent-2` = the branch below plus
-this page and `handoff/reports/DL-DLOPEN-CONCURRENT-2.json`; no code change (code head still 599c1d728, base
-origin/next 68e72ab32). Role shiki:~/w/sh1 (Haswell). Still **INCOMPLETE: LAYOUT-JITTER (#4347)**: LT-1
-(trace-at-build) is on next but opt-in; #4347 (amended 11-13) holds until LT-1 + LT-4 make it the default, and
-this brief allows no merge. Run 2: clippy + static clean on the inherited head (`dl-dlopen-concurrent-2-lint`);
-gate `dl-dlopen-concurrent-2-gate`: 7714 passed, 2 failed, the same test with the same numbers as on mei (tool 53
-at nine pads, 54 at `cold 0xf000`; true/fork equal), peak 14G, so the effect is the layout, not the host;
-plants `dl-dlopen-concurrent-2-plants`: 7/7 CAUGHT by message, 0 WARN. `page_faults.c`'s `tool` mode (the
-counted path) calls none of the changed code (no dl_iterate_phdr/_dl_find_object, single-threaded fork path
-untouched, early_init is the dynamic start only). Next step: after the trace-at-build default switch lands,
-merge origin/next (a brief must allow it), re-gate the direct tier, land.
+**STOPPED AT THE CONTEXT CHECKPOINT (run 3, 2026-11-14): INCOMPLETE, head test-red.** Code head 17d465549 adds
+check 27 (the program's own `__thread` variable): it FAILS: `the program listed with module 0 block (nil) ... (libtls
+module 2)` (job `dl-dlopen-concurrent-3-lint3`, against release products of the same code). So `readers::tls_of`
+misses the PROGRAM's start-time TLS module (the program holds module 1: libtls got 2), while it finds a `dlopen`'d
+one. A real DL-16c defect (`dlpi_tls_modid`/`dlpi_tls_data` of the program are 0), found because Liella's libc.so.6
+and ld.so have no PT_TLS, so the plant `tls-of-start-only` survived until the program got TLS. **Next step:** find
+why `e.bias + p_vaddr` (readers.rs `tls_of`; the program's bias is `START_OBJS[0][2]` via `fill_start`) differs from
+the program's `THREAD_MODS` image (`biases[i] + m.vaddr` in ld.rs `record_thread_tls`): print both in a scratch
+run, fix `tls_of` or the recorded bias, rerun the dlopen_concurrent test, lint, gate, then plants
+(`handoff/DL-DLOPEN-CONCURRENT-3-plants.txt`: tls-of-start-only expects check 26 and should now be caught).
 
-**State (run 1).** Branch `task/dl-dlopen-concurrent` (cut from origin/next 68e72ab32). Code commit 2d72f7cc2, test
-hang-guard fix 599c1d728 (final code head); this page and the report json follow it. Role mei:~/w/s1.
-**INCOMPLETE: LAYOUT-JITTER (ruling #4347).** Gate `dl-dlopen-concurrent-gate` (2d72f7cc2): 7714 passed, 2 failed,
-both `hot_text_products init_data_clusters_hold_at_every_text_phase` (fast and interposed): tool faults 53 at nine
-pads, 54 at `cold 0xf000`. The same test on origin/next 68e72ab32 (job `dl-dlopen-concurrent-next-layout`, a RAM
-copy on mei): 53 at all ten pads, passes. The change grows cold text only (fork's lock step, the readers'
-forwarding, early_init's three stores for dynamic programs); the static start path the test measures runs none of
-it. Not chased (no regen, no moved sections, no bound change). Final jobs on 599c1d728: `dl-dlopen-concurrent-gate2`
-(clippy and static clean; 7714 passed, 2 failed: the same layout test with the same numbers, peak 11G) and
-`dl-dlopen-concurrent-plants2` (7/7 CAUGHT by message, 0 WARN, rc 0).
-Plants run 1 (`dl-dlopen-concurrent-plants`, 2d72f7cc2): 7/7 caught; `find-no-link-map` WARN-NO-MSG (check 16
-caught it first; regex now names 16|18); `child-keeps-writer-lock` caught only by the 600 s tool timeout because a
-fork child does not inherit `alarm` (fixed in 599c1d728: the child arms its own). Decision: `records/pending/DL-DLOPEN-CONCURRENT-1.toml`
-(D-NEW, series D-27; waits for the coordinator's id). dlsym (DL-16b) was not on next when this run started, so
-nothing here builds on it.
+**State before check 27 (DL-DLOPEN-CONCURRENT-3, 2026-11-13).** Branch `task/dl-dlopen-concurrent-3` (stacked on -2's branch, then
+origin/next merged at 9fdf87d40 after LAYOUT-TRACE-DEFAULT-4 landed). Role mei:~/w/s2. Code head 811bc207f was green
+(below). **The layout red is gone:** with trace-at-build the default,
+`hot_text_products` passes fast and interposed in the direct-tier gate (both gates of this run) and in the release profile
+(job `dl-dlopen-concurrent-3-layout-release`, see the report). No bound touched.
+Run 3 commits: merge (one conflict at the dlopen publication point: DL-16d's `publish_tls` stays before the chain's
+`l_next` store and `readers::publish`, so a listed object's TLS module is already recorded); readers test check 25/26:
+a `dlopen`'d `PT_TLS` object is listed with `dlpi_tls_modid` != 0 and `dlpi_tls_data` equal to the address its own code
+reaches (DL-16d appends `dlopen`'d modules to `THREAD_MODS`, which `readers::tls_of` reads, so the gap below closed
+with the merge; the helper uses initial-exec, see INFORMATIONAL); the R14-6 differences row
+(`docs/differences-from-glibc.md`, user-facing incompatibilities) with a registered, not implemented, compat flag
+`records/pending/DL-DLOPEN-CONCURRENT-3-1.toml` (COMPAT-NEW: the coordinator assigns the id; decisions D-27.1;
+rulings #5394/#5418). The DL-16c decision is still pending: `records/pending/DL-DLOPEN-CONCURRENT-1.toml` (D-NEW,
+series D-27; CI auto-assigns).
+Jobs (mei): `-lint0` (inherited head) and `-lint2` (final head): clippy + static clean. `-gate` (fc56524a2): 7728/1,
+my new check 25 (the TLS helper could not bind `__tls_get_addr`); fixed in 811bc207f. `-gate2` (811bc207f): 7729
+passed, 0 failed, conformance 54/0, peak 10G. `-plants` (fc56524a2): baseline failed on the same check, no plant run.
+`-plants2` (811bc207f): 7 CAUGHT by message, 0 WARN, 1 SURVIVED (`tls-of-start-only`, see above). `-layout-release`
+(811bc207f): hot_text_products 25/25 release profile (the role's target/liella holds release products since).
 
 ## What the branch does
-- **Readers** (`crates/boundary/src/ld/readers.rs`, new): in a program Liella's `ld.so` started, libc's
-  `dl_iterate_phdr`/`_dl_find_object` forward through `StartInfo::dl_iterate`/`dl_find_object` (set by
-  `run_init`, stored by `runtime::early_init`) to `ld.so`. `ld.so` keeps an append-only static table (bias, name,
-  phdr, phnum) in chain order, apart from the writer's `Loader` (readers never form a reference to it). The
-  start-time entries are filled at the first reader or `dlopen` (nothing at start). A `dlopen` stages entries in
-  `candidate` and publishes with one Release store (`readers::publish`, next to the chain's `l_next` store, after
-  pass 2 and before the constructors). The walk is live (probe R-2), the vDSO second, the callback holds no lock.
-  `read_section(|view| ..)` wraps every read (empty; DL-17 adds epochs). `_dl_find_object`: whole PT_LOAD span,
-  eh_frame, link map = node address (probe R-1). Static programs keep the old path (one load+branch more).
-- **Counters**: `dlpi_adds` = start objects + vDSO + every object a `dlopen` mapped; `dlpi_subs` = objects a
-  failed attempt unmapped (`count_unmapped` in `unwind` and the two post-map refusals in `candidate`).
-- **Locks** (`dlopen.rs`): `Reentrant` futex mutex; `CALL` (writer, whole call incl. constructors) and `STATE`
-  (inside it, only while state changes). `fork_step` (`StartInfo::dl_fork`): prepare takes `STATE` first in
-  `fork::lock_all` (only when other threads exist, P5), parent/child release; the child frees `CALL` if a vanished
-  thread held it. Lock order comment at `CALL`.
-- **Probe** `tools/probe/dl/readers/` (R-1..R-4) recorded in `spec/behaviour/dynlink.md` + `.glibc.txt`.
-- **Tests** `crates/ld/tests/dlopen_concurrent.rs` (Liella only; the IFUNC-window check is a Liella design
-  property): readers/publication/counters/callback-dlopen/constructor corpus; 20000-iteration concurrent walk;
-  fork during another thread's constructor (P-9); C++ exception through a `dlopen`'d C frame.
+- **Readers** (`crates/boundary/src/ld/readers.rs`): in a program Liella's `ld.so` started, libc's
+  `dl_iterate_phdr`/`_dl_find_object` forward through `StartInfo::dl_iterate`/`dl_find_object` to `ld.so`, which
+  keeps an append-only static table (bias, name, phdr, phnum) in chain order apart from the writer's `Loader`. A
+  `dlopen` stages entries and publishes them with one Release store after pass 2 and the TLS hand-out, before the
+  constructors. The walk is live (probe R-2), the vDSO second, no lock held in the callback. `read_section` wraps
+  every read (empty; DL-17 adds epochs). `_dl_find_object`: whole PT_LOAD span, eh_frame, link map = node address.
+- **Counters**: `dlpi_adds` = start objects + vDSO + every mapped object; `dlpi_subs` = objects a failed attempt unmapped.
+- **Locks** (`dlopen.rs`): re-entrant `CALL` (writer, whole call incl. constructors) and `STATE` (state changes only);
+  `fork` takes `STATE` in prepare, the child frees a vanished thread's `CALL`. Lock order comment at `CALL`.
+- **Tests** `crates/ld/tests/dlopen_concurrent.rs`; probe `tools/probe/dl/readers/` (R-1..R-4, spec/behaviour/dynlink.md).
 
-## Open / for later stories
-- RULING NEEDED: the R14-6 differences row (callbacks run without the loader lock; s27_1_c_8 says the reference
-  holds one). The plan puts it in DL-17; the behaviour is observable from this branch on. Recommend: add it now,
-  no compat option (holding the lock across a callback only adds a deadlock path).
-- Gaps: start-time `dlpi_name` is the DT_SONAME (reference: absolute path; same as `l_name`, DL-16a gap);
-  `dlfo_link_map` is 0 before the first `dlopen` creates the nodes and for the vDSO (reference non-null).
-- DL-16b: add `dlsym` to the constructor corpus and a `dlsym` reader during a slow constructor (P-8) through
-  `read_section`. DL-16d: `tls_of` matches only start-time modules (DL-15's `THREAD_MODS`); place a `dlopen`'d
-  module's TLS before `readers::publish` and report its module id there. My change at the publication point is the
-  one `readers::publish(k, k - base)` line.
+## Open
+- Gaps: start-time `dlpi_name` is the DT_SONAME (reference: absolute path, DL-16a gap); `dlfo_link_map` is 0 before
+  the first `dlopen` makes the nodes and for the vDSO.
+- INFORMATIONAL (not this story): Liella's `libc.so.6` has no `DT_NEEDED` (the reference's names `ld-linux-x86-64.so.2`),
+  so in a program linked `--as-needed` (the toolchain default) `ld.so` is not in the global scope and a `dlopen`'d
+  object without its own `DT_NEEDED` cannot bind `__tls_get_addr` ("undefined symbol"). Not probed on the reference.
+  Recommend a DL story: probe the reference's scope for that case, then decide (add the `DT_NEEDED`, or keep the
+  interpreter in the global scope).
 - INFORMATIONAL (pre-existing): an IFUNC resolver that calls `dlopen` re-enters `open_locked` while the outer
   `&mut Loader` is live (STATE is re-entrant, so no deadlock, but the borrow aliases).
+- DL-16b: add `dlsym` to the constructor corpus and a `dlsym` reader during a slow constructor (P-8).
 
 ## Do not redo
-The probe, the table/epoch design, the fork design (STATE, not CALL, in prepare: P-9 needs fork to return while a
-constructor runs).
+The probe, the table/epoch design, the fork design (STATE, not CALL, in prepare: P-9), the merge resolution.
 
 ## Next step
-When trace-at-build is the default on next (LT-1 + LT-4): merge origin/next into this branch (the continuation's
-brief must allow that merge), re-gate the direct tier on the assigned role, land. Then DL-17 (epochs in
-`read_section`, sorted address index) and DL-16b's corpus additions.
+Fix the program's TLS entry in the readers (top of this page), re-gate, plants on the final head; then land
+(coordinator assigns the COMPAT id, CI the D-27 id). Then DL-17 (epochs in `read_section`, sorted address index).
 
 ## Plan rows to read
-plan/ph14/dl-16-dlopen.md §3, §4, §8; D-27.1, D-27.30, D-27.37; dynlink.md P-7, P-8, P-9, `== phdr`, readers.
+plan/ph14/dl-16-dlopen.md §3, §4, §8; D-27.1, D-27.30, D-27.37; plan/ph14/open-questions.md R14-6; dynlink.md P-7..P-9, readers.
