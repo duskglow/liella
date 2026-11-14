@@ -294,18 +294,19 @@ pub(super) struct View {
 
 /// Run `f` over the published objects without the writer lock (D-27.1). DL-16 never unloads, so the
 /// section needs no grace period yet; DL-17 adds the per-thread reader epochs here. The process's
-/// first loader call builds the loader's state under the lock (as `dlopen` does); `None` when it
-/// cannot be built, or when the calling thread is itself building it (a signal handler that
-/// interrupted the first `dlopen`), which must not wait for itself.
+/// first loader call builds the loader's state under [`STATE`] (the lock every state change holds;
+/// taking it without [`CALL`] keeps the lock order, as `fork` does); `None` when it cannot be
+/// built, or when the calling thread holds [`STATE`] (a signal handler that interrupted the first
+/// `dlopen` while it builds the state), whose re-entrant hold must not build a second one.
 pub(super) fn read_section<R>(f: impl FnOnce(&View) -> R) -> Option<R> {
     let mut at = LOADER.load(Acquire);
     if at == 0 {
-        if OWNER.load(Relaxed) == tb::tp() {
+        if STATE.owner.load(Relaxed) == tb::tp() {
             return None;
         }
-        lock();
+        STATE.lock();
         let made = loader().is_some();
-        unlock();
+        STATE.unlock();
         at = LOADER.load(Acquire);
         if !made || at == 0 {
             return None;
