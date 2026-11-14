@@ -799,17 +799,31 @@ mod tests {
 
     /// jnf and ynf of orders 0 and ±1 on the large band (D-10.109) and off it answer as the
     /// accurate path for `J_n` and `Y_n` does, value and flags, in every mode (`J_{−1}(x) = −J_1(x)`,
-    /// `Y_{−1}(x) = −Y_1(x)`). (No spec clause: LIBM-JNF-LARGE, D-10.109.)
+    /// `Y_{−1}(x) = −Y_1(x)`); on the band the order function's band answers them (its fast count
+    /// grows: a route to the accurate path gives the same values). (No spec clause:
+    /// LIBM-JNF-LARGE, D-10.109.)
     #[test]
     fn jnf_ynf_low_orders_take_the_large_band() {
         use crate::special::{jn, jn_accurate, yn, yn_accurate};
+        // Other tests may count the same names at once: that can only raise a count, so the
+        // check never fails spuriously (and a plant runs this test alone).
+        let band = |name: &str, x: f32, call: &dyn Fn() -> (f32, Status)| {
+            let before = stats::counts(name).fast;
+            let r = call();
+            if x.abs() >= 524_288.0 {
+                assert!(stats::counts(name).fast > before, "{name} band not taken at {x:e}");
+            }
+            r
+        };
         for x in [3.5f32, 524_288.0, 1e30, -524_288.0, -1e30] {
             for n in [-1, 0, 1] {
                 for m in MODES {
-                    let (got, want) = (jn(n, x, m), jn_accurate(n, x, m));
+                    let jname = if n == 0 { "j0f" } else { "j1f" };
+                    let (got, want) = (band(jname, x, &|| jn(n, x, m)), jn_accurate(n, x, m));
                     assert_eq!((got.0.to_bits(), got.1), (want.0.to_bits(), want.1), "jnf({n}, {x:e}) {m:?}");
                     if x > 0.0 {
-                        let (got, want) = (yn(n, x, m), yn_accurate(n, x, m));
+                        let yname = if n == 0 { "y0f" } else { "y1f" };
+                        let (got, want) = (band(yname, x, &|| yn(n, x, m)), yn_accurate(n, x, m));
                         assert_eq!((got.0.to_bits(), got.1), (want.0.to_bits(), want.1), "ynf({n}, {x:e}) {m:?}");
                     }
                 }

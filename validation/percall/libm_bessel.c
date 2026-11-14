@@ -67,6 +67,8 @@ CASE(bes_jnf0_mid, 1000000, 1) { fmid(); LOOPFN(fjn, 0); PC_CHECKING { pc_check(
 CASE(bes_ynf1_mid, 1000000, 1) { fmid(); LOOPFN(fyn, 1); PC_CHECKING { pc_check("%.9g", (double)fyn(1, 1.5f)); } }
 CASE(bes_jnf3_mid, 1000000, 1) { fmid(); LOOPFN(fjn, 3); PC_CHECKING { pc_check("%.9g", (double)fjn(3, 1.5f)); } }
 CASE(bes_ynf3_mid, 1000000, 1) { fmid(); LOOPFN(fyn, 3); PC_CHECKING { pc_check("%.9g", (double)fyn(3, 1.5f)); } }
+CASE(bes_jnf3_large, 1000000, 1) { flarge(); LOOPFN(fjn, 3); PC_CHECKING { pc_check("%.9g", (double)fjn(3, 1e6f)); } }
+CASE(bes_ynf3_large, 1000000, 1) { flarge(); LOOPFN(fyn, 3); PC_CHECKING { pc_check("%.9g", (double)fyn(3, 1e6f)); } }
 CASE(bes_j0_tiny, 1000000, 1) { dtiny(); LOOPD(dj0); PC_CHECKING { pc_check("%.17g", dj0(1e-10)); } }
 CASE(bes_j1_tiny, 1000000, 1) { dtiny(); LOOPD(dj1); PC_CHECKING { pc_check("%.17g", dj1(1e-10)); } }
 CASE(bes_y0_tiny, 1000000, 1) { dtiny(); LOOPD(dy0); PC_CHECKING { pc_check_near(dy0(1e-10), -0x1.d770c5f760b81p+3); } }

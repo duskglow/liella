@@ -1,7 +1,9 @@
-# LIBM-JNF-LARGE plants: jnf/ynf orders 0 and +-1 routed through j0f/j1f/y0f/y1f (special::jn, special::yn).
+# LIBM-JNF-LARGE plants: jnf/ynf orders 0 and +-1 routed through j0f/j1f/y0f/y1f on the tier's refusal (special::jn_low, special::yn_low).
 route0 | crates/math/src/special.rs | perl:s/0 => j0\(x, mode\),/0 => j1(x, mode),/ | cargo test -p liella-math --lib jnf_ynf_low_orders_take_the_large_band | msg:jnf\(0, [0-9.e+-]+\) [A-Za-z]+
 jneg | crates/math/src/special.rs | perl:s/_ => j1\(F::from_bits\(x\.to_bits\(\) \^ 0x8000_0000\), mode\),/_ => j1(x, mode),/ | cargo test -p liella-math --lib jnf_ynf_low_orders_take_the_large_band | msg:jnf\(-1, [0-9.e+-]+\) [A-Za-z]+
 route1y | crates/math/src/special.rs | perl:s/1 => y1\(x, mode\),/1 => y0(x, mode),/ | cargo test -p liella-math --lib jnf_ynf_low_orders_take_the_large_band | msg:ynf\(1, [0-9.e+-]+\) [A-Za-z]+
 ymir | crates/math/src/special.rs | perl:s/y1\(x, fast_bessel::mirrored\(mode\)\)/y1(x, mode)/ | cargo test -p liella-math --lib jnf_ynf_low_orders_take_the_large_band | msg:ynf\(-1, [0-9.e+-]+\) (Up|Down)
 yneg | crates/math/src/special.rs | perl:s/\(F::from_bits\(v\.to_bits\(\) \^ 0x8000_0000\), st\)/(v, st)/ | cargo test -p liella-math --lib jnf_ynf_low_orders_take_the_large_band | msg:ynf\(-1, [0-9.e+-]+\) [A-Za-z]+
+jroute | crates/math/src/special.rs | perl:s/n\.unsigned_abs\(\) <= 1 \{(\s+)return jn_low/n == 0 {$1return jn_low/ | cargo test -p liella-math --lib jnf_ynf_low_orders_take_the_large_band | msg:j1f band not taken at [0-9.e+-]+
+yroute | crates/math/src/special.rs | perl:s/n\.unsigned_abs\(\) <= 1 \{(\s+)return yn_low/n == 1 {$1return yn_low/ | cargo test -p liella-math --lib jnf_ynf_low_orders_take_the_large_band | msg:y[01]f band not taken at [0-9.e+-]+
 sweep | crates/math/src/special.rs | perl:s/0 => y0\(x, mode\),/0 => y1(x, mode),/ | LIELLA_SWEEP_STRIDE=65537 cargo test -p liella-math --release --lib jnf_ynf_low_orders_are_the_order_functions_exhaustively -- --ignored | msg:ynf\(0, [-0-9.e+a-z]+\) [A-Za-z]+

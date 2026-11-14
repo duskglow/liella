@@ -374,7 +374,7 @@ pub fn yn(n: i32, x: f64, mode: Rounding) -> Option<(f64, Status)> {
 }
 
 /// `jnf(n, x)` through the `double` kernels, or `None` (zero, subnormal and non-finite `x`).
-/// (`special::jn` answers orders 0 and ±1 by `j0f` and `j1f` before this tier.)
+/// (`special::jn` sends orders 0 and ±1 this refuses to `j0f` and `j1f`, for their large band.)
 pub fn jnf(n: i32, x: f32, mode: Rounding) -> Option<(f32, Status)> {
     if !x.is_normal() {
         return None;
@@ -391,8 +391,8 @@ pub fn jnf(n: i32, x: f32, mode: Rounding) -> Option<(f32, Status)> {
     }
 }
 
-/// `ynf(n, x)` through the `double` kernels, or `None`. (`special::yn` answers orders 0 and ±1
-/// by `y0f` and `y1f` before this tier.)
+/// `ynf(n, x)` through the `double` kernels, or `None`. (`special::yn` sends orders 0 and ±1
+/// this refuses to `y0f` and `y1f`.)
 pub fn ynf(n: i32, x: f32, mode: Rounding) -> Option<(f32, Status)> {
     if !x.is_normal() || x.is_sign_negative() {
         return None;
