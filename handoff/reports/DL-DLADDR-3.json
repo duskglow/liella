@@ -18,4 +18,4 @@
  "improvement": "The plants tool already rebuilds the products with the mutant, yet `affected --only conformance:...` rebuilds them again (~7 min per plant); letting affected reuse fresh products (or the tool pass a no-rebuild flag) would halve conformance plant runs and keep 9-plant files under the 150-min cap",
  "next_step": "Coordinator: assign ids to records/pending/DL-DLADDR-2-1..6, then land; optional follow-up: SERINFO-of-the-program probe",
  "report_file": "handoff/DL-DLADDR.md",
- "jobs": ["kanon:dl-dladdr-3-gate", "kanon:dl-dladdr-3-plants-a", "kanon:dl-dladdr-3-plants-b", "kanon:dl-dladdr-3-clippy0"]}
+ "jobs": ["kanon:dl-dladdr-3-gate", "kanon:dl-dladdr-3-plants-a", "kanon:dl-dladdr-3-plants-b"]}
