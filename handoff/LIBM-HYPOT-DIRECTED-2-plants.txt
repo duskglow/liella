@@ -1,0 +1,8 @@
+# LIBM-HYPOT-DIRECTED plants: the directed hypot path on the hardware root (hot::Hw).
+entry-nearest | crates/boundary/src/mathret.rs | lit:liella_math::pow::hypot_with::<f64, crate::hot::Hw>(x, y, m) ==> { let _ = m; liella_math::pow::hypot_with::<f64, crate::hot::Hw>(x, y, liella_math::status::Rounding::Nearest) } | cargo test -p liella-boundary --test s10_math_symbols hypot_on_the_hardware | msg:directed entry FAILED
+hw-root-off | crates/boundary/src/hot/mod.rs | lit:sqrtsd(x) ==> sqrtsd(x) * 1.0001 | cargo test -p liella-boundary --test s10_math_symbols hypot_on_the_hardware | msg:hardware kernel FAILED
+kernel-up-nearest | crates/math/src/invtrig.rs | lit:(Greater, true) => (yb + 1, false), ==> (Greater, true) => (yb, false), | cargo test -p liella-boundary --test s10_math_symbols hypot_on_the_hardware | msg:(hardware kernel|directed entry) FAILED
+# cargo xtask plants results (3 plants: 3 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# entry-nearest: CAUGHT, caught by s10_math_symbols hypot_on_the_hardware_root_is_the_exact_path_in_every_direction
+# hw-root-off: CAUGHT, caught by s10_math_symbols hypot_on_the_hardware_root_is_the_exact_path_in_every_direction
+# kernel-up-nearest: CAUGHT, caught by s10_math_symbols hypot_on_the_hardware_root_is_the_exact_path_in_every_direction

@@ -628,12 +628,14 @@ impl Hypot for f64 {
     /// entry [`elem_fast`] in the default MXCSR; a refusal, a directed mode, DAZ, FTZ or an
     /// unmasked trap take `pow::hypot` as before (the envelope honours the caller's DAZ/FTZ,
     /// D-10.22). A refused attempt's inexact is undone by the fallback's flag settlement.
+    /// `pow::hypot` runs its `double` kernel on the hardware root ([`crate::hot::Hw`], `sqrtsd`
+    /// in the default MXCSR that both fallbacks run in; LIBM-HYPOT-DIRECTED).
     #[inline]
     fn hypot_c(self, y: f64) -> f64 {
         elem_fast::<{ Status::HW_ANY.0 }, (f64, f64), f64>(
             (self, y),
             |(x, y)| crate::hot::hypot_nearest(x, y),
-            |(x, y), m| liella_math::pow::hypot(x, y, m),
+            |(x, y), m| liella_math::pow::hypot_with::<f64, crate::hot::Hw>(x, y, m),
         )
     }
 }

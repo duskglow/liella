@@ -181,10 +181,17 @@ pub fn cbrt<F: Small>(x: F, mode: Rounding) -> (F, Status) {
 /// The `double` format (cabs, cpow and the `hypot` entry's slow path included) takes the
 /// kernel `invtrig::hypot_rounded` (D-10.104) for every finite pair in every direction.
 pub fn hypot<F: Float>(x: F, y: F, mode: Rounding) -> (F, Status) {
+    hypot_with::<F, crate::hwop::SoftOps>(x, y, mode)
+}
+
+/// [`hypot`] with the `double` kernel's first root from `O` ([`crate::hwop::HwOps`]; the
+/// boundary's `f64` entry passes its `sqrtsd`, LIBM-HYPOT-DIRECTED).
+#[inline]
+pub fn hypot_with<F: Float, O: crate::hwop::HwOps>(x: F, y: F, mode: Rounding) -> (F, Status) {
     if F::PREC == 53 {
         #[allow(clippy::as_conversions, clippy::cast_possible_truncation)] // a `double`'s 64 bits
         let (xf, yf) = (f64::from_bits(x.to_bits() as u64), f64::from_bits(y.to_bits() as u64));
-        if let Some((v, st)) = crate::invtrig::hypot_rounded(xf, yf, mode) {
+        if let Some((v, st)) = crate::invtrig::hypot_rounded::<O>(xf, yf, mode) {
             return (F::from_bits(u128::from(v.to_bits())), st);
         }
     }

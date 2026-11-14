@@ -71,6 +71,21 @@ pub(crate) fn sqrtsd(x: f64) -> f64 {
     }
 }
 
+/// `liella_math`'s hardware operations ([`liella_math::hwop::HwOps`]; decision pending, records/pending/LIBM-HYPOT-DIRECTED-1.toml):
+/// the root is [`sqrtsd`], so a kernel monomorphised on `Hw` has the instruction inline, no call.
+/// It is correctly rounded in the MXCSR's direction (the kernels run in the default one), within
+/// `2^-53` relative, stricter than the trait's `2^-50`; it raises at most inexact for the
+/// trait's operands (normal, positive). The `liella_math` kernels' proofs hold for both.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Hw;
+
+impl liella_math::hwop::HwOps for Hw {
+    #[inline(always)]
+    fn sqrt(x: f64) -> f64 {
+        sqrtsd(x)
+    }
+}
+
 /// `sqrtss` issued inline, [`sqrtsd_sse2`]'s `float` form: the upper lanes are `+0`, whose root
 /// is exact and raises nothing in any MXCSR mode (FTZ and DAZ included). `sqrtf`'s in-place root
 /// (`mathret`, D-10.71).
