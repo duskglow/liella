@@ -100,15 +100,16 @@ fn facts(nodes: &[Item], kids: &[u32], node: Node, wrap: u32) -> Item {
         Node::Byte(_) | Node::Set(_) => (false, NO_GROUPS),
         Node::Empty | Node::Assert(_) | Node::Backref(_) => (true, NO_GROUPS),
         Node::Cat(st, len) | Node::Alt(st, len) => {
-            let all = matches!(node, Node::Cat(..));
-            let mut null = all;
+            // Only the two facts of each child are read (a missing one is `EMPTY`'s).
+            let (mut every, mut any) = (true, false);
             let mut g = NO_GROUPS;
             for &k in kids_of(kids, st, len) {
-                let it = at(nodes, k);
-                null = if all { null && it.nullable } else { null || it.nullable };
-                g = join(g, it.groups);
+                let (n, kg) = usize::try_from(k).ok().and_then(|i| nodes.get(i)).map_or((true, NO_GROUPS), |it| (it.nullable, it.groups));
+                every &= n;
+                any |= n;
+                g = join(g, kg);
             }
-            (null, g)
+            (if matches!(node, Node::Cat(..)) { every } else { any }, g)
         }
         Node::Group(n, x) => {
             let it = at(nodes, x);

@@ -300,6 +300,10 @@ struct Builder {
 }
 
 impl Builder {
+    fn new() -> Builder {
+        Builder { insts: TryVec::new(), inst_chain: TryVec::new(), chains: TryVec::new(), scopes: TryVec::new(), nodes: 0, entries: Stack::new(0) }
+    }
+
     fn emit(&mut self, op: u32, a: u32, b: u32, c: u32, chain: u32) -> Result<u32, ReError> {
         if self.insts.len() >= MAX_INSTS {
             return Err(ReError::ESpace);
@@ -526,8 +530,8 @@ impl Builder {
     }
 
     /// A node without parts (a leaf), compiled followed by `next`: its entry instruction;
-    /// `None` for any other node.
-    #[inline]
+    /// `None` for any other node. Inlined: it is the per-item work of ordinary patterns.
+    #[inline(always)]
     fn leaf(&mut self, it: Item, next: u32, chain: u32) -> Result<Option<u32>, ReError> {
         Ok(Some(match it.node {
             Node::Empty => next,
@@ -542,7 +546,7 @@ impl Builder {
     /// Part `id` of a node compiled at once when it is a leaf without a hidden group: what
     /// [`Self::start`] would make of it, with no frame and no step. Ordinary patterns are mostly
     /// such parts, so the explicit stack costs them nothing.
-    #[inline]
+    #[inline(always)]
     fn quick(&mut self, t: &Parsed, id: u32, next: u32, chain: u32) -> Result<Option<u32>, ReError> {
         let it = t.item(id);
         if it.wrap != 0 {
@@ -893,7 +897,7 @@ pub(crate) fn assert_code(a: Assert) -> u32 {
 impl Built {
     /// Build the automaton of a parsed pattern.
     fn build(parsed: Parsed, loc: &Locale, icase: bool) -> Result<Built, ReError> {
-        let mut b = Builder { insts: TryVec::new(), inst_chain: TryVec::new(), chains: TryVec::new(), scopes: TryVec::new(), nodes: 0, entries: Stack::new(0) };
+        let mut b = Builder::new();
         let m = b.emit(OP_MATCH, 0, 0, 0, NONE)?;
         let start = b.node(&parsed, parsed.root, m, NONE, NONE, 0)?;
         let can_be_null = parsed.item(parsed.root).nullable;
@@ -2108,6 +2112,8 @@ mod recursion_tests {
     use super::*;
     use crate::locale::Locale;
     use crate::pattern::regex::cflags;
+    use std::string::String;
+    use std::vec::Vec;
 
     /// The subtrees handed to the explicit-stack compiler while `n` nested groups around `a`
     /// compile (ERE). The tree is the groups, outermost first, then the byte at depth `n`.
@@ -2128,5 +2134,57 @@ mod recursion_tests {
         assert_eq!(handoffs(d - 1), 0, "a tree {} deep left the recursion", d - 1);
         assert_eq!(handoffs(d), 1, "the node at depth {d} did not go to the explicit stack");
         assert_eq!(handoffs(4), 0, "a shallow tree left the recursion");
+    }
+
+    /// Everything the compiler of `pat` builds, by the recursion or (`explicit`) by the
+    /// explicit-stack compiler from the root: instructions, their chains, the chains, the scopes
+    /// and the entry.
+    #[allow(clippy::type_complexity)]
+    fn program(pat: &[u8], flags: i32, explicit: bool) -> (Vec<Inst>, Vec<u32>, Vec<(u32, u32, u32)>, Vec<(u32, u32)>, u32) {
+        let t = crate::pattern::regex::parse::parse(pat, super::super::regcomp_syntax(flags), &Locale::C).unwrap();
+        let mut b = Builder::new();
+        let m = b.emit(OP_MATCH, 0, 0, 0, NONE).unwrap();
+        let start = if explicit {
+            b.compile(&t, Call { id: t.root, next: m, chain: NONE, share: NONE, bare: false })
+        } else {
+            b.node(&t, t.root, m, NONE, NONE, 0)
+        }
+        .unwrap();
+        let chains = b.chains.as_slice().iter().map(|c| (c.parent, c.scope, c.depth)).collect();
+        (b.insts.as_slice().to_vec(), b.inst_chain.as_slice().to_vec(), chains, b.scopes.as_slice().to_vec(), start)
+    }
+
+    #[test]
+    fn recursion_and_explicit_stack_build_the_same_program() {
+        // Trace: no spec clause (an implementation invariant, ruling #5529: the two forms of the
+        // compiler are one compilation, so where the switch falls changes no program).
+        let ere = cflags::EXTENDED;
+        let cases: [(&[u8], i32); 22] = [
+            (b"\\.so$", ere),
+            (b"abc|de|f", ere),
+            (b"(ab|c(d|e)f)g", ere),
+            (b"a*b+c?", ere),
+            (b"a{2,5}[0-9]{1,3}x{3}y{0}z{1}", ere),
+            (b"(ab){2,3}(c){1}", ere),
+            (b"(a*)*b", ere),
+            (b"(a|b)+c", ere),
+            (b"((a)+)+", ere),
+            (b"b*++++", ere),
+            (b"(a*)?(b+)?", ere),
+            (b"(x*){2,4}y", ere),
+            (b"((ab)*c|d)*e", ere),
+            (b"(a|bc)*\\1", ere),
+            (b"^(a)(b|c)*$", ere),
+            (b"\\<w\\>|\\bv\\B", ere),
+            (b"([0-9]{1,3}\\.){3}[0-9]{1,3}", ere),
+            (b"([a-z]+)@([a-z]+)\\.com", ere),
+            (b"\\(a\\)*\\1\\{2\\}", 0),
+            (b"^\\([^=]*\\)=\\(.*\\)$", 0),
+            (b"(()|a)*(b|())", ere),
+            (b"((a{2,}){0,2}b?)+", ere),
+        ];
+        for (pat, flags) in cases {
+            assert_eq!(program(pat, flags, false), program(pat, flags, true), "{}", String::from_utf8_lossy(pat));
+        }
     }
 }
