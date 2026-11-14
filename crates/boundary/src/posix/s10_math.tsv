@@ -90,7 +90,7 @@ fma	mret::ret(math::fused::fma({x}, {y}, {z}, {M}))
 @fma	mret::ret(math::fused::fma_to::<{S}, {D}>({x}, {y}, {z}, {M}, false))
 # §10.3 Elementary functions (float and double, D-10.13; long double and _Float128, D-10.19). hypot is exact arithmetic in every format.
 exp	f	mret::elem32_onepass({x}, math::fast32::exp_onepass_any, math::real::Real::exp)
-exp	d	mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>({x}, crate::hot::exp_nearest, math::real::Real::exp)
+exp	d	mret::elem_fast_dir::<{ math::Status::HW_ANY.0 }, _, _>({x}, crate::hot::exp_nearest, crate::hot::exp_directed, math::real::Real::exp)
 exp	lq	mret::elem({x}, {E}, math::real::Real::exp)
 exp2	f	mret::elem32_onepass({x}, math::fast32::exp2_onepass_any, math::real::Real::exp2)
 exp2	d	mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>({x}, crate::hot::exp2_nearest, math::real::Real::exp2)

@@ -1,0 +1,7 @@
+{"task": "PLANTS-PREPARE-TIMEOUT", "model": "sonnet", "tokens": null, "result": "plants tool: --prepare-timeout (default 3600) for the so build, BUILD-TIMEOUT verdict, tests and docs; plants 5 CAUGHT 1 EQUIVALENT on keke",
+ "branch": "task/plants-prepare-timeout", "head": "22f9f50c9", "jobs": ["PPT-clippy2", "PPT-gate", "PPT-plants"],
+ "gate": {"affected": "400 passed / 0 failed", "peak": "1003M"}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["proof ran on keke (the admitted role), not kanon", "restore-rebuild timeout path not planted"], "refused": [],
+ "impact": [{"kind": "tooling", "what": "plants jobs no longer end BASELINE FAILED so rc 124 on a cold traced so", "before": null, "after": null, "unit": "n/a", "measured": false},
+            {"kind": "coverage", "what": "xtask tests added for the prepare/test timeout split", "before": null, "after": 4, "unit": "tests", "measured": true}],
+ "improvement": "the brief named kanon for the proof but the role was keke: a brief should say the admitted host", "next_step": "land; drop --timeout 2400 workaround from briefs", "report_file": "handoff/plants-prepare-timeout.md"}

@@ -683,6 +683,14 @@ fn sym_strfmon_l() {
 }
 
 #[test]
+fn cxx_locales_through_the_lc_all_bit() {
+    // Clauses: s7_3_c_1, s7_3_f_0 (NEWLOCALE-LC-ALL-BIT; spec/behaviour/newlocale-mask.md): the
+    // C++ library starts iostreams and makes std::locale("C"), std::locale("") and named
+    // locales through newlocale(1 << LC_ALL, ...); a C++ program, hence the conformance runner.
+    conformance(&["s07_newlocale_cxx"]);
+}
+
+#[test]
 fn ctype_words_follow_uselocale_and_setlocale() {
     // D-5.5 (probes in spec/behaviour/ctype-words.md): a fetched `__ctype_*_loc` pointer and the
     // byte functions follow `setlocale`, `uselocale`, thread creation and `fork`; another

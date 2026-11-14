@@ -159,13 +159,100 @@ fn view_of_special(loc: usize) -> &'static LocaleView {
 /// whose word is not stored (0) resolves its `uselocale` choice, else the global locale.
 #[inline]
 pub fn view() -> &'static LocaleView {
-    if !crate::thread::owned() {
-        return foreign_view();
-    }
-    match tb::read::<tb::View>() {
-        0 => view_of(tb::read::<tb::Locale>()),
+    match view_word() {
+        0 => unstored_view_cold(),
         w => tb::view_at(w),
     }
+}
+
+/// `f` of the calling thread's current locale view ([`view`]), for an entry whose whole result is
+/// one use of the view (`iswalpha`, `towupper`, `wcwidth`, `MB_CUR_MAX`, ...). The unstored case
+/// (and the foreign one, D-X.58) is a tail call to [`unstored_with_view`], which takes `f` along,
+/// so the stored path stays frameless: with [`view`] the cold call returns into the entry's own
+/// code and costs every call a `push`/`pop` for the call's stack alignment (ruling #4828). Give
+/// `f` its arguments by value (`move`): a closure of at most two words travels in registers, so
+/// the call stays a jump.
+#[inline(always)]
+pub fn with_view<R>(f: impl FnOnce(&'static LocaleView) -> R) -> R {
+    match view_word() {
+        0 => unstored_with_view(f),
+        w => f(tb::view_at(w)),
+    }
+}
+
+/// `iswalpha(wc)` and its siblings: class `mask` of `wc` in the calling thread's locale. Not
+/// through [`with_view`]: its closure would be one function shared by the twelve entries, which
+/// the compiler then calls instead of inlining; the unstored case is the same tail call.
+#[inline(always)]
+pub fn isw_int(wc: u32, mask: Class) -> i32 {
+    match view_word() {
+        0 => unstored_isw_int(wc, mask),
+        w => tb::view_at(w).isw_int(wc, mask),
+    }
+}
+
+/// [`isw_int`] when the `view` word reads 0 ([`unstored_view`]).
+#[cold]
+#[inline(never)]
+fn unstored_isw_int(wc: u32, mask: Class) -> i32 {
+    unstored_view().isw_int(wc, mask)
+}
+
+/// `towupper(wc)` (`upper`) or `towlower(wc)` in the calling thread's locale (shaped as
+/// [`isw_int`]).
+#[inline(always)]
+pub fn wtrans(wc: u32, upper: bool) -> u32 {
+    match view_word() {
+        0 => unstored_wtrans(wc, upper),
+        w => tb::view_at(w).wtrans(wc, upper),
+    }
+}
+
+/// [`wtrans`] when the `view` word reads 0 ([`unstored_view`]).
+#[cold]
+#[inline(never)]
+fn unstored_wtrans(wc: u32, upper: bool) -> u32 {
+    unstored_view().wtrans(wc, upper)
+}
+
+/// [`with_view`] with the view's locale ([`current`]).
+#[inline(always)]
+pub fn with_current<R>(f: impl FnOnce(&'static Locale) -> R) -> R {
+    with_view(move |v| f(v.locale()))
+}
+
+/// The calling thread's `view` word in a process the runtime started; 0 in one it did not start
+/// (D-X.58), whatever another library keeps at that offset of its block. The word is ANDed with
+/// [`owned_mask`](crate::thread::owned_mask): the `and` with a memory operand takes the place of
+/// the `test` the zero check costs, so the gate adds no instruction to the stored path. Every
+/// caller sends 0 to one cold function ([`unstored_view`]), which tests
+/// [`owned`](crate::thread::owned) there: a test of the same word inline would keep the mask in
+/// a register for it and cost the hot path a load and a move.
+#[inline(always)]
+fn view_word() -> usize {
+    tb::read::<tb::View>() & crate::thread::owned_mask()
+}
+
+/// The view when [`view_word`] reads 0: the `uselocale` choice of a thread whose word is not
+/// stored, in a process the runtime started; the registry words' choice in one it did not start
+/// (D-X.58). Only cold functions call it.
+#[inline(always)]
+fn unstored_view() -> &'static LocaleView {
+    if crate::thread::owned() { view_of(tb::read::<tb::Locale>()) } else { foreign_view() }
+}
+
+/// [`unstored_view`] out of line, for [`view`].
+#[cold]
+#[inline(never)]
+fn unstored_view_cold() -> &'static LocaleView {
+    unstored_view()
+}
+
+/// [`with_view`] when the `view` word reads 0 ([`unstored_view`]).
+#[cold]
+#[inline(never)]
+fn unstored_with_view<R, F: FnOnce(&'static LocaleView) -> R>(f: F) -> R {
+    f(unstored_view())
 }
 
 /// [`view`] in a process the runtime did not start (D-X.58): the thread block's words are not
@@ -182,8 +269,9 @@ fn foreign_view() -> &'static LocaleView {
 fn ctype_word<F: tb::Field>(slot: usize) -> usize {
     // 0 elsewhere: the caller's unstored path (one cold call site, so the hot path keeps no
     // frame) reads the registry word through [`foreign_word_or_zero`].
+    // The word ANDed with the ownership mask: the gate rides on the caller's zero test.
     let _ = slot;
-    if crate::thread::owned() { tb::read::<F>() } else { 0 }
+    tb::read::<F>() & crate::thread::owned_mask()
 }
 
 /// The registry ctype word `slot` in a process the runtime did not start (D-X.58), 0 in one it
@@ -329,8 +417,9 @@ pub fn ctype_slot(slot: usize) -> usize {
     // returns `ctype_fill`'s result, a tail call, so the filled path keeps no frame (no
     // push/pop of the stack-alignment slot a call in the middle would cost: PERF-CTYPE-LOC).
     // D-X.58: one cold call site for both slow cases (another library's block, words not yet
-    // stored), so the gate costs the hot path one `cmpb` and a branch, no frame.
-    if crate::thread::owned() && tb::read::<tb::CtypeB>() != 0 {
+    // stored); the word ANDed with the ownership mask is 0 in the first, so the gate rides on
+    // the zero test (no `cmpb`, no frame).
+    if tb::read::<tb::CtypeB>() & crate::thread::owned_mask() != 0 {
         return ctype_off(slot);
     }
     ctype_slot_slow(slot)
@@ -525,9 +614,14 @@ fn new_object(handle: usize) -> usize {
     addr
 }
 
-/// The categories of an `LC_*_MASK` combination, or `EINVAL` for unknown bits.
+/// `1 << LC_ALL` (bit 6): accepted alone as every category; with any other bit it is `EINVAL`.
+const LC_ALL_BIT: i32 = 1 << 6;
+
+/// The categories of an `LC_*_MASK` combination, or `EINVAL` for unknown bits. `1 << LC_ALL`
+/// alone means every category (libstdc++ asks for it at start-up), as the reference answers it.
 fn categories(mask: i32) -> Result<([Cat; 12], usize), liella::error::Errno> {
     let all = Cat::ALL.iter().fold(0i32, |m, c| m | (1 << c.number()));
+    let mask = if mask == LC_ALL_BIT { all } else { mask };
     if mask & !all != 0 {
         return Err(liella::error::Errno::EINVAL);
     }
@@ -549,7 +643,14 @@ pub fn newlocale(mask: i32, name: Option<&[u8]>, base: usize) -> Result<usize, l
     let (cats, n) = categories(mask)?;
     let name = name.ok_or(liella::error::Errno::EINVAL)?;
     let base_locale = if base == 0 { Locale::C } else { *of(base) };
-    let handle = gl::newlocale(&CSys, &Glue, cats.get(..n).unwrap_or(&[]), name, base_locale)?;
+    let cats = cats.get(..n).unwrap_or(&[]);
+    let handle = if name.is_empty() {
+        // `""`: each category from the environment, as `setlocale(cat, "")` takes it.
+        let getenv = |k: &[u8]| -> Option<&'static [u8]> { process::getenv(k).map(strz::env_value) };
+        gl::newlocale_env(&CSys, &Glue, cats, &getenv, base_locale)?
+    } else {
+        gl::newlocale(&CSys, &Glue, cats, name, base_locale)?
+    };
     // `base` is consumed: reuse its block (D-7.3).
     if base != 0 && base != GLOBAL {
         if let Some(w) = tb::locale_object(base) {
@@ -800,7 +901,7 @@ pub fn setlocale_c(category: i32, name: liella::error::KResult<Option<&[u8]>>) -
 
 /// `newlocale` for C (`name` NULL: `EINVAL`).
 pub fn newlocale_c(mask: i32, name: liella::error::KResult<&[u8]>, base: usize) -> liella::error::KResult<usize> {
-    newlocale(mask, Some(name?), base)
+    newlocale(mask, name.ok(), base)
 }
 
 /// The name of category `category` (a C `LC_*` number) of the calling thread's current locale,

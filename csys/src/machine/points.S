@@ -227,7 +227,8 @@ liella_machine_aio_used:
 /* D-X.58: set (by crates/boundary/src/thread.rs, `init_initial`) when the runtime started the
  * process, so every thread block that runs library code is one it made; clear in a process another
  * C library or loader started, whose blocks' words at 0x9c-0x187 are not Liella's: the entries
- * above then never read %fs:0xa0 and take the Rust path. */
+ * above then never read %fs:0xa0 and take the Rust path. Written at start-up, so in a section of its
+ * own that `cargo xtask so` moves into the start-up state cluster (crates/libc-so/startup-state.list). */
 	.section .data.liella_machine_owned,"aw",@progbits
 	.globl liella_machine_owned
 	.hidden liella_machine_owned

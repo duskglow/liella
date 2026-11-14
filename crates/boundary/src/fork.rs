@@ -221,7 +221,7 @@ pub fn clone(f: usize, stack: usize, flags: i32, arg: usize, ptid: usize, tls: u
     let sp = (stack & !15).wrapping_sub(16);
     // The two words the C layer pops in the child: the function and its argument (written
     // just below the caller's stack top, in its stack).
-    crate::conv::store_words_user(sp, &[f, arg])?;
+    crate::conv::store_words_user(sp, [f, arg])?;
     let flags = u64::from(u32::from_ne_bytes(flags.to_ne_bytes()));
     // A child sharing our memory while we keep running: the mutexes must use atomics from
     // now on (MUTEX-3). With CLONE_VFORK the caller is suspended until the child executes or

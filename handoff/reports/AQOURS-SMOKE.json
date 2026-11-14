@@ -1,0 +1,30 @@
+{"task": "AQOURS-SMOKE", "model": "opus", "tokens": null,
+ "result": "Smoke harness (validation/smoke) built 13 Debian programs from source against Liella and the host C library and ran their own suites; 3 behaviour differences (readdir on a removed directory, regcomp nesting limit, setlocale errno) with reproducers; the rest waits on loader items DL-8/16/17/18/21/23",
+ "branch": "task/aqours-smoke", "head": "f8eda08b3",
+ "gate": {"affected": "0 passed / 0 failed (no Rust test reaches validation/)", "peak": "474M"},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "F1 readdir on a directory removed after opendir sets errno ENOENT; reference ends the stream with errno 0 as spec/behaviour/fstree.md records; breaks ls in a removed directory (coreutils tests/ls/removed-directory). Reproducer validation/smoke/repro/readdir_removed.c", "recommendation": "Liella bug: make a story to end the stream with errno 0 (treat ENOENT from getdents64 as end of directory) with a test on the spec note's rows"},
+  {"item": "F2 regcomp refuses EREs with 256 or more nested groups (REG_ESPACE, parse.rs MAX_DEPTH); reference compiles depths 256-1000; no differences row. Reproducer validation/smoke/repro/regcomp_nesting.c", "recommendation": "keep a bound (stack safety) but record it: a differences row with the reason, or raise the bound by making the recursive passes iterative; owner to choose"},
+  {"item": "F3 setlocale that fails leaves errno unchanged; reference sets ENOENT (bash prints strerror(errno) in its warning). Reproducer validation/smoke/repro/setlocale_errno.c", "recommendation": "set ENOENT on failure, consistent with Liella's newlocale (POSIX allows it); do not copy the reference's errno change on success"},
+  {"item": "No Debian chroot on kanon: uidmap (newuidmap) and mmdebstrap are not installed; the harness runs in host mode", "recommendation": "owner: sudo apt-get install uidmap mmdebstrap on kanon, or route the next smoke story to a host that has them, then add a --chroot mode"}
+ ],
+ "informational": [
+  "grep tests glibc-infloop and triple-backref (XFAIL on the reference) pass on Liella (XPASS)",
+  "grep tests/stack-overflow fails on Liella by the test's assumption: regcomp returns REG_EPAREN for unmatched parentheses at every depth (POSIX)",
+  "coreutils stdbuf and 7 preload tests: LD_PRELOAD not supported yet (DL-21); tail inotify-race tests: gdb cannot break in a Liella program (DL-23)",
+  "Liella libc.so.6 exports dlopen/dlerror but not dlsym/dlvsym/dlclose/dladdr/dlinfo (DL-16/17/18): sqlite3, cppunit, Python, gawk, Lua plugin loaders do not link",
+  "Liella libm.so.6 names libc.so.6 by soname, so a dynamic link to it needs the start-time search (DL-8); the harness links libm.a",
+  "Process: one heredoc was used for a python edit early in the run (against the no-heredoc rule); later edits used python -c"
+ ],
+ "refused": [],
+ "impact": [
+  {"kind": "coverage", "what": "Debian programs built against Liella with their own test suites run (zlib, xz-utils, sqlite3, grep, sed, diffutils, findutils, coreutils, gawk, bash, perl, python3.13 sample, cppunit)", "before": 0, "after": 13, "unit": "programs", "measured": true},
+  {"kind": "coverage", "what": "upstream tests run on Liella builds with the same result as the reference (coreutils 1174 of 1185, grep 350 of 353, sed 260, diffutils 240, findutils 387, gawk 529, xz 19, bash 82 of 83, perl 362 scripts, python 35 files, cppunit 3)", "before": 0, "after": null, "unit": "tests", "measured": true},
+  {"kind": "coverage", "what": "plants on the harness's fallback detection", "before": 0, "after": 6, "unit": "plants CAUGHT", "measured": true},
+  {"kind": "unblock", "what": "three (a) findings with reproducers for new stories (F1 readdir, F2 regcomp depth, F3 setlocale errno)", "before": null, "after": 3, "unit": "findings", "measured": true}
+ ],
+ "improvement": "sync_role reports BUSY for any job whose command line names the role path, even read-only; run long harness jobs with products copied out of the role so the role stays syncable (two jobs were started on a stale tree before this was noticed)",
+ "next_step": "owner installs uidmap+mmdebstrap on kanon; then a --chroot mode, the make-dfsg recipe fix (build lib/ first), lua5.4, and a full rerun once DL-16 and DL-8 land",
+ "report_file": "handoff/AQOURS-SMOKE.md",
+ "jobs": ["kanon:aqours-smoke-lint2", "kanon:aqours-smoke-gate2", "kanon:aqours-smoke-plants4", "kanon:aqours-smoke-run7"]}

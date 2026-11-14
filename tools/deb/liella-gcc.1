@@ -1,0 +1,39 @@
+.TH LIELLA-GCC 1 "" "Liella" "User Commands"
+.SH NAME
+liella-gcc, liella-g++ \- build programs that run on the Liella C library
+.SH SYNOPSIS
+.B liella-gcc
+.RI [ gcc-options ] " file" ...
+.br
+.B liella-g++
+.RI [ g++-options ] " file" ...
+.SH DESCRIPTION
+.B liella-gcc
+runs the system's
+.BR gcc (1)
+(\fBliella-g++\fR: \fBg++\fR(1)).
+Compiling (\fB\-c\fR, \fB\-S\fR, \fB\-E\fR, \fB\-M\fR, \fB\-MM\fR) is unchanged and uses
+the system's C headers.
+A link uses only Liella's start files and libraries from the sysroot
+.I /usr/lib/liella
+and sets the program interpreter to
+.IR /usr/lib/liella/lib64/ld-linux-x86-64.so.2 ,
+so the program runs on Liella; the system's C library is not used.
+.PP
+\fB\-static\fR links Liella's static library; \fB\-shared\fR builds a shared object
+against Liella.
+\fBliella-g++\fR links the C++ library and the unwinder statically.
+The loader's default library search is the sysroot only: a program that needs another
+system library names its directory with \fB\-Wl,\-rpath,\fR\fIdir\fR.
+\fB\-static\-pie\fR and \fB\-pg\fR are refused.
+.SH ENVIRONMENT
+.TP
+.B LIELLA_REAL_CC\fR, \fBLIELLA_REAL_CXX
+The compilers (default \fBgcc\fR and \fBg++\fR).
+.TP
+.B LIELLA_SYSROOT
+Where the link-time files are read from (default \fI/usr/lib/liella\fR).
+The program interpreter is always the installed loader.
+.SH SEE ALSO
+.BR gcc (1),
+.BR ld (1)

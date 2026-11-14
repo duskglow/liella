@@ -1,0 +1,40 @@
+{
+ "task": "REGCOMP-DEEP-NESTING",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE checkpoint: iterative parser/arena tree/explicit-stack compiler written, not yet compiled or tested",
+ "branch": "task/regcomp-deep-nesting",
+ "head": "4e8a5236f",
+ "gate": {
+  "affected": null,
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "nested repetitions ((a)*)*... still hit the 2^21-node size cap (D-14.8) near depth 1000 where the reference compiles",
+   "recommendation": "keep the cap in this story; decide separately whether the scope-depth node cost should change"
+  }
+ ],
+ "informational": [
+  "regex_oracle (test-only frozen copy) keeps its 256 depth limit; oracle-diff tests may need deep patterns excluded"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "none",
+   "what": "WIP only, unverified; no behaviour claimed yet",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  }
+ ],
+ "jobs": [
+  "keke:regcomp-deep-nesting-probe",
+  "keke:regcomp-deep-nesting-clippy-1"
+ ],
+ "improvement": "a story that rewrites recursion into state machines over 2 files needs the 260k context budget the brief gives; the 150k common checkpoint cut it before the first build",
+ "next_step": "build and fix on keke, then tests, plants, pending D-14 record, gate and percall (handoff/regex-deep-nesting.md)",
+ "report_file": "handoff/regex-deep-nesting.md"
+}

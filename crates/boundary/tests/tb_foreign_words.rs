@@ -12,6 +12,7 @@
 use core::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
 use liella_boundary::posix::s05_ctype as ct;
+use liella_boundary::posix::s06_multibyte as mb;
 use liella_boundary::posix::s07_locale as lc;
 use liella_boundary::posix::s11_lowio as io;
 use liella_boundary::posix::s16_nameservices as ns;
@@ -72,7 +73,7 @@ fn put(b: &ThreadBlock, v: &[usize; WORDS]) {
 }
 
 /// What the test asks Liella, each as one word, with no allocation.
-const ASKED: usize = 13;
+const ASKED: usize = 16;
 fn ask(fds: [i32; 2]) -> [usize; ASKED] {
     let tp = tb::tp();
     let outside = |a: usize| usize::from(!(tp..tp + BLOCK_SIZE).contains(&a));
@@ -94,6 +95,9 @@ fn ask(fds: [i32; 2]) -> [usize; ASKED] {
         th::pthread_self().0 as usize,
         (wrote as usize) << 8 | read as usize,
         usize::from(byte[0]),
+        usize::from(ct::iswalpha(u32::from('z')) != 0),
+        mb::__ctype_get_mb_cur_max(),
+        core::ptr::from_ref(liella_boundary::locale::view()).addr(),
     ]
 }
 
@@ -102,6 +106,9 @@ fn foreign_block_words_neither_trusted_nor_written() {
     // Trace: no spec clause (D-X.58: a thread block another library made).
     let mut fds = [0i32; 2];
     assert_eq!(ipc::pipe(Some(&mut fds)), 0);
+    // A global locale other than "C" (MB_CUR_MAX 6, not 1): a locale word read from the block
+    // (the decoy aims it at zero words) would resolve to "C", so reading it changes an answer.
+    assert!(!lc::setlocale(6, c"C.UTF-8".as_ptr()).is_null(), "C.UTF-8 is available");
     std::thread::spawn(move || {
         let b = tb::current();
         let saved = words(b);
@@ -132,6 +139,9 @@ fn foreign_block_words_neither_trusted_nor_written() {
             first[10],
             1 << 8 | 1,
             usize::from(b'x'),
+            1,
+            6,
+            first[15],
         ];
         assert_eq!(first, expect, "the answers with the block as the other library left it");
         assert_ne!(first[10], decoy, "pthread_self is Liella's descriptor");
@@ -141,6 +151,7 @@ fn foreign_block_words_neither_trusted_nor_written() {
     })
     .join()
     .unwrap();
+    assert!(!lc::setlocale(6, c"C".as_ptr()).is_null());
     io::close(fds[0]);
     io::close(fds[1]);
 }

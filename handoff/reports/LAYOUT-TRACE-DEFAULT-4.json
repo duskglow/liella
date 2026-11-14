@@ -1,0 +1,47 @@
+{
+ "task": "LAYOUT-TRACE-DEFAULT-4",
+ "model": "opus",
+ "tokens": null,
+ "result": "merged next (DL-DLOPEN-TLS-SURPLUS-3); the merged head reads the -3 table on mei, keke, shiki and kanon in both profiles except fast written start-up pages 11 -> 12 (placement only: heap RESERVE_MEM straddles a page, printf Env::text_only::C alone on a page); rw-budget-fast set to 12, still below next's 20; D-X.92 updated",
+ "branch": "task/layout-trace-default-4",
+ "head": "fec641f89",
+ "gate": {
+  "affected": "layout-trace-default-4-gate (shiki sh1, cargo xtask affected --run, escalated to FULL by the xtask change): running at hand-back; layout-trace-default-4-lint1 rc 0",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "Merged-head table (fast / release), identical on Skylake-SP, Zen 1, Haswell-EP, Broadwell-EP: true 11/10, locale 46/47, tool 50/49, fork 5/5, localtime 17/18, localtime+mktime 17/18, float 3/3, text windows 2/2, ro windows 1/1, rw pages 12/14 (-3: 11/14); every run identical",
+  "Release libc.a byte-identical on all four hosts; fast libc.a identical on mei, shiki and kanon, different on keke (the fast hot-text list effect runs 2 and 3 noted; fault table unchanged)",
+  "The extra fast rw page is placement: RESERVE_MEM (64 KiB at 0x897c18) is counted alone on 0x897000 and 0x898000, Env::text_only::C alone on 0x856000; packing both in the traced data clusters (LT-2) would read about 10 by page count (estimate, not measured)",
+  "Proof jobs mei/keke/shiki/kanon layout-trace-default-4-*-proof end rc 1 by design (the fast so's layout check at the old budget 11); they are measurements of 9b3c46367, not named in jobs",
+  "This chain reached -4 because next moved under zero-margin budgets, not because of a code defect; RUT RULE: a step-back review comes before any -5"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "faults",
+   "what": "STARTUP-DATA-WINDOWS rw-budget-fast against origin/next",
+   "before": 20,
+   "after": 12,
+   "unit": "written start-up pages",
+   "measured": true
+  },
+  {
+   "kind": "cost",
+   "what": "rw-budget-fast against the -3 branch, from placement on the merged next; fix-forward: LT-2 packs RESERVE_MEM and Env::text_only::C",
+   "before": 11,
+   "after": 12,
+   "unit": "written start-up pages",
+   "measured": true
+  }
+ ],
+ "improvement": "a CI red that is a zero-margin budget overtaken by next could be pre-empted by re-measuring the branch's budgets on the train head before the run is cut (one proof job), instead of a full continuation",
+ "next_step": "land; then LT-2 (pack the rw start-up objects, RESERVE_MEM page-aligned) and LT-5",
+ "report_file": "handoff/LAYOUT-TRACE-DEFAULT.md",
+ "jobs": [
+  "layout-trace-default-4-lint1",
+  "layout-trace-default-4-gate"
+ ]
+}

@@ -2,7 +2,9 @@
 //! in both builds through the boundary (the FMA build needs the startup dispatch, so its tests live
 //! here; the SSE2 build's own tests are in `liella-math`'s `fast64/quick/tests.rs`). Clause:
 //! s10_0_f_0 (§10.2 exp, D-10.3): every value the quick phase returns is the correctly rounded
-//! `e^x`, so its two builds are bit-identical wherever both answer.
+//! `e^x`, so its two builds are bit-identical wherever both answer. Its directed variant
+//! (LIBM-DIRECTED-INPLACE, D-10.94) is checked the same way in each directed rounding direction,
+//! with MXCSR set by the test around the calls.
 
 // Sample generation is bit-level arithmetic on bounded values.
 #![allow(clippy::arithmetic_side_effects, clippy::indexing_slicing, clippy::as_conversions)]
@@ -11,10 +13,12 @@
 
 use liella_boundary::posix::s10_math_gen as m;
 use liella_boundary::selftest;
+use liella_boundary::sys::CSys;
 use liella_math::fast64::quick::{RHO_FAM_FMA, RHO_FAM_SSE2, RHO_FMA, RHO_M1, RHO_SSE2};
 use liella_math::mp::{self, Mp};
 use liella_math::real::Real;
 use liella_math::status::Rounding;
+use liella_rt::fpu;
 
 /// xorshift64 over `[lo, hi)`: a fixed, reproducible sample (the cbench operand generator's step).
 fn uniform(n: usize, seed: u64, lo: f64, hi: f64) -> impl Iterator<Item = f64> {
@@ -391,4 +395,137 @@ fn expm1_quick_sse2_build() {
     let miss = check_expm1("SSE2");
     assert!(selftest::set_math_fma(true) || selftest::set_math_fma(false));
     assert!(miss > 0, "the SSE2 build never declined: the rounding test is not in force");
+}
+
+/// The directed rounding directions with the MXCSR word that selects each: the default word
+/// (every exception masked, no flush-to-zero, no denormals-are-zero) but for its rounding field,
+/// the words under which the `exp` entry runs its directed quick phase in place (D-10.94).
+const DIRECTED: [(Rounding, u32); 3] = [(Rounding::Down, 0x3f80), (Rounding::Up, 0x5f80), (Rounding::Zero, 0x7f80)];
+
+/// Run `f` with this thread's MXCSR set to `mxcsr`, then restore the word it had. `f` must do no
+/// floating-point arithmetic of its own (the operands are computed before, the checks after).
+// ARCH(x86_64): sets the caller's MXCSR around the calls; FPCR on aarch64 (A-9)
+fn in_word<T>(mxcsr: u32, f: impl FnOnce() -> T) -> T {
+    let saved = fpu::enter_default(&CSys);
+    fpu::leave(&CSys, mxcsr);
+    let v = f();
+    fpu::leave(&CSys, saved);
+    v
+}
+
+/// The builds this CPU has (SSE2 always, FMA when the startup dispatch can select it).
+fn builds() -> Vec<bool> {
+    if selftest::set_math_fma(true) { vec![false, true] } else { vec![false] }
+}
+
+/// `x = ±2^-k` for the `k` at which `e^x` lies within `x²/2 < rho` of the double `1 ± 2^-k`,
+/// a rounding boundary in every directed direction: SSE2 `rho = 1.5·2^-61`, FMA `1.25·2^-67`.
+fn breakpoint_family(fma: bool) -> Vec<f64> {
+    let k0 = if fma { 35 } else { 31 };
+    (k0..=52).flat_map(|k| [f64::powi(2.0, -k), -f64::powi(2.0, -k)]).collect()
+}
+
+// s10_0_f_0 (§10.2 exp, D-10.3: correctly rounded in the current rounding direction): next to a
+// directed rounding boundary the in-place quick phase must not decide (its interval holds the
+// boundary), and the entry, falling back to the switched path, returns the correctly rounded
+// value in the caller's direction. Catches a nearest-mode rounding test or a skipped fallback.
+#[test]
+fn exp_directed_declines_at_breakpoints_and_the_entry_rounds_them() {
+    let _held = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    for fma in builds() {
+        assert!(selftest::set_math_fma(fma));
+        let build = if fma { "FMA" } else { "SSE2" };
+        let xs = breakpoint_family(fma);
+        for (mode, word) in DIRECTED {
+            let got: Vec<(Option<f64>, f64)> = in_word(word, || xs.iter().map(|&x| (selftest::exp_directed(x, mode), m::exp(x))).collect());
+            for (&x, (quick, entry)) in xs.iter().zip(got) {
+                let want = Real::exp(x, mode).0;
+                assert!(quick.is_none(), "{build} directed quick exp({x:e}) {mode:?} decided {:e} next to a rounding boundary (correctly rounded {want:e})", quick.unwrap_or(f64::NAN));
+                assert_eq!(entry.to_bits(), want.to_bits(), "{build} entry exp({x:e}) {mode:?}: {entry:e}, correctly rounded {want:e}");
+            }
+        }
+    }
+    assert!(selftest::set_math_fma(true) || selftest::set_math_fma(false));
+}
+
+/// Every answer of the directed quick phase and of the entry, in each directed direction, against
+/// liella-math's accurate `exp` in that direction; returns the declines per direction.
+fn check_directed(build: &str, xs: &[f64]) -> [usize; 3] {
+    let mut miss = [0usize; 3];
+    for (i, (mode, word)) in DIRECTED.into_iter().enumerate() {
+        let got: Vec<(Option<f64>, f64)> = in_word(word, || xs.iter().map(|&x| (selftest::exp_directed(x, mode), m::exp(x))).collect());
+        for (&x, (quick, entry)) in xs.iter().zip(got) {
+            let want = Real::exp(x, mode).0;
+            match quick {
+                Some(v) => assert_eq!(v.to_bits(), want.to_bits(), "{build} directed quick exp({x:e} = {:#x}) {mode:?}: {v:e}, correctly rounded {want:e}", x.to_bits()),
+                None => miss[i] += 1,
+            }
+            assert_eq!(entry.to_bits(), want.to_bits(), "{build} entry exp({x:e} = {:#x}) {mode:?}: {entry:e}, correctly rounded {want:e}", x.to_bits());
+        }
+    }
+    miss
+}
+
+// s10_0_f_0: in each directed direction and build, the in-place quick phase returns only the
+// correctly rounded value in that direction, and so does the entry; the quick phase answers all
+// but its expected fallback (SSE2 about 1.1%, FMA about 0.02%: bounds 1.5·2^-61, 1.25·2^-67).
+#[test]
+fn exp_directed_rounds_correctly_in_both_builds() {
+    let _held = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let xs: Vec<f64> = uniform(15_000, 0x51ed_270b_2756_5f1d, -10.0, 10.0).chain(uniform_bits(15_000, 0x2545_f491_4f6c_dd1d)).collect();
+    for fma in builds() {
+        assert!(selftest::set_math_fma(fma));
+        let build = if fma { "FMA" } else { "SSE2" };
+        let miss = check_directed(build, &xs);
+        let limit = if fma { xs.len() / 500 } else { xs.len() * 3 / 100 }; // 0.2% and 3%
+        for (i, (mode, _)) in DIRECTED.into_iter().enumerate() {
+            assert!(miss[i] <= limit, "{build} directed quick exp {mode:?} declined {} of {} (above {limit})", miss[i], xs.len());
+        }
+    }
+    assert!(selftest::set_math_fma(true) || selftest::set_math_fma(false));
+}
+
+/// The accuracy job (LIBM-DIRECTED-INPLACE, brief "10^7 in the three directed modes plus
+/// nearest"): `EXP_DIR_N` operands (default 10^7) per distribution, direction and build, over the
+/// threads available (MXCSR is per thread), each through `m::exp` and the directed quick phase
+/// against liella-math's accurate `exp` in that direction; nearest through `m::exp`. Ignored in
+/// the gate.
+// s10_0_f_0: 0 mismatches in every direction and build.
+#[test]
+#[ignore = "accuracy job: run with --ignored (EXP_DIR_N operands per distribution, direction and build)"]
+fn exp_directed_accuracy_job() {
+    let n: usize = std::env::var("EXP_DIR_N").ok().and_then(|s| s.parse().ok()).unwrap_or(10_000_000);
+    let threads = std::thread::available_parallelism().map_or(4, usize::from);
+    let per = n.div_ceil(threads);
+    let _held = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    for fma in builds() {
+        assert!(selftest::set_math_fma(fma));
+        let name = if fma { "FMA" } else { "SSE2" };
+        for dist in 0..2u64 {
+            let (miss, nearest) = std::thread::scope(|s| {
+                let hs: Vec<_> = (0..threads as u64)
+                    .map(|t| {
+                        s.spawn(move || {
+                            let seed = 0x9e37_79b9_7f4a_7c15 ^ (dist << 40) ^ (t + 0x100);
+                            let xs: Vec<f64> = if dist == 0 { uniform(per, seed, -10.0, 10.0).collect() } else { uniform_bits(per, seed).collect() };
+                            for &x in &xs {
+                                let (v, e) = (m::exp(x), cr(x));
+                                assert_eq!(v.to_bits(), e.to_bits(), "{name} entry exp({x:e}) nearest: {v:e}, correctly rounded {e:e}");
+                            }
+                            (check_directed(name, &xs), xs.len())
+                        })
+                    })
+                    .collect();
+                hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).fold(([0usize; 3], 0usize), |(a, n), (b, k)| ([a[0] + b[0], a[1] + b[1], a[2] + b[2]], n + k))
+            });
+            let label = ["uniform [-10, 10]", "uniform bits over the domain"][dist as usize];
+            eprintln!(
+                "directed exp {name}: {label}: {nearest} operands per direction, 0 mismatches (nearest, down, up, toward zero); quick fallback down {:.4}% up {:.4}% zero {:.4}%",
+                miss[0] as f64 * 100.0 / nearest as f64,
+                miss[1] as f64 * 100.0 / nearest as f64,
+                miss[2] as f64 * 100.0 / nearest as f64
+            );
+        }
+    }
+    assert!(selftest::set_math_fma(true) || selftest::set_math_fma(false));
 }

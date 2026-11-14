@@ -1,7 +1,7 @@
 //! Page faults of short static programs (PAGEFAULTS-2): `tests/oracle/page_faults.c` linked
 //! statically against the products reports its own minor-fault count (getrusage ru_minflt). The
 //! library's startup, stdio, printf and setlocale functions are grouped into `.text.hot.*`
-//! (`crates/libc-so/hot-text.list`, xtask/src/hottext.rs); scattered, the setlocale + printf
+//! (the build's traced `hot-text.list`, xtask/src/hottext.rs); scattered, the setlocale + printf
 //! program touched ~34 separate 64 KiB text windows, one fault each. The bounds below hold the
 //! grouped counts with headroom for layout-only deltas and fail when the grouping is lost; the
 //! program runs without address-space randomisation, so a build gives the same count every run.
@@ -88,8 +88,16 @@ use liella_kernel::uapi::{ADDR_NO_RANDOMIZE, PERSONALITY_QUERY};
 /// LAYOUT-DATA-CLUSTERS-11 (`_nl_msg_cat_cntr` declared: after next's merge it was the first setlocale's
 /// only write on the last `.bss` page): Skylake-SP host, fast products, every run identical: startup only
 /// 11, setlocale + printf 50, tool 54. LOCALE_BOUND 52 -> 51.
-const TRUE_BOUND: u64 = 17;
-const LOCALE_BOUND: u64 = 51;
+/// LAYOUT-TRACE-DEFAULT (trace-at-build is the default: every build groups from a trace of itself, so a
+/// change that adds no start-up code no longer moves these counts; the bounds now sit at the highest
+/// measured count, no margin). Skylake-SP and Zen 1 hosts (next and next plus an unrelated libm change) and
+/// Haswell-EP and Broadwell-EP hosts (LAYOUT-TRACE-DEFAULT-3), both profiles, every run on every host
+/// identical (warm-up + 5, twice), fast / release: startup only 11 / 10,
+/// setlocale + printf 46 / 47, tool 50 / 49, fork child 5 / 5, localtime and localtime + mktime 17 / 18,
+/// float 3 / 3. TRUE_BOUND 17 -> 11, LOCALE_BOUND 51 -> 47, TOOL_BOUND 56 -> 50, FORK_BOUND 6 -> 5,
+/// LOCALTIME_BOUND and LOCALTIME_MKTIME_BOUND 20 -> 18, FLOAT_BOUND 5 -> 3.
+const TRUE_BOUND: u64 = 11;
+const LOCALE_BOUND: u64 = 47;
 /// "tool" mode: a coreutils-shaped program (setlocale, bindtextdomain, atexit, getenv, strtoimax,
 /// printf), see `init_coreutils_shaped_program_stays_within_its_page_fault_bound`.
 /// PERF-READDIR-ENTRY-4 (layout-only delta, owner rule): CI read tool 69 (bound 68) for the readdir
@@ -100,7 +108,8 @@ const LOCALE_BOUND: u64 = 51;
 /// list and adds no startup code; next already sits one under the bound, and the branch adds one fault in
 /// both bases. TOOL_BOUND 68 -> 71 (rule above: the highest count, 69, plus 2); LOCALE_BOUND stays 68
 /// (66 plus 2), TRUE_BOUND stays 23. STARTUP-FAULTS-RESTORE-5: 60 -> 58 (see TRUE_BOUND).
-const TOOL_BOUND: u64 = 56;
+/// LAYOUT-TRACE-DEFAULT: 56 -> 50 (see TRUE_BOUND).
+const TOOL_BOUND: u64 = 50;
 const RUNS: usize = 5;
 /// Every mode of `page_faults.c` whose first-call state is start-up state (the bounds below count each).
 const STARTUP_PROBE_MODES: [&str; 10] = ["true", "locale", "tool", "fork", "mktime", "localtime", "localtime_mktime", "float", "strings", "rebind"];
@@ -110,6 +119,47 @@ const STATE_DECLARED_MAX: u64 = 8192;
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// A generated start-up list (`hot-text.list`, `startup-data.keys`, ...) as the products were grouped from it: the
+/// directory the products' `target/liella/.hot-lists` marker names (`target/product/<profile>`, written by the
+/// build's own trace). No list is committed (LT-5, LAYOUT-DELETE-LISTS): products without the marker have none.
+/// The hand-written inputs (`hot-text.clusters`, `startup-state.list`) are always the committed ones.
+fn generated_list(name: &str) -> PathBuf {
+    let m = std::fs::read_to_string(root().join("target/liella/.hot-lists"))
+        .unwrap_or_else(|e| panic!("target/liella/.hot-lists: {e}: no start-up lists (every product build writes them from a trace of itself: run `cargo xtask so`)"));
+    PathBuf::from(m.lines().next().expect("target/liella/.hot-lists: empty marker")).join(name)
+}
+
+/// LAYOUT-TRACE-DEFAULT (rulings #5190-#5194): a product build traces its own start-up layout by default, so the
+/// products under test carry the `target/liella/.hot-lists` marker, and every generated list it names is the one
+/// the build grouped from (its FNV-1a hash as the marker records it) and holds keys (an ungrouped product's lists
+/// are empty). Products of the ungrouped opt-out are not what ships. No spec clause (layout of the products).
+#[test]
+fn init_products_are_grouped_from_a_trace_of_their_own_build() {
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let marker = std::fs::read_to_string(r.join("target/liella/.hot-lists")).unwrap_or_else(|e| {
+        panic!("TRACE-AT-BUILD: target/liella/.hot-lists: {e}: the products carry no lists of their own trace; a product build traces its own layout (run `cargo xtask so`)")
+    });
+    let mut lines = marker.lines();
+    let dir = PathBuf::from(lines.next().expect("TRACE-AT-BUILD: empty marker"));
+    let mut named = 0;
+    for l in lines {
+        let (name, want) = l.split_once(' ').unwrap_or_else(|| panic!("TRACE-AT-BUILD: marker line {l:?}"));
+        let bytes = std::fs::read(dir.join(name)).unwrap_or_else(|e| panic!("TRACE-AT-BUILD: {}: {e}", dir.join(name).display()));
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for &b in &bytes {
+            h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+        }
+        assert_eq!(format!("{h:016x}"), want, "TRACE-AT-BUILD: {} changed after the build that grouped from it", dir.join(name).display());
+        let keys = String::from_utf8_lossy(&bytes).lines().filter(|k| !k.trim().is_empty() && !k.starts_with('#')).count();
+        if name == "hot-text.list" || name == "startup-text.keys" {
+            assert!(keys > 0, "TRACE-AT-BUILD: {} holds no key: an ungrouped product (LIELLA_LAYOUT_TRACE=ungrouped)", dir.join(name).display());
+        }
+        named += 1;
+    }
+    assert_eq!(named, 4, "TRACE-AT-BUILD: the marker names {named} lists, want the 4 generated ones");
 }
 
 fn build(out: &Path) {
@@ -289,7 +339,8 @@ fn init_first_mktime_after_localtime_r_takes_no_fault() {
 /// the same 64 KiB window: Zen 1 host role, every run identical, 18 (the mktime block back behind
 /// strftime's functions: 19; the rule-years table four times longer: 21). LOCALTIME_BOUND 22 -> 20
 /// (18 plus 2).
-const LOCALTIME_BOUND: u64 = 20;
+/// LAYOUT-TRACE-DEFAULT: 20 -> 18, the highest count of the four host classes and both profiles (see TRUE_BOUND).
+const LOCALTIME_BOUND: u64 = 18;
 
 /// The first `localtime_r` (zone load included) and the first `mktime` after it, counted
 /// together (PERF-ZONE-LOAD-FAULTS-2): a fault that moves from one call to its neighbour (the
@@ -300,7 +351,8 @@ const LOCALTIME_BOUND: u64 = 20;
 /// Bound = 20 plus 2, as for LOCALTIME_BOUND.
 /// PERF-ZONE-LOAD-FAULTS-3 (merge of next, see LOCALTIME_BOUND): Zen 1 host role, every run
 /// identical, 18. Bound 22 -> 20 (18 plus 2).
-const LOCALTIME_MKTIME_BOUND: u64 = 20;
+/// LAYOUT-TRACE-DEFAULT: 20 -> 18, the highest count of the four host classes and both profiles (see TRUE_BOUND).
+const LOCALTIME_MKTIME_BOUND: u64 = 18;
 
 #[test]
 fn init_first_localtime_r_and_mktime_stay_within_their_combined_page_fault_bound() {
@@ -342,7 +394,8 @@ fn init_first_localtime_r_stays_within_its_page_fault_bound() {
 /// Haswell-EP host role, after the change: 4 in every run (text and the first stack page); bound
 /// = that plus 2 for layout-only deltas, below the six stack faults alone of the inlined frame.
 /// STARTUP-FAULTS-RESTORE-4: fast 2, release 4 (Haswell-EP host, relay harness); FLOAT_BOUND 6 -> 5.
-const FLOAT_BOUND: u64 = 5;
+/// LAYOUT-TRACE-DEFAULT: 3 in both profiles on all four host classes (see TRUE_BOUND); FLOAT_BOUND 5 -> 3.
+const FLOAT_BOUND: u64 = 3;
 
 #[test]
 fn init_first_float_conversion_stays_within_its_page_fault_bound() {
@@ -373,7 +426,7 @@ fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
     build(&exe);
     let t = faults(&exe, "tool");
     eprintln!("minor faults: coreutils-shaped tool {t} (bound {TOOL_BOUND})");
-    assert!(t <= TOOL_BOUND, "coreutils-shaped program: {t} page faults > {TOOL_BOUND} (hot-text list stale? run tools/hottext/regen.sh with a coreutils program)");
+    assert!(t <= TOOL_BOUND, "coreutils-shaped program: {t} page faults > {TOOL_BOUND} (the coreutils-shaped mode left the traced hot group? see target/product/<profile>/trace.log)");
 }
 
 /// "fork" mode: the minor faults of a `fork` child that calls `_exit(0)` (the second of two, from
@@ -392,7 +445,8 @@ fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
 /// LAYOUT-DATA-CLUSTERS-7 (D-X.70): 5 in both profiles at every `data` pad (Haswell-EP host, every run
 /// identical; next read 6 release and 7 fast) once the state the child reads joined the `.data1` cluster,
 /// whose pages start-up touches, so the bound is 6.
-const FORK_BOUND: u64 = 6;
+/// LAYOUT-TRACE-DEFAULT: 5 in both profiles on all four host classes (see TRUE_BOUND); FORK_BOUND 6 -> 5.
+const FORK_BOUND: u64 = 5;
 
 #[test]
 fn init_fork_child_stays_within_its_page_fault_bound() {
@@ -406,7 +460,7 @@ fn init_fork_child_stays_within_its_page_fault_bound() {
     build(&exe);
     let f = faults(&exe, "fork");
     eprintln!("minor faults: fork child {f} (bound {FORK_BOUND})");
-    assert!(f <= FORK_BOUND, "fork child: {f} page faults > {FORK_BOUND} (fork path left the hot group? run tools/hottext/regen.sh)");
+    assert!(f <= FORK_BOUND, "fork child: {f} page faults > {FORK_BOUND} (fork path left the traced hot group? see target/product/<profile>/trace.log)");
 }
 
 /// HOTTEXT-COLD-STARTUP: start-up's machine entry points (each in its own `.text.<f>` section of
@@ -442,7 +496,7 @@ fn init_cold_startup_functions_are_grouped() {
     ] {
         assert!(
             grouped.iter().any(|s| s.split_once('.').is_some_and(|(_, name)| name == f || name.ends_with(f))),
-            "{f}: not in the hot group of libc.a (its own section? listed in crates/libc-so/hot-text.list?)"
+            "{f}: not in the hot group of libc.a (its own section? in this build's traced hot-text.list?)"
         );
     }
     // HOTTEXT-STARTUP-COMPLETE: the first Rust function of start-up (generic since the run-path
@@ -457,12 +511,12 @@ fn init_cold_startup_functions_are_grouped() {
         grouped.iter().any(|s| {
             s.split_once('.').and_then(|(_, name)| name.strip_prefix("_RINvNtCs")).and_then(|r| r.split_once('_')).is_some_and(|(_, r)| r.starts_with(f))
         }),
-        "{f}: not in the hot group of libc.a (renamed or generic? run tools/hottext/regen.sh)"
+        "{f}: not in the hot group of libc.a (renamed or generic? not reached by this build's trace?)"
     );
     for l in sections.lines().filter_map(|l| l.split_once("] ").map(|(_, a)| a)) {
         let s = l.split_whitespace().next().unwrap_or("");
         if s.starts_with(".text.") && s.ends_with("15liella_boundary7runtime15apply_irelative") {
-            assert!(s.starts_with(".text.sorted.h"), "{s}: apply_irelative is not in the hot group of libc.a (run tools/hottext/regen.sh)");
+            assert!(s.starts_with(".text.sorted.h"), "{s}: apply_irelative is not in the hot group of libc.a (not reached by this build's trace?)");
         }
     }
     // NSCACHE-SECOND-LOOKUP: the name-service cache's attach and hit paths (p_nss): outside the
@@ -479,7 +533,7 @@ fn init_cold_startup_functions_are_grouped() {
     let mut seen = 0;
     for f in ["7NsCache11region_path", "7NsCache6attach", "6Memory10map_shared", "5Table11stamp_files", "5Table3get"] {
         for s in text.iter().filter(|s| s.contains(f)) {
-            assert!(s.starts_with("sorted.h"), "{f}: section .text.{s} is not in the hot group of libc.a (listed in crates/libc-so/hot-text.list?)");
+            assert!(s.starts_with("sorted.h"), "{f}: section .text.{s} is not in the hot group of libc.a (in this build's traced hot-text.list?)");
             seen += 1;
         }
     }
@@ -576,7 +630,7 @@ fn init_startup_path_lies_in_the_hot_text_range() {
     };
     for (f, a) in &found {
         if REQUIRED.contains(f) || referenced(*a) {
-            assert!(!outside(a), "{f} at {a:#x}: outside the hot text {lo:#x}..{hi:#x} (its hot-text.list key dead or missing? run tools/hottext/regen.sh)");
+            assert!(!outside(a), "{f} at {a:#x}: outside the hot text {lo:#x}..{hi:#x} (not reached by this build's trace? see target/product/<profile>/trace.log)");
         } else if outside(a) {
             eprintln!("{f} at {a:#x}: outside the hot text, but nothing in the program references it (inlined; never runs)");
         }
@@ -740,7 +794,9 @@ fn init_startup_group_ends_inside_the_first_fault_around_window() {
         .and_then(|w| u64::from_str_radix(w[2].trim_start_matches("0x"), 16).ok())
         .expect("no executable LOAD segment in the probe");
     let (start, end) = (seg & !0xfff, (seg & !0xfff) + FIRST_WINDOW);
-    let list = std::fs::read_to_string(r.join("crates/libc-so/hot-text.list")).expect("hot-text.list");
+    // The list the products were grouped from (LAYOUT-TRACE-AT-BUILD: a trace-mode build's own list,
+    // whose start-up tier differs from the committed one); the first-window keys stay hand-kept.
+    let list = std::fs::read_to_string(generated_list("hot-text.list")).expect("hot-text.list");
     let startup = list.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).take_while(|l| l.split('\t').nth(1) == Some("startup")).count();
     let first = std::fs::read_to_string(r.join("crates/libc-so/hot-text.first-window")).expect("hot-text.first-window");
     let group = startup + first.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).count();
@@ -828,7 +884,7 @@ fn init_no_library_text_precedes_the_hot_group() {
 /// The 0-fault clusters of `crates/libc-so/hot-text.clusters`: (name, first, last list position).
 fn clusters() -> Vec<(String, usize, usize)> {
     let dir = root().join("crates/libc-so");
-    let list = std::fs::read_to_string(dir.join("hot-text.list")).expect("hot-text.list");
+    let list = std::fs::read_to_string(generated_list("hot-text.list")).expect("hot-text.list");
     let mut pos = std::collections::BTreeMap::new();
     for (i, l) in list.lines().filter(|l| !l.trim().is_empty() && !l.starts_with('#')).enumerate() {
         pos.entry(l.split('\t').next().unwrap_or("").trim().to_string()).or_insert(i);
@@ -987,7 +1043,7 @@ fn init_startup_rodata_stays_in_one_window_for_any_text_size() {
 }
 
 /// A Rust symbol without its crate hashes (`Cs<hash>_` -> `C`) or split / ThinLTO suffixes: the form of
-/// the keys in `crates/libc-so/startup-data.keys`.
+/// the keys in the build's traced `startup-data.keys`.
 fn unhashed_key(name: &str) -> String {
     let name = symbol_stem(name.rsplit_once(".llvm.").map_or(name, |(s, _)| s));
     let (mut out, mut rest) = (String::new(), name);
@@ -1011,12 +1067,12 @@ fn unhashed_key(name: &str) -> String {
 }
 
 /// LAYOUT-DATA-CLUSTERS (D-X.64): every written start-up object the page-fault trace found (kind `rw`
-/// in `crates/libc-so/startup-data.keys`) that is a `.data`/`.bss` static of at most 4 KiB sits in
+/// in the build's traced `startup-data.keys`) that is a `.data`/`.bss` static of at most 4 KiB sits in
 /// the `.data1` cluster of libc.a, so start-up writes the fewest pages wherever the rest of `.data`
 /// and `.bss` puts it. One left in `.data`/`.bss` is named. No spec clause (layout of the products).
 #[test]
 fn init_written_startup_objects_are_in_the_data1_cluster() {
-    let keys: std::collections::BTreeSet<String> = std::fs::read_to_string(root().join("crates/libc-so/startup-data.keys"))
+    let keys: std::collections::BTreeSet<String> = std::fs::read_to_string(generated_list("startup-data.keys"))
         .expect("startup-data.keys")
         .lines()
         .filter(|l| !l.starts_with('#'))
@@ -1157,7 +1213,7 @@ fn isolated_data_script(dir: &Path) -> PathBuf {
 }
 
 /// LAYOUT-DATA-CLUSTERS-5 (#4602, D-X.69): the writable data start-up touches is keyed by access
-/// (`crates/libc-so/startup-data.keys`) and joins `.data1`; a key the trace no longer matches (a static
+/// (the build's traced `startup-data.keys`) and joins `.data1`; a key the trace no longer matches (a static
 /// renamed, or split by another codegen-unit partition) is named here instead of costing a page that
 /// moves with unrelated changes. The probe is linked with every `.data`, `.bss` and `.lbss` input
 /// section on a 64 KiB boundary of its own and `true` is traced with `perf record -e page-faults -d`:

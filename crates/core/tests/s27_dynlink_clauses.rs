@@ -5,10 +5,11 @@
 //! Clause tests for spec §27 (19 clauses).
 //! The dlopen and dlsym clauses are checked by dynamic-link conformance programs
 //! (`conformance/run.sh`, LINK-HELPERS / DLOPEN-HELPERS), run under the reference and under
-//! Liella's ld.so. Until Liella's loader opens objects (DL-16a) and looks them up (DL-16b), the
-//! programs carry PENDING-LIELLA: the reference must meet the expectations, Liella's run is
-//! reported PENDING and counted, and it turns into a FAIL the day Liella's run passes (then drop
-//! the directive and the pending assertion here).
+//! Liella's ld.so. A program for behaviour Liella's loader does not have yet carries
+//! PENDING-LIELLA: the reference must meet the expectations, Liella's run is reported PENDING and
+//! counted, and it turns into a FAIL the day Liella's run passes (then drop the directive and the
+//! pending assertion here). `s27_dlopen_failures` (DL-16a) and `s27_dlsym_handles` (DL-16b) pass
+//! on both.
 
 #![allow(clippy::unwrap_used, missing_docs)]
 
@@ -27,11 +28,11 @@ fn conformance(names: &[&str]) -> String {
     out
 }
 
-/// Asserts that `name` ran pending on Liella until `story`: the reference met its expectations
-/// and Liella's run failed as expected (run.sh fails the run once Liella's passes).
-fn assert_pending(out: &str, name: &str, story: &str) {
-    let line = format!("conformance: PENDING {name} on Liella until {story}");
-    assert!(out.lines().any(|l| l.starts_with(&line)), "{name} is not reported pending on {story}:\n{out}");
+/// Asserts that `name` ran as a full program, not pending: run.sh (whose success [`conformance`]
+/// checks) passed both the reference's run and Liella's.
+fn assert_not_pending(out: &str, name: &str) {
+    let line = format!("conformance: PENDING {name} ");
+    assert!(!out.lines().any(|l| l.starts_with(&line)), "{name} is still reported pending:\n{out}");
 }
 
 clause!(s27_1_c_1, "27.1", "Contract", r##"**`dlopen(path, mode)`** loads an ELF shared object and its dependencies into the process and runs their constructors. It returns a handle, and repeated opens are reference-counted."##);
@@ -42,11 +43,12 @@ clause!(s27_1_c_2, "27.1", "Contract", r##"**`dlmopen(lmid, ...)`** loads into a
 /// §27.1 Contract: **`dlsym(handle, name)`** returns the address of a symbol. The special handles are `RTLD_DEFAULT` (global lookup order) and `RTLD_NEXT` (the next occurrence after the caller's object, for interposition). **`dlvsym`** requests a specific symbol version.
 ///
 /// `s27_dlsym_handles`: RTLD_DEFAULT and RTLD_NEXT through two helpers, dlvsym, and the dlerror
-/// texts of the failing lookups. Pending on Liella until DL-16b (DL-DLSYM).
+/// texts of the failing lookups. Passes under the reference and under Liella's ld.so (DL-16b,
+/// DL-DLSYM).
 #[test]
 fn s27_1_c_3() {
     let out = conformance(&["s27_dlsym_handles"]);
-    assert_pending(&out, "s27_dlsym_handles", "DL-16b");
+    assert_not_pending(&out, "s27_dlsym_handles");
 }
 clause!(s27_1_c_4, "27.1", "Contract", r##"**`dlclose`** decrements the reference count. At zero, it runs destructors and unmaps the object, unless the object is `NODELETE` or has unique symbols or TLS in use."##);
 clause!(s27_1_c_5, "27.1", "Contract", r##"**`dlerror()`** returns a Text describing the last failure on this thread, and clears it. It returns `NULL` if there was no error. ⚑ HIST: this is yet another error channel. `dlsym` returning `NULL` is ambiguous for symbols whose value is 0, so callers must check `dlerror`."##);
@@ -60,8 +62,8 @@ clause!(s27_1_g_0, "27.1", "Guarantees", r##"Symbol resolution follows ELF rules
 /// `s27_dlopen_failures`: the failure corpus (a missing file, files that are not loadable
 /// objects, the wrong ELF class, a missing dependency, an undefined symbol under RTLD_NOW, a
 /// missing version, bad modes, RTLD_NOLOAD),
-/// each a NULL handle with the reference's dlerror text. Static TLS exhaustion is not covered
-/// (no spec clause test yet). Checked on the reference and on Liella's loader (DL-16a).
+/// each a NULL handle with the reference's dlerror text. Static TLS exhaustion is checked by
+/// `s27_dlopen_tls_surplus` (s27_3_c_0). Checked on the reference and on Liella's loader (DL-16a).
 #[test]
 fn s27_1_f_0() {
     let out = conformance(&["s27_dlopen_failures"]);
@@ -69,7 +71,20 @@ fn s27_1_f_0() {
     assert!(out.lines().any(|l| l == "conformance: 1 passed, 0 failed"), "s27_dlopen_failures did not pass on both:\n{out}");
 }
 clause!(s27_2_c_0, "27.2", "Contract", r##"Libraries named in `LD_AUDIT` (or `DT_AUDIT`) receive callbacks from the dynamic linker for library search, object load and unload, symbol binding (they can redirect bindings), and PLT entry and exit."##);
-clause!(s27_3_c_0, "27.3", "Contract", r##"Return the address of a TLS variable, given a module ID and an offset, for the calling thread. The block is allocated on first access for modules loaded by `dlopen`."##);
+/// §27.3 Contract: Return the address of a TLS variable, given a module ID and an offset, for the calling thread. The block is allocated on first access for modules loaded by `dlopen`.
+///
+/// `s27_dlopen_tls_surplus`: objects with `PT_TLS` opened by `dlopen` (global-dynamic,
+/// local-dynamic, initial-exec and TLS-descriptor accesses), from the main thread, a thread
+/// created before the `dlopen`, one created after it and 32 created while it runs: each sees the
+/// initial image, zeros past it, the alignment and a block of its own. Also the static TLS
+/// exhaustion text (s27_1_f_0) and 80 failed opens that each give their TLS place back. Liella
+/// places such blocks in the static surplus at `dlopen` (DL-16d); dynamic blocks are DL-19's.
+/// Checked on the reference and on Liella's loader.
+#[test]
+fn s27_3_c_0() {
+    let out = conformance(&["s27_dlopen_tls_surplus"]);
+    assert!(out.lines().any(|l| l == "conformance: 1 passed, 0 failed"), "s27_dlopen_tls_surplus did not pass on both:\n{out}");
+}
 clause!(s27_3_f_0, "27.3", "Failure", r##"None. Allocation failure aborts the process. ⚑ ARB: there is no error channel for a lazy allocation."##);
 clause!(s27_4_c_0, "27.4", "Contract", r##"`_r_debug` and `_dl_debug_state` implement the debugger rendezvous. The debugger sets a breakpoint on `_dl_debug_state` and walks the `r_debug.r_map` list after each change. Since 2.35 `r_version` is 2, which adds a linked list of namespaces."##);
 clause!(s27_5_c_0, "27.5", "Contract", r##"Report CPU features as detected by the dynamic linker (CPUID plus OS support via XCR0, masked by `glibc.cpu.hwcaps` tunables): "present" means the CPU supports the feature, and "active" means it is also usable."##);
