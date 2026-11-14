@@ -43,7 +43,7 @@ traces_wait || exit 1
 fi
 [ $phase = trace ] && exit 0
 # shellcheck disable=SC2086
-python3 "$here/keys.py" --tagged $tagged > "$work/probe.keys"
+python3 -B "$here/keys.py" --tagged $tagged > "$work/probe.keys"
 L=${LIELLA_HOT_LISTS:-}
 if [ -z "$L" ] || [ ! -d "$L" ]; then
     echo "probe_text: LIELLA_HOT_LISTS must name the lists directory of this build (cargo xtask so sets it; no list is committed, LT-5)" >&2
@@ -55,7 +55,7 @@ pkeys=$L/probe-text.keys
     echo "# D-X.62: the functions the fault-bounded \`page_faults <mode>\` probes of crates/core/tests/hot_text_products.rs run that"
     echo "# no hot-text tier covers (modes: $MODES): build-stable keys (tools/hottext/keys.py), first-touch order."
     echo "# <key> TAB extra TAB <profile traced>."
-    python3 "$here/order.py" "$work/probe.keys" "$profile"
+    python3 -B "$here/order.py" "$work/probe.keys" "$profile"
 } > "$pkeys.tmp"
 put_changed "$pkeys.tmp" "$pkeys"
 echo "probe-text: $(wc -l < "$work/probe.keys") keys traced ($profile), $(grep -vc '^#' "$pkeys") in $pkeys"

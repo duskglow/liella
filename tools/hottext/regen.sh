@@ -156,35 +156,35 @@ if [ -n "$untraced" ]; then
     exit 1
 fi
 echo "regen: --all-modes: every page_faults mode traced: true $(printf '%s ' "$pmodes" | tr '\n' ' ')"
-python3 "$here/keys.py" --tagged "startup=$work/startup.names" > "$work/startup.keys"
+python3 -B "$here/keys.py" --tagged "startup=$work/startup.names" > "$work/startup.keys"
 skeys=$L/startup-text.keys
 {
     echo "# Written by tools/hottext/regen.sh during cargo xtask so (a trace of this build; never committed)."
     echo "# STARTUP-TEXT-WINDOWS (layout/contracts.tsv, D-X.49): the functions \`page_faults true\` runs (crates/core/tests/oracle/page_faults.c"
     echo "# linked as crates/core/tests/hot_text_products.rs links it): build-stable keys (tools/hottext/keys.py), first-touch order."
     echo "# <key> TAB startup TAB <profile traced>."
-    python3 "$here/order.py" "$work/startup.keys" "$profile"
+    python3 -B "$here/order.py" "$work/startup.keys" "$profile"
 } > "$work/startup.ordered"
 # shellcheck disable=SC2046
-python3 "$here/keys.py" --tagged $(cat "$work/tagged") > "$work/hit.keys"
+python3 -B "$here/keys.py" --tagged $(cat "$work/tagged") > "$work/hit.keys"
 # Only names that are function sections of libc.a (drops the programs' own functions).
 # (The traced archive is ungrouped, but its sections may still carry a hot or cold prefix: `.text.sorted.h<n>.`,
 # `.text.hot.`, `.text.unlikely.<f>` of a #[cold] function, `.text.liella_cold.<f>.liella_cold` (D-X.63);
 # keys.py --sections strips every one of them, LAYOUT-TEXT-PIN-9 #4541.)
 readelf -SW "$P/libc.a" > "$work/readelf"
-python3 "$here/keys.py" --sections "$work/readelf" > "$work/sections"
-python3 "$here/keys.py" "$work/sections" > "$work/lib.keys"
+python3 -B "$here/keys.py" --sections "$work/readelf" > "$work/sections"
+python3 -B "$here/keys.py" "$work/sections" > "$work/lib.keys"
 # LAYOUT-TEXT-PIN-6 (#4467): labels inside a function section (assembly entry labels, aliases) -> its key,
 # so a start-up key traced at such a label brings its section to the start-up head.
 objdump -t "$P/libc.a" > "$work/syms"
-python3 "$here/keys.py" --aliases "$work/syms" > "$work/alias.keys"
+python3 -B "$here/keys.py" --aliases "$work/syms" > "$work/alias.keys"
 awk -F'\t' 'NR == FNR { lib[$1]; next } $1 in lib' "$work/lib.keys" "$work/hit.keys" > "$work/new.keys"  # keeps the touch order
 {
     echo "# Functions grouped as hot text in libc.a (PAGEFAULTS-2), in this order (HOT-ORDER: first touch): build-stable keys, see tools/hottext/keys.py."
     echo "# Written by tools/hottext/regen.sh during cargo xtask so (a trace of this build; never committed)."
     echo "# <key> TAB <tier> TAB <profile traced> (HOTTEXT-STARTUP-COMPLETE; tiers startup fork stdio strings locale tool extra)."
     # Ruling #4417 (D-X.63): every STARTUP-TEXT-WINDOWS key joins the start-up tier at the head.
-    python3 "$here/order.py" "$work/new.keys" "$profile" --startup-head "$work/startup.ordered" --alias "$work/alias.keys"
+    python3 -B "$here/order.py" "$work/new.keys" "$profile" --startup-head "$work/startup.ordered" --alias "$work/alias.keys"
 } > "$work/list.ordered"
 mv "$work/startup.ordered" "$skeys"
 echo "startup-text: $(wc -l < "$work/startup.keys") keys traced ($profile), $(grep -vc '^#' "$skeys") in $skeys"
