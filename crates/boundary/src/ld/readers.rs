@@ -26,14 +26,14 @@
 //!   ([`drained`]), never waiting under the loader's locks (a callback may call `dlclose`). A slot
 //!   is reused only after that. Past a retired threshold a `dlopen`/`dlclose` waits for the drain
 //!   at its entry, holding no lock, unless its thread is itself inside a read section ([`inside`],
-//!   the thread block's `dl_reading` depth) or holds the writer lock (ruling #5651).
+//!   the thread block's `dl_reading` counts) or holds the writer lock (ruling #5651).
 
 use super::dlopen::{node_address, CAP};
 use super::{read_auxv, read_image, AUXV_WORDS_MAX, OWN_BASE, START_ARGS, START_INTERP, START_N, START_OBJS, THREAD_MODS, THREAD_MODS_LEN};
 use crate::posix::s27_dynlink::{find_in, int_result, vdso_headers};
 use crate::{conv, tb};
 use core::sync::atomic::Ordering::{Acquire, Relaxed, Release, SeqCst};
-use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
+use core::sync::atomic::{AtomicU64, AtomicUsize};
 use liella_abi::layout::{struct_dl_find_object, struct_dl_phdr_info};
 use liella_kernel::auxv::Auxv;
 use liella_kernel::uapi::AT_SYSINFO_EHDR;
@@ -66,14 +66,9 @@ static VDSO: AtomicUsize = AtomicUsize::new(usize::MAX);
 /// What a reader sees: the published objects and the counters. The reader is counted for the whole
 /// closure (module documentation), so nothing it may see is unmapped before it leaves. A callback
 /// that leaves by `longjmp` stays counted: the objects closed meanwhile are then never unmapped (a
-/// leak, never a fault).
+/// leak, never a fault), and past the retired threshold a later `dlopen`/`dlclose` waits for it.
 pub(super) fn read_section<R>(f: impl FnOnce(&View) -> R) -> R {
-    // Fibonacci hashing of the thread pointer: its top 5 bits pick one of the 32 stripes.
-    let h = (u64::try_from(tb::tp()).unwrap_or(0) >> 6).wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 59;
-    let Some(stripe) = READERS.get(usize::try_from(h).unwrap_or(0) % STRIPES) else { return f(&View { start: fill_start() }) };
-    // The thread's own depth first ([`inside`]): written by this thread only.
-    let depth = &tb::current().dl_reading;
-    depth.store(depth.load(Relaxed).wrapping_add(1), Relaxed);
+    let Some(stripe) = own_stripe() else { return f(&View { start: fill_start() }) };
     let mut p = PARITY.load(SeqCst) & 1;
     loop {
         let Some(c) = stripe.0.get(p) else { return f(&View { start: fill_start() }) };
@@ -87,44 +82,51 @@ pub(super) fn read_section<R>(f: impl FnOnce(&View) -> R) -> R {
         c.fetch_sub(1, Release);
         p = q;
     }
+    // The thread's own count for that parity ([`inside`], [`after_fork_child`]): written by this
+    // thread only.
+    let own = tb::current().dl_reading.get(p);
+    if let Some(o) = own {
+        o.store(o.load(Relaxed).wrapping_add(1), Relaxed);
+    }
     let r = f(&View { start: fill_start() });
+    if let Some(o) = own {
+        o.store(o.load(Relaxed).wrapping_sub(1), Relaxed);
+    }
     if let Some(c) = stripe.0.get(p) {
         c.fetch_sub(1, Release);
     }
-    depth.store(depth.load(Relaxed).wrapping_sub(1), Relaxed);
     r
+}
+
+/// The calling thread's stripe: Fibonacci hashing of the thread pointer, whose top 5 bits pick one
+/// of the 32.
+fn own_stripe() -> Option<&'static Stripe> {
+    let h = (u64::try_from(tb::tp()).unwrap_or(0) >> 6).wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 59;
+    READERS.get(usize::try_from(h).unwrap_or(0) % STRIPES)
 }
 
 /// Whether the calling thread is inside a [`read_section`] (a `dl_iterate_phdr` callback, at any
 /// depth). Such a thread must never wait for [`drained`]: it may be the reader it waits for.
 pub(super) fn inside() -> bool {
-    tb::current().dl_reading.load(Relaxed) != 0
+    tb::current().dl_reading.iter().any(|o| o.load(Relaxed) != 0)
 }
 
 /// In a `fork` child (its only thread is the caller): the readers other threads counted are gone
-/// with them, so their counts are cleared; otherwise no parity would ever drain again and every
-/// unloaded object would stay mapped (and a `dlopen` past the retired threshold would wait for
-/// ever). When the caller itself forked from inside a read section its own count cannot be told
-/// apart from the others: the counts stay, and the child never waits instead ([`NEVER_WAIT`]).
+/// with them. Every count is cleared, then the caller's own read sections (it may fork from inside
+/// a callback) are counted again from its thread block. Otherwise a parity could never drain
+/// again: every unloaded object would stay mapped, and a `dlopen` past the retired threshold would
+/// wait for ever.
 pub(super) fn after_fork_child() {
-    if inside() {
-        NEVER_WAIT.store(true, Relaxed);
-        return;
-    }
     for s in &READERS {
         for c in &s.0 {
             c.store(0, Relaxed);
         }
     }
-}
-
-/// Set in a `fork` child whose reader counts could not be cleared ([`after_fork_child`]).
-static NEVER_WAIT: AtomicBool = AtomicBool::new(false);
-
-/// Whether a `dlopen`/`dlclose` of the calling thread may wait for [`drained`]: not from inside a
-/// read section, and not in a child that kept stale counts.
-pub(super) fn may_wait() -> bool {
-    !inside() && !NEVER_WAIT.load(Relaxed)
+    if let Some(s) = own_stripe() {
+        for (c, o) in s.0.iter().zip(&tb::current().dl_reading) {
+            c.store(o.load(Relaxed), SeqCst);
+        }
+    }
 }
 
 /// The writer's step (under the loader's locks, only once [`drained`]): readers entering from now on

@@ -988,7 +988,7 @@ const CLOCK_MONOTONIC: i64 = 1;
 /// ends once the readers present now have left.
 fn room_wait() {
     while RETIRED.load(Relaxed) > RETIRED_WAIT {
-        if CALL.held_by_caller() || !super::readers::may_wait() {
+        if CALL.held_by_caller() || super::readers::inside() {
             return;
         }
         CALL.lock();

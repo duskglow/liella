@@ -138,6 +138,7 @@ const PROG: &str = r#"#define _GNU_SOURCE
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
+#include <sys/wait.h>
 #include <unistd.h>
 char dir[4096];
 int pctor, pdtor;
@@ -354,6 +355,8 @@ static int stall_cb(struct dl_phdr_info *i, size_t s, void *d) {
     return 1;
 }
 static void *staller(void *a) { (void)a; dl_iterate_phdr(stall_cb, NULL); return NULL; }
+static pid_t fork_pid = -1;
+static int fork_cb(struct dl_phdr_info *i, size_t s, void *d) { (void)i; (void)s; (void)d; fork_pid = fork(); return 1; }
 
 static void room(void) {
     /* A callback opening and closing: each close stays retired (its own thread is the reader), the
@@ -381,6 +384,19 @@ static void room(void) {
        callback calls dlopen, which blocks on that lock: the constructor's calls must not wait. */
     CHECK(65, pthread_create(&th, NULL, staller, NULL) == 0, "pthread_create");
     while (sem_wait(&in_cb) != 0) {}
+    /* fork from inside a walk while the other thread is stalled in its own: the child, alone, must
+       neither wait for the gone reader nor lose its own count; 600 pairs after its walk ends. */
+    dl_iterate_phdr(fork_cb, NULL);
+    if (fork_pid == 0) {
+        alarm(120);
+        for (int i = 0; i < 600; i++) {
+            void *q = dlopen(P("libP.so"), RTLD_NOW);
+            if (!q || dlclose(q) != 0) _exit(1);
+        }
+        _exit(0);
+    }
+    int st = -1;
+    CHECK(69, fork_pid > 0 && waitpid(fork_pid, &st, 0) == fork_pid && WIFEXITED(st) && WEXITSTATUS(st) == 0, "fork child: status %#x", st);
     for (int i = 0; i < 100; i++) {
         void *q = dlopen(P("libP.so"), RTLD_NOW);
         CHECK(66, q && dlclose(q) == 0, "open %d: %s", i, err());
@@ -518,7 +534,9 @@ fn s27_1_c_4_dlclose_concurrent_with_readers() {
 /// reclaims everything. A reader stalled inside a walk makes the main thread's 600 open/close
 /// pairs wait (seen asleep after 100..200 pairs) instead of filling the table. A constructor
 /// (holding the writer lock) that passes the threshold while a stalled reader's callback is
-/// blocked on that lock never waits (a deadlock otherwise; `alarm` is the hang guard).
+/// blocked on that lock never waits (a deadlock otherwise; `alarm` is the hang guard). A child
+/// forked from inside a walk while another thread is stalled in its own runs 600 pairs: the gone
+/// thread's count is cleared and the child's own is kept until its walk ends.
 #[test]
 fn s27_1_c_4_dlopen_waits_for_readers_only_outside_them() {
     let Some((d, ld, libc, crt1)) = setup("room") else { return };

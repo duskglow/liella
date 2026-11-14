@@ -88,12 +88,12 @@ pub struct ThreadBlock {
     /// thread's first `dl*` failure, then the address of its record (`dlerror` reads it).
     pub dlerror: AtomicUsize,
     /// 0x288: how many of the loader's read sections (`dl_iterate_phdr`, `_dl_find_object`) the
-    /// thread is inside, nested (DL-17): written by the thread itself only; a `dlopen` or
-    /// `dlclose` it makes from inside one never waits for the readers to drain (it could wait on
-    /// itself).
-    pub dl_reading: AtomicUsize,
-    /// 0x290–0x300: room for later phases.
-    tail_rest: [AtomicUsize; 14],
+    /// thread is inside, nested, per reader parity (DL-17): written by the thread itself only. A
+    /// `dlopen` or `dlclose` it makes from inside one never waits for the readers to drain (it
+    /// could wait on itself), and a `fork` child rebuilds the reader counts from them.
+    pub dl_reading: [AtomicUsize; 2],
+    /// 0x298–0x300: room for later phases.
+    tail_rest: [AtomicUsize; 13],
 }
 
 /// The number of [`ThreadBlock::cache`] words.
@@ -137,6 +137,7 @@ const _: () = {
     assert!(offset_of!(ThreadBlock, tail) == 0x180);
     assert!(offset_of!(ThreadBlock, dlerror) == 0x280);
     assert!(offset_of!(ThreadBlock, dl_reading) == 0x288);
+    assert!(offset_of!(ThreadBlock, tail_rest) == 0x298);
     assert!(size_of::<ThreadBlock>() == 0x300);
 };
 
