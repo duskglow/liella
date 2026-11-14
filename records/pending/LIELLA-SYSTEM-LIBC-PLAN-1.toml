@@ -1,0 +1,18 @@
+id = "D-NEW"
+series = "D-X"
+section = "x"
+spec = "—"
+ann = "—"
+status = "active"
+story = "LIELLA-SYSTEM-LIBC-PLAN"
+date = "2026-11-14"
+body = '''
+**How the system-libc scan counts what a distribution needs from the C library (`plan/system-libc.md`, `results/system-libc-scan-2026-11-14.md`).**
+
+* Indices are trusted only after `gpgv` with the pinned archive keyring and a SHA256 match of each `Packages.xz` against `InRelease`, and of each fetched `.deb` against `Packages`.
+* Suites are merged by package name, a `-security`/`-updates` stanza replacing the release's.
+* A binary package's libc need is the highest lower bound (`>=`, `>>`, `=`) on `libc6` in `Pre-Depends`/`Depends`, any alternative, upstream version only.
+* A need above Liella's ABI level is never taken at its word. Every such consumer's ELF files are read (`readelf --dyn-syms`, undefined symbols at a node above the level or at `GLIBC_PRIVATE`), and it is classed as **symbol use**, **private use** or **build-time pin** (no such import).
+* What the reference exports is read from the dynamic symbol tables of its `.deb`'s libraries and compared with `spec/abi/versions.tsv` by (library, name, version).
+* Only metadata, file lists, declarative control files (`shlibs`, `symbols`, `triggers`, `conffiles`) and symbol tables are read. Maintainer scripts are recorded by name and size only.
+'''
