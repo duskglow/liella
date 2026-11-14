@@ -1,56 +1,55 @@
 # STARTUP-DATA-PAGE-ALIGN: the written start-up data takes the same pages whatever precedes it
 
-State: branch `task/startup-data-page-align-2` (run 2, STARTUP-DATA-PAGE-ALIGN-2), stacked on run 1's
-`task/startup-data-page-align` 1bf84786a, cut from origin/next 3e7723955. Code head 71762fa7f (+ this handoff).
-Role shiki:~/w/sh1. Decision: `records/pending/STARTUP-DATA-PAGE-ALIGN-1.toml` (D-NEW, series D-X, amends D-X.62,
-D-X.67; point (3) added in run 2). Plants: `handoff/STARTUP-DATA-PAGE-ALIGN-plants.txt` (4).
+State: branch `task/startup-data-page-align-3` (run 3, STARTUP-DATA-PAGE-ALIGN-3), stacked on run 2's
+`task/startup-data-page-align-2` c0379f7ee and run 1, cut from origin/next 3e7723955. Code head 86b947476 (+ this
+handoff). Role shiki:~/w/sh2. Decision: `records/pending/STARTUP-DATA-PAGE-ALIGN-1.toml` (D-NEW, series D-X, amends
+D-X.62, D-X.67; run 3 adds SLOTS to point (2)). Plants: `handoff/STARTUP-DATA-PAGE-ALIGN-plants.txt` (5).
+Proof script: `handoff/STARTUP-DATA-PAGE-ALIGN-proof.sh` (scratch clone of origin on the build host; usage in its head).
 
 ## What the branch does
-* `xtask/src/startup_ro.rs` `relro_plan` (run 1): the `.data.rel.ro*` sections that start-up functions reach, and the
-  relro sections of the `rw` keys, are renamed `.data.rel.ro.local.liella_startup`; the first is `..._head`, aligned to
-  4096. GNU ld takes `*(.data.rel.ro.local*)` first, so the cluster sits at the head of relro on a page boundary.
+* `xtask/src/startup_ro.rs` `relro_plan` (run 1): the start-up `.data.rel.ro*` sections become one
+  `.data.rel.ro.local.liella_startup*` group at the head of relro, its first section aligned to 4096.
 * `crates/boundary/src/heap.rs` (run 1): `RESERVE_MEM` is `#[repr(C, align(4096))]`.
-* `csys/src/machine/entry.S` (run 2): the start file's empty 64 KiB relro alignment section (D-X.67) is named
-  `.data.rel.ro.local`, so it is the first `.local` input (the start file comes first in the link), ahead of the cluster.
-* `layout/contracts.tsv` (run 2): STARTUP-DATA-WINDOWS rw-budget-fast 12 -> 7, rw-budget-release 14 -> 9.
-* Tests: `init_startup_data_pages_hold_at_every_data_phase` (hot_text_products; run 2 adds: `.data.rel.ro` holds less
-  than a page of `*fill*` in every padded link) and `startup_relro_sections_form_one_group_headed_by_the_first` (xtask).
+* `csys/src/machine/entry.S` (run 2): the start file's 64 KiB relro alignment section is `.data.rel.ro.local`, ahead
+  of the cluster (behind it, it padded relro by 56 KiB: +1 fault in first `%.2f` and the coreutils-shaped probe).
+* `crates/legacy/src/global_locale.rs` (run 3): the 112 KiB locale table `SLOTS` is a `#[repr(C, align(4096))]`
+  wrapper; start-up writes its first records, which straddled two pages in release products.
+* `layout/contracts.tsv`: STARTUP-DATA-WINDOWS rw-budget-fast 12 -> 7 (run 2), rw-budget-release 14 -> 9 (run 2) -> 8
+  (run 3). ro budgets unchanged at 1 (the read-only window is 1 in every build below: the shift cannot move it).
+* Tests: `init_startup_data_pages_hold_at_every_data_phase` (hot_text_products: relro and `.lbss` pads; cluster on a
+  page boundary with a constant page count; relro under a page of fill; RESERVE_MEM and, run 3, SLOTS page-aligned)
+  and `startup_relro_sections_form_one_group_headed_by_the_first` (xtask).
 
-## Why run 1's gate went red (sdpa-gate, kanon, rc 1) and the fix
-`init_first_float_conversion_stays_within_its_page_fault_bound` 4 > 3 and
-`init_coreutils_shaped_program_stays_within_its_page_fault_bound` 51 > 50, every run. Reproduced on shiki (fast: base
-3/50, run-1 head 4/51; release tool 49 -> 50). perf page-fault addresses: the extra fault is a read of a relro object
-by snprintf's float path, on the cluster's first page. Cause: the start file's 64 KiB-aligned `.data.rel.ro` came in
-the second ld pattern, BEHIND the renamed cluster, and padded the rest of relro to the next 64 KiB boundary (0xe3f8
-bytes of fill; relro 0xae88 -> 0x19288 bytes). Relro then spanned two fault-around windows, and `.got`'s start-up read
-no longer mapped the cluster's window. Renaming the start file's section into `.data.rel.ro.local` puts it first:
-relro is back to one window, cluster right after the boundary, no gap.
-
-## Proof (shiki; values from STARTUP-DATA-WINDOWS and the relayed fault probe)
-| tree | profile | written start-up pages | first %.2f | tool | startup only |
+## Proof (run 3; STARTUP-DATA-WINDOWS written start-up pages, fast / release; read-only windows 1 everywhere)
+Trees built by the proof script from origin: next 545ad4882, Bessel = task/libm-f32-bessel-large-6 5eff9a8e6,
+head d4036f24b (code = 86b947476 less the budget line). Release budget 8 = the highest over kanon, mei and keke.
+| host | next | next+Bessel | head | head+Bessel | head fault-bound tests |
 |---|---|---|---|---|---|
-| base 3e7723955 | fast | 11 | 3 | 50 | 11 |
-| run-1 head 042e09b37 | fast | 7 | 4 | 51 | 11 |
-| head 6f9bb9a32 (fix) | fast | 7 | 3 | 50 | 11 |
-| head + LIBM-F32-BESSEL-LARGE-6 merged | fast | 7 | 3 | 50 | 11 |
-| base 3e7723955 | release | 14 | 3 | 49 | 10 |
-| run-1 head | release | 9 | 3 | 50 | 10 |
-| head (fix) | release | 9 | 3 | 49 | 10 |
-| head + bessel-6 merged | release | 9 | 3 | 49 | 10 |
-Run 1 (kanon): fast 7 (head+bessel-6), release 9 / 9. The read-only window stays at 1 everywhere.
-Sizes (shiki, base -> fix): fast libc.a 14077412 -> 14071836, libc.so.6 5824984 -> 5829112 (+4128); release libc.a
-11696378 -> 11692274, libc.so.6 5293152 -> 5297248 (+4096); static probe (page_faults.c) fast 5853072 -> 5853096,
-release 4510680 -> 4510680.
+| mei (Skylake-SP) | 11 / 14 | 11 / 14 | 7 / 8 | 7 / 8 | pass (all four builds) |
+| keke (Zen 1) | 11 / 14 | 11 / 14 | 7 / 8 | 7 / 8 | pass (all four builds) |
+| kanon | not built | not built | 7 / 8 | 7 / 8 | pass (all four builds) |
+At today's next the Bessel merge no longer moves next's count on mei or keke (it did at d53c0d551: 11 -> 13); the
+head's count is the same with and without it on every host. Pages, mei (next -> head): fast, relro 0x853000-0x857000,
+0x85a000, 0x85b000 (7 pages) -> 0x850000, 0x851000, 0x85a000 (3); data 0x878000-0x87a000 (3) -> 3; RESERVE_MEM 1 -> 1.
+Release: relro 0x7b0000-0x7b6000 (7) -> 0x7b0000, 0x7b1000, 0x7b6000 (3); data 3 -> 3; RESERVE_MEM 0x7d6000+0x7d7000
+-> 0x7d7000; SLOTS 0x80a000+0x80b000 -> 0x80c000. Full lists: `grep "^proof:" ~/logs/sdpa3-proof2-*.log` on mei/keke.
+Sizes: head release libc.a 11692274, libc.so.6 5297248, identical to run 2's head on shiki (SLOTS's alignment costs no
+file bytes: `.lbss` is NOBITS). Run 2's like-for-like cost (shiki, base 3e7723955 -> fix): libc.so.6 +4128 fast,
++4096 release; static probe +24 fast, +0 release.
 
-## Not done
-1. mei and keke proof: REFUSED in run 2 (the command that shipped the scripts and trees to mei and keke was denied
-   by the permission layer). The budgets are at the highest measured over kanon and shiki; CI on mei is the check.
-2. `global_locale::SLOTS` (release, ~112 KiB `.lbss`) straddles two pages; page-aligning it should take release 9 -> 8.
-3. Sizes on keke/mei not taken (layout should be host-independent but the traced keys come from the build host).
+## Jobs (final head 86b947476)
+shiki: sdpa3-gate3 (clippy, static, affected --run --base origin/next) rc 0: 32 suites, 11760 passed, 0 failed;
+conformance 134 / 0. sdpa3-plants2 rc 0: relro-align, reserve-align, slots-align, crt1-relro-local CAUGHT;
+head-last WARN-NO-MSG: the mutant broke STARTUP-DATA-WINDOWS at `so` time (8 pages > fast budget 7) before its unit
+test ran; its msg now also matches that catch (widened after the run, plants file only).
+Proof (rc 0; head d4036f24b, code-identical to the final head but the budget line): mei sdpa3-proof2-next, sdpa3-proof2-head; keke the same two; kanon sdpa3-proof2-head.
+Also: shiki sdpa3-lint0 (inherited head clean), sdpa3-gate1 (667cf6ce2, the code commit: green, 11760 passed).
+Superseded: sdpa3-proof-next/-head on mei and keke (killed: the page-list prefix used sed and broke on `/`);
+sdpa3-gate2 and sdpa3-plants on a2bc2358e (the budget edit had joined two columns of the contract row: static and
+`so` rejected it; fixed in 86b947476).
+Run 2's plants: sdpa-reserve-align was WARN-NO-MSG because the STARTUP-DATA-WINDOWS contract caught it at `so` time
+(RESERVE_MEM alone on a page), before the test ran; its msg now matches either catch.
 
-## Jobs (shiki, final head 71762fa7f)
-sdpa2-gate (cargo xtask clippy, cargo xtask static, affected --run --base origin/next): running at hand-back.
-sdpa2-plants (4 plants, `cargo xtask plants`): running at hand-back; baseline ok, sdpa-relro-align CAUGHT so far.
-Diagnosis (not on the final head): sdpa2-lint0 (inherited head clean), sdpa2-base, sdpa2-head, sdpa2-faults1,
-sdpa2-fix, sdpa2-besl. Scratch: shiki ~/work/STARTUP-DATA-PAGE-ALIGN-2/ (build.sh, faults.sh, addrs.sh, mapsum.py),
-/mnt/zram/claude/STARTUP-DATA-PAGE-ALIGN-2/ (base/, besl/, out/).
+## Open
+* Next step: none required. Optional: the remaining relro pages (fast 0x85a000, release 0x7b6000) are the `.got`
+  reads; placing `.got` next to the cluster would save one more page per profile.
