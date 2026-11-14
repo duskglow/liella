@@ -781,6 +781,45 @@ fn listed_rows(name: &str, exe: &Path) -> Result<Vec<String>, String> {
     Ok(parse_rows(name, &out.stdout)?.into_iter().map(|(r, _)| r).collect())
 }
 
+/// The file in `target/liella-v3` that says how the v3 archive was laid out ([`v3_layout`]); the bench output
+/// prints it as `liella_v3 layout: ...` (ruling #5463).
+const V3_LAYOUT: &str = "layout.txt";
+
+/// Whether this host runs x86-64-v3 code (the psABI's v3 level: AVX, AVX2, BMI1, BMI2, F16C, FMA, LZCNT, MOVBE,
+/// XSAVE, on top of v2's CMPXCHG16B, POPCNT, SSE3, SSSE3, SSE4.1, SSE4.2).
+fn host_runs_v3() -> bool {
+    #[cfg(target_arch = "x86_64")]
+    {
+        std::arch::is_x86_feature_detected!("avx")
+            && std::arch::is_x86_feature_detected!("avx2")
+            && std::arch::is_x86_feature_detected!("bmi1")
+            && std::arch::is_x86_feature_detected!("bmi2")
+            && std::arch::is_x86_feature_detected!("f16c")
+            && std::arch::is_x86_feature_detected!("fma")
+            && std::arch::is_x86_feature_detected!("lzcnt")
+            && std::arch::is_x86_feature_detected!("movbe")
+            && std::arch::is_x86_feature_detected!("xsave")
+            && std::arch::is_x86_feature_detected!("cmpxchg16b")
+            && std::arch::is_x86_feature_detected!("popcnt")
+            && std::arch::is_x86_feature_detected!("sse4.2")
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        false
+    }
+}
+
+/// Ruling #5463 (LAYOUT-DELETE-LISTS): the layout of the v3 measurement build, and the line that says so. Traced
+/// like every product (timing measures the layout that ships); only when this host cannot run x86-64-v3 code (the
+/// tracer must execute the probes linked against the v3 archive) ungrouped, in so many words.
+fn v3_layout(runs_v3: bool) -> (crate::hotlists::Layout, &'static str) {
+    if runs_v3 {
+        (crate::hotlists::Layout::Traced, "traced (grouped from a trace of this v3 build, like every product)")
+    } else {
+        (crate::hotlists::Layout::Ungrouped, "UNGROUPED: this build host cannot run x86-64-v3 code, so the v3 build cannot be traced; its start-up rows measure an ungrouped layout, not the one that ships")
+    }
+}
+
 pub fn compare(root: &Path, args: &[String]) -> Result<(), String> {
     let CompareArgs { runs, names, v3, sorted, counters, build_only, no_build, tunables, rows: row_items } = parse_compare_args(args)?;
     set_tunables(tunables)?;
@@ -796,13 +835,21 @@ pub fn compare(root: &Path, args: &[String]) -> Result<(), String> {
     if v3 && !no_build {
         let out = root.join("target/liella-v3");
         fs::create_dir_all(&out).map_err(|e| e.to_string())?;
+        // Ruling #5463: the v3 build is traced like every product, so timing measures the layout that ships;
+        // ungrouped only where this host cannot run x86-64-v3 code (the tracer runs the probes), said below.
+        let (layout, why) = v3_layout(host_runs_v3());
+        fs::write(out.join(V3_LAYOUT), format!("{why}\n")).map_err(|e| format!("{}: {e}", out.join(V3_LAYOUT).display()))?;
         // Own product dir and output dir: a v3 archive never lands in target/product or target/liella,
         // whose `.profile` marker describes the baseline products.
-        crate::so::build_archive(root, &root.join("target/product-v3"), &out.join("libc.a"), Some("-Ctarget-cpu=x86-64-v3"), crate::so::Profile::Release)?;
+        crate::so::build_archive(root, &root.join("target/product-v3"), &out.join("libc.a"), Some("-Ctarget-cpu=x86-64-v3"), crate::so::Profile::Release, layout)?;
     }
     let cpu = cpu_model();
     println!("machine: {}, {cpu}, kernel {}, {} (host C library)", first_line("hostname", &[]), first_line("uname", &["-r"]), first_line("ldd", &["--version"]));
     println!("tunables: GLIBC_TUNABLES={} (both sides)", TUNABLES.get().map_or("(unset)", String::as_str));
+    if v3 {
+        let why = fs::read_to_string(root.join("target/liella-v3").join(V3_LAYOUT)).unwrap_or_else(|_| "not recorded (a v3 archive built before LAYOUT-DELETE-LISTS)".into());
+        println!("liella_v3 layout: {}", why.trim_end());
+    }
     if let Some(m) = &staged {
         println!("{}", crate::benchstage::header(m));
     }
@@ -1965,6 +2012,17 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    /// Ruling #5463 (no spec clause: measurement tooling): the v3 measurement build is traced whenever the host can
+    /// run v3 code, and the fallback says "UNGROUPED" in its line, never a silent ungrouped timing.
+    #[test]
+    fn v3_measurement_build_is_traced_unless_the_host_cannot_run_it() {
+        assert_eq!(super::v3_layout(true).0, crate::hotlists::Layout::Traced);
+        let (layout, why) = super::v3_layout(false);
+        assert_eq!(layout, crate::hotlists::Layout::Ungrouped);
+        assert!(why.starts_with("UNGROUPED:"), "{why}");
+        assert!(super::v3_layout(true).1.starts_with("traced"));
+    }
+
     // BENCH-TUNABLES: no spec clause (developer tooling). `--tunables` reaches the benchmark's environment and the
     // caller's own GLIBC_TUNABLES does not.
     #[test]

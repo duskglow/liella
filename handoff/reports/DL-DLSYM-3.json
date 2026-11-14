@@ -1,0 +1,58 @@
+{
+ "task": "DL-DLSYM-3",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: LAYOUT-JITTER-CLASS: next merged; the one gate red (tool 54 at cold 0x2000, fast profile) is caused by setlocale_locked missing from next's stale tracked hot-text list, not by this branch's start-up code; plants 12/12 CAUGHT",
+ "branch": "task/dl-dlsym-3",
+ "head": "b74793205",
+ "gate": {
+  "affected": "6524 passed / 1 failed (init_data_clusters_hold_at_every_text_phase)",
+  "peak": "11G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "ruling #5350 outcome: only this branch moves the tool count, but the cause is next's stale hot-text list (setlocale_locked in cold text), not StartInfo::dlsym",
+   "recommendation": "hold as LAYOUT-JITTER-CLASS until trace-at-build (or consistent train-owned lists) lands, then land unchanged"
+  }
+ ],
+ "informational": [
+  "next's tracked hot-text.list is behind its trace (regeneration adds 60 keys, drops 25; tool probe 51 vs 53 faults), and `cargo xtask hot-lists` output breaks init_zero_fault_clusters_sit_in_one_window and init_zero_fault_calls_hold_at_every_text_phase on origin/next alone (mei dl-dlsym-3-nextregen)",
+  "diagnostic jobs (evidence only): mei dl-dlsym-3-hot-next, dl-dlsym-3-hot-head (rc 1 by design), dl-dlsym-3-diag-head, dl-dlsym-3-diag-next, dl-dlsym-3-nextregen; shiki dl-dlsym-3-regen"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "unblock",
+   "what": "dlsym/dlvsym in ld.so (DL-16b) ready to land once the layout class is fixed; enables DL-16c and DL-17",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  },
+  {
+   "kind": "coverage",
+   "what": "plants on dlsym/dlvsym re-run on the merged head",
+   "before": null,
+   "after": 12,
+   "unit": "plants caught",
+   "measured": true
+  },
+  {
+   "kind": "faults",
+   "what": "tool probe faults with a regenerated hot-text list (next and this head, fast, every pad): evidence for the list owners, not a change of this branch",
+   "before": 53,
+   "after": 51,
+   "unit": "minor faults",
+   "measured": true
+  }
+ ],
+ "improvement": "the train-owned hot lists drift from their own trace and the regen tool cannot refresh them without breaking the cluster tests; a CI check comparing the tracked list with a fresh trace would catch the drift where it starts",
+ "next_step": "after trace-at-build lands: merge origin/next, rerun init_data_clusters_hold_at_every_text_phase (fast, release) and the gate, land",
+ "report_file": "handoff/DL-DLSYM-3-report.md",
+ "jobs": [
+  "dl-dlsym-3-lint1",
+  "dl-dlsym-3-gate2",
+  "dl-dlsym-3-plants"
+ ]
+}
