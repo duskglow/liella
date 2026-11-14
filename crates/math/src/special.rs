@@ -984,20 +984,14 @@ fn limit<F: Float>() -> i64 {
 }
 
 /// `jn(n, x)`: `double` and `float` try the recurrence tier ([`crate::fast_bessel::n`]) first, then
-/// [`jn_accurate`]. `float` orders 0 and ±1 are [`j0`] and [`j1`] themselves (`J_{−1}(x) = J_1(−x)`;
-/// a NaN keeps its sign), so they share the large band (D-10.109) and agree with `j0f`/`j1f` bit for bit.
+/// [`jn_accurate`]. The `float` tier answers orders 0 and ±1 by [`j0`] and [`j1`] themselves, so
+/// they share the large band (D-10.109) and agree with `j0f`/`j1f` bit for bit.
 pub fn jn<F: Float>(n: i32, x: F, mode: Rounding) -> (F, Status) {
     if F::PREC == 53 {
         if let Some(r) = from_fast("jn", fast_bessel::n::jn(n, as_f64(x), mode)) {
             return r;
         }
     } else if F::PREC == 24 {
-        match n {
-            0 => return j0(x, mode),
-            1 => return j1(x, mode),
-            -1 if !f32::from_bits(x.to_bits() as u32).is_nan() => return j1(F::from_bits(x.to_bits() ^ 0x8000_0000), mode),
-            _ => {}
-        }
         let r = fast_bessel::n::jnf(n, f32::from_bits(x.to_bits() as u32), mode);
         crate::stats::record("jnf", r.is_some());
         if let Some((v, st)) = r {
@@ -1014,18 +1008,7 @@ pub fn yn<F: Float>(n: i32, x: F, mode: Rounding) -> (F, Status) {
             return r;
         }
     } else if F::PREC == 24 {
-        // Orders 0 and ±1 are y0f and y1f themselves, as in [`jn`]; `Y_{−1} = −Y_1` for finite x > 0.
-        let xf = f32::from_bits(x.to_bits() as u32);
-        match n {
-            0 => return y0(x, mode),
-            1 => return y1(x, mode),
-            -1 if xf > 0.0 && xf < f32::INFINITY => {
-                let (v, st) = y1(x, fast_bessel::mirrored(mode));
-                return (F::from_bits(v.to_bits() ^ 0x8000_0000), st);
-            }
-            _ => {}
-        }
-        let r = fast_bessel::n::ynf(n, xf, mode);
+        let r = fast_bessel::n::ynf(n, f32::from_bits(x.to_bits() as u32), mode);
         crate::stats::record("ynf", r.is_some());
         if let Some((v, st)) = r {
             return (F::from_bits(u128::from(v.to_bits())), st);
