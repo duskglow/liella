@@ -42,6 +42,32 @@ not settled by this probe.
 plus and bnd grow by about 4.6x per level from 10 on; within 4 GiB the reference compiles 16 and answers
 REG_ESPACE from 20.
 
+## Liella without a fixed cap (REGCOMP-FALLIBLE-ALLOC-2, Skylake-SP host)
+
+D-14.8 as amended (ruling #5594): no fixed program-size cap; the process's limits are the bound, and only the `u32`
+node-id guard remains (about 65,000 nested levels). Each case runs in a forked child of a static Liella program; "no
+limit" here is `RLIMIT_AS` 16 GiB, so that no case can take the host's memory. Time and peak RSS are the child's.
+
+| shape | depth | limit | regcomp | child time, peak RSS |
+|---|---|---|---|---|
+| rep | 1000 | 16 GiB | 0 | 0.57 s, 100156 KiB |
+| rep | 1446 / 1447 | 16 GiB | 0 / 0 | 1.27 s, 165476 KiB / 1.35 s, 165572 KiB |
+| rep | 2000 | 16 GiB | 0 | 2.52 s, 255840 KiB |
+| rep | 3000 | 16 GiB | 0 | 5.62 s, 573872 KiB |
+| rep2 | 1447 / 3000 | 16 GiB | 0 / 0 | 1.35 s, 165852 KiB / 5.42 s, 573872 KiB |
+| bnd | 14 / 15 / 16 | 16 GiB | 0 / 0 / 0 | 0.41 s, 108984 KiB / 0.96 s, 185572 KiB / 2.03 s, 359164 KiB |
+| rep, rep2 | 3000 | 512 MiB | 12 / 12 | 2.69 s, 397696 KiB / 2.71 s, 397696 KiB |
+| bnd | 20 / 24 | 512 MiB | 12 / 12 | 0.24 s, 156832 KiB / 0.66 s, 433680 KiB |
+| min2 (`a` and n `{2,}`) | 24 / 32 | 512 MiB | 12 / 12 | 0.60 s, 328640 KiB / 0.63 s, 328640 KiB |
+
+Every child exited normally (no signal): under the limit each pattern answers `REG_ESPACE`. The reference, same
+probe and host: rep 1446 6.14 s, 319488 KiB; rep 3000 46.7 s, 1319968 KiB; bnd 16 0.75 s, 357344 KiB (all compile);
+under 512 MiB rep 3000, bnd 20 and bnd 24 answer 12. The gaps listed below (rep and rep2 past 1446, bnd 15 and 16)
+are closed; bounded repeats of bounded repeats stay exponential in both libraries, bounded by the process's limits.
+Tests: `regex_deep_nesting.rs::nested_repetitions_compile_without_a_size_cap` (depths 1446, 1447 compiled; 1000 and
+3000 compiled and searched without a limit), `regex_enomem.rs::regcomp_and_regexec_answer_reg_espace_at_the_process_limit`
+(the limit child).
+
 ## Liella after the fusion (REGCOMP-SCOPE-COST-2, same probe and limits, Skylake-SP host)
 
 A level is one `ENTER` (with the loop's split and the group's open) in the enclosing scope and one `EXIT` (with the
