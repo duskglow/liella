@@ -1,0 +1,20 @@
+{"task": "REGCOMP-SCOPE-COST-3", "model": "opus", "tokens": null,
+ "result": "PENDING JOBS: rx_backref rows fixed (walk's entry set-up was the surplus; now -264/-264/-1370 instr/call below base), every regcomp/regexec row equal or better, depth sweep unchanged (1446), gate green; plants running",
+ "branch": "task/regcomp-scope-cost-3", "head": "see git: last commit of the branch",
+ "gate": {"affected": "8 suites ok, 5301 passed / 0 failed, conformance 2 passed (regcomp-scope-cost-3-gate)", "peak": "4.4G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["base column is the merge base 32c24df04 (next 239a714a5's code); origin/next has moved since (0bc5a04b5), not compared here"],
+ "refused": [],
+ "impact": [
+  {"kind": "perf", "what": "rx_backref_c regexec per call (Broadwell-EP)", "before": 21971.2, "after": 21707.2, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "rx_backref regexec per call", "before": 21999.2, "after": 21735.2, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "rx_backref_long_c regexec per call", "before": 73617.2, "after": 72247.2, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "regcomp_ipv4 per call (run 2's fusion, re-measured)", "before": 131161.5, "after": 121052.4, "unit": "instr/call", "measured": true},
+  {"kind": "correctness", "what": "((a)*)* and ((a*)*)* compile through depth 1446 (was 914), REG_ESPACE from 1447 (run 2's fusion, re-swept on the final head)", "before": 914, "after": 1446, "unit": "depth", "measured": true},
+  {"kind": "coverage", "what": "plants on the final head: run 2's eleven + two new walk dispatch guards", "before": 11, "after": 13, "unit": "plants", "measured": true}
+ ],
+ "improvement": "wl_trace.sh cannot trace a primed base from a role host (no git tree); a --base option (as wl_percall has) would save the role-style copy this run made",
+ "next_step": "land after the plants job is green; REGCOMP-FALLIBLE-ALLOC removes the 2^21 cap",
+ "report_file": "handoff/regex-scope-cost.md",
+ "jobs": ["regcomp-scope-cost-3-gate", "regcomp-scope-cost-3-plants", "regcomp-scope-cost-3-percall", "regcomp-scope-cost-3-sweep", "regcomp-scope-cost-3-lint2"]}

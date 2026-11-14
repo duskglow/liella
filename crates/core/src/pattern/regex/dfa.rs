@@ -800,6 +800,10 @@ impl Dfa<'_> {
                 }
                 OP_ENTER => {
                     push(scr, prog.node(inst.b, super::program::enter_j(inst, j)), &mut top);
+                    if inst.c != NONE {
+                        // An optional iteration's skip (its split fused in).
+                        push(scr, prog.node(inst.c, j), &mut top);
+                    }
                     None
                 }
                 _ => {
@@ -986,7 +990,9 @@ mod tests {
             let got = exists_with(&fits.view(), &Locale::C, s, w, &opts, 9, &mut store).unwrap();
             assert_eq!(got, nfa(&fits, &Locale::C, s, 0, &opts), "{s:?}");
         }
-        let prog = stack(150);
+        // 150 stars fit the cap since a scope's split and group fused into its ENTER/EXIT
+        // (REGCOMP-SCOPE-COST-2): 200 is over it.
+        let prog = stack(200);
         assert!(prog.view().nodes as usize > NODE_CAP, "{} nodes", prog.view().nodes);
         let mut store = Store(std::vec![0; 8192]);
         let (b0, f0) = (get(&counters::BUILT), get(&counters::FALLBACKS));
