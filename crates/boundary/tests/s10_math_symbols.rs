@@ -14,8 +14,6 @@
 use spectest::{family, symbol};
 
 mod products;
-#[path = "../../core/tests/support/skip_note.rs"]
-mod skip_note;
 
 use liella_abi::ctypes::LdBits;
 use liella_boundary::posix::s10_math_gen as m;
@@ -175,7 +173,10 @@ fn math_double_fast_entry_matches_the_envelope_in_every_mode() {
 fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
     // Clauses: s10_0_f_0.
     // The fast path may run in place only under the default control word; under any other word
-    // the entry switches to the default one before computing (D-10.13). Every rounding direction,
+    // the entry switches to the default one before computing (D-10.13). The one exception is exp
+    // under a word that differs from the default only in its rounding field: its quick phase runs
+    // in place in the caller's direction (D-10.94), so the directed rows below check that path's
+    // results and flags too, while under the FTZ/DAZ words exp still switches. Every rounding direction,
     // with and without FTZ and DAZ: the result is liella-math's accurate one in that direction and
     // MXCSR after the call is the caller's word with exactly the reference flags added, nothing
     // else. Values alone cannot show which path ran (the kernels' rounding tests also hold in the
@@ -1457,11 +1458,10 @@ fn sym___fpu_control() {
     let line = products::dynsym_line("__fpu_control");
     assert!(line.contains(" 2 OBJECT  GLOBAL DEFAULT"), "__fpu_control in libc.so.6: {line:?}");
     // Statically linked on Liella (the program's own definition links and is ignored), then the
-    // same programs linked dynamically on glibc (the oracle). Their run on Liella's libc.so.6
-    // waits for Liella's ld.so (phase 14, #814): a reported skip, never a silent pass.
+    // same programs linked dynamically, on glibc (the oracle) and on Liella's libc.so.6 under
+    // Liella's ld.so (#814, D-27.24): a program's own value applies.
     products::conformance(&["fpu_control_default", "fpu_control_own"]);
     products::conformance_dynamic(&["fpu_control_default", "fpu_control_own"]);
-    skip_note::skipped("skipped: fpu_control_default/fpu_control_own dynamic on Liella wait for Liella's ld.so (phase 14, #814); only the glibc oracle run checked");
 }
 symbol!(sym___gamma_r_finite, "__gamma_r_finite", "10", "2.15", r##""##);
 symbol!(sym___gammaf128_r_finite, "__gammaf128_r_finite", "10", "2.26", r##""##);

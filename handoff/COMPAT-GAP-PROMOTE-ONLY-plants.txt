@@ -1,0 +1,3 @@
+# COMPAT-GAP-PROMOTE-ONLY: plants on the compat id gap verdict (xtask/src/compat_ids.rs).
+gap-always-fatal | xtask/src/compat_ids.rs | lit:    if promote { ==> if true { | cargo test -p xtask --bin xtask compat_ids:: | msg:gap_warns_without_promote.*(FAILED|panicked)|panicked.*gap_warns_without_promote
+gap-never-fatal | xtask/src/compat_ids.rs | lit:    if promote { ==> if false { | cargo test -p xtask --bin xtask compat_ids:: | msg:gap_fails_with_promote.*(FAILED|panicked)|panicked.*gap_fails_with_promote

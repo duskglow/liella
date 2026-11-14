@@ -99,54 +99,114 @@ fn ln64(v: f64) -> f64 {
 /// * otherwise ([`gamma_core`]'s domain): y = ln|G|, absolute error ≤ 55.1u·1.0001 + (1.45 + 2|y|)u
 ///   ≤ (56.7 + 2.1|y|)u, in ulp of y (|y| in [2^E, 2^(E+1))): ≤ 56.7·2^-(E+1) + 2.1: ≤ 30.5 for
 ///   |y| ≥ 1, ≤ 7260 for |y| ≥ 2^-8. Below 2^-8 (next to the negative zeros) the bound is too wide
-///   for the rounding test: refused, as are the poles and |x| < 2^-20.
-#[inline(always)]
-pub(super) fn lgamma_core(x: f32) -> Option<(f64, u64)> {
-    let (y, d, _) = lgamma_core_signed(x)?;
-    Some((y, d))
+///   for the rounding test: those operands and |x| < 2^-20 go to [`lgamma_edge`]; the poles are
+///   refused.
+///
+/// (Tests only: the exports go through [`eval_lgamma`].) The third value says the margin is
+/// [`lgamma_edge`]'s.
+#[cfg(test)]
+pub(super) fn lgamma_core(x: f32) -> Option<(f64, u64, bool)> {
+    let (y, d, _, edge) = lgamma_core_signed(x)?;
+    Some((y, d, edge))
 }
 
 /// [`lgamma_core`] and the sign of Γ(x) (1 or -1). Only the last branch sees x < 0, and there the
 /// sign of [`gamma_core`]'s Γ(x) is exact: every factor x + j is exact and nonzero (a pole is
 /// refused) and P > 0; its sign bit spread over the word and or-ed with 1 gives ±1. The other
 /// branches have x > 0. So no operand is converted to an integer to find the parity of its integer
-/// part (D-10.95), and the positive path computes no parity at all.
+/// part (D-10.95), and the positive path computes no parity at all. The fourth value is true when
+/// [`lgamma_edge`] answered (its [`Status::hw`] stays conservative, see there).
 #[inline(always)]
-fn lgamma_core_signed(x: f32) -> Option<(f64, u64, i32)> {
+fn lgamma_core_signed(x: f32) -> Option<(f64, u64, i32, bool)> {
     let xd = f64::from(x);
     let z = xd - 1.0;
     if crate::dd::abs(z) <= 0.125 {
-        return Some((z * horner(&LG, z), LGAMMA_DELTA, 1));
+        return Some((z * horner(&LG, z), LGAMMA_DELTA, 1, false));
     }
     let z = xd - 2.0;
     if crate::dd::abs(z) <= 0.125 {
-        return Some((log1p_core(z as f32)? + z * horner(&LG, z), LGAMMA_DELTA, 1));
+        return Some((log1p_core(z as f32)? + z * horner(&LG, z), LGAMMA_DELTA, 1, false));
     }
     if xd >= STIRLING_X {
         let lx = log_core(x)?;
         let w = 1.0 / xd;
         let w2 = w * w;
         let s = w * (1.0 / 12.0 + w2 * (-1.0 / 360.0 + w2 * (1.0 / 1260.0)));
-        return Some(((xd - 0.5) * (lx - 1.0) + (HALF_LN_2PI_M_HALF + s), LGAMMA_DELTA, 1));
+        return Some(((xd - 0.5) * (lx - 1.0) + (HALF_LN_2PI_M_HALF + s), LGAMMA_DELTA, 1, false));
     }
-    let g = gamma_core(xd)?;
+    let Some(g) = gamma_core(xd) else { return lgamma_edge(xd) };
     let y = ln64(crate::dd::abs(g));
     let a = crate::dd::abs(y);
     if a >= 1.0 {
-        Some((y, LGAMMA_DELTA, (g.to_bits() as i64 >> 63) as i32 | 1))
+        Some((y, LGAMMA_DELTA, (g.to_bits() as i64 >> 63) as i32 | 1, false))
     } else if a >= 1.0 / 256.0 {
-        Some((y, LGAMMA_SMALL_DELTA, (g.to_bits() as i64 >> 63) as i32 | 1))
+        Some((y, LGAMMA_SMALL_DELTA, (g.to_bits() as i64 >> 63) as i32 | 1, false))
     } else {
-        None
+        lgamma_edge(xd)
     }
+}
+
+/// 2^-60, [`crate::fast_gamma::TINY`]: below it lnΓ(x) = -ln|x| to well within a `double` ulp.
+const LGAMMA_TINY: f64 = f64::from_bits(0x3c30_0000_0000_0000);
+/// 2^26: the largest margin [`lgamma_edge`] hands to [`super::round`] (whose test holds below 2^27).
+const EDGE_MAX_MARGIN: f64 = 67_108_864.0;
+
+/// lnΓ(x) for the operands [`lgamma_core_signed`]'s `double` pieces refuse, as its (y, margin in
+/// ulp of y, sign of Γ(x)), or `None` (the poles, x ≤ -16 off the poles, 0, NaN: the accurate path).
+/// Cold: on the cbench row's 256 operands only x = -3.14382577 comes here (LIBM-F32-REST-NEXT).
+/// * |y| < 2^-8 beside the negative zeros, and 2^-60 ≤ |x| < 2^-20: the `double` tier's
+///   double-double kernel ([`crate::fast_gamma::lgamma_kernel`], x in its domain: |x| < 16, not a
+///   negative integer), Y = Y.hi + Y.lo with |lnΓ(x) - Y| ≤ ε (its proved absolute bound: tables
+///   2^-75 relative, D 2^-99, the log and the sums 2^-96). v = RN(Y.hi + Y.lo): |lnΓ(x) - v| ≤
+///   ε + ulp(v)/2. With q = ε/ulp(v) (exact: ulp(v) a power of two, v ≥ 2^-126 so ulp(v) ≥ 2^-178
+///   normal), the margin d = ⌊q⌋ + 2 > q + 1/2 is strict, as [`super::round`] requires; q ≥ 2^26 is
+///   refused (round's test needs d < 2^27). No `float` x ≤ -16 other than a pole lies within the
+///   |y| < 2^-8 window of a zero of lnΓ (the windows shrink like 1/n!), so the kernel's |x| < 16
+///   loses no operand that could pass the test.
+/// * 0 < |x| < 2^-60: lnΓ(x) = -ln|x| - γx + R, |R| ≤ 0.83x² (ζ(2)/2 bounds the series' terms, which
+///   alternate and decrease). y = -ln64(|x|): |x| ≥ 2^-149 is in ln64's range, |y| in [41.5, 103.3],
+///   |y| in [2^E, 2^(E+1)), E ≥ 5; ln64's (1.45 + 2|y|)u is ≤ 1.45·2^-(E+1) + 2 ≤ 2.03 ulp(y); the
+///   dropped γx + R ≤ 2^-59.9 against ulp(y) ≥ 2^-47 adds < 0.001: ≤ 2.04 ulp, so LGAMMA_DELTA
+///   (72) holds. Γ(x) has the sign of x.
+///
+/// Flags: inexact, as every piece ([`super::finish`]); [`eval_lgamma`] widens the hardware hint
+/// [`Status::hw`] to [`Status::HW_ANY`] for these results, as the `double` tier does for the same
+/// kernel, so the in-place envelope always writes MXCSR after a call that came here (no proof
+/// that the kernel's intermediates stay normal is needed; the cost is on this cold path only).
+#[cold]
+#[inline(never)]
+fn lgamma_edge(xd: f64) -> Option<(f64, u64, i32, bool)> {
+    let a = crate::dd::abs(xd);
+    if a < LGAMMA_TINY {
+        if a == 0.0 {
+            return None;
+        }
+        return Some((-ln64(a), LGAMMA_DELTA, if xd < 0.0 { -1 } else { 1 }, true));
+    }
+    if !crate::fast_gamma::domain(xd, false) {
+        return None;
+    }
+    let (y, eps, sign) = crate::fast_gamma::lgamma_kernel(xd)?;
+    let v = y.hi + y.lo;
+    let e = v.to_bits() & 0x7ff0_0000_0000_0000;
+    if e < 0x3810_0000_0000_0000 {
+        return None;
+    }
+    let q = eps / (f64::from_bits(e) / 4_503_599_627_370_496.0);
+    if q.is_nan() || q >= EDGE_MAX_MARGIN {
+        return None;
+    }
+    // RANGE: 0 <= q < 2^26 (NaN and larger returned above).
+    Some((v, q as u64 + 2, sign, true))
 }
 
 /// `lgammaf` by the fast path with the sign of Γ(x) (`signgam`), or `None` (see [`eval`]): the
 /// value as `eval(Fast::Lgamma, ..)`, the sign from Γ(x) itself ([`lgamma_core_signed`]).
 #[inline(always)]
 pub fn eval_lgamma(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
-    let (y, d, sign) = lgamma_core_signed(x)?;
-    Some((super::finish(x, y, d, mode, "lgammaf")?, sign))
+    let (y, d, sign, edge) = lgamma_core_signed(x)?;
+    let (v, st) = super::finish(x, y, d, mode, "lgammaf")?;
+    Some(((v, if edge { st.hw(Status::HW_ANY) } else { st }), sign))
 }
 
 /// `tgammaf` by the fast path, or `None` (see [`eval`]).
@@ -191,11 +251,12 @@ mod tests {
                 let ulp = f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
                 assert!(crate::dd::abs(y - f) <= (GAMMA_BOUND + 0.5) * ulp, "gamma_core({x:e}): {} ulp", (y - f) / ulp);
             }
-            if let Some((y, d)) = lgamma_core(x) {
+            if let Some((y, d, edge)) = lgamma_core(x) {
                 lg += 1;
                 let f = crate::special::lgamma_accurate::<f64>(xd, Rounding::Nearest).0.0;
                 let ulp = f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
-                let b = if d == LGAMMA_SMALL_DELTA { LGAMMA_SMALL_BOUND } else { LGAMMA_BOUND };
+                // lgamma_edge: its margin d with the reference's half ulp (d - 1 > q + 1/2 + 1/2).
+                let b = if edge { d as f64 - 1.5 } else if d == LGAMMA_SMALL_DELTA { LGAMMA_SMALL_BOUND } else { LGAMMA_BOUND };
                 assert!(crate::dd::abs(y - f) <= (b + 0.5) * ulp, "lgamma_core({x:e}): {} ulp", (y - f) / ulp);
             }
         }
@@ -214,6 +275,29 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// lgammaf beside the negative zeros of lnΓ (the 1024 encodings around the cbench row's
+    /// x = -3.14382577 and around the zero near -2.4570) and for 0 < |x| < 2^-60 takes the fast path
+    /// ([`lgamma_edge`]) and agrees with the accurate path (value, flags, signgam) in every mode.
+    /// (No spec clause: LIBM-F32-REST-NEXT.)
+    #[test]
+    fn lgammaf_beside_the_negative_zeros_takes_the_fast_path() {
+        let around = |c: f32| (-512i32..512).map(move |k| f32::from_bits(c.to_bits().wrapping_add_signed(k)));
+        let tiny = [1.0e-30f32, -1.0e-30, 8.0e-19, -8.6e-19, f32::from_bits(1), f32::from_bits(0x8000_0001), f32::MIN_POSITIVE];
+        let (mut edge, mut refused) = (0u32, 0u32);
+        for x in around(-3.143_825_8).chain(around(-2.457_024_8)).chain(tiny) {
+            edge += u32::from(matches!(lgamma_core(x), Some((_, _, true))));
+            for m in MODES {
+                let Some(r) = eval_lgamma(x, m) else {
+                    refused += 1;
+                    continue;
+                };
+                let want = crate::special::lgamma_accurate::<f32>(x, m);
+                assert_eq!((x.to_bits(), m, r.0.0.to_bits(), r.0.1, r.1), (x.to_bits(), m, want.0.0.to_bits(), want.0.1, want.1), "lgammaf edge");
+            }
+        }
+        assert!(edge > 200 && refused <= 4, "lgammaf edge path: {edge} operands taken, {refused} mode calls refused");
     }
 
     /// The tiered oracle's decided gamma answers equal the accurate path's in every mode on the

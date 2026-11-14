@@ -1,0 +1,18 @@
+# PLANTS-UNGROUPED-MUTANTS: plants on the layout choice of cargo xtask plants, caught by its unit tests.
+auto-detect-off | xtask/src/plants.rs | lit:if p.layout || targets_layout(&p.cmd) { Layout::Traced } ==> if p.layout { Layout::Traced } | cargo test -p xtask --bin xtask plants::tests | msg:ordinary_plants_build_ungrouped_and_layout_plants_traced \.\.\. FAILED
+ungrouped-env-traced | xtask/src/plants.rs | perl:s/(fn layout_env.*?Layout::Ungrouped => )"ungrouped"/$1""/s | cargo test -p xtask --bin xtask plants::tests | msg:a_file_without_layout_plants_builds_ungrouped_only \.\.\. FAILED
+no-traced-baseline | xtask/src/plants.rs | lit:for layout in [Layout::Ungrouped, Layout::Traced] { ==> for layout in [Layout::Ungrouped] { | cargo test -p xtask --bin xtask plants::tests | msg:ordinary_plants_build_ungrouped_and_layout_plants_traced \.\.\. FAILED
+layout-plant-not-rebuilt | xtask/src/plants.rs | lit:let products = uses_products || layout == Layout::Traced; ==> let products = uses_products; | cargo test -p xtask --bin xtask plants::tests | msg:ordinary_plants_build_ungrouped_and_layout_plants_traced \.\.\. FAILED
+affected-only-ignored | xtask/src/plants.rs | lit:&& !words.iter().any(|w| w.starts_with("--only")) ==> | cargo test -p xtask --bin xtask plants::tests | msg:which_commands_target_the_layout \.\.\. FAILED
+mark-ignored | xtask/src/plants.rs | lit:layout = true; ==> layout = false; | cargo test -p xtask --bin xtask plants::tests | msg:plants_lines_parse \.\.\. FAILED
+cmd-env-ungrouped | xtask/src/plants.rs | lit:run_logged(&copy, &sh(&p.cmd), &log, cfg.timeout, layout) ==> run_logged(&copy, &sh(&p.cmd), &log, cfg.timeout, Layout::Ungrouped) | cargo test -p xtask --bin xtask plants::tests | msg:ordinary_plants_build_ungrouped_and_layout_plants_traced \.\.\. FAILED
+layout-check-not-named | xtask/src/plants.rs | lit:t == "layout-check" || ==> | cargo test -p xtask --bin xtask plants::tests | msg:which_commands_target_the_layout \.\.\. FAILED
+# cargo xtask plants results (8 plants: 8 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG, 0 BUILD-TIMEOUT):
+# auto-detect-off: CAUGHT, caught by xtask plants::tests::ordinary_plants_build_ungrouped_and_layout_plants_traced
+# ungrouped-env-traced: CAUGHT, caught by xtask plants::tests::a_file_without_layout_plants_builds_ungrouped_only
+# no-traced-baseline: CAUGHT, caught by xtask plants::tests::ordinary_plants_build_ungrouped_and_layout_plants_traced
+# layout-plant-not-rebuilt: CAUGHT, caught by xtask plants::tests::ordinary_plants_build_ungrouped_and_layout_plants_traced
+# affected-only-ignored: CAUGHT, caught by xtask plants::tests::which_commands_target_the_layout
+# mark-ignored: CAUGHT, caught by xtask plants::tests::plants_lines_parse
+# cmd-env-ungrouped: CAUGHT, caught by xtask plants::tests::ordinary_plants_build_ungrouped_and_layout_plants_traced
+# layout-check-not-named: CAUGHT, caught by xtask plants::tests::which_commands_target_the_layout

@@ -43,6 +43,7 @@
 - [28. Profiling and instrumentation](#28-profiling-and-instrumentation)
 - [29. Legacy and compatibility subsystems](#29-legacy-and-compatibility-subsystems)
 - [30. Catalogue of historical accidents and path dependencies](#30-catalogue-of-historical-accidents-and-path-dependencies)
+- [31. Utilities](#31-utilities)
 - [Appendix A. Kernel primitive catalogue (Linux x86_64)](#appendix-a-kernel-primitive-catalogue-linux-x8664)
 - [Appendix B. Exported symbol index](#appendix-b-exported-symbol-index)
 - [Appendix C. ABI data](#appendix-c-abi-data)
@@ -2582,8 +2583,9 @@ once. Entries created or removed during the scan may or may not appear. `.` and 
 included (except on some special file systems).
 
 **Failure.** `readdir` returns `NULL` both at the end and on error. ⚑ HIST: the caller must
-zero `errno` to distinguish them (C0.1). Errors are `EBADF`, `EOVERFLOW` (an entry does not
-fit a 32-bit `ino_t`), and `ENOENT` (the directory was removed).
+zero `errno` to distinguish them (C0.1). Errors are `EBADF` and `EOVERFLOW` (an entry does not
+fit a 32-bit `ino_t`). Removal of the directory while it is open ends the stream: `NULL` with
+`errno` unchanged.
 
 **Kernel.** `openat(O_DIRECTORY)`, `getdents64`, `lseek`, `close`.
 
@@ -5035,6 +5037,431 @@ A reimplementation cannot remove these, because the kernel ABI imposes them:
 * Page granularity for `mmap` and friends.
 * `MAP_FAILED` rather than `NULL`, because address 0 is mappable.
 * The `getpriority` return bias (20 - nice), handled inside the wrapper.
+
+---
+
+## 31. Utilities
+
+The commands the C library's packages install (Debian's `libc-bin`, `libc-dev-bin` and `locales`): what callers
+depend on, namely command names and paths, options, output formats, exit codes, files read and written, and
+environment. Their internals are not specified; Liella builds them as described in `plan/utilities.md` (owner's
+approval 2026-11-14). Sources: POSIX.1-2024 (XCU `getconf`, `iconv`, `locale`, `localedef`, `gencat`), the man pages
+(ldconfig(8), ldd(1), ld.so(8), getent(1), iconv(1), locale(1), localedef(1), zic(8), zdump(8), tzselect(1),
+tzfile(5), gencat(1), pldd(1)), RFC 8536 (TZif), Appendix D of this document (D.1 locales, D.2 catalogs, D.3 the
+loader cache), and black-box probes of the reference: `probe <case>` names a case of
+`spec/behaviour/utilities.glibc.txt`, recorded by `tools/probe/util_spec.sh` (see `spec/behaviour/utilities.md`).
+Messages are quoted as the reference prints them in the `POSIX` locale. A **Liella rule** is behaviour the design
+decided differently from the reference; each has a row in `docs/differences-from-glibc.md` and a pending decision
+(`records/pending/UTIL-SPEC-<k>.toml`, series D-31).
+
+### 31.1 Common conventions
+
+**Contract.**
+
+| Command | Path | Kind on the reference | Source |
+|---|---|---|---|
+| `ldconfig` | `/usr/sbin/ldconfig` | a shell script wrapper over a static program (Liella: one program, §31.2) | probe `paths`, `ldconfig-help` |
+| `ldd` | `/usr/bin/ldd` | a shell script | probe `paths` |
+| `getent`, `getconf`, `iconv`, `locale`, `localedef`, `zdump`, `gencat`, `pldd` | `/usr/bin/<name>` | dynamic programs | probe `paths` |
+| `zic` | `/usr/sbin/zic` | a dynamic program | probe `paths` |
+| `tzselect` | `/usr/bin/tzselect` | a shell script | probe `paths` |
+| `ld.so` | `/usr/bin/ld.so` | a symbolic link to `../lib64/ld-linux-x86-64.so.2` | probe `ldso-link` |
+
+* The paths are part of the interface: scripts name them (`/sbin/ldconfig` reaches `/usr/sbin/ldconfig` on a
+  merged-`/usr` system), and `dpkg` refuses to configure any package when `ldconfig` is not in `PATH`: `dpkg: warning:
+  'ldconfig' not found in PATH or not executable`, then `dpkg: error: 2 expected programs not found in PATH or not
+  executable`, exit 2 (probe `dpkg-needs-ldconfig`). ⚑ COMPAT.
+* The argp-style commands (`ldconfig`, `getent`, `iconv`, `locale`, `localedef`, `gencat`, `pldd`) accept `-?`/`--help`,
+  `--usage` and `-V`/`--version`; `ldd`, `zic`, `zdump` and `tzselect` accept `--help` and `--version`; `getconf`
+  accepts `--help` and `--version` (probe `*-help`, `*-version`).
+
+**Guarantees.**
+
+* `--help` writes the usage text to standard output and exits 0 (probe `*-help`, every case `rc=0`).
+* `--version` writes a banner whose first line is `<command> (<identity>) 2.39` and exits 0 (probe `*-version`:
+  `ldd (Ubuntu GLIBC 2.39-0ubuntu8.9) 2.39`). **Liella rule:** `<identity>` is `Liella <version>`, and the bug-report
+  line of `--help` names Liella's channel (pending `UTIL-SPEC-4`; differences row "Identity strings of the utilities").
+
+**Failure.**
+
+* An argp-style usage error writes the message and ``Try `<command> --help' or `<command> --usage' for more
+  information.`` (probe `getent-unknowndb`, `iconv-unsupported`, `pldd-nopid`); the exit status is the command's
+  (§31.2-§31.13).
+
+### 31.2 ldconfig
+
+**Contract.**
+
+* Builds the loader cache (Appendix D.3) from the directories of the configuration and the trusted directories, and
+  creates or updates the soname links in them (ldconfig(8)).
+* `dpkg` runs it through the `ldconfig` trigger (`activate-noawait ldconfig` in a package's `triggers` file) after
+  library packages change; Liella's `libc-bin` declares interest in that trigger (pending `UTIL-SPEC-2`).
+
+**Inputs.**
+
+* Options (probe `ldconfig-help`): `-c`/`--format=FORMAT`, `-C CACHE`, `-f CONF`, `-i`/`--ignore-aux-cache`, `-l`,
+  `-n`, `-N`, `-p`/`--print-cache`, `-r ROOT`, `-v`/`--verbose`, `-X`, `-?`/`--help`, `--usage`, `-V`/`--version`;
+  operands are directories (with `-n`, only those) or, with `-l`, library files (ldconfig(8)).
+* `/etc/ld.so.conf` (default; `-f CONF` replaces it): one directory per line, `#` comments, `include <glob>` lines
+  read in sorted order; the reference ships `include /etc/ld.so.conf.d/*.conf` (probe `ld.so.conf`; ldconfig(8)).
+* The trusted directories are scanned after the configured ones: `/lib/x86_64-linux-gnu`, `/usr/lib/x86_64-linux-gnu`,
+  `/lib`, `/usr/lib` (the same list as the loader's default directories, D-27.16); a directory reached twice is
+  scanned once (ldconfig(8)).
+* `-r ROOT`: the configuration, the scanned directories and the cache are taken inside ROOT; the reference does this
+  for an ordinary user too (probe `ldconfig-r-user`, exit 0). **Liella rule** (mechanism only, not observable):
+  paths are resolved inside ROOT without `chroot` (pending `UTIL-SPEC-9`).
+
+**Guarantees.**
+
+* The cache is written in the D.3.1 new format with the D.3.2 extensions (tag 0 generator text, tag 1 hwcaps names)
+  (probe `ldconfig-c-new`: the file starts `glibc-ld.so.cache1.1`; pending `UTIL-SPEC-3`).
+* The cache is replaced through a temporary file `<cache>~` (probe `ldconfig-user`). **Liella rule:** the temporary
+  file is in the cache's directory, synced, then renamed over the cache, so a reader sees the old or the new file
+  whole (pending `UTIL-SPEC-9`).
+* **Liella rule:** the cache is deterministic: entries in the D.3.3 order, ties broken by configuration order and then
+  path bytes, directory listings sorted, so the same tree gives byte-identical caches on any file system; every ELF
+  file read is untrusted input, bounds-checked and never mapped executable (pending `UTIL-SPEC-9`).
+* Soname links (probe `ldconfig-n-links`): in each scanned directory, the link `<soname>` points to the file with
+  that `DT_SONAME` whose name has the highest version under the D.3.3 comparison (`libfoo.so.1` -> `libfoo.so.1.10`
+  among `1.2`, `1.9`, `1.10`); a file without `DT_SONAME` is keyed by its own name and gets no link; a development
+  link (`libfoo.so`) is left as it is; `-X` makes no links, `-N` builds no cache (ldconfig(8)).
+* `-v` prints `<dir>: (from <file>:<line>)` per directory (`<cmdline>:0` for an operand) and `\t<soname> -> <file>`
+  per library, with ` (changed)` when the link was created or changed (probe `ldconfig-n-links`).
+* `-p` prints ``<N> libs found in cache `<cache>'``, then `\t<key> (<flags>) => <path>` per entry in cache order
+  (`(libc6,x86-64)` for this architecture), then `Cache generated by: <tag 0 text>` (probe `ldconfig-p`); callers
+  parse it (CPython's `ctypes.util.find_library` matches `(libc6,x86-64`). ⚑ COMPAT.
+
+**Failure.**
+
+* A cache that cannot be opened by `-p`: `<program>: Can't open cache file <cache>` and the strerror text on the next
+  line, exit 1 (probe `ldconfig-p-missing`).
+* A cache directory that is not writable: `<program>: Can't create temporary cache file <cache>~: Permission denied`,
+  exit 1 (probe `ldconfig-user`).
+* `-c old` and `-c compat`: the reference writes the old format (probe `ldconfig-c-old`: the file starts
+  `ld.so-1.7.0`). **Liella rule:** refused with a message and a nonzero exit, nothing written; `-c new` is accepted
+  (pending `UTIL-SPEC-6`; differences row "`ldconfig -c old`, `-c compat`").
+
+### 31.3 ldd
+
+**Contract.**
+
+* Prints the shared objects each operand needs, as the loader would resolve them; the same list as
+  `LD_TRACE_LOADED_OBJECTS=1` or the loader's `--list` (ld.so(8), ldd(1); D-27.16).
+* **Liella rule:** ldd never runs the operand's code or an interpreter other than Liella's loader: it lists through
+  Liella's loader in list mode, and for an operand whose `PT_INTERP` names another loader it lists by Liella's rules
+  and says so on standard error (pending `UTIL-SPEC-7`; differences row "`ldd` on a program for another loader").
+
+**Inputs.**
+
+* `ldd [OPTION]... FILE...`; options `--help`, `--version`, `-d`/`--data-relocs`, `-r`/`--function-relocs`,
+  `-u`/`--unused`, `-v`/`--verbose` (probe `ldd-help`). **Liella rule:** `-d`, `-r` and `-u` are refused with a
+  message until the loader processes relocations of a listed program (DL-10; pending `UTIL-SPEC-7`).
+
+**Guarantees.**
+
+* One line per object, each starting with a TAB: `\tlinux-vdso.so.1 (0x<16 hex digits>)`, `\t<name> => <path>
+  (0x<16 hex digits>)`, and the program's interpreter `\t/lib64/ld-linux-x86-64.so.2 (0x<16 hex digits>)`, exit 0
+  (probe `ldd-dynamic`); a dependency not found is `\t<name> => not found` (D-27.16). initramfs-tools parses these
+  lines (the TAB, the path after `=>`, the word before ` (`). ⚑ COMPAT.
+* With several operands, a `<file>:` line before each list (probe `ldd-two`).
+* `-v` adds a blank line, `\tVersion information:`, and per object `\t<object>:` followed by `\t\t<needed> (<version>)
+  => <path>` per version need (probe `ldd-v`).
+* A static-pie program: `\tstatically linked` on standard output, exit 0 (probe `ldd-static-pie`).
+
+**Failure.**
+
+* A file that is not a dynamic ELF program, including a static program that is not position independent:
+  `\tnot a dynamic executable` on standard error, exit 1 (probe `ldd-notelf`, `ldd-static`).
+* A missing operand file: `ldd: <file>: No such file or directory`, exit 1 (probe `ldd-missing`).
+* No operand: `ldd: missing file arguments` and ``Try `ldd --help' for more information.``, exit 1 (probe `ldd-none`).
+
+### 31.4 getent
+
+**Contract.**
+
+* Prints entries of the name-service databases through the library's own functions (§16, §17), so it shows what every
+  program gets from `nsswitch.conf` and its modules (getent(1)).
+
+**Inputs.**
+
+* `getent [OPTION...] database [key ...]`; options `-A`/`--no-addrconfig`, `-i`/`--no-idn`, `-s`/`--service=CONFIG`,
+  `-?`/`--help`, `--usage`, `-V`/`--version`; databases `ahosts ahostsv4 ahostsv6 aliases ethers group gshadow hosts
+  initgroups netgroup networks passwd protocols rpc services shadow` (probe `getent-help`).
+* `-s files` selects the service for the lookup (probe `getent-s`; getent(1)).
+
+**Guarantees.**
+
+* `passwd`, `group` and the other file databases print the entry in its file's line form (`root:x:0:0:root:/root:/bin/bash`;
+  probe `getent-passwd`, `getent-group`).
+* `hosts`: the address left-justified in 15 columns, a space, the names (probe `getent-hosts`); `ahosts`: per address
+  the lines `<address padded> STREAM <canonical name>`, `<address padded> DGRAM`, `<address padded> RAW` (probe
+  `getent-ahosts`); `services`: the name left-justified in 21 columns, a space, `<port>/<protocol>` (probe
+  `getent-services`); `initgroups`: the user left-justified in 21 columns, a space, the group ids (probe
+  `getent-initgroups`).
+* Without a key, the database is enumerated, exit 0 (getent(1)).
+
+**Failure.**
+
+* A key not found: no output, exit 2 (probe `getent-notfound`).
+* An unknown database: `Unknown database: <db>` and the `Try` line, exit 1 (probe `getent-unknowndb`).
+* Enumeration of a database that cannot be enumerated: `Enumeration not supported on <db>`, exit 3 (probe
+  `getent-noenum`).
+
+### 31.5 getconf
+
+**Contract.**
+
+* Prints configuration values from `sysconf`, `confstr` and `pathconf` (§24) by name (POSIX `getconf`).
+
+**Inputs.**
+
+* `getconf [-v SPEC] NAME`, `getconf [-v SPEC] PATH_NAME PATH`, `getconf -a [PATH]`, `--help`, `--version` (POSIX
+  `getconf`; probe `getconf-help`, `getconf-pathvar-nopath`).
+* Names: the POSIX set, plus `GNU_LIBC_VERSION`, `GNU_LIBPTHREAD_VERSION`, `PAGESIZE`, `PAGE_SIZE`, `_NPROCESSORS_ONLN`,
+  `LONG_BIT`, `PATH`, `LFS_CFLAGS`, `POSIX_V7_LP64_OFF64_CFLAGS` and the others `getconf -a` lists (320 lines on the
+  reference; probe `getconf-a`). Scripts use `_NPROCESSORS_ONLN` and `PAGESIZE`. ⚑ COMPAT.
+
+**Guarantees.**
+
+* A value on one line: `PAGESIZE` `4096`, `LONG_BIT` `64`, `PATH` `/bin:/usr/bin`, `GNU_LIBC_VERSION` `glibc 2.39`,
+  `GNU_LIBPTHREAD_VERSION` `NPTL 2.39`, `LFS_CFLAGS` empty, `POSIX_V7_LP64_OFF64_CFLAGS` `-m64`, exit 0 (probe
+  `getconf-values`); `_NPROCESSORS_ONLN` a positive integer (probe `getconf-nproc`); `NAME_MAX /` `255` (probe
+  `getconf-pathvar`). The `GNU_LIBC_VERSION` value is `confstr`'s (§24), not a getconf decision.
+* `-a` prints each name left-justified and padded, then its value (probe `getconf-a`: values start in column 36 for
+  `LONG_BIT`, `PAGESIZE`, `GNU_LIBC_VERSION`).
+* `-v` with a specification accepts any name, known or not, and prints the value (probe `getconf-v`).
+
+**Failure.**
+
+* An unknown name: ``getconf: Unrecognized variable `<NAME>'``, exit 2 (probe `getconf-unknown`).
+* A path variable without a path: the usage text on standard error, exit 2 (probe `getconf-pathvar-nopath`).
+
+### 31.6 iconv
+
+**Contract.**
+
+* Converts text between character sets through `iconv(3)` (§6), as any program would (POSIX `iconv`).
+
+**Inputs.**
+
+* `iconv [OPTION...] [FILE...]`; options `-f`/`--from-code=NAME`, `-t`/`--to-code=NAME` (with `//TRANSLIT` and
+  `//IGNORE`), `-l`/`--list`, `-c`, `-o`/`--output=FILE`, `-s`/`--silent`, `--verbose`, `-?`/`--help`, `--usage`,
+  `-V`/`--version` (probe `iconv-help`); no FILE or `-` reads standard input (POSIX `iconv`).
+* The character sets are the library's (§6): Liella's built-ins and the charmaps of `/usr/share/i18n/charmaps`
+  (D-6.8).
+
+**Guarantees.**
+
+* The converted bytes on standard output or in the `-o` file (probe `iconv-o`).
+* `-c` omits characters that cannot be converted, exit 0 (probe `iconv-c`); `//TRANSLIT` replaces them by the target
+  set's transliteration or `?` (probe `iconv-translit`).
+* `-l` lists the names the command accepts. **Liella rule:** exactly the names it can convert (the reference lists
+  1180 names of its conversion modules, `437//` style; probe `iconv-l`); differences row "Character sets of `iconv`
+  and `iconv -l`".
+
+**Failure.**
+
+* Invalid input: the output up to the error is written, then `iconv: illegal input sequence at position <N>` (N the
+  byte offset), exit 1 (probe `iconv-illegal`); the same for a character the target set cannot hold without `-c`
+  (probe `iconv-unconvertible`); with `//IGNORE`, the remaining output is written and the message and exit 1 still
+  follow (probe `iconv-ignore`).
+* An unknown character set: ``iconv: conversion from `<NAME>' is not supported`` (or `to`) and the `Try` line, exit 1
+  (probe `iconv-unsupported`).
+* An input file that cannot be opened: ``iconv: cannot open input file `<FILE>': <strerror>``, exit 1 (probe
+  `iconv-nofile`).
+
+### 31.7 locale
+
+**Contract.**
+
+* Reports the current locale settings, the available locales and charmaps, and the values of locale keywords (POSIX
+  `locale`; locale(1)).
+
+**Inputs.**
+
+* `locale [OPTION...] NAME...` or `locale [OPTION...] [-a|-m]`; options `-a`/`--all-locales`, `-m`/`--charmaps`,
+  `-c`/`--category-name`, `-k`/`--keyword-name`, `-v`/`--verbose`, `-?`/`--help`, `--usage`, `-V`/`--version` (probe
+  `locale-help`).
+* The environment: `LANG`, `LANGUAGE`, `LC_ALL` and the twelve `LC_*` variables (POSIX XBD 8.2).
+
+**Guarantees.**
+
+* Without operands: `LANG=<value>`, `LANGUAGE=<value>`, then each of `LC_CTYPE`, `LC_NUMERIC`, `LC_TIME`,
+  `LC_COLLATE`, `LC_MONETARY`, `LC_MESSAGES`, `LC_PAPER`, `LC_NAME`, `LC_ADDRESS`, `LC_TELEPHONE`, `LC_MEASUREMENT`,
+  `LC_IDENTIFICATION` as `NAME="<value>"` when derived from `LANG` or the default and `NAME=<value>` when set itself,
+  then `LC_ALL=<value>` (probe `locale-noenv`, `locale-lang`).
+* `-a`: `C`, `C.utf8`, `POSIX` and the installed locales with normalised codeset names (probe `locale-a`); `-a -v`:
+  per locale `locale: <name>  directory: <path>` (or `archive: <path>`), a rule line and its `LC_IDENTIFICATION`
+  fields (`title`, `email`, `revision`, `date`, `codeset`) (probe `locale-a-v`). Liella builds `C.utf8` into the library
+  and still lists it (`plan/utilities.md` §2.1); what `-a -v` prints for it is left to UTIL-8.
+* `-m`: the charmap names (probe `locale-m`).
+* A keyword operand prints its value; with `-k` as `keyword=value`, strings quoted and numbers bare, including the
+  wide-character items (`numeric-decimal-point-wc=46`); a category operand prints all its keywords; `-c` adds the
+  category name first (probe `locale-k`, `locale-ck`, `locale-category`). `locale charmap` prints the codeset
+  (`ANSI_X3.4-1968` in `POSIX`; probe `locale-charmap`).
+
+**Failure.**
+
+* An unknown operand: `locale: unknown name "<name>"`, exit 1 (probe `locale-unknown`).
+* A locale variable naming a locale that is not installed: the values are still printed, and `locale: Cannot set
+  LC_CTYPE to default locale: No such file or directory` (also for `LC_MESSAGES` and `LC_ALL`) on standard error,
+  exit 0 (probe `locale-missing`).
+
+### 31.8 localedef
+
+**Contract.**
+
+* Compiles a locale source and a charmap into the binary locale files of Appendix D.1, as a directory or into the
+  locale archive (D.1.6) (POSIX `localedef`; localedef(1)).
+
+**Inputs.**
+
+* `localedef [OPTION...] NAME`, `localedef [OPTION...] --add-to-archive|--delete-from-archive FILE...`, `localedef
+  [OPTION...] --list-archive [FILE]`; options `-f`/`--charmap`, `-i`/`--inputfile`, `-u`/`--repertoire-map`,
+  `-c`/`--force`, `--no-hard-links`, `--no-warnings=`, `--warnings=` (`ascii`, `intcurrsym`), `--posix`, `--prefix=`,
+  `--quiet`, `-v`/`--verbose`, `-A`/`--alias-file`, `--big-endian`, `--little-endian`, `--no-archive`, `--replace`,
+  `-?`/`--help`, `--usage`, `-V`/`--version` (probe `localedef-help`).
+* Search paths (probe `localedef-help-paths`): charmaps `/usr/share/i18n/charmaps`, repertoire maps
+  `/usr/share/i18n/repertoiremaps`, locale sources `/usr/lib/locale:/usr/share/i18n`.
+
+**Guarantees.**
+
+* A NAME containing `/` receives the directory form: `LC_ADDRESS`, `LC_COLLATE`, `LC_CTYPE`, `LC_IDENTIFICATION`,
+  `LC_MEASUREMENT`, `LC_MESSAGES/SYS_LC_MESSAGES`, `LC_MONETARY`, `LC_NAME`, `LC_NUMERIC`, `LC_PAPER`,
+  `LC_TELEPHONE`, `LC_TIME` (probe `localedef-dir`), in the D.1 format (pending `UTIL-SPEC-3`); otherwise the
+  locale goes into the archive unless `--no-archive` (localedef(1)).
+* `--list-archive` prints one locale name per line (probe `localedef-list`).
+
+**Failure.**
+
+* A missing source or charmap: `[error] ...` lines and exit 4, no output produced (probe `localedef-nosource`,
+  `localedef-nocharmap`; POSIX `localedef` exit status 4: errors, no output created).
+
+### 31.9 zic
+
+**Contract.**
+
+* Compiles time-zone source (the `Rule`, `Zone`, `Link`, `Leap` and `Expires` lines of zic(8)) into TZif files
+  (RFC 8536; tzfile(5)); Liella's `localtime` reads the same files (§23.5).
+
+**Inputs.**
+
+* Options (probe `zic-help`; zic(8)): `--version`, `--help`, `-v`, `-b slim|fat`, `-d DIRECTORY`, `-l LOCALTIME`,
+  `-L LEAPSECONDS`, `-p POSIXRULES`, `-r '[@lo][/@hi]'`, `-t LINK`, then source files.
+* `tzdata` installs `/usr/share/zoneinfo/tzdata.zi` (`# version 2026e` on the reference) and fat TZif version 2 files
+  (`Europe/London` 3664 bytes); there is no `posix/` or `right/` tree (probe `zic-tzdata`).
+
+**Guarantees.**
+
+* One TZif file per zone under the output directory, a link per `Link` line (probe `zic-compile`), in RFC 8536
+  version 2 or later (the file starts `TZif2`; pending `UTIL-SPEC-3`).
+* `-b fat` is the default (a one-zone source gives 1256 bytes; `-b slim` 140 bytes; probe `zic-compile`, `zic-slim`).
+* The footer TZ string reproduces the last transitions (RFC 8536 §3.3).
+
+**Failure.**
+
+* A source file that cannot be opened: `zic: Can't open <file>: <strerror>`, exit 1 (probe `zic-nofile`).
+
+### 31.10 zdump
+
+**Contract.**
+
+* Prints the current time or the transitions of each named zone, read through the TZif files (zdump(8)).
+
+**Inputs.**
+
+* `zdump [OPTION]... TIMEZONE...`; options `-c [L,]U` (years, default -500 to 2500), `-t [L,]U` (seconds since 1970),
+  `-i`, `-v`, `-V`, `--help`, `--version` (probe `zdump-help`); `TZDIR` names the zone directory (probe `zdump-test`).
+
+**Guarantees.**
+
+* Plain: `<zone>  <date as by ctime> <abbreviation>` (probe `zdump-plain`).
+* `-v`: per transition two lines, the second before it and the transition itself, as `<zone>  <UT date> UT = <local
+  date> <abbr> isdst=<0|1> gmtoff=<seconds>`, framed by `<zone>  -9223372036854775808 = NULL`,
+  `-9223372036854689408 = NULL` at the start and `9223372036854689407 = NULL`, `9223372036854775807 = NULL` at the
+  end (probe `zdump-v`, `zdump-t`); `-V` the same lines without the frame (probe `zdump-V`).
+* `-i` (experimental in its own help): a blank line, `TZ="<zone>"`, then tab-separated date, time, offset,
+  abbreviation and DST flag per transition (probe `zdump-i`).
+* An abbreviation shorter than 3 characters gives `zdump: warning: zone "<zone>" abbreviation "<abbr>" has fewer than
+  3 characters` on standard error, exit 0 (probe `zdump-test`).
+
+### 31.11 tzselect
+
+**Contract.**
+
+* Asks the user for a location and prints the time-zone value for it (tzselect(1)).
+
+**Inputs.**
+
+* `tzselect [--version] [--help] [-c COORD] [-n LIMIT]`: `-c` takes ISO 6709 coordinates and offers the nearest
+  zones, `-n` the number offered (default 10) (probe `tzselect-help`).
+* Answers on standard input; the zone tables `zone1970.tab`, `zonenow.tab`, `iso3166.tab` of `/usr/share/zoneinfo`
+  (tzselect(1)).
+
+**Guarantees.**
+
+* Prompts and menus on standard error, in order of distance with `-c` (probe `tzselect-eof`); the chosen value on
+  standard output once confirmed (tzselect(1)).
+
+**Failure.**
+
+* End of input before the confirmation: exit 1 (probe `tzselect-eof`).
+
+### 31.12 gencat
+
+**Contract.**
+
+* Compiles message-catalog sources into the catalog format of Appendix D.2 that `catopen` reads (§7.8; POSIX
+  `gencat`).
+
+**Inputs.**
+
+* `gencat [OPTION...] -o OUTPUT-FILE [INPUT-FILE]...` or `gencat [OPTION...] [OUTPUT-FILE [INPUT-FILE]...]`; options
+  `-H`/`--header=NAME`, `--new`, `-o`/`--output=NAME`, `-?`/`--help`, `--usage`, `-V`/`--version`; `-` is standard
+  input or output (probe `gencat-help`).
+
+**Guarantees.**
+
+* The catalog in the D.2 format (probe `gencat-compile`: a two-message source gives 72 bytes starting `de 08 04 96`;
+  pending `UTIL-SPEC-3`); without `--new`, an existing catalog's messages are merged (POSIX `gencat`).
+
+**Failure.**
+
+* An input that cannot be opened: ``cannot open input file `<file>': <strerror>``, exit 1 (probe `gencat-nofile`).
+
+### 31.13 pldd
+
+**Contract.**
+
+* Lists the shared objects loaded into a running process, those loaded with `dlopen` included (pldd(1)).
+
+**Inputs.**
+
+* `pldd [OPTION...] PID`; options `-?`/`--help`, `--usage`, `-V`/`--version` (probe `pldd-help`).
+
+**Guarantees.**
+
+* A line with the process id and its program, then one line per loaded object (pldd(1)); the exact form is left to
+  UTIL-15's probe, which needs a target the probe may trace.
+
+**Failure.**
+
+* No operand: `Exactly one parameter with process ID required.` and the `Try` line, exit 1 (probe `pldd-nopid`).
+* No such process: `pldd: cannot open /proc/<pid>: No such file or directory`, exit 1 (probe `pldd-nosuchpid`).
+* A process the caller may not trace: `pldd: cannot attach to process <pid>: Operation not permitted` (probe
+  `pldd-self`).
+
+### 31.14 Not provided
+
+**Contract.**
+
+* **Liella rule:** `iconvconfig` (the reference indexes its conversion modules; Liella has none, D-6.8),
+  `/etc/bindresvport.blacklist` (Sun RPC is not implemented), and the `libc-devtools` commands `sprof`, `sotruss` and
+  `mtrace` are not installed, and `nscd` is dropped (R8) (probe `iconvconfig-help`, `devtools`; pending
+  `UTIL-SPEC-5`; differences row "Commands not installed").
+* **Liella rule:** `locale-gen`, `update-locale` and `validlocale` of the `locales` package are Liella's own
+  implementations from their man pages (locale-gen(8), update-locale(8)) and `/etc/locale.gen`,
+  `/etc/default/locale` and `SUPPORTED` (pending `UTIL-SPEC-8`); their interface is specified with UTIL-13.
 
 ---
 

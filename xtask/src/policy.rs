@@ -93,7 +93,26 @@ fn words(line: &str) -> impl Iterator<Item = &str> {
 
 /// The files where the `allocator` category (`unsafe impl GlobalAlloc` and its host calls) may appear.
 const ALLOCATOR_FILES: &[&str] = &["src/heap.rs", "src/selftest/failalloc.rs", "src/ld.rs"];
-const CATEGORIES: [&str; 7] = ["extern", "export", "slice", "allocator", "tb-field", "hot-kernel", "machine-register"];
+const CATEGORIES: [&str; 8] = ["extern", "export", "slice", "allocator", "tb-field", "hot-kernel", "machine-register", "process-flag"];
+
+/// Category *process-flag* (owner ruling #4888, 2026-11-12, D-X.58): a non-atomic read of a word
+/// written only before the first thread starts, in this one file of liella-boundary and nowhere
+/// else (crate-relative path).
+const PROCESS_FLAG_FILE: &str = "src/thread.rs";
+/// The only body a *process-flag* block may have (whitespace removed): the read of the ownership
+/// word, so the category cannot grow into other reads or any write.
+const PROCESS_FLAG_READ: &str = "*OWNED_HERE.as_ptr()";
+
+/// The body of the (stripped) `unsafe {` block at `lines[n]`, whitespace removed, up to its first
+/// `}`: the category's one permitted read needs no nested braces.
+fn block_body(lines: &[&str], n: usize) -> String {
+    let mut text: String = lines.iter().skip(n).take(4).copied().collect::<Vec<_>>().join(" ");
+    if let Some(i) = text.find("unsafe {") {
+        text = text[i + 8..].to_string();
+    }
+    let end = text.find('}').unwrap_or(text.len());
+    text[..end].chars().filter(|c| !c.is_whitespace()).collect()
+}
 
 /// Category *machine-register* (owner ruling 2026-11-07, D-X.44): the libm envelope's inline
 /// MXCSR read and empty `xmm` barrier, in this one file of liella-boundary and nowhere else.
@@ -410,12 +429,19 @@ pub fn unsafe_audit(root: &Path) -> Result<(), String> {
                 } else if l.contains("unsafe {") && is_asm_block(&code_lines, n) {
                     // Owner ruling 2026-10-06 (plan S2): the one `%fs`-relative field load.
                     ("tb-field", &["src/tb.rs"])
+                } else if l.contains("unsafe {") && tag_above(&src_lines, n, 6).as_deref() == Some("process-flag") {
+                    // Owner ruling #4888 (D-X.58): the write-once ownership word, read without an
+                    // atomic so the gate folds into a memory operand; only in thread.rs and only that read.
+                    if block_body(&code_lines, n) != PROCESS_FLAG_READ {
+                        errors.push(format!("{}:{}: a `process-flag` block may only read `{PROCESS_FLAG_READ}` (D-X.58)", f.display(), n + 1));
+                    }
+                    ("process-flag", &[PROCESS_FLAG_FILE])
                 } else if (l.contains("unsafe fn") || l.contains("unsafe {")) && rel.starts_with("src/hot/") {
                     // Owner ruling 2026-10-08 (plan S2, D-4.22): the small copy and fill kernels (the `hot`
                     // module, one directory since LIBM-HOT-PER-FAMILY).
                     ("hot-kernel", &["src/hot/"])
                 } else if l.contains("unsafe fn") || l.contains("unsafe {") {
-                    ("slice", &["src/conv.rs", "src/strz.rs", "src/heap.rs", "src/tb.rs", "src/runtime.rs", "src/bootstrap.rs", "src/ld.rs", "src/posix/", "src/native/", "src/selftest/failalloc.rs"])
+                    ("slice", &["src/conv.rs", "src/strz.rs", "src/heap.rs", "src/tb.rs", "src/runtime.rs", "src/bootstrap.rs", "src/ld.rs", "src/ld/", "src/dlerr.rs", "src/posix/", "src/native/", "src/selftest/failalloc.rs"])
                 } else {
                     errors.push(format!("{}:{}: `unsafe` form not in any permitted category", f.display(), n + 1));
                     continue;

@@ -268,6 +268,11 @@ pub mod private {
     /// `__liella_libc_early_init(const StartInfo *)`: libc's start steps 3 and 4, called by `ld.so`
     /// after relocation and before any constructor (`.preinit_array` included).
     pub const EARLY_INIT: &[u8] = b"__liella_libc_early_init";
+    /// `size_t __liella_thread_walk(size_t (*cb)(size_t ctx, size_t tp), size_t ctx)`: under the
+    /// C library's thread-list lock, `cb(ctx, tp)` per live thread, then `cb(ctx, 0)` (DL-16d:
+    /// `dlopen` gives a new module's static TLS block to every thread). Looked up only by a
+    /// `dlopen` that loads an object with `PT_TLS`.
+    pub const THREAD_WALK: &[u8] = b"__liella_thread_walk";
     /// `__liella_build_tag`: [`TAG_LEN`] bytes, [`TAG_PREFIX`] then the build's identity.
     pub const BUILD_TAG: &[u8] = b"__liella_build_tag";
     /// The tag's first bytes (a test finds the tag in a file by them).
@@ -323,10 +328,44 @@ pub mod private {
         pub auxv: usize,
         /// The stack end (`__libc_stack_end`): the initial stack pointer.
         pub stack_end: usize,
+        /// The program's `DT_INIT` (relocated address, 0: none). `ld.so` leaves the program's
+        /// own initialisation to `__libc_start_main` (design §14, D-27.24).
+        pub init: usize,
+        /// The program's `DT_INIT_ARRAY` (relocated address, 0: none).
+        pub init_array: usize,
+        /// Entries in the program's `DT_INIT_ARRAY`.
+        pub init_array_len: usize,
         /// The size of the initial thread's rseq area the loader registered at the thread pointer
         /// plus `tls::RSEQ_OFFSET` (`__rseq_size` as the loader publishes it); 0: none registered,
         /// so the C library registers none for new threads either (D-27.26).
         pub rseq_size: usize,
+        /// The loader's per-thread TLS interface (DL-15 `DL-TLS-THREADS`, design §7): the bytes a
+        /// new thread's static area needs directly below its thread pointer (every initially loaded
+        /// module's block, the surplus and the dtv; 0: the C library may not create threads).
+        pub tls_size: usize,
+        /// The alignment the thread pointer of a new thread needs (a power of two).
+        pub tls_align: usize,
+        /// `extern "C" fn(tp) -> usize`: fill the static area below `tp` of a thread not started yet
+        /// (each module's image, then zeros to its `p_memsz`, and the dtv) and store the dtv's
+        /// address in the thread block's dtv word. The block's other words are the C library's.
+        pub tls_init: usize,
+        /// `extern "C" fn(tp) -> usize`: the thread at `tp` is ending (its last call into the
+        /// loader); the area itself goes with the thread's mapping.
+        pub tls_release: usize,
+        /// The loader's `dlopen` entry (DL-16a, plan/ph14/dl-16-dlopen.md §1): `(file, mode, caller)`
+        /// to a handle or NULL, the failure text set in the calling thread's dlerror record; 0: none.
+        pub dlopen: usize,
+        /// The loader's `dlsym`/`dlvsym` entry (DL-16b, plan §2): `(handle, name, version, caller)`
+        /// (`version` NULL for `dlsym`) to an address or NULL with the failure text set; 0: none.
+        pub dlsym: usize,
+        /// The loader's readers (DL-16c, plan/ph14/dl-16-dlopen.md §4): `dl_iterate_phdr`'s walk,
+        /// `(callback, data)` to the walk's result, over every loaded object; 0: none.
+        pub dl_iterate: usize,
+        /// `_dl_find_object`'s lookup, `(pc, result)` to 0 or -1, over every loaded object; 0: none.
+        pub dl_find_object: usize,
+        /// `fork`'s step (DL-16c): `(0)` before the clone (waits for a `dlopen` that is changing
+        /// the loader's state), `(1)` in the parent and `(2)` in the child after it; 0: none.
+        pub dl_fork: usize,
     }
 
     #[cfg(test)]

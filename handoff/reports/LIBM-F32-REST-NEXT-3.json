@@ -1,0 +1,25 @@
+{
+ "task": "LIBM-F32-REST-NEXT-3",
+ "model": "opus",
+ "tokens": null,
+ "result": "COMPLETE: merged origin/next after the layout fix landed (one conflict in fast32.rs eval, resolved), direct gate and lgammaf plants green on the merged head; erff/erfcf/hypotf profiled: the gap is the entry (full mret::elem envelope, 50 of 115 instructions on erff's |x| < 1 path; hypotf's out-of-line MXCSR read), not the kernels; one-pass design recorded, not implemented (budget)",
+ "branch": "task/libm-f32-rest-next-3",
+ "head": null,
+ "gate": {"affected": "affected --run --base origin/next: ok (rc 0) on 84025d548; plants 4 CAUGHT, 0 SURVIVED, 1 EQUIVALENT", "peak": "1.4G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "Zen 1 instr/call glibc vs Liella: erff 139.2/155.9, erff_small 59.5/125.0, erfcf 143.0/163.8, erfcf_small 62.5/125.0, hypotf 37.0/50.0",
+  "erfcf(0x1.b12e88p+0): glibc 0x1.11c964p-6, Liella 0x1.11c966p-6 (correctly rounded; exact 0x1.11c9655...p-6)"
+ ],
+ "refused": [],
+ "improvement": "wl_percall's default base needs a primed merge-base; a role synced with --base origin/next after a merge has an unprimed one, so the first percall run fails rc 2 - default to --base none (with a note) when the base is not primed instead of exiting",
+ "next_step": "follow-up story: erff/erfcf on elem32_onepass (erf_onepass_any/erfc_onepass_any, bounds with 2^-52 per op, ONEPASS sweeps) and hypotf without the MXCSR read (elem32_onepass2), then booked IVB/N100 timing; design in handoff/LIBM-F32-REST.md",
+ "report_file": "handoff/LIBM-F32-REST.md",
+ "jobs": [
+  "keke:libm-f32-rest-next-3-gate",
+  "keke:libm-f32-rest-next-3-plants",
+  "keke:libm-f32-rest-next-3-prof2",
+  "keke:libm-f32-rest-next-3-lint2"
+ ]
+}

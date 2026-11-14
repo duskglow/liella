@@ -1,0 +1,22 @@
+# TB-FOREIGN-SAFETY (D-X.58) plants: a foreign block with bit 0 of 0x9c set and decoys in 0x9c-0x17f.
+words-trusts-flag | crates/boundary/src/thread.rs | lit:if owned() { tb::current() } else { foreign_words() } ==> if owned() || tb::current().flags.load(Relaxed) & liella_rt::tls::FLAG_OWN != 0 { tb::current() } else { foreign_words() } | cargo test -p liella-boundary --test tb_foreign_words | msg:decoys in the block|was written|panicked at crates/boundary/src/tb.rs
+ctype-word-ungated | crates/boundary/src/locale.rs | lit:if crate::thread::owned() { tb::read::<F>() } ==> if true { tb::read::<F>() } | cargo test -p liella-boundary --test tb_foreign_words | msg:decoys in the block's words
+h-errno-location-ungated | crates/boundary/src/netdb.rs | lit:if crate::thread::owned() { ==> if true { | cargo test -p liella-boundary --test tb_foreign_words | msg:decoys in the block's words|was written|as the other library left it
+view-ungated | crates/boundary/src/locale.rs | perl:s/if !crate::thread::owned\(\) \{(\s*return foreign_view\(\);)/if false {$1/ | cargo test -p liella-boundary --test tb_foreign_words | msg:decoys in the block's words|SIGSEGV|signal
+points-read-ungated | csys/src/machine/points.S | perl:s/(liella_machine_read:.*?)cmpb \$0, liella_machine_owned\(%rip\)\n\tje liella_read_rest\n/$1/s | cargo test -p liella-boundary --test tb_foreign_words | msg:decoys in the block's words|panicked
+fork-child-words-cleared | crates/boundary/src/thread.rs | lit:if i32::try_from(tid).unwrap_or(0) != CSys.getpid() { ==> if true { | cargo test -p liella-boundary --test s07_locale_symbols foreign_thread_words_kept_in_forked_child | msg:uselocale choice lost
+period-store-moved | crates/boundary/src/zone.rs | lit:tb::current().cache.get(CACHE_TZ_PERIOD..) ==> tb::current().cache.get(CACHE_TZ_PERIOD + 3..) | cargo xtask affected --only conformance:tb_period_cache --with-exports --run | msg:FAIL: a DST period is kept
+tls-get-addr-trusts-block-flag | crates/boundary/src/ld.rs | lit:if !STARTED_HERE.load(Acquire) { ==> if crate::tb::current().flags.load(Relaxed) & FLAG_OWN == 0 { | cargo test -p liella-ld --test tls tls_get_addr_refuses_in_a_process_it_did_not_start | msg:answered for a block it did not make|tls_get_addr_refuses_in_a_process_it_did_not_start.*FAILED|panicked
+tls-get-addr-zero-dtv-read | crates/boundary/src/ld.rs | lit:if dtv == 0 { ==> if false { | cargo test -p liella-ld --test tls tls_get_addr_refuses_a_thread_without_a_vector | msg:tls_get_addr_refuses_a_thread_without_a_vector.*FAILED|panicked
+ld-products-marker-dropped | xtask/src/affected.rs | lit:|| text.contains("join(\"liella\")") ==> || text.contains("join(\"liella-none\")") | cargo test -p xtask --bin xtask image_model_and_layout_test_list_follow_the_tree | msg:liella-ld::[a-z_]+ runs the built ld.so
+# cargo xtask plants results (10 plants: 10 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# words-trusts-flag: CAUGHT, caught by tb_foreign_words (a panic outside a named test, thread '<unnamed>')
+# ctype-word-ungated: CAUGHT, caught by tb_foreign_words foreign_block_words_neither_trusted_nor_written
+# h-errno-location-ungated: CAUGHT, caught by tb_foreign_words foreign_block_words_neither_trusted_nor_written
+# view-ungated: CAUGHT, caught by tb_foreign_words foreign_block_words_neither_trusted_nor_written
+# points-read-ungated: CAUGHT, caught by tb_foreign_words foreign_block_words_neither_trusted_nor_written
+# fork-child-words-cleared: CAUGHT, caught by s07_locale_symbols foreign_thread_words_kept_in_forked_child
+# period-store-moved: CAUGHT, caught by no test the log names
+# tls-get-addr-trusts-block-flag: CAUGHT, caught by tls tls_get_addr_refuses_in_a_process_it_did_not_start
+# tls-get-addr-zero-dtv-read: CAUGHT, caught by tls tls_get_addr_refuses_a_thread_without_a_vector
+# ld-products-marker-dropped: CAUGHT, caught by xtask affected::tests::image_model_and_layout_test_list_follow_the_tree

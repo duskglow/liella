@@ -1,0 +1,6 @@
+{"task": "COMPAT-GAP-PROMOTE-ONLY", "model": "sonnet", "tokens": null, "result": "compat id gap warns (names missing ids); fatal only with LIELLA_PROMOTE=1", "branch": "task/compat-gap-promote-only", "head": "3a12f479b",
+ "gate": {"affected": "pending", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [], "informational": [], "refused": [],
+ "impact": [{"kind": "unblock", "what": "stories that reserve COMPAT ids out of landing order no longer fail static", "before": null, "after": null, "unit": "none", "measured": false},
+            {"kind": "coverage", "what": "tests and plants added", "before": 0, "after": 4, "unit": "tests+plants", "measured": true}],
+ "improvement": "none", "next_step": "read the jobs", "report_file": "handoff/COMPAT-GAP-PROMOTE-ONLY.md"}

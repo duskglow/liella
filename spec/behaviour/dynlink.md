@@ -41,6 +41,23 @@ listed with `nm -D` (the public ABI). No source, disassembly or debugger was use
 | `dlsym` missing | `<object>: undefined symbol: <name>`; for `RTLD_DEFAULT`/`RTLD_NEXT` the object is the calling program |
 | `dlvsym` missing version | `<object>: undefined symbol: <name>, version <version>` (also for an object without versions) |
 | `dlinfo` request 9999 | returns -1, `unsupported dlinfo request` (no object prefix) |
+| non-ELF file of 64 bytes or more (64, 4096, 65536 bytes of text; 4096 zero bytes) | `invalid ELF header` |
+| `EI_CLASS` 0, 3 or 255 | `wrong ELF class: ELFCLASS32` (the 32-bit text for every class but 64-bit) |
+| `EI_VERSION` 0 | `ELF file version ident does not match current one` |
+| `e_version` 0 | `ELF file version does not match current one` |
+| `e_phentsize` 32 | `ELF file's phentsize not the expected size` |
+| `e_phnum` 0, or every `PT_LOAD` retyped `PT_NULL` | `object file has no loadable segments` |
+| `PT_DYNAMIC` retyped `PT_NULL` | `object file has no dynamic section` |
+| a `PT_LOAD` whose `p_vaddr` and `p_offset` differ modulo the page | `ELF load command address/offset not page-aligned` |
+| `e_ehsize` 0; a `PT_LOAD` with `p_align` 3 | loads (Liella refuses both as malformed headers: `malformed ELF object`, its reader's rule) |
+
+The rows after `dlinfo` are the gaps probe (`tools/probe/dl/gaps/run.sh SCRATCH`, record `== gaps` and
+`== noload-pending`, ruling #5266, DL-DLOPEN-LOAD-2; same host and settings as above). It also settles
+that an `RTLD_NOLOAD` miss clears a pending dlerror text (`dlerror()` is NULL after a failed open then
+a NOLOAD miss), as a successful open and a NOLOAD hit do. Liella's dlopen uses these texts
+(`liella_ld::dlopen::Refusal`) and checks the header, then the loadable segments, then the dynamic
+section, in that order. Liella uses the misaligned-segment text for every malformed `PT_LOAD` layout
+its planner refuses (`map::MapError::BadSegments`), a choice the probe does not decide.
 
 Other calls: `dlopen("")` and `dlopen(NULL)` return a handle (the program); `RTLD_NOW|RTLD_LAZY`
 is accepted; `RTLD_NOLOAD` of an unloaded object returns NULL with **no** dlerror text; an object
@@ -55,6 +72,15 @@ every object mapped (a second open of the same object does not count), `subs` ev
 unmapped (`dlclose` of A unmaps A and B, +2, while C is still held). A `dlopen` refused at the
 header (`text.so`) changes neither; one that maps the object and then fails on a dependency
 (`libMissingDep.so`) bumps both by one. `RTLD_NODELETE` objects stay in the list after `dlclose`.
+
+**Readers in a dynamic program** (record `== readers (DL-16c)`, probe `tools/probe/dl/readers/run.sh SCRATCH`,
+same reference and conditions as the P-n probes). R-1: `_dl_find_object` of a pc in the program's text or data, in
+libc and in a `dlopen`'d object reports the object's **whole `PT_LOAD` span** (not the segment, unlike a static
+program), `dlfo_flags` 0, `dlfo_eh_frame` set, and `dlfo_link_map` equal to the object's handle (`dlopen(NULL)` for
+the program). R-4: a stack address gives -1. R-3: `dlpi_name` is `""` for the program, `linux-vdso.so.1`, then
+libc and `ld.so` by absolute path, a `dlopen`'d object by the name it was opened with; libc has TLS module 1. R-2: a
+`dl_iterate_phdr` callback that calls `dlopen` of a new object returns, the running walk then visits that object
+(one more callback), and `dlpi_adds` grows by one within the walk.
 
 **Static-TLS surplus** (record `== tls`): with default tunables, one `dlopen` of an object with an
 initial-exec TLS block of 1664 bytes succeeds and 1728 fails (64-byte steps); thirteen distinct
@@ -124,6 +150,7 @@ with gcc 13.3 / binutils, black box: only the values the bound functions return 
 | program linked against `libv.so` | `f`→VER_2 (the default at link time), `f@VER_1`→VER_1, `h@VER_2`→VER_2 |
 | `dlsym` | `f`→VER_2, `h`→NULL (`undefined symbol: h`), `b`→base, `g`→VER_1, `m`→VER_3 (base or default only) |
 | `dlvsym` | `f`/VER_1, `f`/VER_2, `h`/VER_1, `h`/VER_2 bind that version; `f`/VER_9, `b`/VER_1, `b`/`libv.so` (the base node's name) → NULL (`undefined symbol: f, version VER_9`) |
+| an unversioned (base, index 1) `f` earlier in the scope, against `libv.so`'s own `f@@VER_1` reference (`JUMP_SLOT`) (DL-LIBC-START-6 probe, Zen 1 host, glibc 2.39) | in the program (exported; the object has `versym`) → the program's; in an `LD_PRELOAD` object with `versym` → the preloaded one; a program's needed `f@VER_1` (`vna_other`) against the same preload → the preloaded one (a versioned reference accepts a base definition; the program's `__fpu_control` reaches libc this way) |
 | program needing VER_1/VER_2 run against the unversioned stub | `no version information available (required by ./ver)` twice, then an internal consistency message from the loader, exit 127 |
 | weak `w` in `libw1.so`, strong `w` in `libw2.so` | link order w1,w2 → the weak one; w2,w1 → the strong one; `LD_DYNAMIC_WEAK=1` → unchanged |
 | undefined weak data and function references | both 0 |
@@ -149,7 +176,7 @@ last column says how each answer decides the plan's choice.
 | Probe | Program case | Observed in the reference | Decides |
 |---|---|---|---|
 | P-1 binding (`s27_1_c_1`) | `probe p1`: `RTLD_NOW\|RTLD_LAZY` on `libU1` (undefined function) | the open succeeds (constructor runs); `RTLD_NOW` alone on the same object fails `undefined symbol: undefined_symbol_xyz` | both bits set = lazy binding. Before DL-20 Liella binds eagerly (plan §1), so this is DL-20's interim gap, like `RTLD_LAZY` |
-| P-1 unknown bits (`s27_1_c_1`, `s27_1_f_0`) | `probe p1` sweep: every bit outside `0x110f` but `0x40000000` (25 bits) with `RTLD_NOW` on `libC1` and `RTLD_LAZY` on `libU1` | every swept bit: NULL, dlerror `invalid mode parameter` (no object prefix), checked before the file is looked for (also for a missing file); an unknown bit with no binding mode gives the same text, not mode 0's | Liella refuses every unknown mode bit (every bit outside `RTLD_LAZY\|RTLD_NOW\|RTLD_NOLOAD\|RTLD_DEEPBIND\|RTLD_GLOBAL\|RTLD_NODELETE`) with `invalid mode parameter`, before the search. The sweep leaves out bit `0x40000000`; Liella refuses it the same way, and DL-16a's test sweeps every undefined bit |
+| P-1 unknown bits (`s27_1_c_1`, `s27_1_f_0`) | `probe p1` sweep: every bit outside `0x110f` and outside the eight glibc-internal high bits `0x01000000`-`0x80000000` (17 bits; the raw lines for `0x01000000`-`0x20000000` and `0x80000000` in `dynlink.glibc.txt` predate the exclusion and are kept as they are) with `RTLD_NOW` on `libC1` and `RTLD_LAZY` on `libU1` | every swept bit: NULL, dlerror `invalid mode parameter` (no object prefix), checked before the file is looked for (also for a missing file); an unknown bit with no binding mode gives the same text, not mode 0's | Liella refuses every unknown mode bit (every bit outside `RTLD_LAZY\|RTLD_NOW\|RTLD_NOLOAD\|RTLD_DEEPBIND\|RTLD_GLOBAL\|RTLD_NODELETE`) with `invalid mode parameter`, before the search. The eight high bits `0x01000000`, `0x02000000`, `0x04000000`, `0x08000000`, `0x10000000`, `0x20000000`, `0x40000000` and `0x80000000` are internal, undocumented flags of glibc (some used for its profiling; confirmed by glibc's maintainers, 2026-11-13): reserved for Liella (Liella owes glibc's internal meaning of them nothing; refused like any unknown bit with `invalid mode parameter`; kept available for a possible future Liella-defined use, none planned, any use a new public-interface decision), and excluded from the reference comparison (the probe sweep skips all eight). DL-16a's test sweeps every undefined bit, these included. D-27 pending record `DLOPEN-INTERNAL-BITS-1` |
 | P-2 identity (`s27_1_c_1`) | `probe p2`: `id/libId.so.1` (`DT_SONAME libId.so.1`), symlink `id/sym.so`, hard link `id/hard.so`, `id/../id/…`, `./libId.so.1`, a copy `id2/libId.so.1` | symlink, hard link, `..` path, `./` path and the bare `DT_SONAME`: the same handle (constructor once), and `l_name` stays the first name used (the hard link's path when it came first). The bare `DT_SONAME` finds the loaded object although no search path holds the file; before any load it fails with the file-missing text, and `NOLOAD` gives NULL. A copy (another inode, same `DT_SONAME`) opened by path is a second object. When the copy is loaded first, the bare `DT_SONAME` returns the copy. A `DT_NEEDED libId.so.1` whose `DT_RUNPATH` holds only the copy binds to the already-loaded original. `NOLOAD` by the bare file name `hard.so` gives NULL | identity = `(st_dev, st_ino)` of the found file, plus a `DT_SONAME` match of a bare name (no `/`) against loaded objects before any search, for `dlopen` and `DT_NEEDED` alike (plan §1 as written). A bare name is never matched against file names. `l_name` keeps the name of the first open |
 | P-3 `RTLD_GLOBAL` (`s27_1_c_1`, `s27_1_g_0`) | `probe p3`: `libA3` needs `libB3`; `libZ3` references `fn_A3` and `fn_B3` with no `DT_NEEDED` | `RTLD_GLOBAL` puts the root **and its dependency** in the global scope (`RTLD_DEFAULT` finds both; `libZ3` then opens `RTLD_NOW`). After an `RTLD_LOCAL` open neither is found. A `NOLOAD\|GLOBAL` re-open, and a plain `NOW\|GLOBAL` re-open of a lazily opened root, return the same handle and promote both. `NOLOAD\|GLOBAL` of the dependency alone promotes only it (`fn_A3` still NULL) | `RTLD_GLOBAL` (first open or promotion) appends the opened object's whole local scope (itself and its dependencies, in breadth-first order, the ones not yet global) to the global scope. Promoting a dependency promotes only its own local scope |
 | P-4 sibling scope (`s27_1_g_0`) | `probe p4`: `libA4` needs `libB4` then `libC4`; `libB4` calls `fn_C4` (sibling) and `fn_A4` (root), linked with neither | both bind (`C4`, `A4`) under `RTLD_NOW` and `RTLD_LAZY`; constructors C4, B4, A4 | a new object is relocated against [global scope, the root's local scope] (plan §2 as written) |
@@ -162,6 +189,32 @@ last column says how each answer decides the plan's choice.
 | P-11 surplus TLS in older threads (`s27_1_c_1`) | `probe p11`: `libT11` with `tv_ie` (initial-exec, 42), `tv_gd` (7), `tv_bss`; a thread created before the `dlopen`, one after | every thread sees 42 / 7 / 0, including the thread created before the `dlopen`. A write in one thread is invisible to the others, and `dlsym(tv_ie)` is the calling thread's own address | DL-16d initialises the surplus block of every live thread from the module's image (plan §5 point 1) |
 | P-12 link maps (`s27_1_c_1`) | `probe p12`: `dlinfo(RTLD_DI_LINKMAP)` | the link map **equals** the handle for `dlopen(NULL)`, `dlopen("")`, a path, a relative `./libC1b.so` and `libc.so.6`. The program's `l_name` is `""` and its `l_prev` is NULL. `l_name` is the name as opened (`./libC1b.so` stays relative). The chain by `l_next`: program, `linux-vdso.so.1`, libc, `ld.so`, then the `dlopen`'d objects in load order | handle = link map (plan §1 as written). `l_name` keeps the caller's spelling of a path |
 | P-13 program, `ld.so`, libc (`s27_1_c_1`, `s27_1_f_0`) | `probe p13` (PIE build and `-no-pie` build) | the program by its own path or as `/proc/self/exe`: NULL, `cannot dynamically load position-independent executable` (PIE) or `cannot dynamically load executable` (non-PIE). `NOLOAD`: NULL, no text. `ld.so` by name and by `/lib64/ld-linux-x86-64.so.2`: the start-time handle; by its real path `/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2`: **a different handle** (a second object with that `l_name`). libc by name, `NOLOAD`, real path and a `..` path: the start-time handle | the program is refused by path like any executable (identity does not match it). `libc.so.6` by any name is the start-time object. For `ld.so`, Liella's `(st_dev, st_ino)` identity returns the start-time object for every path. That differs from the reference (one loader per process); whether that becomes a differences row is open (maintainer ruling #5126) |
+| P-14 process capacity (`s27_1_c_1`, `s27_1_f_0`; #5321) | a program `dlopen`s N distinct copies of one tiny object (`RTLD_NOW\|RTLD_LOCAL`, each by its own path), N = 511, 512, 513, 1000, 2000 (DL-DLSYM-2 probe, Zen 1 host, glibc 2.39) | every open succeeds for every N, 2000 included: no fixed limit on the number of loaded objects shows up | Liella's loader holds at most 512 objects, start-time objects included, and refuses the next with `<name>: cannot load more objects` (NULL, dlerror text); a differences row records it (maintainer ruling on the capacity, #5321) |
+
+## The link-time archive libc_nonshared.a (DL-LIBC-NONSHARED, D-27.28)
+
+Clauses `s1_2_c_1`, `s1_2_c_3`, `s1_2_c_5`. Black box only, on the Zen 1 build host (glibc 2.39, gcc 13): `ar t` and
+`readelf -sW` of the installed archive, the installed `libc.so` script, `nm` of linked programs, and program behaviour
+(DL-NONSHARED-OPTOUT's probes P1-P2 and this story's `__cxa_finalize` probe). No source or disassembly.
+
+| member | defines (all hidden) | reaches in libc.so.6 | how settled |
+|---|---|---|---|
+| `atexit` | `atexit` | `__cxa_atexit@@GLIBC_2.2.5` | symbol listing; libc.so.6 exports no `atexit`; a linked program has `atexit` local (`t`) |
+| `at_quick_exit` | `at_quick_exit` | `__cxa_at_quick_exit@@GLIBC_2.10` | symbol listing; libc.so.6 exports no `at_quick_exit` |
+| `pthread_atfork` | `__pthread_atfork`, `pthread_atfork` (weak, same address) | `__register_atfork@@GLIBC_2.3.2` | symbol listing; libc.so.6 has `pthread_atfork` only as the non-default `@GLIBC_2.2.5`, so a new link takes the member |
+| `stack_chk_fail_local` | `__stack_chk_fail_local` | `__stack_chk_fail@@GLIBC_2.4` | symbol listing |
+
+All members reference `__dso_handle` (undefined, hidden: the compiler's start files define it).
+
+* **The tag is the VALUE of `__dso_handle`.** In a `-no-pie` program the value is 0, and its address is not. There,
+  `__cxa_finalize(&__dso_handle)` leaves the `atexit` handler, the `at_quick_exit` handler and the atfork handler
+  registered (the quick handler still runs at `quick_exit`). `__cxa_finalize(0)` runs the handler. In a PIE the value is
+  the address, and `__cxa_finalize(__dso_handle)` runs the module's `atexit` handler, then drops its `at_quick_exit`
+  handler AND its atfork handler (a later `fork` does not call it).
+* **At `dlclose`** (P2): a shared object's own `atexit` handler runs when it is unloaded. Its `at_quick_exit` and
+  `pthread_atfork` handlers are dropped, and a later `quick_exit` or `fork` calls neither.
+* **The installed `libc.so`** is `GROUP ( <libc.so.6> <libc_nonshared.a> AS_NEEDED ( <ld-linux-x86-64.so.2> ) )`.
+  The reference names absolute paths. Liella's names bare files, which ld finds on the library search path.
 
 ## Notes for the implementation stories
 

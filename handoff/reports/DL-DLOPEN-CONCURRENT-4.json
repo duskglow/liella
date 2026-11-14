@@ -1,0 +1,21 @@
+{"task": "DL-DLOPEN-CONCURRENT-4", "model": "opus", "tokens": null,
+ "result": "Run 3's check-27 red was a test defect (an empty dlpi_name matched the SONAME-less libc copy, not the program); the test now finds start-time objects by address and checks a TLS dependency too; readers code unchanged and correct; gate 7729/0, plants 10/10 CAUGHT",
+ "branch": "task/dl-dlopen-concurrent-4", "head": "ec3413cc6",
+ "gate": {"affected": "7729 passed / 0 failed (conformance 54/0)", "peak": "12G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "Start-time dlpi_name is \"\" for an object without DT_SONAME (reference: its path), the DL-16a gap; it made check 27 misfire.",
+  "Plants tool: the prepare `cargo xtask so` shares the 600 s per-plant limit, and trace-at-build takes ~10 min on keke (rc 124 twice); plants3 used LIELLA_LAYOUT_TRACE=ungrouped.",
+  "Plants tool: a timed-out prepare left the trace's gdb children orphaned and running (killed by PID); the tool should kill the whole process group.",
+  "Carried: libc.so.6 has no DT_NEEDED on ld.so (dlopen'd objects cannot bind __tls_get_addr under --as-needed)."
+ ],
+ "refused": [],
+ "impact": [
+  {"kind": "coverage", "what": "readers test: program and start-time dependency TLS checks (27 fixed, 28 new) and 2 new plants (10 caught)", "before": 8, "after": 10, "unit": "plants caught", "measured": true},
+  {"kind": "unblock", "what": "DL-16c (DL-DLOPEN-CONCURRENT) can land; then DL-17", "before": null, "after": null, "unit": null, "measured": false}
+ ],
+ "improvement": "The plants tool should give the prepare build its own limit (or build ungrouped) and kill whole process groups on timeout: two plants runs here were lost to trace-at-build and left orphaned gdb processes.",
+ "next_step": "Land (coordinator assigns the COMPAT id, CI the D-27 id); then DL-17 (epochs in read_section).",
+ "report_file": "handoff/DL-DLOPEN-CONCURRENT-4-report.md",
+ "jobs": ["dl-dlopen-concurrent-4-gate", "dl-dlopen-concurrent-4-plants3", "dl-dlopen-concurrent-4-lint1"]}

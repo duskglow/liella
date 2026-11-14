@@ -1,0 +1,50 @@
+{
+ "task": "LAYOUT-TRACE-AT-BUILD-3",
+ "model": "opus",
+ "tokens": null,
+ "result": "merged origin/next (one conflict in xtask/src/so.rs build_archive_locked: keep the layout parameter, take next's LIBC_BUILD.command body); trace-mode so green in both profiles, 4/4 plants caught, gate green",
+ "branch": "task/layout-trace-at-build-3",
+ "head": "d1aca954f",
+ "gate": {
+  "affected": "32 suites, 11710 passed / 0 failed, conformance 132/0 (ltab3-gate, shiki)",
+  "peak": "16G (page cache included), oom_kill=0"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "unblock",
+   "what": "LAYOUT-TRACE-AT-BUILD (LT-1) mergeable with next again; enables LT-2, LT-3, LT-4 (plan/layout-rethink.md)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  },
+  {
+   "kind": "tooling",
+   "what": "opt-in LIELLA_LAYOUT_TRACE=1: so traces its own build and groups from it; fast 101/503/153 and release 102/436/154 startup/hot/probe keys traced on the merged head, hot_text_products 23 passed in both profiles",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "plants on the merged head (trace mode, fast)",
+   "before": null,
+   "after": 4,
+   "unit": "plants caught",
+   "measured": true
+  }
+ ],
+ "jobs": [
+  "ltab3-so",
+  "ltab3-plants",
+  "ltab3-gate"
+ ],
+ "improvement": "the direct-tier gate for any xtask/src/so.rs change escalates to the whole workspace nextest (47 min under load 18); a so.rs-only merge resolution could be gated by the xtask suite plus a product build",
+ "next_step": "land; then LT-2 (clusters by probe phase), LT-3, LT-4",
+ "report_file": "handoff/LAYOUT-TRACE-AT-BUILD.md"
+}

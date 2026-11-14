@@ -1,0 +1,12 @@
+{"task": "DL-DLSYM", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE (context checkpoint): dlsym/dlvsym, scopes, RTLD_NEXT, DEEPBIND, unique table with pinning, IFUNC/TLS answers and handle validation written and compiling; tests written, not yet run",
+ "branch": "task/dl-dlsym", "head": "14cca2489",
+ "gate": {"affected": "not run", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "handles.c flip needs origin/next on this branch (CONF-DYN-HELPERS landed after the base was cut)", "recommendation": "allow git merge origin/next on task/dl-dlsym, or flip it at landing"}],
+ "informational": ["dlsym takes the loader's writer lock until DL-16c makes readers lock-free (matches the reference's P-8 blocking meanwhile)"],
+ "refused": [],
+ "impact": [{"kind": "unblock", "what": "dlsym/dlvsym in Liella's ld.so (DL-17, DL-18, DL-20, DL-28 need DL-16b)", "before": null, "after": null, "unit": null, "measured": false}],
+ "jobs": ["dl-dlsym-t1"],
+ "improvement": "the ~150k context checkpoint arrives before an M story's first test on a 923-line base file; briefs for M loader stories could name the files to read by line range",
+ "next_step": "read dl-dlsym-t1, commit the regenerated compat_aliases.S, fix test failures, plants, records, gate",
+ "report_file": "handoff/DL-DLSYM.md"}

@@ -1,0 +1,16 @@
+id = "COMPAT-23"
+behaviour = "IFUNC resolvers in a `dlopen` that fails (§27, `s27_1_f_0`; probe P-10, ruling #5125)"
+glibc = "With `RTLD_NOW`, a root whose dependency list puts an IFUNC-defining object before an object with an undefined symbol fails, but the IFUNC object's resolver has already run (probe P-10, root `R10b`); with the other order, or the IFUNC in the root, it does not run; no constructor runs in any"
+liella = "A failing `dlopen` runs no foreign code: every symbol of the whole new set is resolved and its versions checked first (pass 1), and only then are IFUNC resolvers called (pass 2), so a set that fails runs no resolver whatever its order"
+restore = "A tunable read at startup that relocates each object of a new set completely (IFUNC resolvers included) before resolving the next one, as at program start; not a weakening, so honoured in a secure process too"
+cost = "none (the flag does not exist; the restore is the per-object order of the start-time relocation, chosen once per `dlopen`)"
+status = "registered"
+decisions = ["D-27.31"]
+story = "DL-DLOPEN-LOAD-3"
+date = "2026-11-13"
+body = '''
+Registered option for ruling #5125 (DL-DLOPEN-LOAD-2 implemented the two passes; DL-DLOPEN-LOAD-3 wrote the
+record). The behaviour is D-27.31's two-pass relocation of a new set: a failure can only happen in pass 1, before any
+foreign code runs, so a failed `dlopen` leaves no trace. Test: `crates/ld/tests/dlopen.rs` (a failed open with a
+missing dependency maps nothing and runs no constructor).
+'''

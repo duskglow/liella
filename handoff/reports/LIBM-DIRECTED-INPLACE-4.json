@@ -1,0 +1,11 @@
+{"task": "LIBM-DIRECTED-INPLACE-4", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: LAYOUT-JITTER: the first localtime_r +2 faults (Zen 1: next 19, branch 21; mei 21 > 20) are one .bss page (0x87b000) whose first touch moved into localtime_r: liella_legacy::time_compat::GENERATION (read) and liella_boundary::sys::TSC_STATE (write), undeclared in startup-state.list, reordered by this story's liella_boundary codegen-unit change; no story code on the path, no code changed",
+ "branch": "task/libm-directed-inplace-4", "head": null,
+ "gate": {"affected": "not run (no code change; story held for LAYOUT-JITTER)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "LAYOUT-JITTER (data): first-localtime_r .bss objects time_compat::GENERATION and sys::TSC_STATE (and setenv's process::TABLE_ON / ENV_OWNED) sit in plain .bss, page decided by emission order", "recommendation": "data-clusters lane declares them together in crates/libc-so/startup-state.list; hold this story until that lands, then merge next and re-gate"}],
+ "informational": ["whole-process fault total equal on next and branch (181): the faults moved into the window, none were added", "the window's text faults (localtime_r, zone::local_in) are on the same pages in both builds"],
+ "refused": [],
+ "improvement": "a reusable fault-map-vs-base tool (link page_faults.c against ~/wl/products/<sha> and the role, diff the maps) would make every LAYOUT-JITTER diagnosis ~6 calls; mine is ~/work/LIBM-DIRECTED-INPLACE-4/fmap.sh on keke",
+ "next_step": "after the startup-state declaration lands: merge origin/next, so, hot_text_products localtime tests, direct-tier gate and plants; then booked Ivy Bridge/N100 timing; then log/sin/pow",
+ "report_file": "handoff/libm-directed-inplace.md",
+ "jobs": ["libm-directed-inplace-4-lint1", "libm-directed-inplace-4-so", "libm-directed-inplace-4-nextprod", "libm-directed-inplace-4-fmnext", "libm-directed-inplace-4-fm2"]}

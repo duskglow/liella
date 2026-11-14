@@ -1,0 +1,29 @@
+{
+ "task": "CONF-DYN-HELPERS-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "COMPLETE: conformance dynamic-link mode finished: clause tests s27_1_f_0 / s27_1_c_3 assert the PENDING programs by name, affected's failure report handles the two runs, pending D-27 record, 7 plants (6 caught, 1 equivalent); branch based on origin/task/dl-libc-start-10",
+ "branch": "task/conf-dyn-helpers-2",
+ "head": "c4418a65d",
+ "gate": {"affected": "11697 passed / 0 failed (32 suites; conformance 132 passed, 0 failed, 3 pending on Liella)", "peak": "14G (page cache included) oom_kill=0"},
+ "accepted_first_attempt": false,
+ "rulings": [
+  {"item": "decision id for records/pending/CONF-DYN-HELPERS-2-1.toml (series D-27, harness design)", "recommendation": "assign the next D-27 id"}
+ ],
+ "informational": [
+  "Branch carries origin/task/dl-libc-start-10 (merged again at 84fb8d645): CI must wait until DL-LIBC-START-10 lands",
+  "First gate (conf-dyn-helpers-2-gate) also failed fstree_equals_the_reference once: the reference's line 'stat (the kernel's limit, for comparison): chains l0..l33 resolve' against Liella's l39; it passed on rerun (xt1) and on the final gate. The probe (crates/core/tests/oracle/fstree_diff.c, the stat chain loop) drops errno, so the cause of the transient stat failure (probably memory pressure in the 16G gate cgroup, not proven) is not recorded; recommend printing the first failure's errno there. Not reachable from this change",
+  "Liella's pending runs end in SIGSEGV (s27_dlopen_failures, s27_dynlink_helper_dlsym) or an ld.so error (s27_dlsym_handles): the loader work of DL-16a/b, expected"
+ ],
+ "refused": [],
+ "impact": [
+  {"kind": "coverage", "what": "clause tests s27_1_f_0 and s27_1_c_3 specified (pending on DL-16a / DL-16b, fail the day Liella passes)", "before": 0, "after": 2, "unit": "tests", "measured": true},
+  {"kind": "coverage", "what": "plants on the dynamic-link mode and its report", "before": 0, "after": 7, "unit": "plants", "measured": true},
+  {"kind": "tooling", "what": "cargo xtask affected's report of a failed dynamic-link program names the failing run and tails its own stdout/stderr (before: ends dropped, static-mode files tailed)", "before": null, "after": null, "unit": null, "measured": true},
+  {"kind": "unblock", "what": "DL-16a (s27_dlopen_failures) and DL-16b (s27_dlsym_handles, s27_dynlink_helper_dlsym) have conformance programs and clause tests under Liella's ld.so", "before": null, "after": null, "unit": null, "measured": true}
+ ],
+ "improvement": "the gate's format check caught a report regression the first run's targeted try could not see; a story that edits conformance/run.sh should run `cargo test -p xtask --bin xtask -- conformance` before its first gate (seconds instead of a 30-min gate)",
+ "next_step": "when DL-16a/b land, drop PENDING-LIELLA from the three programs and assert_pending from the clause tests; when ld.so searches the run path, drop the by-path libc copy (dyn_setup)",
+ "report_file": "handoff/CONF-DYN-HELPERS.md",
+ "jobs": ["conf-dyn-helpers-2-lint3", "conf-dyn-helpers-2-gate2", "conf-dyn-helpers-2-plants2"]
+}

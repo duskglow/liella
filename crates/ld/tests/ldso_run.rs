@@ -193,7 +193,20 @@ fn ldso_run_aux_rewrite_and_env() {
 #[test]
 fn ldso_run_features_only_from_arch() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let mut files: Vec<PathBuf> = std::fs::read_dir(root.join("src")).unwrap().map(|e| e.unwrap().path()).filter(|p| !p.ends_with("arch.rs")).collect();
+    let src = root.join("src");
+    // Every file under src/, module directories (src/cache/) included; only the seam itself is exempt.
+    let (mut files, mut dirs) = (Vec::new(), vec![src.clone()]);
+    while let Some(d) = dirs.pop() {
+        for e in std::fs::read_dir(&d).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                dirs.push(p);
+            } else if p != src.join("arch.rs") {
+                files.push(p);
+            }
+        }
+    }
+    assert!(files.iter().any(|p| p.starts_with(src.join("cache"))), "the walk does not reach src/cache/");
     files.sort(); // FS-ORDER: every file is checked; sorted for a stable first failure
     let ld = root.join("../boundary/src/ld.rs");
     files.push(ld.clone());

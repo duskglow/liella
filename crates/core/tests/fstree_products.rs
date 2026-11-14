@@ -54,7 +54,6 @@ fn build(out: &Path, liella: bool) -> bool {
     oracle::build_quiet(cmd, out)
 }
 
-const D13_2: &str = "D-13.2 (owner ruling 2026-10-03): readdir and its variants report the kernel's ENOENT for a directory removed while open, after the entries already buffered; the reference ends the stream silently (getdents64 itself fails with ENOENT, as the record shows)";
 const D13_5: &str = "D-13.5: canonicalization has no length limit internally, so the allocating forms resolve a path whose result is longer than PATH_MAX; the reference fails with ENAMETOOLONG";
 const D13_13_CHDIR: &str = "D-13.13 (owner ruling): nftw with FTW_CHDIR walks paths of any length (D-13.4: descriptor-relative, no depth limit); the reference aborts on an internal assertion past about 4.2 KB";
 const D13_4_NOPENFD: &str = "D-13.4 (P-lift): nopenfd does not bound the walk; one descriptor is held per directory level, so a 25-level tree is walked whole with any nopenfd and 26 descriptors are open at the bottom";
@@ -63,11 +62,10 @@ const FTS_SET: &str = "fts(3): fts_set returns -1 on an error (an invalid instru
 
 /// Lines that differ from the reference by decision: text the reference's line starts with, and
 /// why. A recorded line that no longer differs fails the test.
-const KNOWN: [(&str, &str); 39] = [
+const KNOWN: [(&str, &str); 20] = [
     ("PWD=<dir>/c/./sub: <dir>/c/./sub", "D-13.14 (owner ruling 2026-10-03): get_current_dir_name accepts $PWD only when it is absolute and has no . or .. component; the reference returns any $PWD that names the working directory"),
     ("PWD=<dir>/c/../c/sub: <dir>/c/../c/sub", "D-13.14 (owner ruling 2026-10-03): get_current_dir_name accepts $PWD only when it is absolute and has no . or .. component; the reference returns any $PWD that names the working directory"),
     ("PWD=. (relative, names cwd): .", "D-13.14 (owner ruling 2026-10-03): get_current_dir_name accepts $PWD only when it is absolute and has no . or .. component; the reference returns any $PWD that names the working directory"),
-    ("opendir(.): ok, readdir entries=0 errno=0", "D-13.2: in a removed working directory getdents64 fails with ENOENT, and readdir reports it"),
     ("getwd: NULL errno=ERANGE buf=[untouched]", "getwd(3): a working directory longer than PATH_MAX is ENAMETOOLONG (the caller cannot pass a size, so ERANGE would name a remedy it cannot apply); the reference gives ERANGE"),
     ("realpath(bottom, NULL): ENAMETOOLONG", D13_5),
     ("canonicalize_file_name(bottom): ENAMETOOLONG", D13_5),
@@ -75,24 +73,6 @@ const KNOWN: [(&str, &str); 39] = [
     ("canonicalize_file_name(rel): ENAMETOOLONG", D13_5),
     ("realpath(in, NULL): ENAMETOOLONG", D13_5),
     ("canonicalize_file_name(in): ENAMETOOLONG", D13_5),
-    ("readdir of a directory removed after opendir: 0 entries errno=0", D13_2),
-    ("[fs *] readdir, empty directory removed", D13_2),
-    ("[fs *] readdir, 3 files, emptied and removed", D13_2),
-    ("[fs *] readdir, 2000 files, emptied and removed", D13_2),
-    ("[fs *] readdir64, empty directory removed", D13_2),
-    ("[fs *] readdir64, 3 files, emptied and removed", D13_2),
-    ("[fs *] readdir64, 2000 files, emptied and removed", D13_2),
-    ("[fs *] readdir_r, empty directory removed", D13_2),
-    ("[fs *] readdir_r, 3 files, emptied and removed", D13_2),
-    ("[fs *] readdir_r, 2000 files, emptied and removed", D13_2),
-    ("[fs *] readdir64_r, empty directory removed", D13_2),
-    ("[fs *] readdir64_r, 3 files, emptied and removed", D13_2),
-    ("[fs *] readdir64_r, 2000 files, emptied and removed", D13_2),
-    ("[fs *] rewinddir after removal", D13_2),
-    ("[fs *] seekdir(0) after that", D13_2),
-    ("[fs *] rewinddir on a stream whose directory was removed", D13_2),
-    ("[fs *] fdopendir(descriptor of a removed directory)", D13_2),
-    ("[fs *] fdopendir, then the directory removed", D13_2),
     ("  the process was killed by signal 6 (SIGABRT)", D13_13_CHDIR),
     ("  callbacks=22 maxlevel=21 maxpathlen=4024", "D-13.13: every callback receives the entry's path (the reference passes an empty path at level 21 with FTW_CHDIR)"),
     ("nftw(deep, nopenfd=1, FTW_PHYS): callbacks=21 -> -1 errno=ENAMETOOLONG", D13_4_NOPENFD),
@@ -168,6 +148,36 @@ fn without(text: &str, list: &[(&str, &str, &str)], who: &str) -> Vec<String> {
     out
 }
 
+/// The probe's stat chain line (`... chains l0..l<N> resolve; first failure l<K> stat <ERRNO>`, with
+/// ` (retried: <errno>)` when the failure came before l40 and persisted through the probe's retries)
+/// must name the first failure's chain index and errno, and must stop at the kernel's limit, so a run
+/// whose chain stops early says why (FSTREE-STAT-ERRNO). Returns the line's fault.
+fn stat_chain_fault(who: &str, out: &str) -> Option<String> {
+    const HEAD: &str = "stat (the kernel's limit, for comparison): chains l0..l";
+    let Some(line) = out.lines().find(|l| l.starts_with(HEAD)) else {
+        return Some(format!("{who}: no stat chain line"));
+    };
+    let shape = || -> Option<(i32, i32, &str)> {
+        let (last, rest) = line[HEAD.len()..].split_once(" resolve; first failure l")?;
+        let (fail, rest) = rest.split_once(" stat ")?;
+        let errno = rest.split(' ').next()?;
+        let named = errno.starts_with('E') && errno.len() > 1 && errno[1..].bytes().all(|b| b.is_ascii_uppercase())
+            || errno.strip_prefix("errno").is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
+        named.then_some(())?;
+        Some((last.parse().ok()?, fail.parse().ok()?, errno))
+    };
+    match shape() {
+        None => Some(format!("{who}: the stat chain line does not name the first failure's index and errno: {line:?}")),
+        // The kernel's limit: 40 links (path_resolution(7)), so l40 (41 links) is the first ELOOP, and
+        // the probe retries only failures before it.
+        Some((39, 40, "ELOOP")) if line.ends_with(" stat ELOOP") => None,
+        Some(_) => Some(format!(
+            "{who}: the stat chain does not stop at the kernel's link limit (l40, ELOOP), even after the probe's \
+             retries (a fault in this run, not a difference; the errno and the retry's answer say which): {line:?}"
+        )),
+    }
+}
+
 #[test]
 fn fstree_equals_the_reference() {
     // Clauses: s13_1_c_1, s13_1_c_1_1, s13_1_c_1_2, s13_1_c_2, s13_1_c_3, s13_1_c_4, s13_1_c_5, s13_1_f_0,
@@ -211,6 +221,9 @@ fn fstree_equals_the_reference() {
         String::from_utf8_lossy(&o.stdout).into_owned()
     };
     let reference = run(&host, "fstree-host", None);
+    if let Some(f) = stat_chain_fault("the reference", &reference) {
+        panic!("{f}");
+    }
     let record = std::fs::read_to_string(r.join("spec/behaviour/fstree.glibc.txt")).unwrap();
     let fs_line = reference.lines().next().unwrap_or("");
     assert!(fs_line.starts_with("stat -f -c %T: "), "the output must start by naming the scratch file system: {fs_line:?}");
@@ -223,6 +236,9 @@ fn fstree_equals_the_reference() {
     for mode in ["on", "off"] {
         eprintln!("name-service cache {mode}");
         let got = run(&ours, &format!("fstree-liella-{mode}"), Some(mode));
+        if let Some(f) = stat_chain_fault("Liella", &got) {
+            panic!("{f}");
+        }
         let want = without(&neutral(&reference), &DROPPED, "the reference");
         let got = without(&neutral(&got), &ADDED, "Liella");
         let mut diffs = 0;

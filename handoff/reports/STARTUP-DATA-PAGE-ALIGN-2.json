@@ -1,0 +1,20 @@
+{"task": "STARTUP-DATA-PAGE-ALIGN-2", "model": "opus", "tokens": null,
+ "result": "run-1 gate red explained and fixed (start file's 64 KiB relro alignment behind the cluster padded relro by 56 KiB: +1 fault in first %.2f and tool); written start-up page budgets fast 12 -> 7, release 14 -> 9; mei/keke proof refused",
+ "branch": "task/startup-data-page-align-2", "head": "71762fa7f",
+ "gate": {"affected": "pending at hand-back (sdpa2-gate, shiki)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["mei/keke proof not run: shipping the trees there was refused; budgets set at the highest of kanon and shiki, both profiles, head and head+LIBM-F32-BESSEL-LARGE-6", "release global_locale::SLOTS straddles two pages: page-aligning it should take release 9 -> 8"],
+ "refused": ["ssh copy of scratch scripts and the head/bessel-merge source trees to mei (/mnt/zram/claude/STARTUP-DATA-PAGE-ALIGN-2) and keke (/dev/shm/claude/STARTUP-DATA-PAGE-ALIGN-2) via vm_ssh_cmd + cat/tar"],
+ "impact": [
+  {"kind": "faults", "what": "written start-up data pages (STARTUP-DATA-WINDOWS), fast", "before": 11, "after": 7, "unit": "pages", "measured": true},
+  {"kind": "faults", "what": "written start-up data pages (STARTUP-DATA-WINDOWS), release", "before": 14, "after": 9, "unit": "pages", "measured": true},
+  {"kind": "correctness", "what": "run-1 regression removed: first %.2f faults (fast) 4 -> 3, coreutils-shaped probe 51 -> 50 fast / 50 -> 49 release, equal to base", "before": 4, "after": 3, "unit": "faults", "measured": true},
+  {"kind": "size", "what": "libc.so.6 (fast / release): one page of relro alignment", "before": 5824984, "after": 5829112, "unit": "bytes", "measured": true},
+  {"kind": "size", "what": "static probe page_faults.c, fast (release unchanged at 4510680)", "before": 5853072, "after": 5853096, "unit": "bytes", "measured": true},
+  {"kind": "coverage", "what": "plants (relro head align, RESERVE_MEM align, head-last unit, crt1 relro section name) and the relro fill check", "before": 3, "after": 4, "unit": "plants", "measured": true},
+  {"kind": "unblock", "what": "LIBM-F32-BESSEL-LARGE-7, SMOKE-ERRNO-FIXES-3 (held on this story)", "before": null, "after": null, "unit": null, "measured": false}
+ ],
+ "improvement": "the start-up fault tests caught a layout defect the page-count contract could not: a layout contract that checks the relro output section for page-sized fill would have shown it at `cargo xtask so` time",
+ "next_step": "page-align global_locale::SLOTS (release 9 -> 8); measure the budgets on mei and keke",
+ "report_file": "handoff/STARTUP-DATA-PAGE-ALIGN.md",
+ "jobs": ["sdpa2-gate", "sdpa2-plants"]}

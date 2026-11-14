@@ -1,0 +1,8 @@
+# NEWLOCALE-LC-ALL-BIT plants: each puts back one way newlocale's mask, "" or NULL handling can go wrong.
+# The C++ program and the oracle diff link the products, so those plants rebuild them first.
+bit-refused-cxx | crates/boundary/src/locale.rs | lit:let mask = if mask == LC_ALL_BIT { all } else { mask }; ==> let mask = mask; | cargo xtask so && cargo test -p liella-boundary --test s07_locale_symbols cxx_locales_through_the_lc_all_bit | msg:conformance: FAIL s07_newlocale_cxx
+bit-refused-clause | crates/boundary/src/locale.rs | lit:let mask = if mask == LC_ALL_BIT { all } else { mask }; ==> let mask = mask; | cargo test -p liella --test s07_locale_clauses s7_3_c_1 | msg:1 << LC_ALL is accepted
+bit-with-others | crates/boundary/src/locale.rs | lit:if mask == LC_ALL_BIT { all } ==> if mask & LC_ALL_BIT != 0 { all } | cargo test -p liella --test s07_locale_clauses s7_3_f_0 | msg:mask 0x[0-9a-f]+
+empty-name-not-env | crates/boundary/src/locale.rs | lit:let handle = if name.is_empty() { ==> let handle = if name.is_empty() && mask < 0 { | cargo xtask so && cargo test -p liella --test locale_products newlocale_masks_equal_the_reference | msg:lines that differ from the reference
+env-ignores-category | crates/legacy/src/global_locale.rs | lit:*names.get_mut(c.index()).ok_or(Errno::EINVAL)? = env_name(c, getenv); ==> *names.get_mut(c.index()).ok_or(Errno::EINVAL)? = getenv(b"LANG").unwrap_or(b"C"); | cargo xtask so && cargo test -p liella --test locale_products newlocale_masks_equal_the_reference | msg:lines that differ from the reference
+null-name-efault | crates/boundary/src/locale.rs | lit:newlocale(mask, name.ok(), base) ==> newlocale(mask, Some(name?), base) | cargo test -p liella --test s07_locale_clauses s7_3_f_0 | msg:EINVAL: a NULL name

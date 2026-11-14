@@ -2319,13 +2319,15 @@ pub(crate) fn exec_array_entry(addr: usize, i: usize) -> usize {
 }
 
 /// Store `words` at `addr` (a new thread's start words, on its fresh stack). Crate-private
-/// contract: `addr` is 8-aligned in the creator's fresh mapping.
-pub(crate) fn store_words(addr: usize, words: &[usize]) {
+/// contract: `addr` is 8-aligned in the creator's fresh mapping. A fixed count, so the stores are
+/// straight-line code (a slice length known only after inlining left a copy loop in
+/// `pthread_create`).
+pub(crate) fn store_words<const N: usize>(addr: usize, words: [usize; N]) {
     // UNSAFE(slice): the contract above.
     #[allow(unsafe_code)]
     // SAFETY: the contract above.
-    let w = unsafe { crate::tb::words64_at(addr, words.len()) };
-    for (slot, &v) in w.iter().zip(words) {
+    let w = unsafe { crate::tb::words64_at(addr, N) };
+    for (slot, v) in w.iter().zip(words) {
         slot.store(v, core::sync::atomic::Ordering::Relaxed);
     }
 }
@@ -2333,7 +2335,7 @@ pub(crate) fn store_words(addr: usize, words: &[usize]) {
 /// Store `words` at `addr` in a stack a C caller gave `clone` (spec §18.2: the child runs on
 /// that stack). Crate-private contract: `addr` is 8-aligned, just below the top of the stack the
 /// caller passed, which `clone`'s contract makes writable memory the caller owns.
-pub(crate) fn store_words_user(addr: usize, words: &[usize]) -> KResult<()> {
+pub(crate) fn store_words_user<const N: usize>(addr: usize, words: [usize; N]) -> KResult<()> {
     if addr == 0 || addr % 8 != 0 {
         return Err(Errno::EINVAL);
     }

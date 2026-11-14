@@ -271,6 +271,179 @@ pub(super) fn bessel_finish(x: f32, (y, e): (f64, f64), mode: Rounding, name: &'
     finish(x, y, d as u64 + 1, mode, name)
 }
 
+// The large band 2^19 ≤ |x| < 2^128 (LIBM-F32-BESSEL-LARGE, D-10.109). Modulus and phase (DLMF
+// 10.18.17-18, μ = 4n²): J_n = M cos θ, Y_n = M sin θ = M cos(θ - π/2), M = √(2/(πx))·(1 + (μ - 1)/(16x²)),
+// θ = x - (2n + 1)π/4 + (μ - 1)/(8x) + (μ - 1)(μ - 25)/(384x³). Both follow from Hankel's P and Q
+// (DLMF 10.17.3: M = √(2/(πx))·√(P² + Q²), θ = ω + atan(Q/P)), whose remainders are bounded by the
+// first neglected terms (DLMF 10.17(iii)): from 2^19 the dropped parts are below 2^-76 of M and
+// 2^-90 of θ. The phase in quadrants, φ = x·2/π - (2n + 1)/2 + δ' (- 1 for Y), is formed exactly in
+// fixed point (Payne and Hanek; Muller, Elementary Functions, ch. 11): the 24-bit significand
+// times the 128 bits of 2/π whose products are not multiples of 4, a wrapping u128 product in
+// units of 2^-126, with δ' added at 2^-84; the top two bits give the quadrant, the rest g ∈
+// [-1/2, 1/2]. Then one Taylor polynomial of sin(πg/2) or cos(πg/2) (alternating, remainder below
+// the first neglected term) and a per-call relative bound into [`round`]; the operands it refuses
+// (an exhaustive enumeration, `bessel_large_table_is_the_refused_set`) are answered from a table:
+// no multi-precision path at run time.
+
+/// The large band's start, 2^19, as `float` bits of |x|.
+const BES_LARGE_BITS: u32 = 0x4900_0000;
+const TWO84: f64 = 19_342_813_113_834_066_795_298_816.0; // 2^84
+const TWO_M126: f64 = 1.175_494_350_822_287_5e-38; // 2^-126
+/// δ' = r·(D1 + D3·r²), r = 1/x: (μ - 1)/(4π) and (μ - 1)(μ - 25)/(192π) for n = 0, 1 (the x^-3
+/// term is the plant target "phase3").
+const LG_D1: [f64; 2] = [-0.25 * INV_PI_D, 0.75 * INV_PI_D];
+const LG_D3: [f64; 2] = [25.0 / 192.0 * INV_PI_D, -63.0 / 192.0 * INV_PI_D];
+/// 2·(μ - 1)/16: M² = (2/(πx))·(1 + LG_W·r²) to O(x^-4).
+const LG_W: [f64; 2] = [-0.125, 0.375];
+/// The relative bound in units of 2^-53 (see `bessel_large_bound` in the tests; the plant target
+/// "margin"), and the absolute error of g in quadrants apart from δ''s own rounding.
+const LG_B: f64 = 8.0;
+const LG_GABS: f64 = 3.0e-25; // > 2^-84 (δ' cut) + 2^-102 (2/π cut) + 2^-96 (the expansion)
+
+/// Taylor coefficients of sin(πg/2)/g and cos(πg/2) in z = g² (k ≤ 8 and k ≤ 9: the first neglected
+/// terms at |g| = 1/2 are below 2^-62 of the value).
+const fn lg_taylor(odd: bool) -> [f64; 10] {
+    let h2 = core::f64::consts::FRAC_PI_2 * core::f64::consts::FRAC_PI_2;
+    let mut c = [0.0; 10];
+    c[0] = if odd { core::f64::consts::FRAC_PI_2 } else { 1.0 };
+    let mut k = 1;
+    while k < 10 {
+        let j = (2 * k) as f64;
+        c[k] = -c[k - 1] * h2 / if odd { j * (j + 1.0) } else { (j - 1.0) * j };
+        k += 1;
+    }
+    c
+}
+const LG_SIN: [f64; 10] = lg_taylor(true);
+const LG_COS: [f64; 10] = lg_taylor(false);
+
+// The operands the rounding test refuses, per function, sorted: bits 32..63 |x|, 0..31 the
+// nearest `float` F of the value at |x|, bit 31 of the high word set when the value lies above F.
+// Written by `bessel_large_table_is_the_refused_set` (the plant target "table").
+include!("bessel_tab.rs");
+
+/// Where each function's entries start in [`LG_ALL`] (and where the last ends).
+const LG_OFF: [usize; 5] = [
+    0,
+    LG_J0.len(),
+    LG_J0.len() + LG_J1.len(),
+    LG_J0.len() + LG_J1.len() + LG_Y0.len(),
+    LG_J0.len() + LG_J1.len() + LG_Y0.len() + LG_Y1.len(),
+];
+
+/// The four tables as one array of plain words. Not an array of slices: a slice is a pointer,
+/// and a position-independent build puts a table of pointers in writable data (`.data.rel.ro`,
+/// relocated at start-up), where it moved the start-up data's pages (LIBM-F32-BESSEL-LARGE-3).
+static LG_ALL: [u64; LG_OFF[4]] = {
+    let parts: [&[u64]; 4] = [&LG_J0, &LG_J1, &LG_Y0, &LG_Y1];
+    let mut all = [0; LG_OFF[4]];
+    let (mut f, mut k) = (0, 0);
+    while f < 4 {
+        let mut i = 0;
+        while i < parts[f].len() {
+            all[k] = parts[f][i];
+            (i, k) = (i + 1, k + 1);
+        }
+        f += 1;
+    }
+    all
+};
+
+/// Function f's table (0 j0f, 1 j1f, 2 y0f, 3 y1f).
+#[inline(always)]
+fn lg_tab(f: usize) -> &'static [u64] {
+    &LG_ALL[LG_OFF[f]..LG_OFF[f + 1]]
+}
+
+/// y ≈ f(|x|) (J1 at |x|) and the bound in units of 2^-53 of |y|; `y` is never 0 on the band.
+#[inline(always)]
+fn large_core(f: usize, a: u32) -> (f64, f64) {
+    let m = u128::from((a & 0x007f_ffff) | 0x0080_0000);
+    // |x| = m·2^(E - 150); the window ends at bit p = E - 24 of 2/π (bits whose products with |x|
+    // are multiples of 4 dropped): floor(2^p·2/π) mod 2^128, p in [122, 230].
+    let p = (a >> 23) as usize - 24;
+    let t = &crate::coeffs::tables::TWO_OVER_PI;
+    let w = if p <= 128 {
+        ((u128::from(t[0]) << 64) | u128::from(t[1])) >> (128 - p)
+    } else {
+        let (j, s) = (p / 64 - 2, (p % 64) as u32);
+        (u128::from(t[j]) << (64 + s)) | (u128::from(t[j + 1]) << s) | u128::from((t[j + 2] >> 1) >> (63 - s))
+    };
+    let xd = f64::from(f32::from_bits(a));
+    let r = 1.0 / xd;
+    let z = r * r;
+    let nu = f & 1;
+    let dq = r * (LG_D1[nu] + LG_D3[nu] * z);
+    // RANGE: |dq| < 2^-21, |dq·2^84| < 2^63.
+    let dfix = (((dq * TWO84) as i64) as i128) << 42;
+    // φ + 1/2 in units of 2^-126, mod 4: x·2/π - (n + [Y])·1 (the 1/2 of (2n + 1)/2 cancels the rounding's).
+    let v = m.wrapping_mul(w).wrapping_sub(((nu + (f >> 1)) as u128) << 126).wrapping_add(dfix as u128);
+    let quad = (v >> 126) as u32;
+    let g = (((v & ((1 << 126) - 1)) as i128) - (1 << 125)) as f64 * TWO_M126;
+    let zz = g * g;
+    let q = TWO_OVER_PI / xd;
+    let mm = sqrt64(q + q * (LG_W[nu] * z));
+    let (s, b) = if quad & 1 == 1 {
+        (g * horner_f10(&LG_SIN, zz), LG_B + (LG_GABS + 5.0 * U53 * dq.abs()) * TWO53 / g.abs())
+    } else {
+        (horner_f10(&LG_COS, zz), LG_B)
+    };
+    // cos(Nπ/2 + πg/2): C, -S, -C, S.
+    let y = mm * s;
+    (if (quad + 1) & 2 != 0 { -y } else { y }, b)
+}
+
+#[inline(always)]
+fn horner_f10(c: &[f64; 10], t: f64) -> f64 {
+    let mut y = c[9];
+    let mut i = 9;
+    while i > 0 {
+        i -= 1;
+        y = y * t + c[i];
+    }
+    y
+}
+
+/// The rounding test's margin in ulp(y) for a bound of b units of 2^-53 of |y| (ulp(y) = 2^-52 of
+/// y's binade: b·m/2, m ∈ [1, 2) y's significand), or `None` past 2^26.
+#[inline(always)]
+fn large_delta(y: f64, b: f64) -> Option<u64> {
+    let m = f64::from_bits((y.to_bits() & 0x000f_ffff_ffff_ffff) | 0x3ff0_0000_0000_0000);
+    let d = b * m * 0.5;
+    // RANGE: 0 <= d < 2^26 (NaN and larger refused).
+    if d < 67_108_864.0 { Some(d as u64 + 1) } else { None }
+}
+
+/// The large band for an operand [`bessel_eval`] refused (the core and the rounding test, else
+/// the table; J1 odd: the value at -x is the negated one), `None` off the band (zero,
+/// infinities, NaN, Y at x < 0, |x| < 2^19). Called only on that refusal, from the one
+/// out-of-line call `special` makes there (`bessel32_rest`), so no other operand tests for the
+/// band: inlined into `bessel_eval`, its u128 reduction's registers widened the frame for every
+/// band, and a second call on the refusal path kept values live across it (mid and tiny rows
+/// 1 to 18 instructions slower, LIBM-F32-BESSEL-LARGE-2 and -3).
+#[inline(never)]
+pub(crate) fn bessel_large(f: usize, x: f32, mode: Rounding, name: &'static str) -> Option<(f32, Status)> {
+    let a = x.to_bits() & 0x7fff_ffff;
+    if !(BES_LARGE_BITS..0x7f80_0000).contains(&a) || (f >= 2 && x < 0.0) {
+        return None;
+    }
+    let (y, b) = large_core(f, a);
+    let y = if f == 1 && x < 0.0 { -y } else { y };
+    if let Some(d) = large_delta(y, b) {
+        if let Some(v) = round(y, d, mode) {
+            stats::record(name, true);
+            return Some((v, Status::flags(Flags::INEXACT)));
+        }
+    }
+    let tab = lg_tab(f);
+    let i = tab.binary_search_by(|e| ((e >> 32) as u32 & 0x7fff_ffff).cmp(&a)).ok()?;
+    // A value a 2^-28 relative step from F on its side: every mode rounds it as the value.
+    let fv = f64::from(f32::from_bits(tab[i] as u32));
+    let side = if tab[i] >> 63 == 1 { fv.abs() } else { -fv.abs() };
+    let yv = fv + side * 3.725_290_298_461_914e-9; // 2^-28
+    finish(x, if f == 1 && x < 0.0 { -yv } else { yv }, 1, mode, name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -497,6 +670,171 @@ mod tests {
             }
         }
         assert!(decided > 40_000, "{decided}");
+    }
+
+    /// Operands of the large band: a stride over every binade, and the first 2^18 floats from 2^19
+    /// where |g| < 2^-12 (next to a zero, where the x^-3 phase term matters most).
+    fn large_operands(f: usize) -> std::vec::Vec<u32> {
+        let mut v: std::vec::Vec<u32> = (BES_LARGE_BITS..0x7f80_0000).step_by(99_991).collect();
+        v.extend((BES_LARGE_BITS..BES_LARGE_BITS + (1 << 18)).filter(|&a| large_core(f, a).1 > LG_B + 1e-9 && {
+            let (y, _) = large_core(f, a);
+            y.abs() < 2.4e-6 // |πg/2|·M < 2^-12 at x ≈ 2^19
+        }));
+        v
+    }
+
+    /// The large band's core (D-10.109) is within its relative bound of the 384-bit value rounded
+    /// to double-double, and the oracle's estimate there within its absolute bound. (No spec
+    /// clause: LIBM-F32-BESSEL-LARGE, D-10.109.)
+    #[test]
+    fn bessel_large_core_is_within_its_bound() {
+        use crate::oracle32::{bessel_est, Est};
+        let mut worst = [0f64; 4];
+        for f in 0..4 {
+            let ops = large_operands(f);
+            assert!(ops.len() > 1_000, "{} {}", BES_NAMES[f], ops.len());
+            for &a in &ops {
+                let x = f32::from_bits(a);
+                let want = crate::special::bessel01_dd(x)[f];
+                let (y, b) = large_core(f, a);
+                let err = crate::dd::Dd::from(y).sub(want).to_f64().abs() / (y.abs() * U53);
+                assert!(err <= b, "{}({x:e}) = {y:e}: error {err} > bound {b}", BES_NAMES[f]);
+                worst[f] = worst[f].max(err / b);
+                // No estimate: a NaN that fails the assertion below.
+                let (v, oe) = match bessel_est(f, x) {
+                    Est::Near { v, err } => (v, err),
+                    _ => (crate::dd::Dd::from(f64::NAN), 0.0),
+                };
+                let d = v.sub(want).to_f64().abs();
+                assert!(d <= oe + 2.47e-32 * want.hi.abs() && oe < 8.9e-16 * want.hi.abs(), "{} oracle at {x:e}: {d:e} > {oe:e}", BES_NAMES[f]);
+            }
+        }
+        std::println!("large band: worst error / bound {worst:?}");
+    }
+
+    /// The Taylor coefficients of the large band: their errors, weighted by z^k at |g| = 1/2 and
+    /// divided by the smallest value (π/4·0.9, 0.707), stay below 2^-53 (the bound's share). (No
+    /// spec clause: D-10.109.)
+    #[test]
+    fn bessel_large_taylor_coefficients() {
+        use crate::mp::{self, Mp};
+        for (odd, c, lo) in [(true, &LG_SIN, 0.9 * core::f64::consts::FRAC_PI_4 * 2.0), (false, &LG_COS, 0.707)] {
+            let hp = mp::pi().ldexp(-1);
+            let mut exact = if odd { hp } else { Mp::from_f64(1.0) };
+            let mut sum = 0.0;
+            for (k, &ck) in c.iter().enumerate() {
+                if k > 0 {
+                    let j = (2 * k) as f64;
+                    let d = if odd { j * (j + 1.0) } else { (j - 1.0) * j };
+                    exact = exact.mul(hp).mul(hp).mul(Mp::from_f64(-d).recip());
+                }
+                sum += Mp::from_f64(ck).sub(exact).to_f64().abs() * 0.25f64.powi(k as i32);
+            }
+            assert!(sum / lo < U53, "odd {odd}: weighted coefficient error {:e}", sum / lo);
+        }
+    }
+
+    /// Every table entry (D-10.109) is refused by the core's rounding test (no dead entry: the
+    /// plant "margin" halves the bound) and is the accurate path's answer in every mode, at +x and
+    /// for J also at -x. (No spec clause: D-10.109.)
+    #[test]
+    fn bessel_large_table_entries() {
+        for f in 0..4 {
+            for &e in lg_tab(f) {
+                let a = (e >> 32) as u32 & 0x7fff_ffff;
+                let (y, b) = large_core(f, a);
+                assert!(large_delta(y, b).and_then(|d| round(y, d, Rounding::Nearest)).is_none(), "{} entry {a:#x} is not refused", BES_NAMES[f]);
+                for x in if f < 2 { std::vec![a, a | 0x8000_0000] } else { std::vec![a] } {
+                    let x = f32::from_bits(x);
+                    for m in MODES {
+                        let want = accurate(BES[f], x, m);
+                        let got = super::super::tests::fast(BES[f], x, m).map(|(v, s)| (v.to_bits(), s));
+                        assert_eq!(got, Some((want.0.to_bits(), want.1)), "{}({x:e}) {m:?}", BES_NAMES[f]);
+                    }
+                }
+            }
+        }
+    }
+
+    /// The band is reached from the core's refusal and only on the band (D-10.109): J at ±x and Y
+    /// at +x from 2^19 to FLT_MAX get the accurate path's answer in every mode; infinities, NaN
+    /// and Y at x ≤ -2^19 stay with the accurate path (`None`); below 2^19 an answer is the
+    /// accurate one. (No spec clause: LIBM-F32-BESSEL-LARGE-3, D-10.109.)
+    #[test]
+    fn bessel_large_band_edges() {
+        for f in 0..4 {
+            for a in [0, BES_LARGE_BITS - 1, BES_LARGE_BITS, BES_LARGE_BITS + 1, 0x7f7f_ffff, 0x7f80_0000, 0x7fc0_0000] {
+                for x in [a, a | 0x8000_0000] {
+                    let band = (BES_LARGE_BITS..0x7f80_0000).contains(&a) && (f < 2 || x == a);
+                    let x = f32::from_bits(x);
+                    for m in MODES {
+                        let got = super::super::tests::fast(BES[f], x, m).map(|(v, s)| (v.to_bits(), s));
+                        if band || (a < BES_LARGE_BITS && got.is_some()) {
+                            let want = accurate(BES[f], x, m);
+                            assert_eq!(got, Some((want.0.to_bits(), want.1)), "{}({x:e}) {m:?}", BES_NAMES[f]);
+                        } else {
+                            assert!(got.is_none(), "{}({x:e}) {m:?} left the accurate path", BES_NAMES[f]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// `special::bessel32_rest`, the functions' path once the fast one refused, answers each
+    /// function as its accurate path does, off the band (1e-30 and 3.5, where the four values
+    /// differ) and on it (2^19, 1e30). (No spec clause: LIBM-F32-BESSEL-LARGE-3, D-10.109.)
+    #[test]
+    fn bessel32_rest_is_each_functions_path() {
+        for f in 0..4 {
+            for x in [1e-30f32, 3.5, 524_288.0, 1e30] {
+                for m in MODES {
+                    let want = accurate(BES[f], x, m);
+                    let got = crate::special::bessel32_rest(f, BES_NAMES[f], x, m);
+                    assert_eq!((got.0.to_bits(), got.1), (want.0.to_bits(), want.1), "rest {}({x:e}) {m:?}", BES_NAMES[f]);
+                }
+            }
+        }
+    }
+
+    /// The table is exactly the set of band operands the core's rounding test refuses (an
+    /// exhaustive enumeration of 2^19 ≤ x < 2^128; J0 even, J1 odd, so x > 0 decides). On a
+    /// mismatch it prints the table to paste into bessel_tab.rs, the nearest value and its side from
+    /// the accurate path. (No spec clause: D-10.109.)
+    #[test]
+    #[ignore]
+    fn bessel_large_table_is_the_refused_set() {
+        let mut ok = true;
+        for f in 0..4 {
+            let found = std::sync::Mutex::new(std::vec::Vec::new());
+            super::super::tests::exhaustive_by(|xs| {
+                for &x in xs {
+                    let a = x.to_bits();
+                    if (BES_LARGE_BITS..0x7f80_0000).contains(&a) {
+                        let (y, b) = large_core(f, a);
+                        if large_delta(y, b).and_then(|d| round(y, d, Rounding::Nearest)).is_none() {
+                            found.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(a);
+                        }
+                    }
+                }
+                0
+            });
+            let mut found = found.into_inner().unwrap_or_else(std::sync::PoisonError::into_inner);
+            found.sort_unstable();
+            let have: std::vec::Vec<u32> = lg_tab(f).iter().map(|e| (e >> 32) as u32 & 0x7fff_ffff).collect();
+            std::println!("{}: {} refused", BES_NAMES[f], found.len());
+            if found != have {
+                ok = false;
+                std::println!("{} table:", BES_NAMES[f]);
+                for a in found {
+                    let x = f32::from_bits(a);
+                    let near = accurate(BES[f], x, Rounding::Nearest).0;
+                    let above = accurate(BES[f], x, Rounding::Down).0 == near;
+                    std::println!("    {:#018x},", (u64::from(above) << 63) | (u64::from(a) << 32) | u64::from(near.to_bits()));
+                }
+            }
+        }
+        assert!(ok, "the large band's table is not the refused set");
     }
 
     /// j0f on every `float` operand in every mode against the tiered oracle (its mp tier the

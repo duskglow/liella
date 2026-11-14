@@ -142,6 +142,8 @@ pub const SWEEPS: &[Sweep] = &[
     lib("crates/math/src/wide_int/quad/arc.rs", "wide_int::quad::arc::tests::arc_sine_agrees_with_the_wide_route_long", Group::Long),
     lib("crates/math/src/complex_fast_tests.rs", "complex_fast::tests::cexp_quick_tier_sweep", Group::Long),
     lib("crates/math/src/complex_fast_ls_tests.rs", "complex_fast::ls_tests::clog_csqrt_quick_tier_sweep", Group::Long),
+    lib("crates/math/src/complex_fast_sinh_tests.rs", "complex_fast::sinh::tests::csinh_quick_tier_sweep", Group::Long),
+    lib("crates/math/src/complex_fast_pow_tests.rs", "complex_fast::pow::tests::cpow_decline_rates", Group::Long),
     it("crates/math/tests/fast_bessel_n.rs", "fast_bessel_n", "bessel_n_tier_sweep", Group::Long).env(&[("LIELLA_BESSEL_N_SWEEP", "10000000")]),
     // The double special-function fast tiers against their 384-bit paths at 10^5 operands per function and mode
     // (ruling #5061; the gate runs 1500 to 2000). Each took 60 s or more, so they run weekly (ruling #5062).
@@ -162,6 +164,9 @@ pub const SWEEPS: &[Sweep] = &[
     lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::j1f_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::y0f_fast_path_agrees_exhaustively", Group::Exhaustive),
     lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::y1f_fast_path_agrees_exhaustively", Group::Exhaustive),
+    // Every float of 2^19..2^128 through the large-band core, once per function, but no oracle: about 40 s at
+    // opt-level 2 on a Haswell-EP host (26 vCPU), so it runs with the long group (D-10.109).
+    lib("crates/math/src/fast32/bessel.rs", "fast32::bessel::tests::bessel_large_table_is_the_refused_set", Group::Long),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::asinf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::acosf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
     lib("crates/math/src/fast32/tests.rs", "fast32::tests::atanf_fast_path_agrees_exhaustively", Group::Exhaustive).env(STRIDE1),
@@ -183,6 +188,9 @@ pub const SWEEPS: &[Sweep] = &[
     it("crates/math/tests/complex_f128_products.rs", "complex_f128_products", "accuracy_suite_retry_count", Group::Count),
     // liella-boundary (TEST-LONG-SWEEPS-BOUNDARY, #4752)
     it("crates/boundary/tests/exp_quick.rs", "exp_quick", "exp_quick_accuracy_job", Group::Long).env(&[("EXP_QUICK_N", "100000000")]).secs(5),
+    // The directed-rounding quick phase of exp (LIBM-DIRECTED-INPLACE, D-10.94): 10^7 operands per distribution,
+    // direction and build.
+    it("crates/boundary/tests/exp_quick.rs", "exp_quick", "exp_directed_accuracy_job", Group::Long).env(&[("EXP_DIR_N", "10000000")]).secs(3),
     it("crates/boundary/tests/trig_quick.rs", "trig_quick", "trig_quick_accuracy_job", Group::Long).env(&[("TRIG_QUICK_N", "100000000")]).secs(58),
     it("crates/boundary/tests/hyperb_quick.rs", "hyperb_quick", "hyperb_quick_both_builds_round_correctly", Group::Long)
         .env(&[("LIELLA_HYPERB_N", "1000000")]).secs(23),
@@ -229,6 +237,7 @@ pub const NOT_SWEEPS: &[(&str, &str, &str)] = &[
     ("crates/core/tests/no_proc_lane.rs", "link_max_without_proc", "LIELLA_NPL_LINK_MAX is the expected value the test hands its re-executed child, not a size"),
     ("crates/core/tests/no_proc_lane.rs", "getauxval_hosted_without_proc", "LIELLA_NPL_PAGESZ is the expected value the test hands its re-executed child, not a size"),
     ("crates/core/tests/s25_ipc_clauses.rs", "s25_2_c_3", "LIELLA_C25_UNDO is the semaphore id the test hands its re-executed child, not a size"),
+    ("crates/ld/tests/cache_write.rs", "write_reader_fuzz_seeds", "regenerates fuzz/seeds/ld_cache from the cache writer; it checks nothing"),
 ];
 
 /// The identifier at the start of `s` (a `$` for a `macro_rules!` metavariable).

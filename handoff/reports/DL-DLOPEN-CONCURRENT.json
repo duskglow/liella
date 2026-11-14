@@ -1,0 +1,92 @@
+{
+ "task": "DL-DLOPEN-CONCURRENT",
+ "model": "opus",
+ "tokens": null,
+ "result": "Lock-free dl_iterate_phdr/_dl_find_object over the whole object chain in dynamic programs (publication after pass 2), live walk with probed counters, fork prepare/child step and lock order; gate red only on the #4347 start-up layout jitter (tool 54 at one pad vs 53 on origin/next)",
+ "branch": "task/dl-dlopen-concurrent",
+ "head": "599c1d728",
+ "gate": {
+  "affected": "7714 passed / 2 failed on 599c1d728 (gate2; both hot_text_products init_data_clusters_hold_at_every_text_phase, fast and interposed: tool faults 53 at nine pads, 54 at cold 0xf000; origin/next 68e72ab32: 53 at all ten, passes); clippy and static clean",
+  "peak": "11G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "LAYOUT-JITTER (#4347): the start-up layout test moves 53 -> 54 at the cold 0xf000 pad from cold-text growth (fork lock_all/unlock_all, dl_iterate_phdr, early_init); the measured static start path is not touched",
+   "recommendation": "hold the story until the trace-at-build layout fix lands, then land unchanged"
+  },
+  {
+   "item": "R14-6 differences row: dl_iterate_phdr callbacks run without the loader lock (s27_1_c_8 says the reference holds one); plan put the row in DL-17 but it is observable from DL-16c",
+   "recommendation": "add the row now with no compat option (holding the lock across a callback only adds a deadlock path)"
+  },
+  {
+   "item": "pending decision records/pending/DL-DLOPEN-CONCURRENT-1.toml (D-NEW, series D-27)",
+   "recommendation": "assign the next D-27 id"
+  }
+ ],
+ "informational": [
+  "start-time dlpi_name is the DT_SONAME (reference: absolute path), as l_name (DL-16a gap)",
+  "dlfo_link_map is 0 before the first dlopen creates the loader's nodes and for the vDSO (reference non-null)",
+  "pre-existing: an IFUNC resolver that calls dlopen re-enters open_locked while the outer &mut Loader is live",
+  "dlsym was not on next: the constructor corpus has no dlsym case (DL-16b to add, with a P-8 reader through read_section)",
+  "plants run 1 (2d72f7cc2): find-no-link-map WARN-NO-MSG and child-keeps-writer-lock caught only by the tool timeout (no alarm in the fork child); fixed in 599c1d728, plants2: 7/7 CAUGHT, 0 WARN"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "correctness",
+   "what": "dl_iterate_phdr/_dl_find_object in programs Liella's ld.so starts listed only the program and vDSO; now every dependency and dlopen'd object (unwinders find them: C++ exception through a dlopen'd frame)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": true
+  },
+  {
+   "kind": "correctness",
+   "what": "fork while another thread is in a dlopen: the child can dlopen (writer lock freed in the child)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "tests in crates/ld/tests/dlopen_concurrent.rs",
+   "before": 0,
+   "after": 4,
+   "unit": "tests",
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "plants",
+   "before": 0,
+   "after": 7,
+   "unit": "plants",
+   "measured": true
+  },
+  {
+   "kind": "cost",
+   "what": "static dl_iterate_phdr/_dl_find_object: one Acquire load and branch more per call; multi-threaded fork: two calls into ld.so's step (dynamic only); not counted (no bench row reaches them)",
+   "before": null,
+   "after": null,
+   "unit": "instr/call",
+   "measured": false
+  },
+  {
+   "kind": "unblock",
+   "what": "DL-17 (read_section epochs, sorted index), DL-16b/16d build on the reader table and publication point",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  }
+ ],
+ "improvement": "plants tool could warn when a plant is caught only by its timeout (a missing hang guard in the test), as it does for WARN-NO-MSG",
+ "next_step": "after the #4347 layout fix lands: re-gate and land; then DL-17",
+ "report_file": "handoff/DL-DLOPEN-CONCURRENT.md",
+ "jobs": [
+  "dl-dlopen-concurrent-gate2",
+  "dl-dlopen-concurrent-plants2"
+ ]
+}
