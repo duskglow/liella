@@ -366,6 +366,12 @@ pub mod private {
         /// `fork`'s step (DL-16c): `(0)` before the clone (waits for a `dlopen` that is changing
         /// the loader's state), `(1)` in the parent and `(2)` in the child after it; 0: none.
         pub dl_fork: usize,
+        /// The loader's `dladdr`/`dladdr1` entry (DL-18): `(addr, info, extra, flags)` to 1 with
+        /// `*info` (and `*extra`) filled, or 0 when no object holds `addr`; 0: none.
+        pub dladdr: usize,
+        /// The loader's `dlinfo` entry (DL-18): `(handle, request, arg)` to the request's result or
+        /// -1 with the failure text set; 0: none.
+        pub dlinfo: usize,
     }
 
     #[cfg(test)]

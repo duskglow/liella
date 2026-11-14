@@ -279,7 +279,128 @@ static CALL: Reentrant = Reentrant::new();
 /// runs, and the child can `dlopen`).
 static STATE: Reentrant = Reentrant::new();
 
+pub(super) mod dladdr;
 pub(super) mod dlsym;
+
+/// One reader's view of the published objects (plan §4 `read_section`, D-27.1, D-27.30). It reads
+/// only what publication made final: the chain (`l_next`, Acquire), and each published node's
+/// range, names and path, object and symbol tables, all written before the Release store that
+/// linked them and never written again (DL-16 never unloads; a failed attempt rewrites only
+/// unpublished indices). It never forms a reference to the [`Loader`] or a [`Node`], whose other
+/// fields (`opens`, `global`) the writer may change under the lock.
+pub(super) struct View {
+    at: usize,
+}
+
+/// Run `f` over the published objects without the writer lock (D-27.1). DL-16 never unloads, so the
+/// section needs no grace period yet; DL-17 adds the per-thread reader epochs here. The process's
+/// first loader call builds the loader's state under [`STATE`] (the lock every state change holds;
+/// taking it without [`CALL`] keeps the lock order, as `fork` does); `None` when it cannot be
+/// built, or when the calling thread holds [`STATE`] (a signal handler that interrupted the first
+/// `dlopen` while it builds the state), whose re-entrant hold must not build a second one.
+pub(super) fn read_section<R>(f: impl FnOnce(&View) -> R) -> Option<R> {
+    let mut at = LOADER.load(Acquire);
+    if at == 0 {
+        if STATE.owner.load(Relaxed) == tb::tp() {
+            return None;
+        }
+        STATE.lock();
+        let made = loader().is_some();
+        STATE.unlock();
+        at = LOADER.load(Acquire);
+        if !made || at == 0 {
+            return None;
+        }
+    }
+    Some(f(&View { at }))
+}
+
+impl View {
+    /// Node `i`'s address (the handle and link map of object `i`).
+    pub(super) fn node_addr(&self, i: usize) -> usize {
+        self.at.wrapping_add(core::mem::offset_of!(Loader, nodes)).wrapping_add(i.wrapping_mul(size_of::<Node>()))
+    }
+
+    /// A published, final field of node `i` (`off` from [`core::mem::offset_of`]).
+    fn field<T: Copy>(&self, i: usize, off: usize) -> T {
+        let at = self.node_addr(i).wrapping_add(off);
+        // UNSAFE(slice): one field of a published node in the loader's own mapping.
+        #[allow(unsafe_code)]
+        // SAFETY: `i` came from the published chain (below CAP), so the node lies in the loader's
+        // mapping, which is never unmapped; `off` is a field's offset, so `at` is aligned for `T`;
+        // the field was written before the Release store that published the node and is never
+        // written again, so this read does not race with the writer.
+        unsafe { core::ptr::with_exposed_provenance::<T>(at).read() }
+    }
+
+    /// The next published node after `i` (0: none).
+    fn next(&self, i: usize) -> usize {
+        let at = self.node_addr(i).wrapping_add(core::mem::offset_of!(Node, l_next));
+        // UNSAFE(slice): the atomic `l_next` word of a published node.
+        #[allow(unsafe_code)]
+        // SAFETY: as in `field`; an atomic may be read while the writer stores it.
+        let next = unsafe { &*core::ptr::with_exposed_provenance::<AtomicUsize>(at) };
+        next.load(Acquire)
+    }
+
+    /// The first published object, in chain order, for which `pred` holds.
+    pub(super) fn find(&self, mut pred: impl FnMut(usize) -> bool) -> Option<usize> {
+        let first = self.node_addr(0);
+        let mut i = 0usize;
+        for _ in 0..CAP {
+            if pred(i) {
+                return Some(i);
+            }
+            let next = self.next(i);
+            i = next.checked_sub(first)?.checked_div(size_of::<Node>())?;
+            if next == 0 || i >= CAP {
+                return None;
+            }
+        }
+        None
+    }
+
+    /// Object `i`'s mapped range [lo, hi).
+    pub(super) fn range(&self, i: usize) -> (usize, usize) {
+        (self.field(i, core::mem::offset_of!(Node, lo)), self.field(i, core::mem::offset_of!(Node, hi)))
+    }
+
+    /// `l_name` of object `i`.
+    pub(super) fn l_name(&self, i: usize) -> usize {
+        self.field(i, core::mem::offset_of!(Node, l_name))
+    }
+
+    /// Object `i`'s path (NUL-terminated in the path arena) as an address and a length; (0, 0)
+    /// when unknown.
+    pub(super) fn path(&self, i: usize) -> (usize, usize) {
+        let (a, b): (u32, u32) = self.field(i, core::mem::offset_of!(Node, path));
+        if b == 0 {
+            return (0, 0);
+        }
+        let names = self.at.wrapping_add(core::mem::offset_of!(Loader, names));
+        (names.wrapping_add(usize::try_from(a).unwrap_or(0)), usize::try_from(b).unwrap_or(0))
+    }
+
+    /// Object `i` as the relocator saw it.
+    pub(super) fn obj(&self, i: usize) -> &Obj<'static> {
+        let at = self.at.wrapping_add(core::mem::offset_of!(Loader, objs)).wrapping_add(i.wrapping_mul(size_of::<Obj<'static>>()));
+        // UNSAFE(slice): a published object record in the loader's own mapping.
+        #[allow(unsafe_code)]
+        // SAFETY: `i` came from the published chain, so `objs[i]` was initialised before the Release
+        // store that published it and is never written again (no unloading in DL-16), and the
+        // mapping outlives the view.
+        unsafe { &*core::ptr::with_exposed_provenance::<Obj<'static>>(at) }
+    }
+
+    /// Object `i`'s symbol tables.
+    pub(super) fn syms(&self, i: usize) -> &Object<'static> {
+        let at = self.at.wrapping_add(core::mem::offset_of!(Loader, syms)).wrapping_add(i.wrapping_mul(size_of::<Object<'static>>()));
+        // UNSAFE(slice): a published symbol-table record in the loader's own mapping.
+        #[allow(unsafe_code)]
+        // SAFETY: as in `obj`.
+        unsafe { &*core::ptr::with_exposed_provenance::<Object<'static>>(at) }
+    }
+}
 
 /// The address of [`entry`], for `StartInfo::dlopen`.
 pub(super) fn entry_address() -> usize {
@@ -353,6 +474,7 @@ fn loader() -> Option<&'static mut Loader> {
             let _ = raw::munmap(at, size_of::<Loader>());
             return None;
         }
+        dladdr::keep_start_paths(l);
         LOADER.store(at, Release);
     }
     Some(l)
@@ -632,6 +754,15 @@ struct Env {
 
 impl Env {
     fn read() -> Env {
+        Env::read_with(true)
+    }
+
+    /// The environment without the cache (a caller that lists directories, never opens a name).
+    fn read_paths() -> Env {
+        Env::read_with(false)
+    }
+
+    fn read_with(with_cache: bool) -> Env {
         let (envp, auxv) = (start_arg(2), start_arg(3));
         let mut copy = [0u64; AUXV_WORDS_MAX];
         let words = if auxv == 0 { 0 } else { read_auxv(auxv, &mut copy).unwrap_or(0) };
@@ -640,7 +771,7 @@ impl Env {
         let ld = start::ld_env(env_entries(envp));
         let features = Native::features(&aux, &crate::sys::CSys);
         let mut path = PathBuf::default();
-        let file = if search::prefixed(b"etc/ld.so.cache", &mut path) { path.c_str().and_then(open_whole) } else { None };
+        let file = if with_cache && search::prefixed(b"etc/ld.so.cache", &mut path) { path.c_str().and_then(open_whole) } else { None };
         let cache = file.and_then(|(f, fd)| {
             let _ = crate::ffi_sys::liella_sys_close(fd);
             match Cache::parse(f) {

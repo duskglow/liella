@@ -198,6 +198,35 @@ fn search_order() {
     assert_eq!(&got[..2], ["./libq.so.1", "rel/libq.so.1"], "outside secure mode: empty = current directory");
 }
 
+/// s27_1_c_7 (`RTLD_DI_SERINFO` lists the search path; spec/behaviour/dynlink.md "dladdr and dlinfo"):
+/// `search::dirs` gives exactly the directories `search` tries for a bare name, in its order, without
+/// the cache and the hwcaps subdirectories, in plain and secure mode, with RPATH chains and RUNPATH.
+#[test]
+fn search_dirs_follow_the_search() {
+    let lib = Scope { rpath: Some(b"/r1"), runpath: None, origin: Some(b"/o/lib") };
+    let prog = Scope { rpath: Some(b"/r0:$ORIGIN/$LIB::rel"), runpath: None, origin: Some(b"/o") };
+    let ru = Scope { rpath: Some(b"/ignored"), runpath: Some(b"/u1:$ORIGIN/x:$BAD/y"), origin: Some(b"/o/ru") };
+    let prog_ru = Scope { rpath: None, runpath: Some(b"/pu"), origin: Some(b"/o") };
+    for x in [ctx(false, Some(b"/e1;/e2:"), None), ctx(true, Some(b"/e1"), None)] {
+        for chain in [&[lib, prog][..], &[ru, prog][..], &[lib, prog_ru][..], &[prog][..]] {
+            let mut got = Vec::new();
+            search::dirs::<Native>(chain, &x, &mut |d| {
+                got.push(format!("{}/libq.so.1", String::from_utf8(d.to_vec()).unwrap()));
+                true
+            });
+            let want: Vec<String> = candidates("libq.so.1", chain, &x).into_iter().map(|p| p.replace("/./", "/")).collect();
+            let got: Vec<String> = got.into_iter().map(|p| p.replace("/./", "/")).collect();
+            assert_eq!(got, want, "chain {chain:?} secure {}", x.secure);
+        }
+    }
+    let mut first = Vec::new();
+    search::dirs::<Native>(&[lib, prog], &ctx(false, None, None), &mut |d| {
+        first.push(d.to_vec());
+        false
+    });
+    assert_eq!(first, [b"/r1".to_vec()], "returning false stops the walk");
+}
+
 /// s27_1_c_1_1, threat model rules 1-3 and 5 in a secure process: LD_LIBRARY_PATH ignored, `$ORIGIN` only in a
 /// trusted directory, empty and relative elements skipped, `$LIB` fixed.
 #[test]
