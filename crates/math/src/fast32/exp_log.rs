@@ -95,13 +95,37 @@ pub(super) fn onepass_scaled(x: f32) -> f64 {
 #[inline(always)]
 pub(super) fn exp_onepass(x: f32, c: f64, amax: u32) -> Option<f32> {
     if (x.to_bits() & 0x7fff_ffff).wrapping_sub(ONEPASS_AMIN) >= amax - ONEPASS_AMIN {
-        return None;
+        return exp_onepass_tiny(x);
     }
     let y = exp_z(onepass_scaled(x) * (c * ONEPASS_SCALE));
     if (y.to_bits().wrapping_add(EXP_ONEPASS_DELTA) & 0x0fff_ffff) <= 2 * EXP_ONEPASS_DELTA {
         return None;
     }
     Some(y as f32)
+}
+
+/// [`exp_onepass`]'s answer below its range (LIBM-TINY-FASTPATHS, D-10.108), inlined into the
+/// kernel's refusal branch: as an out-of-line call it made the entry a non-leaf function, 2
+/// instructions more on every operand (probed). e^x, 2^x or 10^x for a normal x with |x| < 2^-27, as 1 + x
+/// rounded in the caller's direction, or `None` (zeros, subnormals, |x| ≥ 2^-27, NaN).
+/// * Value: b^x - 1 has x's sign and |b^x - 1| < 2^-27·ln 10·1.001 < 2^-25.79 (b = e, 2, 10), so
+///   b^x and 1 + x both lie strictly inside (1 - 2^-24, 1) or (1, 1 + 2^-23) on x's side of 1,
+///   and inside (1 - 2^-25, 1 + 2^-24), between the midpoints around 1. Neither is a `float` and
+///   no `float` lies between them, so every directed rounding gives both the same `float`, and
+///   round to nearest gives 1 for both.
+/// * Arithmetic: x is normal (its conversion raises nothing; DAZ reads it unchanged). The `double`
+///   sum 1 + x is rounded in the caller's direction and then converted in that direction: the
+///   `float` grid is part of the `double` grid, so two directed roundings the same way are the one
+///   rounding of 1 + x; in round to nearest the sum stays within 2^-26 of 1 and converts to 1. x ≠ 0,
+///   so the sum or the conversion is inexact, and nothing else is raised (operands and result
+///   near 1: no overflow, underflow or subnormal): the one-pass contract, inexact only.
+#[inline(always)]
+fn exp_onepass_tiny(x: f32) -> Option<f32> {
+    // 2^-27 and the least normal as `float` bits.
+    if (x.to_bits() & 0x7fff_ffff).wrapping_sub(0x0080_0000) >= 0x3200_0000 - 0x0080_0000 {
+        return None;
+    }
+    Some((1.0 + f64::from(x)) as f32)
 }
 
 /// The `float`s 10^n, n = 1..=10 (5^10 < 2^24, so each is exact), at index (biased exponent mod

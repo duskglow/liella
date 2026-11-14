@@ -1,0 +1,11 @@
+{"task": "DL-LIBC-START-7", "model": "opus", "tokens": null,
+ "result": "native_dynamic gets its own expected output (static list minus the static-only kernel types step, D-X.10); D-10.5 amend recorded as pending D-NEW",
+ "branch": "task/dl-libc-start-7", "head": "fd7612d31",
+ "gate": {"affected": "see keke:dl-libc-start-7-gate", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "#4807 Liella's own libc_nonshared.a (unchanged from -5/-6)", "recommendation": "a product story; keep the host archive until then"}],
+ "informational": ["records/pending/DL-LIBC-START-7-1.toml needs a D-10 id (amends D-10.5)", "counts not rerun: no product code changed since -6 (dl-libc-start-6-counts-head4 measures the same products)"],
+ "refused": [],
+ "improvement": "the expected-output comparison should name its static-only steps from the start; a new run step that reuses another step's expected list needs a test of both on first landing",
+ "next_step": "assign the D-10 id to the pending record; land",
+ "report_file": "handoff/DL-LIBC-START-7-report.md",
+ "jobs": ["dl-libc-start-7-gate", "dl-libc-start-7-plants"]}

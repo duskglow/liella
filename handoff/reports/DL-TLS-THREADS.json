@@ -1,0 +1,76 @@
+{
+ "task": "DL-TLS-THREADS",
+ "model": "opus",
+ "tokens": null,
+ "result": "pthread_create works in dynamic programs under Liella's ld.so (static TLS of every initial module per thread via StartInfo tls_size/align/init/release); R_X86_64_TLSDESC applied; tlsdesc.S static + dynamic primitives; tests pass on reference and Liella",
+ "branch": "task/dl-tls-threads",
+ "head": null,
+ "gate": {
+  "affected": "dl-tls-threads-gate2 (escalated FULL): 6492 passed / 1 failed (liella::hot_text_products init_data_clusters_hold_at_every_text_phase)",
+  "peak": "11G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "+28.9 instr/call on static pthread_create+join (35957.2 -> 35986.1, 0.08%)",
+   "recommendation": "land now; fix forward by re-applying bbe7c0530 with tools/hottext/regen.sh in both profiles"
+  },
+  {
+   "item": "per-thread TLS interface in StartInfo instead of LIELLA_PRIVATE exports (design 7/14)",
+   "recommendation": "accept: libc.so.6 keeps loading under another loader"
+  },
+  {
+   "item": "dynamic TLSDESC trampoline saves FXSAVE state only",
+   "recommendation": "keep; DL-19's resolver stays baseline SSE2 code"
+  }
+ ],
+ "informational": [
+  "fast xtask so lost two hot-text.list keys (locale::publish_global, a locale::name::candidates closure) after a thread.rs edit (bbe7c0530); reverted",
+  "rule slips: one no-op empty heredoc, one sed -i on this story's pending record; revert commit lacks the Co-Authored-By trailer",
+  "dl-tls-threads-percall4 refused: role synced with an untracked handoff note (docs only); rerun as dl-tls-threads-percall5 with --rev 1f09927be",
+  "dl-tls-threads-percall5 rc 2: wl_percall chose base cdafa3d1c (not primed); the measurement stands from dl-tls-threads-percall2 on the identical code tree 0460cc7fe"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "correctness",
+   "what": "pthread_create in a dynamically linked program under Liella's ld.so: EAGAIN before, threads with every initial module's TLS after",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "tests added (tlsdesc register oracle, dynamic TLS threads vs reference) + 1 descriptor assertion; plants",
+   "before": 0,
+   "after": 10,
+   "unit": "plants",
+   "measured": true
+  },
+  {
+   "kind": "cost",
+   "what": "thread_create_join per call, static program (wl_percall, Zen 1 host)",
+   "before": 35957.2,
+   "after": 35986.1,
+   "unit": "instr/call",
+   "measured": true
+  },
+  {
+   "kind": "unblock",
+   "what": "DL-16d (DL-DLOPEN-TLS-SURPLUS), DL-19 (DL-TLS-DLOPEN), DL-24 (DL-THREAD-DB-1)",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  }
+ ],
+ "improvement": "hot-text.list keys break on unrelated inlining moves; the so step could warn in the fast profile instead of failing a feature branch",
+ "next_step": "find why init_data_clusters_hold_at_every_text_phase fails (likely the new libc .bss static LOADER_TLS in thread.rs moving the data clusters; check origin/next on keke with the same test), fix, rerun the failing suite; then collect plants3",
+ "report_file": "handoff/DL-TLS-THREADS-report.md",
+ "jobs": [
+  "dl-tls-threads-lint3",
+  "dl-tls-threads-gate2",
+  "dl-tls-threads-plants3"
+ ]
+}

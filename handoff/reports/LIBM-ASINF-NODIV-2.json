@@ -1,0 +1,12 @@
+{"task": "LIBM-ASINF-NODIV-2", "model": "opus", "tokens": null,
+ "result": "asinf/acosf one sqrt no division, atanf one division (D-10.103): faster than next on Ivy Bridge (asinf 48.5->19.0 ns, acosf 47.9->19.05, atanf 33.6->22.6) and N100 (22.1->13.05, 23.1->13.1, 16.2->12.65); surviving plant fixed by holding atanf above 1 to its 5.4u proof bound",
+ "branch": "task/libm-asinf-nodiv-2", "head": "9b28981f1",
+ "gate": {"affected": "2581 passed / 0 failed, conformance 18/0 (9b28981f1, libm-asinf-nodiv-2-gate2); plants 5 CAUGHT / 0 SURVIVED", "peak": "1.8G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["glibc gap remains: asinf 1.31x (Ivy Bridge) / 1.66x (N100), acosf 1.01x / 1.31x, atanf 0.98x / 1.04x in time; instructions asinf 69.3 vs 53.5, acosf 70.1 vs 61.2, atanf 65.4 vs 66.6", "Zen 1 not timed (keke not bookable); ruling #4932 makes Ivy Bridge and N100 the verdict", "run 1's start-up fault red (localtime_r 21 > 20) is gone after merging origin/next"],
+ "refused": [],
+ "improvement": "bench --stage --base needs a git tree, so a role cannot stage next; a depth-1 clone of origin/next under the role's target/bench-base/ worked in one copy - the tool could do this from the synced base sha itself",
+ "next_step": "optional follow-up for asinf's remaining latency gap (shorter |x|<1/2 polynomial chain); see handoff/LIBM-ASINF-NODIV.md",
+ "report_file": "handoff/LIBM-ASINF-NODIV.md",
+ "jobs": ["libm-asinf-nodiv-2-gate2", "libm-asinf-nodiv-2-plants2", "libm-asinf-nodiv-2-counts", "kotori:libm-asinf-nodiv-2-ivb", "nozomi:libm-asinf-nodiv-2-n100"]}

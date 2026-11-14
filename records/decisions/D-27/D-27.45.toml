@@ -1,0 +1,11 @@
+id = "D-27.45"
+section = "s26-29"
+spec = "§27.1"
+ann = "—"
+status = "active"
+story = "DL-DLADDR-2"
+date = "2026-11-14"
+tests = ["crates/core/tests/s27_dynlink_clauses.rs::s27_1_c_6"]
+body = '''
+**`dladdr`'s object and symbol (phase 14 DL-18 `DL-DLADDR`, plan/ph14/design.md §10; probe `tools/probe/dl/dladdr/`).** The object holding an address is the first object in chain order whose mapped range (lowest to highest `PT_LOAD` address) holds it; `dli_fname` is the path it was loaded by (`argv[0]` for the program), `dli_fbase` the page of its lowest `PT_LOAD` address. The symbol is the defined dynamic symbol, neither `STT_TLS` nor `SHN_ABS`, that holds the address (`st_value <= a < st_value + st_size`, or `a == st_value` for size 0) with the highest start; at equal starts the lowest `.dynsym` index; an IFUNC is reported by its resolver's address under its own name. When no symbol holds the address, `dli_sname` and `dli_saddr` are NULL and the call still returns 1. An address no object holds returns 0 and leaves `*info` (and `dladdr1`'s `*extra`) untouched; dlerror is not touched. `dladdr1`: `RTLD_DL_SYMENT` stores the `Elf64_Sym` (NULL when no symbol holds the address), `RTLD_DL_LINKMAP` the object's link map (the handle `dlopen` gives); other flags store nothing. All of it matches the probe of the reference (spec/behaviour/dynlink.md "dladdr and dlinfo"). One linear pass over `.dynsym` per call: no index is built, so a caller pays nothing until it calls `dladdr`. Code: `crates/boundary/src/ld/dlopen/dladdr.rs`.
+'''

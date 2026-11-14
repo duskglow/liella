@@ -1,0 +1,12 @@
+{"task": "HOTLIST-REGEN-CHEAP", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: cheap regen of both profiles 324 s vs 1069 s full on mei, all 5 lists byte-identical; data trace deterministic (2x keke, 1x mei); parallel-runner test and plants not written",
+ "branch": "task/hotlist-regen-cheap", "head": "fecf4bf65",
+ "gate": {"affected": "not run: affected --list escalates to FULL (xtask product-path modules); clippy and static pass", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "affected escalates any xtask/src/{main,so,hottext}.rs change to FULL, so a developer gate cannot run for this story", "recommendation": "let the train's FULL gate cover it; the regen commands touch only target/product/regen and target/product/<p>/hot-text.pre-group.a"}],
+ "informational": ["fast merge of the tracked lists changed all four release-build inputs although the final lists equal the tracked ones: the release products were rebuilt (88 s), cause not yet understood", "startup-data.keys on next is 33 lines stale vs a regen of 9b2a0c029 (input, not nondeterminism)"],
+ "refused": [],
+ "improvement": "tools/ paths select no tests in affected, so regen tooling changes are never gated; map tools/hottext/ to a self-test",
+ "next_step": "write the HOTTEXT_GDB rendezvous + serial-vs-parallel test, map tools/hottext/ in affected, run both plants via cargo xtask plants",
+ "report_file": "handoff/HOTLIST-REGEN-CHEAP.md",
+ "jobs": ["mei:hrc-clippy2", "mei:hrc-static3", "mei:hrc-regen-cmp", "mei:hrc-det-mei", "keke:hrc-det-keke"]}

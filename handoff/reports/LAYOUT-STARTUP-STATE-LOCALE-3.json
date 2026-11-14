@@ -1,0 +1,11 @@
+{"task": "LAYOUT-STARTUP-STATE-LOCALE-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE (context checkpoint): first-call tiers moved to a page-aligned .lbss cluster after .bss (ruling #4942); compile, tests and counts not verified yet (lssl3-branch2 running)",
+ "branch": "task/layout-startup-state-locale-3", "head": "f1047eb5c",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "First-call cluster in .lbss instead of the ruling's .ldata example", "recommendation": "accept: .ldata starts a second writable PT_LOAD, which the static-PIE start refuses (D-X.68); .lbss follows .bss in the one segment"}],
+ "informational": ["No decision record yet for the order rule (#4923) or the first-call cluster (#4942)", "Initialised first-call objects (~300 bytes) and csys_7.o's __daylight/__timezone/__tzname stay in .data1"],
+ "refused": [],
+ "improvement": "A kinds.py-style query (member, type, size per declared entry) belongs in xtask: one unfiltered readelf listing cost this run ~25k of context",
+ "next_step": "Read lssl3-branch2 on mei; if true <= next and nothing WORSE, run the gate, hot_text_products, the 7 plants, clippy and static on the head",
+ "report_file": "handoff/LAYOUT-STARTUP-STATE-LOCALE.md",
+ "jobs": ["lssl3-lint0", "lssl3-branch2"]}

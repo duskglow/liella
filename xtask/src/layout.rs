@@ -39,7 +39,7 @@ pub struct Contract {
 
 impl Contract {
     /// The rule's `key=value` pairs (`; `-separated).
-    fn params(&self) -> Result<BTreeMap<String, String>, String> {
+    pub(crate) fn params(&self) -> Result<BTreeMap<String, String>, String> {
         let mut m = BTreeMap::new();
         for p in self.rule.split(';').map(str::trim).filter(|p| !p.is_empty()) {
             let (k, v) = p.split_once('=').ok_or_else(|| format!("layout: {}: rule part `{p}` is not key=value", self.id))?;
@@ -410,14 +410,31 @@ fn check_one(c: &Contract, pr: &mut Products) -> Result<String, Vec<String>> {
 }
 
 /// Check every contract on the products in `dir` (built with `profile`, when known); one line per contract, every
-/// failure listed.
+/// failure listed. A pass already proven for the same products, inputs, tools and checker is served from the verdict
+/// cache (`layout_verdict`), except under the CI train.
 pub fn check_products(root: &Path, dir: &Path, profile: Option<&str>) -> Result<(), String> {
+    crate::layout_verdict::check(root, dir, profile, || check_products_full(root, dir, profile))
+}
+
+/// Every contract checked on the products; on a pass, the lines printed (for the verdict cache).
+fn check_products_full(root: &Path, dir: &Path, profile: Option<&str>) -> Result<Vec<String>, String> {
     let contracts = load(root)?;
     let mut pr = Products { root, dir, profile: profile.map(str::to_string), index: BTreeMap::new() };
     let mut bad = Vec::new();
+    let mut ok = Vec::new();
+    let (all, mut slowest) = (std::time::Instant::now(), (0.0, String::new()));
     for c in &contracts {
-        match check_one(c, &mut pr) {
-            Ok(s) => println!("layout: {} ok: {s} ({})", c.id, c.decision),
+        let t = std::time::Instant::now();
+        let r = check_one(c, &mut pr);
+        let s = t.elapsed().as_secs_f64();
+        if s > slowest.0 {
+            slowest = (s, c.id.clone());
+        }
+        match r {
+            Ok(s) => {
+                ok.push(format!("layout: {} ok: {s} ({})", c.id, c.decision));
+                println!("{}", ok[ok.len() - 1]);
+            }
             Err(lines) => {
                 for l in &lines {
                     eprintln!("{l}");
@@ -427,9 +444,11 @@ pub fn check_products(root: &Path, dir: &Path, profile: Option<&str>) -> Result<
             }
         }
     }
+    println!("layout: {} contracts checked in {:.1} s (slowest {} {:.1} s)", contracts.len(), all.elapsed().as_secs_f64(), slowest.1, slowest.0);
     if bad.is_empty() {
-        println!("layout: all {} contracts of {MANIFEST} hold in {}", contracts.len(), dir.display());
-        Ok(())
+        ok.push(format!("layout: all {} contracts of {MANIFEST} hold in {}", contracts.len(), dir.display()));
+        println!("{}", ok[ok.len() - 1]);
+        Ok(ok)
     } else {
         Err(format!("layout: {} of {} contracts broken: {}", bad.len(), contracts.len(), bad.join(", ")))
     }
@@ -439,8 +458,8 @@ pub fn check_products(root: &Path, dir: &Path, profile: Option<&str>) -> Result<
 // STARTUP-TEXT-WINDOWS (D-X.49): the start-up text of the static probe in few 64 KiB windows
 //
 // A static program's text is a file mapping, and the first touch of each 64 KiB window of it costs one page fault
-// (fault-around maps the window). The functions `page_faults true` runs (keys in the row's `keys=` file, written by
-// `tools/hottext/regen.sh`) must occupy at most `budget-<profile>=` distinct windows of `page_faults.c` linked from the
+// (fault-around maps the window). The functions `page_faults true` runs (keys in the row's `keys=` list, written by
+// the trace of the build, `tools/hottext/regen.sh` run by `cargo xtask so`) must occupy at most `budget-<profile>=` distinct windows of `page_faults.c` linked from the
 // products as `crates/core/tests/hot_text_products.rs` links it, and none outside the hot group (D-X.20) may straddle
 // a window boundary. STARTUP-TEXT-GROUPED (`grouped=error|warn`): every start-up function of `libc.a` lies in the
 // hot group. Products and counters only: no timing, no tracing at check time.
@@ -628,7 +647,7 @@ fn startup_verdict(c: &Contract, t: &StartupText, window: u64, budget: u64, grou
     if !grouped.is_empty() {
         let what = format!("STARTUP-TEXT-GROUPED: {} start-up functions of libc.a outside the hot group 0x{lo:x}-0x{hi:x}: {}", grouped.len(), grouped.join(", "));
         if grouped_error {
-            bad.push(c.broken(&what, "add their keys to crates/libc-so/hot-text.list (tools/hottext/regen.sh)"));
+            bad.push(c.broken(&what, "the trace of this build did not group them (cargo xtask so traces the layout: see target/product/<profile>/trace.log)"));
         } else {
             summary += &format!("\nlayout: {} WARNING {what}", c.id);
         }
@@ -695,10 +714,10 @@ fn check_startup_windows(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Pr
         g => return Err(one(format!("layout: {}: grouped={g}: want error or warn", c.id))),
     };
     let path = param(p, c, "keys").map_err(one)?;
-    let text = std::fs::read_to_string(pr.root.join(path)).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
+    let text = std::fs::read_to_string(crate::hotlists::rel(pr.root, path).map_err(one)?).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     let keys = startup_keys(&text, &profile).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     if keys.is_empty() {
-        return Err(one(format!("layout: {}: {path}: no start-up key traced in profile {profile} (run tools/hottext/regen.sh)", c.id)));
+        return Err(one(format!("layout: {}: {path}: no start-up key traced in profile {profile} (rebuild: cargo xtask so traces the layout)", c.id)));
     }
     for f in &c.subjects {
         pr.file(f).map_err(|e| one(c.broken(f, &e)))?;
@@ -915,16 +934,16 @@ fn check_startup_data(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Produ
     let ro_budget = param_num(p, c, &format!("ro-budget-{profile}")).map_err(one)?;
     let rw_budget = param_num(p, c, &format!("rw-budget-{profile}")).map_err(one)?;
     let path = param(p, c, "keys").map_err(one)?;
-    let text = std::fs::read_to_string(pr.root.join(path)).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
+    let text = std::fs::read_to_string(crate::hotlists::rel(pr.root, path).map_err(one)?).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     let keys = startup_keys(&text, &profile).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
     if keys.is_empty() {
-        return Err(one(format!("layout: {}: {path}: no start-up object traced in profile {profile} (run tools/hottext/startup_data.sh)", c.id)));
+        return Err(one(format!("layout: {}: {path}: no start-up object traced in profile {profile} (rebuild: cargo xtask so traces the layout)", c.id)));
     }
     for f in &c.subjects {
         pr.file(f).map_err(|e| one(c.broken(f, &e)))?;
     }
     let tpath = param(p, c, "text-keys").map_err(one)?;
-    let ttext = std::fs::read_to_string(pr.root.join(tpath)).map_err(|e| one(format!("layout: {}: {tpath}: {e}", c.id)))?;
+    let ttext = std::fs::read_to_string(crate::hotlists::rel(pr.root, tpath).map_err(one)?).map_err(|e| one(format!("layout: {}: {tpath}: {e}", c.id)))?;
     let fns: BTreeSet<String> = startup_keys(&ttext, &profile).map_err(|e| one(format!("layout: {}: {tpath}: {e}", c.id)))?.into_iter().collect();
     let probe = link_startup_probe(pr, true).map_err(|e| one(format!("layout: {}: {e}", c.id)))?;
     let secs = parse_exe_sections(&probe.sections);
@@ -984,9 +1003,28 @@ fn decision_ids(root: &Path) -> Result<BTreeSet<String>, String> {
     Ok(out)
 }
 
-/// Whether `changed` holds a decision change (a file under one of `DECISION_DIRS`).
+/// Where a new record waits for the id the coordinator assigns (D-X.55); CI holds the branch until then.
+const PENDING_DIR: &str = "records/pending/";
+
+/// Whether `changed` holds a decision change: a file under one of `DECISION_DIRS`, or a pending decision record
+/// under `PENDING_DIR` (`rule_d_inputs` keeps only the pending records that are decisions, see
+/// [`pending_is_decision`]).
 fn decision_change(changed: &[String]) -> bool {
-    changed.iter().any(|f| DECISION_DIRS.iter().any(|d| f.starts_with(d)))
+    changed.iter().any(|f| DECISION_DIRS.iter().any(|d| f.starts_with(d)) || f.starts_with(PENDING_DIR))
+}
+
+/// Whether a pending record's text is a decision record: its `id` names a D-id (the placeholder or a reserved one), not
+/// a compatibility flag or a saturation claim.
+fn pending_is_decision(text: &str) -> bool {
+    text.lines().any(|l| {
+        l.strip_prefix("id").map(str::trim_start).and_then(|r| r.strip_prefix('=')).is_some_and(|v| v.trim_start().starts_with("\"D-"))
+    })
+}
+
+/// `changed` without the pending records that are not decision records (`read` gives a file's text; a pending
+/// record that is gone or unreadable is dropped too).
+fn keep_pending_decisions(changed: Vec<String>, read: impl Fn(&str) -> Option<String>) -> Vec<String> {
+    changed.into_iter().filter(|f| !f.starts_with(PENDING_DIR) || read(f).is_some_and(|t| pending_is_decision(&t))).collect()
 }
 
 /// The rows' own problems: kind known, D-row present.
@@ -1080,9 +1118,11 @@ fn git(root: &Path, args: &[&str]) -> Option<String> {
 }
 
 /// The base the branch is compared with, as `affected` does: `origin/next` where it exists, else `origin/main`.
+/// A changed pending record stays in the list only when it is a decision record (one that is gone or unreadable
+/// does not count).
 fn rule_d_inputs(root: &Path) -> Result<(Vec<String>, Option<Vec<Contract>>), String> {
     let base = if git(root, &["rev-parse", "--verify", "--quiet", "origin/next"]).is_some() { "origin/next" } else { "origin/main" };
-    let changed = crate::affected::changed_files(root, base)?;
+    let changed = keep_pending_decisions(crate::affected::changed_files(root, base)?, |f| std::fs::read_to_string(root.join(f)).ok());
     if !changed.iter().any(|f| f == MANIFEST) {
         return Ok((changed, Some(Vec::new())));
     }
@@ -1136,9 +1176,14 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("--static") => static_check(root),
         Some(d) if d.starts_with('-') => Err(format!("layout-check: unknown option {d} (usage: layout-check [--static | <products dir>])")),
-        Some(d) => check_products(root, Path::new(d), marker_profile(Path::new(d)).as_deref()),
+        // LAYOUT-TRACE-AT-BUILD: products grouped from a trace of their own build are checked against those lists.
+        Some(d) => {
+            crate::hotlists::follow_products(Path::new(d));
+            check_products(root, Path::new(d), marker_profile(Path::new(d)).as_deref())
+        }
         None => {
             let d = root.join("target/liella");
+            crate::hotlists::follow_products(&d);
             check_products(root, &d, marker_profile(&d).as_deref())
         }
     }
@@ -1192,10 +1237,34 @@ mod tests {
         assert!(rule_d(&rec, Some(&base), &loosened).is_empty(), "with a decision record change (D-X.55)");
         let near = vec![MANIFEST.to_string(), "records/compat/COMPAT-1.toml".to_string()];
         assert_eq!(rule_d(&near, Some(&base), &loosened).len(), 1, "another record is not a decision change");
+        let pend = vec![MANIFEST.to_string(), "records/pending/STORY-1.toml".to_string()];
+        assert!(rule_d(&pend, Some(&base), &loosened).is_empty(), "with a pending decision record (D-X.55)");
+        assert!(rule_d(&pend, None, &loosened).is_empty(), "a pending decision record in a tree without history");
         assert!(rule_d(&other, Some(&base), &loosened).is_empty(), "the manifest did not change");
         assert!(rule_d(&m, Some(&base), &[a.clone(), b.clone(), row("C", "align=8")]).is_empty(), "an added row");
         assert!(rule_d(&m, Some(&[]), &base).is_empty(), "a new manifest");
         assert_eq!(rule_d(&m, None, &base).len(), 1, "unknown base: the change needs a decision change");
+    }
+
+    #[test]
+    fn only_a_pending_decision_record_counts_as_a_decision_change() {
+        // no spec clause: tooling (D-X.48 rule d with D-X.55's pending records).
+        assert!(pending_is_decision("id = \"D-X.91\"\nseries = \"D-X\"\n"));
+        assert!(pending_is_decision("id=\"D-X.90\"\n"));
+        assert!(!pending_is_decision("id = \"COMPAT-7\"\ndecisions = [\"D-X.48\"]\n"), "a compatibility flag");
+        assert!(!pending_is_decision("id = \"SR-4.2\"\n"), "a saturation claim");
+        assert!(!pending_is_decision("ids = \"D-X.91\"\n"), "another key");
+        assert!(!pending_is_decision("id = \"SR-4.2\"\nbody = '''\n  id = \"D-X.91\" quoted\n'''\n"), "an indented line of the body");
+        let read = |f: &str| match f {
+            "records/pending/A-1.toml" => Some("id = \"D-X.91\"\n".to_string()),
+            "records/pending/A-2.toml" => Some("id = \"COMPAT-7\"\n".to_string()),
+            _ => None,
+        };
+        let changed = ["layout/contracts.tsv", "records/pending/A-1.toml", "records/pending/A-2.toml", "records/pending/gone.toml"];
+        let kept = keep_pending_decisions(changed.iter().map(|s| s.to_string()).collect(), read);
+        assert_eq!(kept, ["layout/contracts.tsv", "records/pending/A-1.toml"], "other files stay; only the pending decision record is kept");
+        let compat_only = keep_pending_decisions(vec![MANIFEST.to_string(), "records/pending/A-2.toml".to_string()], read);
+        assert_eq!(rule_d(&compat_only, None, &[]).len(), 1, "a pending compatibility flag is no decision change");
     }
 
     #[test]

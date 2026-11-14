@@ -178,7 +178,30 @@ pub fn cbrt<F: Small>(x: F, mode: Rounding) -> (F, Status) {
 
 /// `hypot(x, y)` = √(x² + y²), correctly rounded in every format. `hypot(±∞, y)` is +∞ even
 /// for a quiet NaN `y`.
+/// The `double` format (cabs, cpow and the `hypot` entry's slow path included) takes the
+/// kernel `invtrig::hypot_rounded` (D-10.104) for every finite pair in every direction.
 pub fn hypot<F: Float>(x: F, y: F, mode: Rounding) -> (F, Status) {
+    hypot_with::<F, crate::hwop::SoftOps>(x, y, mode)
+}
+
+/// [`hypot`] with the `double` kernel's first root from `O` ([`crate::hwop::HwOps`]; the
+/// boundary's `f64` entry passes its `sqrtsd`, LIBM-HYPOT-DIRECTED).
+#[inline]
+pub fn hypot_with<F: Float, O: crate::hwop::HwOps>(x: F, y: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 53 {
+        #[allow(clippy::as_conversions, clippy::cast_possible_truncation)] // a `double`'s 64 bits
+        let (xf, yf) = (f64::from_bits(x.to_bits() as u64), f64::from_bits(y.to_bits() as u64));
+        if let Some((v, st)) = crate::invtrig::hypot_rounded::<O>(xf, yf, mode) {
+            return (F::from_bits(u128::from(v.to_bits())), st);
+        }
+    }
+    hypot_exact(x, y, mode)
+}
+
+/// [`hypot`] by the exact sum of the exact squares (D-10.13), every format: the `double`
+/// kernel's oracle in the tests.
+#[doc(hidden)]
+pub fn hypot_exact<F: Float>(x: F, y: F, mode: Rounding) -> (F, Status) {
     let (a, b) = (float::decode(x), float::decode(y));
     let inf = a.kind == Kind::Inf || b.kind == Kind::Inf;
     let signalling = [a.kind, b.kind].iter().any(|k| matches!(k, Kind::SNan | Kind::Invalid));

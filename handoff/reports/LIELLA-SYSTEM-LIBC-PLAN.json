@@ -1,0 +1,30 @@
+{"task": "LIELLA-SYSTEM-LIBC-PLAN", "model": "opus", "tokens": null,
+ "result": "System-libc plan for Aqours + Devuan excalibur mirror scan: 0 packages need libc6 2.40, 37 need 2.41 (13 sources; outside glibc: sched_[gs]etattr 4, r-base pi functions 1, GLIBC_PRIVATE 4, build-time pins 3); glibc 2.41 = Liella's 2.39 table + 98 symbols (2 libc, 96 libm); inventory, packaging/version scheme, bootstrap path, 2.40/2.41 options with numbers, 8 rulings, 19 stories",
+ "branch": "task/liella-system-libc-plan", "head": "2310eb610",
+ "gate": {"affected": "400 passed / 0 failed (lslp-gate-1; its static step failed on a home path in the handoff, fixed; final gate lslp-gate-2)", "peak": "1.1G"},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "R1 Aqours package identity for Liella in libc6's place", "recommendation": "take glibc's binary names (libc6, libc-bin Essential, libc6-dev Provides libc-dev, libc-dev-bin, locales, libc-l10n) with Source: liella; keep liella6/liella6-dev for coexistence"},
+  {"item": "R2 version scheme", "recommendation": "<abi>+liella<YYYYMMDD>.<n>-<rev>, no epoch; symbols file minimum = the GLIBC_2.x node level, LIELLA_NATIVE via a Liella-only template; shlibs libc6 (>= <abi>)"},
+  {"item": "R3 2.40/2.41 symbols (owner decides; plan section 4)", "recommendation": "options laid out: stay 2.39 (patch/verify 5 sources), all 98 (2 libc + 44 libm kernels + 2.41 reference), or mix: sched_[gs]etattr (S) + double sinpi/cospi/tanpi/atanpi (M), rest to the libm backlog"},
+  {"item": "R4 C header provenance: Liella has no header set (liella-gcc uses the host's glibc 2.39 headers)", "recommendation": "generate headers from spec/abi tables (OD-1) plus the standards' text; no glibc header text"},
+  {"item": "R5 locale/charmap/translation data for a glibc-free root", "recommendation": "ship Devuan's locales and libc-l10n data unchanged (Architecture: all data), compiled by Liella's own localedef"},
+  {"item": "R6 utility programs (ldconfig, getent, getconf, locale, iconv, localedef, ldd, zic) are out of spec scope today", "recommendation": "bring them in as a spec utilities part: POSIX, man pages, black-box probes, formats D.1-D.3"},
+  {"item": "R7 zic/zdump/tzselect", "recommendation": "owner's call: clean-room SL-TZ (M), or a separate Aqours package built from IANA tzcode that Liella developers never read"},
+  {"item": "R8 nscd/unscd", "recommendation": "drop from Aqours (no Liella nscd client; unscd imports GLIBC_PRIVATE)"}
+ ],
+ "informational": [
+  "libmvec.so.1 (216 exports at GLIBC_2.22/2.35) is shipped by libc6 and absent from spec/abi/versions.tsv; with Liella's own headers declaring no simd variants, rebuilt packages never import it (M-0/M-1 re-scoped in plan section 6)",
+  "util-linux (Essential) imports sched_setattr/sched_getattr@GLIBC_2.41: with Liella at 2.39 it blocks a pinned libc6 swap until rebuilt or SCHED-ATTR lands",
+  "Scan scripts and data are on the Zen 1 build host under ~/work/LIELLA-SYSTEM-LIBC-PLAN (not committed: they name the LAN mirror)"
+ ],
+ "refused": [],
+ "impact": [
+  {"kind": "none", "what": "planning and measurement only; no behaviour change", "before": null, "after": null, "unit": null, "measured": true},
+  {"kind": "unblock", "what": "briefable stories SL-FLAVOUR, SL-SYMBOLS, SL-CRT, SL-SONAMES, SL-LDCONFIG, SL-HEADERS, SL-BIN-CORE, SL-SWAP-SMOKE, SCHED-ATTR, SL-BOOTSTRAP-ESSENTIAL, SL-LOCALEDEF, SL-TZ, SL-NSS, SL-GLIBC-PRIVATE-CONSUMERS, LIBM-C23-PI(-DOUBLE), LIBM-C23-P1, SL-AQOURS-REBUILD, SL-DEVTOOLS; owner decision R3", "before": null, "after": 18, "unit": "stories", "measured": true},
+  {"kind": "coverage", "what": "binary packages classified by libc6 need (excalibur amd64)", "before": 0, "after": 70082, "unit": "packages", "measured": true}
+ ],
+ "improvement": "A signed-index mirror scanner (InRelease gpgv, Packages hashes, libc dependency classes, consumer ELF import check) belongs in liella-ops tools next to MIRRORS.md, where the LAN mirror name is allowed, so the weekly mirror resync can rerun the 2.40/2.41 numbers in one command",
+ "next_step": "owner rules R1-R8 (R3 from plan section 4); then brief SL-FLAVOUR, SL-SYMBOLS, SL-CRT, SL-SONAMES in parallel (DL-8 shared prerequisite)",
+ "report_file": "handoff/system-libc.md",
+ "jobs": ["lslp-lint-3", "lslp-gate-2", "lslp-scan-index", "lslp-scan-debs", "lslp-scan-meta"]}

@@ -173,10 +173,12 @@ fn sym_uselocale() {
 
 /// `tb::read::<Locale>()` (the one `%fs`-relative load, plan S2 *tb-field*) reads the same
 /// word as the block reached through the thread pointer, on several threads with different
-/// `uselocale` choices at once.
+/// `uselocale` choices at once. This test process was not started by the runtime, so its
+/// threads' blocks are another library's: each thread's choice lives in its own words and the
+/// block's word at 0xa8 is never written (D-X.58).
 #[test]
 fn tb_read_locale_matches_thread_block() {
-    // Trace: no spec clause (thread-block access plumbing); S2 tb-field, D-X.16.
+    // Trace: no spec clause (thread-block access plumbing); S2 tb-field, D-X.16, D-X.58.
     use core::sync::atomic::Ordering::Relaxed;
     use liella_boundary::tb;
     let both = || (tb::read::<tb::Locale>(), tb::current().locale.load(Relaxed));
@@ -185,17 +187,18 @@ fn tb_read_locale_matches_thread_block() {
         .map(|i| {
             let start = start.clone();
             std::thread::spawn(move || {
-                let (r, b) = both();
-                assert_eq!(r, b, "fresh thread");
+                let before = both();
+                assert_eq!(before.0, before.1, "fresh thread");
                 let l = s::newlocale(LC_ALL_MASK, c("C.UTF-8").as_ptr(), null_mut());
                 assert!(!l.is_null());
                 s::uselocale(l);
                 start.wait();
-                assert_eq!(both(), (l as usize, l as usize), "thread {i} after uselocale");
+                assert_eq!(s::uselocale(null_mut()) as usize, l as usize, "thread {i} after uselocale");
+                assert_eq!(both(), before, "thread {i}: another library's block word is not written");
                 start.wait();
                 s::uselocale(GLOBAL_LOCALE);
-                let (r, b) = both();
-                assert_eq!(r, b, "thread {i} back on the global locale");
+                assert_eq!(s::uselocale(null_mut()), GLOBAL_LOCALE, "thread {i} back on the global locale");
+                assert_eq!(both(), before, "thread {i} back on the global locale: block word");
                 s::freelocale(l);
                 l as usize
             })
@@ -206,6 +209,36 @@ fn tb_read_locale_matches_thread_block() {
     seen.dedup();
     assert_eq!(seen.len(), 4, "each thread had its own locale object");
     assert_eq!(tb::read::<tb::Locale>(), tb::current().locale.load(Relaxed), "main thread");
+}
+
+/// A forked child's only thread continues the thread that called `fork` (POSIX `fork`: the
+/// child is a copy of the calling thread), so it keeps that thread's `uselocale` choice and
+/// `h_errno`, here in a process the runtime did not start, where those live outside the
+/// thread's block (D-X.58), and with a fork no hook of Liella's runs for.
+#[test]
+fn foreign_thread_words_kept_in_forked_child() {
+    // Trace: no spec clause (D-X.58: a forked child's words in a process the runtime did not start).
+    use liella_boundary::netdb;
+    use liella_boundary::selftest::{in_child, ChildEnd};
+    static CHOSEN: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+    std::thread::spawn(|| {
+        let l = s::newlocale(LC_ALL_MASK, c("C.UTF-8").as_ptr(), null_mut());
+        assert!(!l.is_null());
+        CHOSEN.store(l as usize, core::sync::atomic::Ordering::Relaxed);
+        s::uselocale(l);
+        netdb::set_h_errno(3);
+        let end = in_child(|_| {
+            let kept = s::uselocale(null_mut()) as usize == CHOSEN.load(core::sync::atomic::Ordering::Relaxed);
+            i32::from(!kept) | i32::from(netdb::h_errno() != 3) << 1
+        })
+        .unwrap();
+        assert_eq!(end, ChildEnd::Exited(0), "bit 0: uselocale choice lost, bit 1: h_errno lost");
+        assert_eq!(s::uselocale(null_mut()), l, "the parent's thread keeps its choice");
+        s::uselocale(GLOBAL_LOCALE);
+        s::freelocale(l);
+    })
+    .join()
+    .unwrap();
 }
 
 #[test]
@@ -647,6 +680,14 @@ fn sym___strfmon_l() {
 fn sym_strfmon_l() {
     // The given locale object's conventions; E2BIG.
     conformance(&["s07_symbols_strfmon", "s07_strfmon"]);
+}
+
+#[test]
+fn cxx_locales_through_the_lc_all_bit() {
+    // Clauses: s7_3_c_1, s7_3_f_0 (NEWLOCALE-LC-ALL-BIT; spec/behaviour/newlocale-mask.md): the
+    // C++ library starts iostreams and makes std::locale("C"), std::locale("") and named
+    // locales through newlocale(1 << LC_ALL, ...); a C++ program, hence the conformance runner.
+    conformance(&["s07_newlocale_cxx"]);
 }
 
 #[test]

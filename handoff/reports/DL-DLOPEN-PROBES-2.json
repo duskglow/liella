@@ -1,0 +1,24 @@
+{"task": "DL-DLOPEN-PROBES-2", "model": "opus", "tokens": null,
+ "result": "P-1..P-13 dlopen/dlsym probes, record, dynlink.md rows and pending D-27 record landed as new commits on a fresh branch from next; P-1 cleaned to the Liella rule for unknown mode bits; no product code",
+ "branch": "task/dl-dlopen-probes-2", "head": "e088a7daa",
+ "gate": {"affected": "375 passed / 0 failed", "peak": "1.4G"},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "#5125: P-10 (Liella runs no IFUNC resolver in a failing dlopen) as a differences row", "recommendation": "still open with the owner; DL-16a writes the row if ruled"},
+  {"item": "#5126: P-13 (ld.so by its real path is the start-time object in Liella) as a differences row", "recommendation": "still open with the owner; DL-16a writes the row if ruled"}
+ ],
+ "informational": [
+  "#5127 applied: pending record DL-DLOPEN-PROBES-1 items (4) RTLD_DEFAULT also searches the caller's local scope and (5) a successful dl* call clears the pending dlerror text",
+  "unknown mode bits: plan/ph14/dl-16-dlopen.md Modes states Liella refuses every bit outside the defined mask (0x40000000 included) with invalid mode parameter; DL-16a's test sweeps every undefined bit; the P-1 probe sweep leaves that bit out",
+  "the DL-0b run.sh re-run on the same reference prints its recorded part unchanged (job dl-dlopen-probes-2-probe-dl0)",
+  "the earlier report handoff/reports/DL-DLOPEN-PROBES.json was not carried over; this report replaces it"
+ ],
+ "refused": [],
+ "impact": [
+  {"kind": "unblock", "what": "DL-16a DL-DLOPEN-LOAD, DL-16b DL-DLSYM, DL-16c DL-DLOPEN-CONCURRENT, DL-16d DL-DLOPEN-TLS-SURPLUS: the probe answers their plan choices wait on", "before": null, "after": null, "unit": null, "measured": false},
+  {"kind": "coverage", "what": "behaviour rows added to spec/behaviour/dynlink.md (P-1 split in two)", "before": 0, "after": 14, "unit": "rows", "measured": true}
+ ],
+ "improvement": "a cleaned-continuation brief could ship the private source files already cleaned (or a list of the lines to drop), saving the re-run of the probe to regenerate the record",
+ "next_step": "DL-16a/DL-16b build to the dynlink.md rows; P-10/P-13 differences rows wait on rulings #5125/#5126",
+ "report_file": "handoff/DL-DLOPEN-PROBES.md",
+ "jobs": ["dl-dlopen-probes-2-lint", "dl-dlopen-probes-2-gate", "dl-dlopen-probes-2-probe-dlopen-2", "dl-dlopen-probes-2-probe-dl0"]}

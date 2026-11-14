@@ -62,7 +62,12 @@ struct Slot {
     file_id: [AtomicU64; 7],
 }
 const _: () = assert!(CAPACITY == FILES);
-static SLOTS: [Slot; CAPACITY] = [const {
+/// The table, page-aligned (STARTUP-DATA-PAGE-ALIGN-3): start-up writes its first records, whose page
+/// then stays the same wherever the objects ahead of it in `.lbss` end (unaligned, the head straddled
+/// two pages). The alignment costs at most 4 KiB of zero-filled address space, no file bytes.
+#[repr(C, align(4096))]
+struct Slots([Slot; CAPACITY]);
+static SLOTS: Slots = Slots([const {
     Slot {
         interned: AtomicUsize::new(0),
         name_addr: AtomicUsize::new(0),
@@ -73,7 +78,7 @@ static SLOTS: [Slot; CAPACITY] = [const {
         file_gen: AtomicUsize::new(0),
         file_id: [const { AtomicU64::new(0) }; 7],
     }
-}; CAPACITY];
+}; CAPACITY]);
 static COUNT: AtomicUsize = AtomicUsize::new(0);
 static NAME_COUNT: AtomicUsize = AtomicUsize::new(0);
 static FILE_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -139,7 +144,7 @@ fn load(a: &[AtomicUsize], i: usize) -> usize {
 
 /// Field `f` of slot `i` (0 past the end).
 fn field(f: fn(&'static Slot) -> &'static AtomicUsize, i: usize) -> usize {
-    SLOTS.get(i).map_or(0, |s| f(s).load(Acquire))
+    SLOTS.0.get(i).map_or(0, |s| f(s).load(Acquire))
 }
 
 /// The view of the `"C"` locale, as a static for [`view`].
@@ -167,7 +172,7 @@ fn intern_locked(objs: &impl Objects, l: Locale) -> KResult<usize> {
     if let Some(i) = (0..n).find(|&i| *objs.view_at(field(|s| &s.interned, i)).locale() == l) {
         return Ok(i.saturating_add(1));
     }
-    let slot = &SLOTS.get(n).ok_or(Errno::ENOMEM)?.interned;
+    let slot = &SLOTS.0.get(n).ok_or(Errno::ENOMEM)?.interned;
     // A category file an earlier view already tabulated is not tabulated again (LV-3).
     let reuse = |cat: Cat, d: &Data| {
         (0..n).find_map(|i| {
@@ -197,7 +202,7 @@ fn intern_name_locked(objs: &impl Objects, name: &[u8]) -> KResult<(usize, &'sta
             return Ok((i, stored));
         }
     }
-    let e = SLOTS.get(n).ok_or(Errno::ENOMEM)?;
+    let e = SLOTS.0.get(n).ok_or(Errno::ENOMEM)?;
     let (addr, len) = (&e.name_addr, &e.name_len);
     let mut v = TryVec::with_capacity(name.len().saturating_add(1))?;
     v.extend_from_slice(name)?;
@@ -230,14 +235,18 @@ pub fn global(objs: &impl Objects) -> &'static Locale {
 struct Files<'a, M: Mapper> {
     m: &'a M,
     /// `m.locpath()`, read at the first need and kept for the selection (SETLOCALE-3: read
-    /// once per category before).
-    locpath: core::cell::OnceCell<Option<&'a [u8]>>,
+    /// once per category before). `None` until then. A plain `Cell`, not a `OnceCell`
+    /// (HOTTEXT-TIME-CLUSTER-STABLE-2): `OnceCell::get_or_init` runs its first fill in an
+    /// out-of-line cold generic with no hot-text key, which `setlocale(LC_ALL, "")` touches in cold
+    /// text, where its distance from other cold code (and so its page-fault count) followed the
+    /// codegen-unit partition of unrelated code.
+    locpath: core::cell::Cell<Option<Option<&'a [u8]>>>,
 }
 
 /// Record file slot `i`: the mapping, its identity, checked in `generation`. The caller holds
 /// [`LOCK`].
 fn record_file(i: usize, addr: usize, len: usize, id: &Identity, generation: usize) {
-    if let Some(e) = SLOTS.get(i) {
+    if let Some(e) = SLOTS.0.get(i) {
         let (a, l, w, g) = (&e.file_addr, &e.file_len, &e.file_id, &e.file_gen);
         a.store(addr, Release);
         l.store(len, Release);
@@ -250,7 +259,7 @@ fn record_file(i: usize, addr: usize, len: usize, id: &Identity, generation: usi
 
 fn file_id(i: usize) -> Identity {
     let mut id = [0u64; 7];
-    if let Some(w) = SLOTS.get(i).map(|e| &e.file_id) {
+    if let Some(w) = SLOTS.0.get(i).map(|e| &e.file_id) {
         for (v, slot) in id.iter_mut().zip(w) {
             *v = slot.load(Acquire);
         }
@@ -280,7 +289,7 @@ impl<M: Mapper> Source for Files<'_, M> {
             // The first use since an invalidation: the same file is used again, a changed one
             // mapped again (the old mapping stays for the locales that point into it).
             if self.m.identity(path) == Some(file_id(i)) {
-                if let Some(g) = SLOTS.get(i).map(|e| &e.file_gen) {
+                if let Some(g) = SLOTS.0.get(i).map(|e| &e.file_gen) {
                     g.store(generation, Release);
                 }
                 return Some(current);
@@ -295,7 +304,7 @@ impl<M: Mapper> Source for Files<'_, M> {
         }
         // A new file: only when it can be recorded (a full table fails the load cleanly, as a
         // missing file does, instead of mapping again at every call).
-        let fname = &SLOTS.get(n)?.file_name;
+        let fname = &SLOTS.0.get(n)?.file_name;
         if MAPS.load(Acquire) >= MAP_LIMIT {
             return None;
         }
@@ -312,7 +321,12 @@ impl<M: Mapper> Source for Files<'_, M> {
     }
 
     fn locpath(&self) -> Option<&[u8]> {
-        *self.locpath.get_or_init(|| self.m.locpath())
+        if let Some(p) = self.locpath.get() {
+            return p;
+        }
+        let p = self.m.locpath();
+        self.locpath.set(Some(p));
+        p
     }
 
     fn charmap(&self, name: &[u8]) -> Option<&'static Charmap> {
@@ -473,7 +487,7 @@ pub fn codec<S: Sys, M: Mapper>(sys: &S, m: &M, name: &[u8]) -> Option<Codec> {
         return Some(c);
     }
     let _g = LOCK.lock(sys);
-    Files { m, locpath: core::cell::OnceCell::new() }.charmap(name).map(|c| Codec::Charmap(CharmapRef(c)))
+    Files { m, locpath: core::cell::Cell::new(None) }.charmap(name).map(|c| Codec::Charmap(CharmapRef(c)))
 }
 
 /// The name `setlocale(cat, "")` takes for `cat`: `LC_ALL`, then `LC_<cat>`, then `LANG`
@@ -496,7 +510,7 @@ pub enum Request<'a> {
 /// `base` with the categories in `cats` replaced by the locales `names` gives them (indexed
 /// like [`Cat::ALL`]). The caller holds [`LOCK`].
 fn replace<M: Mapper>(m: &M, base: Locale, cats: &[Cat], names: &[&[u8]; 12]) -> Option<Locale> {
-    let src = Files { m, locpath: core::cell::OnceCell::new() };
+    let src = Files { m, locpath: core::cell::Cell::new(None) };
     let mut l = base;
     // The alias and the archive search are shared by the categories of one name.
     let mut cache = locale::FindCache::default();
@@ -581,9 +595,32 @@ fn query_record(handle: usize, cat: Option<Cat>, slot: usize) {
     }
 }
 
+/// `a == b` for two locale names, compared here eight bytes at a time rather than through a
+/// library call: names are short, and the call made the fast path of [`setlocale`] save and
+/// restore six registers and keep a frame, so its miss could not jump straight to
+/// [`setlocale_locked`] (SETLOCALE-C-ROWS).
+#[inline(always)]
+fn same_name(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let word = |c: &[u8]| <[u8; 8]>::try_from(c).ok().map(u64::from_ne_bytes);
+    let (mut a8, mut b8) = (a.chunks_exact(8), b.chunks_exact(8));
+    for (x, y) in a8.by_ref().zip(b8.by_ref()) {
+        if word(x) != word(y) {
+            return false;
+        }
+    }
+    a8.remainder().iter().zip(b8.remainder()).all(|(x, y)| x == y)
+}
+
 /// `setlocale(cat, …)` (`cat` `None` is `LC_ALL`). Returns the category's name or the
 /// composite name (`'static`, followed by a NUL), or `None` if a name is unknown, in which
 /// case nothing changes. A query is answered from the query cache when it can be.
+///
+/// Only the lock-free answers are here; the rest is [`setlocale_locked`], kept out of line so
+/// that a call answered here does not set up that function's frame (several kilobytes of stack
+/// buffers, six saved registers): SETLOCALE-C-ROWS.
 pub fn setlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: Request<'_>) -> Option<&'static [u8]> {
     match req {
         Request::Query => {
@@ -592,19 +629,33 @@ pub fn setlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: Reque
             }
         }
         // The name the query would answer (for `LC_ALL`: the single or composite name) names
-        // every category asked as it is: nothing to look up (s7_2_c_4), no lock.
+        // every category asked as it is: nothing to look up (s7_2_c_4), no lock. `"POSIX"` is
+        // compared as the `"C"` it reports: otherwise every repeated setlocale(cat, "POSIX")
+        // missed here and rebuilt, compared and copied whole locales under the lock (~2,300
+        // instructions, partly memmove whose count follows stack alignment).
         Request::Name(n) => {
-            if let Some(s) = query_cached(m, cat).filter(|&s| s == n) {
+            // The name as given first: "C" and every file name match there at no extra cost.
+            if let Some(s) = query_cached(m, cat).filter(|&s| same_name(s, n) || same_name(s, locale::reported(n))) {
                 return Some(s);
             }
         }
         Request::Environment(_) => {}
     }
+    setlocale_locked(sys, m, cat, &req)
+}
+
+/// [`setlocale`] when the query cache did not answer, under [`LOCK`]; also called directly for a
+/// [`Request::Environment`], which the cache never answers. A caller that calls this itself puts
+/// its stack buffers right below its own frame, where they were when this was part of
+/// `setlocale`: `setlocale(cat, "")` copies whole locales there and its memmove count follows
+/// their alignment (+6 to +8 per call when reached through [`setlocale`]; SETLOCALE-C-ROWS).
+#[inline(never)]
+pub fn setlocale_locked<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: &Request<'_>) -> Option<&'static [u8]> {
     let _g = LOCK.lock(sys);
     let current = *global(m);
     let one = [cat.unwrap_or(Cat::Ctype)];
     let cats: &[Cat] = if cat.is_some() { &one } else { &Cat::ALL };
-    let next = match req {
+    let next = match *req {
         Request::Query => current,
         Request::Name(n) => {
             let names = match (cat, name::parse_composite(n)) {
@@ -674,6 +725,19 @@ pub fn newlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cats: &[Cat], name: &[u8], b
         Some(all) if cats.len() == Cat::ALL.len() => all,
         _ => [name; 12],
     };
+    let l = replace(m, base, cats, &names).ok_or(Errno::ENOENT)?;
+    intern_locked(m, l)
+}
+
+/// `newlocale(mask, "", base)`: `base` with each category in `cats` taken from the locale the
+/// environment names for it ([`env_name`], as `setlocale(cat, "")` reads it). The new locale's
+/// handle, or `ENOENT` when a name does not resolve.
+pub fn newlocale_env<S: Sys, M: Mapper>(sys: &S, m: &M, cats: &[Cat], getenv: &dyn Fn(&[u8]) -> Option<&'static [u8]>, base: Locale) -> KResult<usize> {
+    let mut names: [&[u8]; 12] = [b"C"; 12];
+    for &c in cats {
+        *names.get_mut(c.index()).ok_or(Errno::EINVAL)? = env_name(c, getenv);
+    }
+    let _g = LOCK.lock(sys);
     let l = replace(m, base, cats, &names).ok_or(Errno::ENOENT)?;
     intern_locked(m, l)
 }

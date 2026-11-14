@@ -1,0 +1,13 @@
+{"task": "LAYOUT-STARTUP-STATE-TIME", "model": "opus", "tokens": null,
+ "result": "nine first-localtime_r/mktime/setenv statics declared in startup-state.list; the access check now traces localtime_mktime; first localtime_r flat at 20 (fast) / 17 (release) at every pad (next 21-22 / 18-19 at .bss pads); no probe cell worse than next",
+ "branch": "task/layout-startup-state-time", "head": null,
+ "gate": {"affected": "pending: lsst-gate escalated to FULL (startup-state.list is a linker input); hot_text_products all green (lsst-htp)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["setlocale's .bss jitter remains (locale 50->51, tool 54->55/56 at .bss pads, next and branch alike); next step: trace locale/tool in the same check and declare what it names",
+                   "the affected tool escalates any startup-state.list change to FULL, so a list-only story cannot get a direct-tier gate"],
+ "refused": [],
+ "jobs": ["lsst-gate", "lsst-plants", "lsst-htp", "lsst-probes", "lsst-lint"],
+ "improvement": "affected escalates startup-state.list edits to FULL; a list entry only moves objects into .data1, so mapping the list to hot_text_products (direct) would save a full gate per layout story",
+ "next_step": "trace `locale` and `tool` in init_startup_data_accesses_are_in_the_data1_cluster and declare what it names; then add a bss pad region to init_data_clusters_hold_at_every_text_phase",
+ "report_file": "handoff/LAYOUT-STARTUP-STATE-TIME.md"}

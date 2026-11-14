@@ -1846,7 +1846,7 @@ realpath(NULL, buf): NULL EINVAL buf=untouched
 canonicalize_file_name(NULL): NULL EINVAL
 -- symbolic-link chains rp/ch/l<k> -> l<k-1>, l0 -> ../a/f
 realpath: chains l0..l39 resolve (l39 is 40 links); first failure l40 ELOOP
-stat (the kernel's limit, for comparison): chains l0..l39 resolve
+stat (the kernel's limit, for comparison): chains l0..l39 resolve; first failure l40 stat ELOOP
 realpath m<k>/f (chain as a directory component): m0..m39 resolve; first failure m40 ELOOP
 realpath rp/hop/h/h/... (41 separate one-hop links): ELOOP
 realpath through k separate one-hop links h -> .: up to k=40 resolve

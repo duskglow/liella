@@ -1,0 +1,13 @@
+# LIBM-ASINF-NODIV (D-10.103): asin on [-1/2, 1/2], the `float` asinf/acosf kernel without a
+# division (Cody & Waite, Software Manual for the Elementary Functions, ch. 10): a polynomial in
+# x for |x| <= 1/2, and the half-angle form asin x = pi/2 - 2 asin sqrt((1 - x)/2) above it, whose
+# argument is again in [0, 1/2]. Odd powers up to 23; the x coefficient is fixed at 1 so that the
+# leading term is exact.
+name = fast32_asin
+target = asin
+interval = -1/2, 1/2
+powers = odd 1..23
+fixed = 1:1
+error = relative
+format = f64
+output = crates/math/src/coeffs/fast32_asin.rs

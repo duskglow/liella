@@ -1,0 +1,12 @@
+id = "D-10.100"
+section = "s10"
+spec = "§10.6"
+ann = "HIST, COMPAT"
+status = "active"
+amends = ["D-10.5"]
+story = "DL-LIBC-START-7"
+date = "2026-11-11"
+tests = ["crates/boundary/tests/s10_math_symbols.rs::sym___fpu_control"]
+body = '''
+**The dynamic `__fpu_control` hook runs on Liella (amends D-10.5; DL-LIBC-START-6, DL-LIBC-START-7).** D-10.5 left the dynamic programs' run on Liella as a reported skip until Liella's `ld.so` existed. It now runs: `sym___fpu_control` links its dynamic programs (default and program-defined `__fpu_control`) against Liella's `libc.so.6` and runs them under Liella's `ld.so`, and they pass. That needed the program's versioned reference `__fpu_control@GLIBC_2.2.5` to bind to the program's own base definition, which comes earlier in the scope (D-27.27, probe-settled against glibc 2.39). The "drop the hook" plant on the dynamic path is caught (DL-LIBC-START-6 plants). The rest of D-10.5 is unchanged.
+'''

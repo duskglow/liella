@@ -1,0 +1,4 @@
+# LIBM-BESSEL-SELFCHECK: the external-oracle pin of y1(2.0) and y0(1e-10) (crates/math/tests/fast_bessel.rs)
+# catches a last-places error in the y0 tiny band and in the table kernel slot holding 2.0.
+y0-tiny-shift | crates/math/src/fast_bessel.rs | perl:s/\.add\(Dd::from\(corr\)\);/.add(Dd::from(corr + 4e-15));/ | cargo test -p liella-math --test fast_bessel double_bessel_selfcheck_operands | msg:selfcheck operand y0.*(entry|fast tier)
+y1-table-shift | crates/math/src/fast_bessel.rs | perl:s/let y = taylor\(row, x - c\);/let y = taylor(row, x - c).add(Dd::from(if f == 3 { 3e-17 } else { 0.0 }));/ | cargo test -p liella-math --test fast_bessel double_bessel_selfcheck_operands | msg:selfcheck operand y1.*(entry|fast tier)

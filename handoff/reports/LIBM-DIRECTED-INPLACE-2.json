@@ -1,0 +1,17 @@
+{"task": "LIBM-DIRECTED-INPLACE-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: LAYOUT-JITTER: double exp directed quick phase tested (plants 4/4 caught, 10^7 accuracy 0 mismatches in every direction and build) and D-10.94 recorded; gate red only on start-up localtime_r page-fault bounds (21 > 20; base bb9130ed9 passes); booked timing not done",
+ "branch": "task/libm-directed-inplace-2", "head": "the commit adding this file (code head 75cd24c22)",
+ "gate": {"affected": "7941 passed / 4 failed (hot_text_products init_first_localtime_r x2: 21 > 20 page faults; static: bare | in D-10.94, fixed in 75cd24c22)", "peak": "11G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "START-UP LAYOUT JITTER (#4347): first localtime_r and localtime_r+mktime 21 > 20 page faults on head (Zen 1 host); the same test on base bb9130ed9 passes (<= 20), job libm-directed-inplace-2-basefaults; the change touches no start-up code",
+  "counts (instructions/call Liella vs glibc): exp_upward FMA 107.5 vs 67.1, SSE2 125.1 vs 77.1 (docs/benchmarks.md had 408 on an older revision); exp nearest unchanged path 85.2 / 99.4; expf_upward = expf 55.1",
+  "unbooked wall time on the Zen 1 build host: exp_upward 53.4 ns vs glibc 10.5 (FMA), 55.9 vs 12.3 (SSE2), about 34 ns above Liella's nearest exp with only 22-26 more instructions: not explained by instructions, profile before further design",
+  "expf: code unchanged (already one-pass in the caller's direction, D-10.63/D-10.72); exhaustive expf not rerun"
+ ],
+ "refused": [],
+ "improvement": "a primed origin/next product tree on each build host would let a LAYOUT-JITTER check run one test instead of a second full build in the role",
+ "next_step": "after the layout fix lands re-gate affected --base origin/next; profile the exp_upward time gap; booked timing Ivy Bridge + N100; then LIBM-DIRECTED-INPLACE-3 (log/logf, sin/sinf, pow)",
+ "report_file": "handoff/libm-directed-inplace.md",
+ "jobs": ["libm-directed-inplace-2-lint-final", "libm-directed-inplace-2-plants1", "libm-directed-inplace-2-acc1", "libm-directed-inplace-2-counts-fma1", "libm-directed-inplace-2-counts-sse2-1"]}

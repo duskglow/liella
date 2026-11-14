@@ -11,6 +11,20 @@ const CHEAP: usize = 21;
 const TRIG: [Fast; 3] = [Fast::Sin, Fast::Cos, Fast::Tan];
 pub(super) const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
 
+/// [`eval`], and for the Bessel functions the large band after its refusal, the order
+/// `special::j0` and its siblings take (D-10.109): what the `float` functions answer without the
+/// accurate path.
+pub(super) fn fast(f: Fast, x: f32, m: Rounding) -> Option<(f32, Status)> {
+    let (n, name) = match f {
+        Fast::J0 => (0, "j0f"),
+        Fast::J1 => (1, "j1f"),
+        Fast::Y0 => (2, "y0f"),
+        Fast::Y1 => (3, "y1f"),
+        _ => return eval(f, x, m),
+    };
+    eval(f, x, m).or_else(|| bessel_large(n, x, m, name))
+}
+
 pub(super) fn accurate(f: Fast, x: f32, m: Rounding) -> (f32, Status) {
     match f {
         Fast::Exp => acc::exp(x, m),
@@ -377,6 +391,54 @@ fn inverse_trig_cores_are_within_their_bounds() {
     verdict.pass();
 }
 
+/// The one-pass kernels' `double` results (asinf, acosf: polynomial below |x| = 1/2, half-angle
+/// form above; atanf: the table-point reduction above |x| = 1) within INV_ONEPASS_BOUND ulp of
+/// [`atan2_dd`], round to nearest: every encoding of the band 3/8 ≤ |x| < 3/4 around the split
+/// (a split moved either way puts the polynomial outside its fit interval, hundreds of ulp off
+/// within the band), every 509th over the rest of the range, and every 61st atanf operand in
+/// [1, 64), across the table's bins and its end at 32. Above 1 atanf is held to its own proof's
+/// 5.4u (relative, u = 2^-53), not the shared bound: a table point read from the wrong bin or
+/// cut short leaves |u| up to 1/16 outside the fit's interval, about 16u, inside the shared
+/// bound. The agreement sweeps see such a loss only next to a `float` boundary. (No spec clause:
+/// LIBM-ASINF-NODIV, D-10.103.)
+#[test]
+fn inverse_trig_onepass_kernels_are_within_their_bound() {
+    let Some(verdict) = crate::verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".fast32.inverse_trig_onepass_kernels_are_within_their_bound")).begin() else {
+        return;
+    };
+    use crate::dd::{two_sum, Dd};
+    let ulp = |y: f64| f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
+    let bound = INV_ONEPASS_BOUND as f64;
+    let check = |y: f64, f: Dd, what: &str, b: u32| {
+        let err = Dd::from(y).sub(f).to_f64();
+        assert!(err.abs() <= bound * ulp(y), "onepass bound: {what}({b:#010x}): {} ulp", err / ulp(y));
+    };
+    let one = Dd::from(1.0);
+    let band = (0x3ec0_0000u32..0x3f40_0000).step_by(16);
+    let rest = (0x0080_0000u32..0x3f80_0000).step_by(509);
+    let mut seen = 0u32;
+    for b in band.chain(rest).flat_map(|b| [b, b | 1 << 31]) {
+        let a = f64::from(f32::from_bits(b));
+        let (p, q) = (crate::dd::sqrt(two_sum(1.0, -a)), crate::dd::sqrt(two_sum(1.0, a)));
+        check(acos_y(b, f64::sqrt), atan2_dd(p, q).scale(2.0), "acos", b);
+        if b & 0x7fff_ffff >= 0x3280_0000 {
+            let d = crate::dd::sqrt(two_sum(1.0, -a).mul(two_sum(1.0, a)));
+            check(asin_y(b, f64::sqrt), atan2_dd(Dd::from(a), d), "asin", b);
+            check(atan_y(b), atan2_dd(Dd::from(a), one), "atan", b);
+        }
+        seen += 1;
+    }
+    // atanf above 1 (D-10.103's proof at `atan_onepass_any`): 5.4u relative.
+    let above_one = 5.4 / 9_007_199_254_740_992.0;
+    for b in (0x3f80_0001u32..0x4280_0000).step_by(61).chain((0x4280_0000..0x7f80_0000).step_by(0x1_0001)) {
+        let y = atan_y(b);
+        let err = Dd::from(y).sub(atan2_dd(Dd::from(f64::from(f32::from_bits(b))), one)).to_f64();
+        assert!(err.abs() <= above_one * y, "onepass bound: atan({b:#010x}): {} u above 1", err / y * 9_007_199_254_740_992.0);
+    }
+    assert!(seen > 2_500_000, "{seen}");
+    verdict.pass();
+}
+
 /// atan2f's fast path against the accurate path in every mode: pairs across the range with
 /// both signs, the octant edges |y| = |x| ± 1 ulp, the bench row's square [-10, 10]² (and its
 /// fallback rate), and the C Annex F F.10.1.4 special cases (zeros, infinities, NaN), which
@@ -673,6 +735,41 @@ fn hyperbolic_hardware_sqrt_agrees_sampled() {
     assert!(taken > 150_000, "{taken}");
 }
 
+/// The 256 bits of 2/π behind `TRIG_LARGE` are the generated table's, and its entries at both
+/// ends and the middle are ⌊2^K/π⌋ mod 2^128 (K = 123, 177, 231), computed independently with
+/// Machin's formula in integers. (No spec clause: LIBM-TINY-FASTPATHS-2.)
+#[test]
+fn trig_large_table_is_two_over_pi() {
+    assert_eq!(TWO_OVER_PI_256[..], t::TWO_OVER_PI[..4]);
+    assert_eq!(TRIG_LARGE[0], 0x028b_e60d_b939_1054_a7f0_9d5f_47d4_d377);
+    assert_eq!(TRIG_LARGE[54], 0x1529_fc27_57d1_f534_ddc0_db62_9599_3c43);
+    assert_eq!(TRIG_LARGE[108], 0x4d37_7036_d8a5_664f_10e4_107f_9458_eaf7);
+}
+
+/// trig_core_wide above 2^19 (reduce_large): sin, cos (< TRIG_BOUND ulp) and tan (< TAN_BOUND
+/// ulp) against the accurate path's `sin_cos` on every 2003rd encoding of [2^19, 2^128) of either
+/// sign; below 2^19 the same `double`s as trig_core (or the same refusal). (No spec clause:
+/// LIBM-TINY-FASTPATHS-2.)
+#[test]
+fn trig_core_wide_is_within_its_bound_above_2_19() {
+    let ulp = |y: f64| f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
+    let mut seen = 0u32;
+    for x in (0x4900_0000u32..0x7f80_0000).step_by(2003).flat_map(|b| [b, b | 1 << 31]).map(f32::from_bits) {
+        let Some((s, c)) = trig_core_wide(x) else { continue };
+        seen += 1;
+        let (fs, fc) = crate::trig::sin_cos(f64::from(x));
+        for (y, f, b, n) in [(s, fs, TRIG_BOUND, "sin"), (c, fc, TRIG_BOUND, "cos"), (s / c, fs.div(fc), TAN_BOUND, "tan")] {
+            let err = crate::dd::Dd::from(y).sub(f).to_f64();
+            assert!(err.abs() <= b * ulp(y), "trig_core_wide {n}({x:e}): {} ulp", err / ulp(y));
+        }
+    }
+    assert!(seen > 900_000, "{seen}");
+    let bits = |v: Option<(f64, f64)>| v.map(|(s, c)| (s.to_bits(), c.to_bits()));
+    for x in (0..0x4900_0000u32).step_by(4099).flat_map(|b| [b, b | 1 << 31]).map(f32::from_bits) {
+        assert_eq!(bits(trig_core_wide(x)), bits(trig_core(x)), "{:#010x}", x.to_bits());
+    }
+}
+
 /// The `float` sin, cos and tan entries with the boundary's conversion (`f64::from`, what its
 /// in-place `cvtss2sd` computes) answer exactly where, and exactly what, the bit-built entries do,
 /// on every 16411th `float` encoding: the operand handed to the core is x's `double` and each
@@ -928,11 +1025,11 @@ fn fast_path_agrees_exhaustively() {
 /// `f` against the tiered oracle (ruling #2889) on `xs`, `est` its family's estimator: one
 /// oracle call per operand the fast path takes in any mode, the accurate path only for the
 /// modes the double-double tier leaves undecided; the number of calls taken.
-pub(super) fn agree_oracle(f: Fast, est: impl Fn(f32) -> crate::oracle32::Est, xs: impl Iterator<Item = f32>, tally: &crate::oracle32::Tally) -> u64 {
+pub(super) fn agree_oracle(f: Fast, get: impl Fn(f32, Rounding) -> Option<(f32, Status)>, est: impl Fn(f32) -> crate::oracle32::Est, xs: impl Iterator<Item = f32>, tally: &crate::oracle32::Tally) -> u64 {
     use crate::oracle32 as o;
     let mut taken = 0;
     for x in xs {
-        let got = o::MODES.map(|m| eval(f, x, m));
+        let got = o::MODES.map(|m| get(x, m));
         if got.iter().all(Option::is_none) {
             continue;
         }
@@ -949,10 +1046,17 @@ pub(super) fn agree_oracle(f: Fast, est: impl Fn(f32) -> crate::oracle32::Est, x
 }
 
 /// `f` on every `float` operand in every mode against the tiered oracle (`est` its family's
-/// estimator; `LIELLA_SWEEP_STRIDE` thins the sweep); prints the calls taken and how often the
+/// estimator; `LIELLA_SWEEP_STRIDE` thins the sweep) through [`fast`] (for the Bessel functions
+/// the large band after the fast path, D-10.109); prints the calls taken and how often the
 /// oracle needed the mp path.
 pub(super) fn exhaustive_oracle(f: Fast, name: &str, est: impl Fn(f32) -> crate::oracle32::Est + Sync) {
+    exhaustive_oracle_by(f, name, est, |x, m| fast(f, x, m));
+}
+
+/// [`exhaustive_oracle`] with `get` in place of [`fast`]: the fast path and what its entry adds
+/// before the accurate path (erff and erfcf: the tiny operands' direct paths, D-10.107).
+pub(super) fn exhaustive_oracle_by(f: Fast, name: &str, est: impl Fn(f32) -> crate::oracle32::Est + Sync, get: impl Fn(f32, Rounding) -> Option<(f32, Status)> + Sync) {
     let tally = crate::oracle32::Tally::default();
-    let taken = exhaustive_by(|xs| agree_oracle(f, &est, xs.iter().copied(), &tally));
+    let taken = exhaustive_by(|xs| agree_oracle(f, &get, &est, xs.iter().copied(), &tally));
     std::println!("{name} fast path taken {taken} of {} calls; oracle: {}", 4u64 << 32, tally.summary());
 }

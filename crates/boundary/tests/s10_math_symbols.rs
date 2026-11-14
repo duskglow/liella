@@ -14,8 +14,8 @@
 use spectest::{family, symbol};
 
 mod products;
-#[path = "../../core/tests/support/skip_note.rs"]
-mod skip_note;
+#[path = "../../math/tests/support/hypot_pairs.rs"]
+mod hypot_pairs;
 
 use liella_abi::ctypes::LdBits;
 use liella_boundary::posix::s10_math_gen as m;
@@ -62,6 +62,39 @@ fn observe_with_cw(cw: u16, f: impl FnOnce()) -> (i32, Flags) {
 /// bits 10-11): nearest, down, up, toward zero.
 // ARCH(x86_64): x87 rounding-control encodings of `fesetround`; FE_* values on aarch64 (A-9)
 const ROUND_DIRECTIONS: [(u32, i32); 4] = [(0, 0), (1, 0x400), (2, 0x800), (3, 0xc00)];
+
+/// The `double` hypot kernel on the hardware root (`hot::Hw`, `sqrtsd`; LIBM-HYPOT-DIRECTED) is
+/// the exact path (D-10.13) in every direction, value bits and status, on the math test's hard
+/// pairs (ties, exact roots, roots just off a midpoint, the subnormal and overflow edges); the
+/// `hypot` entry under each `fesetround` direction gives the same bits, errno and flags (a
+/// directed call runs that kernel on `sqrtsd` in the default MXCSR).
+#[test]
+fn hypot_on_the_hardware_root_is_the_exact_path_in_every_direction() {
+    // Clauses: s10_3_c_0 (D-10.104).
+    use liella_boundary::hot::Hw;
+    use liella_math::{invtrig, pow, MathError, Rounding};
+    let errno_of = |e: MathError| if e == MathError::Range { 34 } else { 0 };
+    let pairs: Vec<(f64, f64)> = hypot_pairs::hard_pairs().into_iter().flat_map(|(x, y)| [(x, y), (-y, x)]).collect();
+    let dirs = [(0, Rounding::Nearest), (0x400, Rounding::Down), (0x800, Rounding::Up), (0xc00, Rounding::Zero)];
+    for &(x, y) in &pairs {
+        for (_, mode) in dirs {
+            let (w, ws) = pow::hypot_exact::<f64>(x, y, mode);
+            let r = invtrig::hypot_rounded::<Hw>(x, y, mode);
+            assert!(r.is_some_and(|(g, gs)| g.to_bits() == w.to_bits() && gs == ws), "hypot({x:e}, {y:e}) {mode:?}: kernel on sqrtsd {r:?}, exact {w:e} {ws:?}: hardware kernel FAILED");
+        }
+    }
+    for (rc, mode) in dirs {
+        assert_eq!(liella_boundary::posix::s10_math::fesetround(rc), 0);
+        for &(x, y) in &pairs {
+            let (w, ws) = pow::hypot_exact::<f64>(x, y, mode);
+            let mut got = 0;
+            let seen = observe(|| got = m::hypot(x, y).to_bits());
+            let want = (w.to_bits(), (errno_of(ws.error), Flags(ws.flags.0)));
+            assert!((got, seen) == want, "hypot({x:e}, {y:e}) {mode:?}: entry {:e} {seen:?}, exact {w:e} {:?}: directed entry FAILED", f64::from_bits(got), want.1);
+        }
+    }
+    assert_eq!(liella_boundary::posix::s10_math::fesetround(0), 0);
+}
 
 #[test]
 fn math_translation_reports_errno_flags_and_out_parameters() {
@@ -175,7 +208,10 @@ fn math_double_fast_entry_matches_the_envelope_in_every_mode() {
 fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
     // Clauses: s10_0_f_0.
     // The fast path may run in place only under the default control word; under any other word
-    // the entry switches to the default one before computing (D-10.13). Every rounding direction,
+    // the entry switches to the default one before computing (D-10.13). The one exception is exp
+    // under a word that differs from the default only in its rounding field: its quick phase runs
+    // in place in the caller's direction (D-10.94), so the directed rows below check that path's
+    // results and flags too, while under the FTZ/DAZ words exp still switches. Every rounding direction,
     // with and without FTZ and DAZ: the result is liella-math's accurate one in that direction and
     // MXCSR after the call is the caller's word with exactly the reference flags added, nothing
     // else. Values alone cannot show which path ran (the kernels' rounding tests also hold in the
@@ -452,6 +488,54 @@ fn math_float_hyperbolic_fast_entry_matches_the_envelope_in_every_mode() {
     bad.truncate(24);
     assert!(n == 0, "{n} mismatches, the first:\n{}", bad.join("\n"));
     assert!(checked > 380_000, "{checked}");
+    fpu::clear(&CSys, Flags::ALL);
+}
+
+// ARCH(x86_64): the in-place fast entry of the float sincos export (s10_0_f_0); FPCR/FPSR on aarch64 (A-9)
+#[test]
+#[allow(clippy::arithmetic_side_effects)] // counters over bounded test loops
+fn math_float_sincos_fast_entry_matches_the_envelope_in_every_mode() {
+    // Clauses: s10_0_f_0.
+    // sincosf's in-place entry (LIBM-SINCOS-SHARED, D-10.89) as the float hyperbolic test above:
+    // round to nearest in the default word takes it, DAZ forces the full envelope, and both
+    // results, the flags and errno must agree; the directed modes must give liella-math's
+    // accurate pair. Arguments: every 2^16th `float` bit pattern of each sign (the fast range
+    // 2^-26 <= |x| < 2^19 and every refused range) and the range's edges.
+    use liella_math::real::Real;
+    let pair = |x: f32| {
+        let (mut s, mut c) = (0f32, 0f32);
+        m::sincosf(x, Some(&mut s), Some(&mut c));
+        u64::from(s.to_bits()) << 32 | u64::from(c.to_bits())
+    };
+    let edges: [f32; 6] = [1.490_116_1e-8, 1.490_116_2e-8, 524_287.97, 524_288.0, std::f32::consts::FRAC_PI_4, std::f32::consts::FRAC_PI_2];
+    let mut args: Vec<f32> = edges.iter().flat_map(|&x| [x, -x]).collect();
+    args.extend((0u32..1 << 16).map(|i| f32::from_bits(i << 16 | (i & 0xffff))));
+    let (mut checked, mut bad) = (0usize, Vec::new());
+    for &x in &args {
+        if x != 0.0 && x.abs() < f32::MIN_POSITIVE {
+            continue; // DAZ reads a subnormal argument as zero: another function value
+        }
+        let mut fast = (0, 0);
+        let e_fast = observe(|| fast = around(0x1f80, || pair(x))).0;
+        let mut full = (0, 0);
+        let e_full = observe(|| full = around(0x1f80 | 0x40, || pair(x))).0;
+        if (fast.0, fast.1 | 0x40, e_fast) != (full.0, full.1, e_full) {
+            bad.push(format!("sincosf({x:e}) nearest: {fast:x?} {e_fast} vs {full:x?} {e_full}"));
+        }
+        for (rc, mode) in [(1u32, liella_math::Rounding::Down), (2, liella_math::Rounding::Up), (3, liella_math::Rounding::Zero)] {
+            let (bits, _) = around(0x1f80 | (rc << 13), || pair(x));
+            let ((s, c), _) = Real::sincos(x, mode);
+            let want = u64::from(s.to_bits()) << 32 | u64::from(c.to_bits());
+            if bits != want && !x.is_nan() {
+                bad.push(format!("sincosf({x:e}) rc {rc}: {bits:x} vs {want:x}"));
+            }
+        }
+        checked += 1;
+    }
+    let n = bad.len();
+    bad.truncate(24);
+    assert!(n == 0, "{n} mismatches, the first:\n{}", bad.join("\n"));
+    assert!(checked > 60_000, "{checked}");
     fpu::clear(&CSys, Flags::ALL);
 }
 
@@ -1409,11 +1493,10 @@ fn sym___fpu_control() {
     let line = products::dynsym_line("__fpu_control");
     assert!(line.contains(" 2 OBJECT  GLOBAL DEFAULT"), "__fpu_control in libc.so.6: {line:?}");
     // Statically linked on Liella (the program's own definition links and is ignored), then the
-    // same programs linked dynamically on glibc (the oracle). Their run on Liella's libc.so.6
-    // waits for Liella's ld.so (phase 14, #814): a reported skip, never a silent pass.
+    // same programs linked dynamically, on glibc (the oracle) and on Liella's libc.so.6 under
+    // Liella's ld.so (#814, D-27.24): a program's own value applies.
     products::conformance(&["fpu_control_default", "fpu_control_own"]);
     products::conformance_dynamic(&["fpu_control_default", "fpu_control_own"]);
-    skip_note::skipped("skipped: fpu_control_default/fpu_control_own dynamic on Liella wait for Liella's ld.so (phase 14, #814); only the glibc oracle run checked");
 }
 symbol!(sym___gamma_r_finite, "__gamma_r_finite", "10", "2.15", r##""##);
 symbol!(sym___gammaf128_r_finite, "__gammaf128_r_finite", "10", "2.26", r##""##);
@@ -1778,6 +1861,56 @@ fn complex_axes_in_place_match_the_route() {
     fpu::clear(&CSys, Flags::ALL);
 }
 
+/// `cexp`'s cold fallback in the default environment (LIBM-CEXP-COLD-MIDDLE, D-10.99): where the
+/// in-place kernel declines, the envelope (quick tier with the middle tier, then the route) gives
+/// the 384-bit route's bits, flags and `errno` to nearest. The bench operand is one the kernel
+/// declines and the middle tier answers (checked first, so the case keeps reaching that branch);
+/// the others leave the quick tier's range (tiny, huge or zero-crossing parts, underflow and
+/// overflow).
+#[test]
+fn cexp_cold_fallback_matches_the_route() {
+    // Clauses: s10_5_c_0, s10_0_c_0.
+    use liella_boundary::mathret::Complex;
+    use liella_math::{complex as c, complex_fast as cf, MathError, Rounding::Nearest};
+    let bench = (f64::from_bits(0xbff9_c127_e0e2_1690), f64::from_bits(0xbffe_c14d_45bc_5e2d));
+    assert_eq!(cf::cexp_nearest(bench.0, bench.1), None, "the in-place kernel answers the bench operand");
+    assert!(cf::cexp(bench.0, bench.1, Nearest).is_some(), "the middle tier declines the bench operand");
+    let ops = [
+        bench,
+        (1.0, 1e-300),
+        (0.5, f64::MIN_POSITIVE),
+        (-0.5, 5e-324),
+        (1.0, 1e10),
+        (-745.0, 1.0),
+        (-707.5, -3.0),
+        (710.0, 1.0),
+        (2.0, f64::MAX),
+    ];
+    for (x, y) in ops {
+        use liella_kernel::machine::Machine;
+        let (mut got, mut word) = ((0, 0), 0);
+        let seen = observe(|| {
+            let r = m::cexp(Complex { re: x, im: y });
+            // ARCH(x86_64): the MXCSR flag bits after the call, the denormal-operand bit included
+            word = CSys.mxcsr() & 0x3f;
+            got = (r.re.to_bits(), r.im.to_bits());
+        });
+        let ((wr, wi), st) = c::cexp_route(x, y, Nearest);
+        let errno = match st.error {
+            MathError::None => 0,
+            MathError::Domain => 33,
+            MathError::Range => 34,
+        };
+        assert_eq!((x, y, got, seen), (x, y, (wr.to_bits(), wi.to_bits()), (errno, st.flags)), "cexp's cold fallback differs from the route");
+        // Where the middle tier answers, MXCSR holds exactly the caller's word with inexact: the
+        // declined attempt's own intermediate bits (the denormal-operand bit too) are dropped.
+        if (x, y) == bench {
+            assert_eq!((x, y, word), (x, y, u32::from(st.flags.0)), "cexp's cold fallback left an attempt's flag in MXCSR");
+        }
+    }
+    fpu::clear(&CSys, Flags::ALL);
+}
+
 /// The complex functions of `long double`, `_Float64x` and `_Float128` (D-10.21; milestone 5,
 /// M5-1 to M5-4): each name of every family member is exported, and the bit-level functions behind the C forwarders keep the parts in their order
 /// and report the flags of the implementation.
@@ -1996,27 +2129,30 @@ fn math_sqrt_hardware_matches_the_software_square_root() {
 }
 
 #[test]
-fn math_sqrt_stays_out_of_place_under_an_unmasked_trap() {
+fn math_sqrt_runs_in_place_under_every_mask() {
     // Clauses: s10_0_f_0.
-    // D-10.22/D-10.71: the in-place `sqrtsd`/`sqrtss` runs only under a word whose exceptions are
-    // all masked. With the denormal-operand exception unmasked, a subnormal operand would trap in
-    // the instruction; the software path answers instead, with the reference bits, flags and
-    // errno, in every direction. The divide-by-zero, overflow and underflow masks (which a square
-    // root never raises) must give the same answers. Invalid and inexact stay masked: the
-    // harness's own arithmetic raises them.
+    // D-10.101 (probed: the reference's `sqrt`/`sqrtf` are the instruction on the caller's word):
+    // `sqrtsd`/`sqrtss` run in place under every word, with no MXCSR read on entry. With the
+    // divide-by-zero, overflow or underflow exception unmasked (a square root never raises them)
+    // the answer is the reference's bits, flags and errno in every direction, subnormal operands
+    // included; with the denormal-operand exception unmasked, a normal operand answers the same
+    // (a subnormal one traps in the instruction: conformance/c/s10_sqrt_env.c). Invalid and
+    // inexact stay masked: the harness's own arithmetic raises them.
     use liella_math::{fused, MathError, Rounding};
     let errno_of = |e: MathError| if e == MathError::Domain { 33 } else { 0 };
     let modes = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
     for unmask in [0x100_u32, 0x200, 0x400, 0x800] {
         for (rc, &mode) in (0u32..).zip(modes.iter()) {
             let mx = (0x1f80 & !unmask) | (rc << 13);
-            for x in [1e-310, 5e-324, 2.0, 0.5, -1.0] {
+            let sub64: &[f64] = if unmask == 0x100 { &[] } else { &[1e-310, 5e-324] };
+            let sub32: &[f32] = if unmask == 0x100 { &[] } else { &[1e-40, 1e-45] };
+            for &x in sub64.iter().chain(&[2.0, 0.5, -1.0, 3.0]) {
                 let (w, st) = fused::sqrt::<f64, f64>(x, mode);
                 let mut got = 0;
                 let seen = observe_with_ctl(mx, || got = m::sqrt(x).to_bits());
                 assert_eq!((mx, x.to_bits(), got, seen), (mx, x.to_bits(), w.to_bits(), (errno_of(st.error), Flags(st.flags.0))));
             }
-            for x in [1e-40f32, 1e-45, 2.0, 0.5, -1.0] {
+            for &x in sub32.iter().chain(&[2.0f32, 0.5, -1.0, 3.0]) {
                 let (w, st) = fused::sqrt::<f32, f32>(x, mode);
                 let mut got = 0;
                 let seen = observe_with_ctl(mx, || got = m::sqrtf(x).to_bits());
@@ -2274,13 +2410,16 @@ fn hypotf_oracle(x: f32, y: f32, f: f32, rc: u32) -> bool {
 /// The one-pass `float` entries (LIBM-F32-ONEPASS, D-10.63) and their reference: the full
 /// envelope on the accurate path, the entry they replaced.
 type OnePass = (&'static str, extern "C" fn(f32) -> f32, fn(f32) -> f32);
-const ONEPASS: [OnePass; 6] = [
+const ONEPASS: [OnePass; 9] = [
     ("expf", m::expf, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::exp)),
     ("exp2f", m::exp2f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::exp2)),
     ("exp10f", m::exp10f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::exp10)),
     ("logf", m::logf, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::log)),
     ("log2f", m::log2f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::log2)),
     ("log10f", m::log10f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::log10)),
+    ("asinf", m::asinf, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::asin)),
+    ("acosf", m::acosf, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::acos)),
+    ("atanf", m::atanf, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::atan)),
 ];
 
 /// Compare `entry` with `reference` on the encoding `b` under MXCSR `mx`: result bits, errno
@@ -2325,12 +2464,21 @@ fn math_expf_onepass_entries_match_the_envelope() {
     // D-10.72 adds exp10f's range edges (±37.9) and exact powers (1, 9, 10; 11 and 1.125 are not
     // exact), and the log family's: 1 and its neighbours, the m split at 0.75 and 1.5, the least
     // normal and the largest finite operand, -1, and the 10^n operands log10 refuses (10, 10^10).
-    let edges: [u32; 36] = [
+    // LIBM-TINY-FASTPATHS (D-10.108): the exp family's tiny-operand path below 2^-27 (0x3200_0000)
+    // on both sides of its bound and of the least normal (0x0080_0000, 0x0080_0001 above).
+    let edges: [u32; 54] = [
+        0x31ff_ffff, 0x3200_0000, 0xb1ff_ffff, 0xb200_0000,
         0x0000_0000, 0x8000_0000, 0x0000_0001, 0x807f_ffff, 0x327f_ffff, 0x3280_0000, 0xb280_0000, 0x42ae_a8f5,
         0x42ae_a8f6, 0xc2ae_a8f6, 0x42fb_ffff, 0x42fc_0000, 0xc2fc_0000, 0x4040_0000, 0xc0e0_0000, 0x7f80_0000,
         0xff80_0000, 0x7fc0_0000, 0x7f80_0001, 0xffa0_0005, 0x4217_9999, 0x4217_999a, 0xc217_999a, 0x3f80_0000,
         0x4110_0000, 0x4120_0000, 0x4130_0000, 0x3f90_0000, 0x3f7f_ffff, 0x3f80_0001, 0x3f40_0000, 0x3fc0_0000,
         0x0080_0000, 0x7f7f_ffff, 0xbf80_0000, 0x5015_02f9,
+        // D-10.82 (asinf, acosf, atanf): the one-pass ranges' edges (|x| < 1, the least and the
+        // largest normal), the index split at s = 1/64 and 1/8, and 1 - 2^-24 on both sides.
+        0x3f7f_ffff, 0xbf7f_ffff, 0x3c80_0000, 0x3c7f_ffff, 0x3e00_0000, 0x0080_0001, 0x807f_ffff, 0xff7f_ffff,
+        // D-10.103: asinf/acosf's split at |x| = 1/2 on both sides, atanf's table at 32 (its end)
+        // and 2 (a reduced argument of exactly 0).
+        0x3eff_ffff, 0x3f00_0000, 0xbf00_0000, 0x41ff_ffff, 0x4200_0000, 0x4000_0000,
     ];
     for p in &ONEPASS {
         for ctl in [0u32, 0x8000, 0x0040, 0x8040] {
@@ -2415,6 +2563,123 @@ fn math_log2f_onepass_sweep() {
 fn math_log10f_onepass_sweep() {
     // Clauses: s10_0_f_0. D-10.72: as math_expf_onepass_sweep.
     onepass_sweep(&ONEPASS[5]);
+}
+
+#[test]
+#[ignore = "exhaustive: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_asinf_onepass_sweep"]
+fn math_asinf_onepass_sweep() {
+    // Clauses: s10_0_f_0. D-10.82: as math_expf_onepass_sweep.
+    onepass_sweep(&ONEPASS[6]);
+}
+
+#[test]
+#[ignore = "exhaustive: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_acosf_onepass_sweep"]
+fn math_acosf_onepass_sweep() {
+    // Clauses: s10_0_f_0. D-10.82: as math_expf_onepass_sweep.
+    onepass_sweep(&ONEPASS[7]);
+}
+
+#[test]
+#[ignore = "exhaustive: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_atanf_onepass_sweep"]
+fn math_atanf_onepass_sweep() {
+    // Clauses: s10_0_f_0. D-10.82: as math_expf_onepass_sweep.
+    onepass_sweep(&ONEPASS[8]);
+}
+
+/// The `k`-th pair of the atan2f checks (a splitmix64 stream): uniform encodings for x, and for
+/// y either uniform (one in four) or x's encoding moved by up to ±2^25 (ratios within a few
+/// binades of 1 and of each other's sign, where the reduction's index runs over its whole table).
+#[allow(clippy::arithmetic_side_effects, clippy::as_conversions, clippy::cast_possible_truncation)] // bit mixing on u64
+fn atan2_pair(k: u64) -> (u32, u32) {
+    let mut z = k.wrapping_mul(0x9e37_79b9_7f4a_7c15).wrapping_add(0x6a09_e667_f3bc_c909);
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^= z >> 31;
+    let x = z as u32;
+    let r = (z >> 32) as u32;
+    let y = if r & 3 == 0 { r } else { x.wrapping_add((r >> 6) & 0x03ff_ffff).wrapping_sub(0x0200_0000) ^ (r & 0x8000_0000) };
+    (y, x)
+}
+
+/// atan2f's one-pass entry against the full envelope (the entry it replaced) on the pairs
+/// `ks` under MXCSR `mx`: result bits, errno and flags. Returns the mismatches (a few printed).
+fn atan2_onepass_mismatches(mx: u32, ks: core::ops::Range<u64>) -> u64 {
+    let reference = |y: f32, x: f32| liella_boundary::mathret::elem((y, x), liella_boundary::mathret::Unit::Sse, |(y, x), md| liella_math::real::Real::atan2(y, x, md));
+    let mut bad = 0u64;
+    for k in ks {
+        let (by, bx) = atan2_pair(k);
+        let (y, x) = (f32::from_bits(by), f32::from_bits(bx));
+        let (mut got, mut want) = (0u32, 0u32);
+        let seen = observe_with_ctl(mx, || got = m::atan2f(y, x).to_bits());
+        let wanted = observe_with_ctl(mx, || want = reference(y, x).to_bits());
+        if (got, seen) != (want, wanted) {
+            if bad < 4 {
+                eprintln!("BAD atan2f({by:#010x}, {bx:#010x}) mxcsr {mx:#06x}: got {got:#010x} {seen:?}, want {want:#010x} {wanted:?}");
+            }
+            bad = bad.wrapping_add(1);
+        }
+    }
+    bad
+}
+
+#[test]
+#[allow(clippy::arithmetic_side_effects)] // MXCSR fields
+fn math_atan2f_onepass_matches_the_envelope() {
+    // Clauses: s10_0_f_0. D-10.82: atan2f's one-pass entry gives the envelope's bits, errno and
+    // flags in every rounding direction and under FTZ, DAZ and both, on a pair sample and on the
+    // special and edge pairs (zeros, subnormals, infinities, NaN, the least normal, signs, |y| = |x|).
+    let edges: [u32; 12] = [
+        0x0000_0000, 0x8000_0000, 0x0000_0001, 0x007f_ffff, 0x0080_0000, 0x3f80_0000, 0xbf80_0000, 0x7f7f_ffff,
+        0x7f80_0000, 0xff80_0000, 0x7fc0_0000, 0x7f80_0001,
+    ];
+    for ctl in [0u32, 0x8000, 0x0040, 0x8040] {
+        for rc in 0..4u32 {
+            let mx = 0x1f80 | ctl | rc << 13;
+            let mut bad = atan2_onepass_mismatches(mx, 0..1 << 15);
+            for &by in &edges {
+                for &bx in &edges {
+                    let (y, x) = (f32::from_bits(by), f32::from_bits(bx));
+                    let (mut got, mut want) = (0u32, 0u32);
+                    let seen = observe_with_ctl(mx, || got = m::atan2f(y, x).to_bits());
+                    let wanted = observe_with_ctl(mx, || {
+                        want = liella_boundary::mathret::elem((y, x), liella_boundary::mathret::Unit::Sse, |(y, x), md| liella_math::real::Real::atan2(y, x, md)).to_bits();
+                    });
+                    bad += u64::from((got, seen) != (want, wanted));
+                }
+            }
+            assert_eq!(bad, 0, "atan2f differs from the envelope under MXCSR {mx:#06x}");
+        }
+    }
+}
+
+#[test]
+#[ignore = "pairs: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_atan2f_onepass_pairs"]
+#[allow(clippy::arithmetic_side_effects, clippy::as_conversions, clippy::cast_possible_truncation)] // counters and MXCSR fields
+fn math_atan2f_onepass_pairs() {
+    // Clauses: s10_0_f_0. D-10.82: 2.5·10^8 pairs in each of the four directions (10^9 checks;
+    // LIELLA_PAIRS overrides the per-direction count) against the envelope, as
+    // math_atan2f_onepass_matches_the_envelope.
+    use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+    let per = std::env::var("LIELLA_PAIRS").ok().and_then(|s| s.parse().ok()).unwrap_or(250_000_000u64);
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let chunks = per.div_ceil(1 << 20);
+    let (next, bad) = (AtomicU64::new(0), AtomicU64::new(0));
+    std::thread::scope(|sc| {
+        for _ in 0..threads {
+            sc.spawn(|| loop {
+                let c = next.fetch_add(1, Relaxed);
+                if c >= 4 * chunks {
+                    break;
+                }
+                let (rc, k) = ((c % 4) as u32, c / 4);
+                let ks = k << 20..((k + 1) << 20).min(per);
+                bad.fetch_add(atan2_onepass_mismatches(0x1f80 | rc << 13, ks), Relaxed);
+            });
+        }
+    });
+    let b = bad.load(Relaxed);
+    println!("atan2f one-pass pairs: {per} per direction (4 directions), mismatches {b}");
+    assert_eq!(b, 0, "atan2f differs from the envelope");
 }
 
 #[test]

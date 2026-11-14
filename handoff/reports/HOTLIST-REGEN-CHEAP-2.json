@@ -1,0 +1,12 @@
+{"task": "HOTLIST-REGEN-CHEAP-2", "model": "opus", "tokens": null,
+ "result": "PENDING JOBS: cheap regen of both profiles 298 s, all 5 lists byte-identical to the full path; #5093 settled (fast merge reorders the lists; build tag hashes their content; mtimes play no part); runner test + 3 plants CAUGHT; FULL gate running",
+ "branch": "task/hotlist-regen-cheap-2", "head": "a491cee26",
+ "gate": {"affected": "FULL (xtask product-path modules, ruling #5092): job hrc2-gate-full on shiki, pending at hand-back; xtask test, clippy, static pass (hrc2-lint1, hrc2-final)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "LIELLA_BUILD_TAG hashes the generated layout lists, so every list change recompiles rt/ld/boundary and dependants and a regen always leaves one profile stale", "recommendation": "exclude crates/libc-so/hot-text.list, *.keys and hot-text.absent from build_tag if the tag only pairs products sharing Rust code; saves most of the 145 s release build per regen"}],
+ "informational": ["#5093: the fast merge keeps the key set and profile columns but reorders 13 hot-text.list lines and 4 startup-text keys (first-touch order differs per profile); the release merge restores it, every regen", "after a regen a plain so recompiles both raw archives on this tree (lists changed vs the stale tracked copies, #5094); steady state: release only", "drop-entry plant is caught by the runner test, not by the 20+ min full-vs-cheap comparison", "one empty python3 heredoc run by mistake (no effect)"],
+ "refused": [],
+ "improvement": "plants on tools/ files rebuild the full products per mutant (~280 s each) although no product reads tools/: the plants tool could skip `so` when the planted path is outside build_tag's inputs",
+ "next_step": "HOTLIST-TRAIN-REGEN step 2: the train calls tools/hottext/regen.sh . --both --allow-drop",
+ "report_file": "handoff/HOTLIST-REGEN-CHEAP-2.md",
+ "jobs": ["hrc2-gate-full", "hrc2-plants", "hrc2-regen-cmp", "hrc2-final"]}

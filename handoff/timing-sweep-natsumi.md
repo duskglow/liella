@@ -1,8 +1,30 @@
-# TIMING-SWEEP-NATSUMI (table written; first Zen 3 sweep)
+# TIMING-SWEEP-NATSUMI (table written; first Zen 3 sweep; 11-13 libm re-sweep below)
 
 State: branch task/timing-sweep-natsumi-2 (continuation of task/timing-sweep-natsumi), base origin/next 66b8d3ba
 (products built from it). No product code change; one analyzer script. Result: results/timing-sweep-zen3-1107-table.md
 (summaries, slowest 20 per set, 1106E counts for orientation, full tables).
+
+## TIMING-SWEEP-ZEN3-LIBM (11-13: second Zen 3 libm sweep, next bc146cce)
+- Result: results/timing-sweep-zen3-libm-1113-table.md (analyzer handoff/timing-sweep-zen3-libm-1113-analyze.py:
+  `python3 -I <it> <out-libm>/sweep.tsv results/timing-sweep-zen3-1107-table.md bc146cce 66b8d3ba`).
+- Host check 03:54Z (read-only): perf_event_paranoid 1, governor performance x12, scaling_max 3.6 GHz, swap now OFF
+  (`swapon --show` empty, 0 B total), GPU 0 % / 0 MiB, load ~1.0 from kworker/11:1+usb_hub_wq in D state at 0 % CPU
+  (the same kworker state as 11-07; not touched). slots idle, no jobs queued.
+- Stage: mei:tsz3libm-stage (role s2, synced clean at bc146cce), rc 0, 290 s: `cargo xtask bench --stage
+  ~/work/TIMING-SWEEP-ZEN3-LIBM/stage.tar --only cbench_libm`, sha256 3fe7b8ab17f8...b86587, copied mei -> local ->
+  natsumi, sha256 checked on arrival.
+- Booking 184 (`ops timing-book natsumi 90 --story TIMING-SWEEP-ZEN3-LIBM`), active 04:01:42Z; cancelled by me at
+  ~04:04Z right after the run.
+- natsumi:tsz3libm-sweep, 04:01:49-04:02:44Z, rc 0 (`~/bin/timing tsz3libm-sweep bash
+  ~/work/TIMING-SWEEP-ZEN3-LIBM/run.sh`; run.sh = `./xtask-bin sweep run --out <R>/out-libm --only cbench_libm` in the
+  unpacked stage): `sweep: COMPLETE`, 176 ratio_host rows 28 faster / 7 parity / 141 slower (179 counted with the 3
+  baselines: 28 / 10 / 141). Spread median 0.007, p90 0.036, max 0.409 (asinhl). Intruder log: no entry.
+- Against 11-07 (same host, commit 66b8d3ba): median time ratio 6.19 -> 1.98, geomean 9.76 -> 3.25; 166 selected rows
+  5/5/156 -> 28/7/141; 19 slower->faster, 4 slower->parity. Time ratio up > 5 % with instr unchanged: cexpl, cpowl,
+  j0, tgammal, y1 (+6-14 %, one run each: recheck before reopening); y1f also moved in instructions (0.731 -> 0.822).
+- Left on natsumi at hand-back: dirs ~/work/TIMING-SWEEP-NATSUMI (221M) and ~/work/TIMING-SWEEP-ZEN3-LIBM (89M:
+  stage.tar, tree/, out-libm/ raw data), ~/bin tools, ~/logs. No processes, no crontab, no user timers of ours
+  (the one user timer, launchpadlib-cache-clean, is the distribution's), booking cancelled, slots idle.
 
 ## TIMING-SWEEP-NATSUMI-2 (fixed the CI precheck red)
 - CI precheck on 7d52b306 failed `xtask static: lab-names`: results/timing-sweep-zen3-1107-table.md lines 15 and 30

@@ -81,6 +81,7 @@
 //!    2^161]`: normal.
 
 pub(crate) mod arc;
+pub(crate) mod explog;
 
 use super::{M64, SC, big_u64, mul_wide, mulhi, mulhi64};
 use crate::coeffs::tables as t;
@@ -490,9 +491,16 @@ fn cos_poly(u: W3) -> W3 {
 /// Step 5: `±m·2^e` rounded into `F` (binary128) in `mode`, or `None` when the bound does not
 /// decide it.
 pub(crate) fn round<F: Float>(neg: bool, m: W3, e: i32, mode: Rounding) -> Option<(F, Status)> {
+    round_within::<F>(neg, m, e, mode, ERR)
+}
+
+/// [`round`] for a bound of `err` units of the 192-bit significand's last place (the exponentials'
+/// and logarithms' tier, [`explog`], proves a different bound).
+#[inline(always)]
+fn round_within<F: Float>(neg: bool, m: W3, e: i32, mode: Rounding, err: u128) -> Option<(F, Status)> {
     let low = ((m.h & 0x7fff) << 64) | u128::from(m.l); // the 79 bits below the significand
-    // The distance above the last representable value or midpoint must lie in [ERR, 2^78 - ERR].
-    if (low & ((1 << 78) - 1)).wrapping_sub(ERR) > (1 << 78) - 2 * ERR {
+    // The distance above the last representable value or midpoint must lie in [err, 2^78 - err].
+    if (low & ((1 << 78) - 1)).wrapping_sub(err) > (1 << 78) - 2 * err {
         return None;
     }
     let up = match mode {
@@ -921,7 +929,7 @@ mod tests {
     /// multiples of π/2 at every exponent.
     /// `cargo test --release -p liella-math --lib wide_int::quad -- --ignored`.
     #[test]
-    #[ignore = "10^7 operands against the 384-bit route: run in release as a job"]
+    #[ignore = "10^7 operands against the 384-bit route: cargo xtask long-sweeps runs it in release (nightly and release runs)"]
     fn tier_agrees_with_the_wide_route_long() {
         const TOTAL: usize = 10_000_000;
         let threads = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);

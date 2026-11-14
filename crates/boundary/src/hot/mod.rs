@@ -60,7 +60,7 @@ fn sqrtsd_sse2(x: f64) -> f64 {
 }
 
 /// [`sqrtsd_sse2`] from a function without `#[target_feature]`. Also `sqrt`'s in-place root
-/// (`mathret`, D-10.71): the caller pins the operand behind its mode test first.
+/// (`mathret`, D-10.71), on the caller's own MXCSR with no mode test (D-10.101).
 #[inline(always)]
 pub(crate) fn sqrtsd(x: f64) -> f64 {
     // UNSAFE(hot-kernel) SAFETY: the callee needs only SSE2, which the x86-64 baseline
@@ -68,6 +68,21 @@ pub(crate) fn sqrtsd(x: f64) -> f64 {
     #[allow(unsafe_code)]
     unsafe {
         sqrtsd_sse2(x)
+    }
+}
+
+/// `liella_math`'s hardware operations ([`liella_math::hwop::HwOps`]; decision pending, records/pending/LIBM-HYPOT-DIRECTED-1.toml):
+/// the root is [`sqrtsd`], so a kernel monomorphised on `Hw` has the instruction inline, no call.
+/// It is correctly rounded in the MXCSR's direction (the kernels run in the default one), within
+/// `2^-53` relative, stricter than the trait's `2^-50`; it raises at most inexact for the
+/// trait's operands (normal, positive). The `liella_math` kernels' proofs hold for both.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Hw;
+
+impl liella_math::hwop::HwOps for Hw {
+    #[inline(always)]
+    fn sqrt(x: f64) -> f64 {
+        sqrtsd(x)
     }
 }
 

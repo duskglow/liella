@@ -33,6 +33,8 @@ pub static HEAP: Heap = Heap::new();
 pub struct KernelPages;
 
 impl Pages for KernelPages {
+    // LAYOUT-HOTKEY-INLINE-STABLE: a fixed boundary for its start-up/fork hot-text key (off the hot paths: the call is free).
+    #[inline(never)]
     fn map(&self, len: usize, align: usize, node: Option<u32>) -> Option<usize> {
         // Over-map by the alignment and cut the ends off, so that the range is aligned.
         let slack = if align > PAGE { align } else { 0 };
@@ -328,14 +330,19 @@ const RESERVE: usize = 64 << 10;
 /// stream is first used then (`stdio`; kept for good, at most three). A stack: a block freed at
 /// the top lowers it, and the whole reserve is free again when no block is live. Never used
 /// while the heap serves.
-static RESERVE_MEM: [AtomicU64; RESERVE / 8] = [const { AtomicU64::new(0) }; RESERVE / 8];
+/// Page-aligned (STARTUP-DATA-PAGE-ALIGN): start-up code addresses its head, which then takes one page
+/// wherever the objects ahead of it in `.lbss` end (it straddled two pages at an offset of 0xc18). The
+/// alignment costs at most 4 KiB of zero-filled address space, no file bytes.
+#[repr(C, align(4096))]
+struct Reserve([AtomicU64; RESERVE / 8]);
+static RESERVE_MEM: Reserve = Reserve([const { AtomicU64::new(0) }; RESERVE / 8]);
 static RESERVE_LOCK: liella_rt::sync::RawMutex = liella_rt::sync::RawMutex::new();
 /// The first free byte (an offset) and the number of live blocks.
 static RESERVE_TOP: AtomicUsize = AtomicUsize::new(0);
 static RESERVE_LIVE: AtomicUsize = AtomicUsize::new(0);
 
 fn reserve_base() -> usize {
-    core::ptr::from_ref(&RESERVE_MEM).expose_provenance()
+    core::ptr::from_ref(&RESERVE_MEM.0).expose_provenance()
 }
 
 /// Whether `addr` is in the reserve.

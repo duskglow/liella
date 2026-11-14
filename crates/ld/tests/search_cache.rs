@@ -198,6 +198,35 @@ fn search_order() {
     assert_eq!(&got[..2], ["./libq.so.1", "rel/libq.so.1"], "outside secure mode: empty = current directory");
 }
 
+/// s27_1_c_7 (`RTLD_DI_SERINFO` lists the search path; spec/behaviour/dynlink.md "dladdr and dlinfo"):
+/// `search::dirs` gives exactly the directories `search` tries for a bare name, in its order, without
+/// the cache and the hwcaps subdirectories, in plain and secure mode, with RPATH chains and RUNPATH.
+#[test]
+fn search_dirs_follow_the_search() {
+    let lib = Scope { rpath: Some(b"/r1"), runpath: None, origin: Some(b"/o/lib") };
+    let prog = Scope { rpath: Some(b"/r0:$ORIGIN/$LIB::rel"), runpath: None, origin: Some(b"/o") };
+    let ru = Scope { rpath: Some(b"/ignored"), runpath: Some(b"/u1:$ORIGIN/x:$BAD/y"), origin: Some(b"/o/ru") };
+    let prog_ru = Scope { rpath: None, runpath: Some(b"/pu"), origin: Some(b"/o") };
+    for x in [ctx(false, Some(b"/e1;/e2:"), None), ctx(true, Some(b"/e1"), None)] {
+        for chain in [&[lib, prog][..], &[ru, prog][..], &[lib, prog_ru][..], &[prog][..]] {
+            let mut got = Vec::new();
+            search::dirs::<Native>(chain, &x, &mut |d| {
+                got.push(format!("{}/libq.so.1", String::from_utf8(d.to_vec()).unwrap()));
+                true
+            });
+            let want: Vec<String> = candidates("libq.so.1", chain, &x).into_iter().map(|p| p.replace("/./", "/")).collect();
+            let got: Vec<String> = got.into_iter().map(|p| p.replace("/./", "/")).collect();
+            assert_eq!(got, want, "chain {chain:?} secure {}", x.secure);
+        }
+    }
+    let mut first = Vec::new();
+    search::dirs::<Native>(&[lib, prog], &ctx(false, None, None), &mut |d| {
+        first.push(d.to_vec());
+        false
+    });
+    assert_eq!(first, [b"/r1".to_vec()], "returning false stops the walk");
+}
+
 /// s27_1_c_1_1, threat model rules 1-3 and 5 in a secure process: LD_LIBRARY_PATH ignored, `$ORIGIN` only in a
 /// trusted directory, empty and relative elements skipped, `$LIB` fixed.
 #[test]
@@ -224,16 +253,31 @@ fn search_secure_rules() {
     assert!(open.iter().any(|p| p.starts_with("/tmp/evil/sub/")) && open.iter().any(|p| p.starts_with("/env1/")));
 }
 
-/// s27_1_c_1_1, R14-3 (a), threat model rule 9: Liella's sonames resolve to `<prefix>/lib` only (never RPATH,
-/// RUNPATH or the cache); LD_LIBRARY_PATH may override outside secure mode only.
+/// s27_1_c_1_1, R14-3 (a), threat model rule 9: Liella's sonames resolve to `<prefix>/<libdir>` only (never
+/// RPATH, RUNPATH or the cache); LD_LIBRARY_PATH may override outside secure mode only.
 #[test]
 fn search_pinned_sonames() {
     let f = cache_file(&[(FLAGS, "libc.so.6", "/host/libc.so.6", None)], &[]);
     let c = Cache::parse(&f).unwrap();
     let s = Scope { rpath: Some(b"/r"), runpath: None, origin: None };
     let mut own = search::PathBuf::default();
-    assert!(search::prefixed(b"lib/libc.so.6", &mut own));
+    assert!(search::own_lib(b"libc.so.6", &mut own));
     let own = String::from_utf8(own.as_bytes().to_vec()).unwrap();
+    // The build-time layout (RELEASE-PACKAGING-DEB): `<LIELLA_PREFIX>/<LIELLA_LIBDIR>/NAME`, one `/`
+    // between the parts; the default build (`/`, `lib`) keeps `/lib/libc.so.6`.
+    let want = format!("{}/{}/libc.so.6", PREFIX.trim_end_matches('/'), search::LIBDIR.trim_matches('/'));
+    assert_eq!(own, want, "pinned path is <prefix>/<libdir>/name");
+    if option_env!("LIELLA_PREFIX").is_none() && option_env!("LIELLA_LIBDIR").is_none() {
+        assert_eq!(own, "/lib/libc.so.6", "the default build's pinned directory is /lib");
+    }
+    let mut dir = search::PathBuf::default();
+    assert!(search::own_lib(b"", &mut dir) && search::trusted::<Native>(dir.as_bytes()), "<prefix>/<libdir> is trusted");
+    if PREFIX != "/" {
+        // Another prefix: the default directory is <prefix>/<libdir> alone.
+        let dir = String::from_utf8(dir.as_bytes().to_vec()).unwrap();
+        let got = candidates("libq.so.1", &[Scope::default()], &ctx(false, None, None));
+        assert_eq!(got, [format!("{dir}/libq.so.1")], "the default directory of a prefixed build is <prefix>/<libdir>");
+    }
     assert_eq!(candidates("libc.so.6", &[s], &ctx(true, Some(b"/env"), Some(&c))), std::slice::from_ref(&own));
     assert_eq!(candidates("libc.so.6", &[s], &ctx(false, Some(b"/env"), Some(&c))), ["/env/libc.so.6".to_string(), own]);
 }

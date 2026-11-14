@@ -267,6 +267,12 @@ fn expm1_upper(acc5: Dd, r: Dd) -> Dd {
 }
 
 /// `e^x`, `2^x` or `10^x` as `v·2^scale` (`|x| < 2^14`).
+/// `e^x ≈ v·2^scale` within `2^-B_MAIN` relative (the `exp` kernel below, proof in the module
+/// comment), for `cexp`'s middle tier ([`crate::complex_fast`]); `None` outside its ranges.
+pub(crate) fn exp_dd(n: &Num) -> Option<(Dd, i32)> {
+    exp_kernel(Kernel::Exp, n)
+}
+
 fn exp_kernel(k: Kernel, n: &Num) -> Option<(Dd, i32)> {
     if n.top() >= 14 {
         return None;

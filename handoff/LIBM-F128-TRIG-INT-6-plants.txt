@@ -1,0 +1,14 @@
+# LIBM-F128-TRIG-INT-6 plants (from -5; the index-scale plant typed so it compiles): cargo xtask plants handoff/LIBM-F128-TRIG-INT-6-plants.txt --dir <new RAM dir>
+# The binary128 asin/acos tier (crates/math/src/wide_int/quad/arc.rs, D-10.97) and the shared rounding test.
+# The root's third limb dropped: S loses its low 64 bits (error about 2^-127).
+f128-arcsin-limb-dropped | crates/math/src/wide_int/quad/arc.rs | lit:W3 { h: corr >> 64, l: corr as u64 } ==> W3 { h: corr >> 64, l: 0 } | cargo test -p liella-math --lib wide_int::quad::arc | msg:a(sin|cos) Num .*error [0-9]+(\.[0-9]+)?e-[0-9]+
+# The rounding test skipped: the parent's boundary test refuses nothing.
+f128-arcsin-round-test-skipped | crates/math/src/wide_int/quad.rs | lit:if (low & ((1 << 78) - 1)).wrapping_sub(ERR) > (1 << 78) - 2 * ERR { ==> if false && (low & ((1 << 78) - 1)).wrapping_sub(ERR) > (1 << 78) - 2 * ERR { | cargo test -p liella-math --lib wide_int::quad | msg:rounding_test_refuses_near_a_boundary.*FAILED|test result: FAILED. [0-9]+ passed; [0-9]+ failed
+# acos of a < 0 not composed with pi: the kernel check sees acos|a| against acos a.
+f128-arcsin-neg-composition | crates/math/src/wide_int/quad/arc.rs | lit:Some(if n.neg { sub_from(190, t) } else { t }) ==> Some(if !n.neg { sub_from(190, t) } else { t }) | cargo test -p liella-math --lib wide_int::quad::arc | msg:acos Num .*error [0-9]+(\.[0-9]+)?e-[0-9]+
+# The root's reciprocal not refined: R keeps the double's 2^-50, the correction loses about 2^-151.
+f128-arcsin-recip-unrefined | crates/math/src/wide_int/quad/arc.rs | lit:let rr = if d < 0 { (vw << 63) - dr } else { (vw << 63) + dr }; ==> let rr = vw << 63; | cargo test -p liella-math --lib wide_int::quad::arc | msg:a(sin|cos) Num .*error [0-9]+(\.[0-9]+)?e-[0-9]+
+# The index scale of the root not adjusted by the normalising shift: j doubles, |r| leaves the series' range.
+f128-arcsin-index-scale | crates/math/src/wide_int/quad/arc.rs | lit:u64::from(1023 - 107 - l) << 52 ==> u64::from(1023u32 - 107) << 52 | cargo test -p liella-math --lib wide_int::quad::arc | msg:a(sin|cos) Num .*(error [0-9]+(\.[0-9]+)?e-[0-9]+|panicked)
+# a² truncated to nothing not counted as one unit: acos of a < 2^-127 shifts W by a wrapped count (debug: overflow).
+f128-arcsin-tiny-square | crates/math/src/wide_int/quad/arc.rs | lit:let l = if h == 0 { l.max(1) } else { l }; ==> let l = if h == 0 { l } else { l }; | cargo test -p liella-math --test s10_math_clauses s10_3_c_0 | msg:s10_3_c_0.*FAILED|attempt to subtract with overflow

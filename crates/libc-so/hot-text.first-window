@@ -1,0 +1,9 @@
+# First-window keys (LAYOUT-FIRST-WINDOW, D-X pending record): <key> TAB <reason>. Hand-kept
+# (hot-text.list is generated). `cargo xtask so` links these keys right after the start-up tier, in
+# this file's order, whatever their list position: the first fault of a static program maps the 16
+# pages from the start of its text segment (the kernel's fault-around window), and the start-up tier
+# fills most of them. A key here is a function that the fault-bounded probes of
+# crates/core/tests/hot_text_products.rs share beyond `page_faults true` (whose functions are the
+# start-up tier), so it must end inside that window too (FIRST-WINDOW in that test). A line whose key
+# a regen moves into the start-up tier or drops is an error (`cargo xtask static`, `so`).
+liella_sys_fstat	every stdio stream's first output (buffering of stdout) and the locale archive and zone file loads: the tool, locale, localtime and localtime_mktime probes

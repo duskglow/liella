@@ -1,0 +1,12 @@
+{"task": "LIBM-CEXP-ROUTE-2", "model": "opus", "tokens": null,
+ "result": "LIBM-CEXP-ROUTE's middle tier verified on the head merged with next: cexp_bench 845 -> 400.4 instructions (base 019004ab5, primed on shiki), cexpf unchanged, cexp typical 396 -> 397 (one stack store for the inline middle call); gate, plants 4/4, sweep, hottext, counts all rc 0",
+ "branch": "task/libm-cexp-route-2", "head": "see git: last commit of the branch (this file's commit)",
+ "gate": {"affected": "shiki libm-cexp-route-2-gate (direct tier, --base origin/next): 1513 passed / 0 failed", "peak": "2.2G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "cexp typical +1 instruction (396 -> 397): fused::cexp_nearest spills x for the inline middle call; cexp_bench -445", "recommendation": "a short follow-up that calls middle from the cold path (cplx_fast_cold side) so the hot kernel matches the base; or accept the +1 for the -445 on the bench row"}],
+ "informational": ["-1's percall failed only because WL base e167f4952 was not primed on keke; -2 merged origin/next 019004ab5, primed it on shiki and reran percall and counts", "Booked Ivy Bridge timing not run: the common path's mix changes by one store; the periodic timing sweep can cover it"],
+ "refused": [],
+ "improvement": "sync_role could prime the WL base on the role's host when it writes merge_base= into .synced, so a percall never fails for an unprimed base",
+ "next_step": "Ruling on the +1; then cexp typical toward 300 per handoff/libm-cplx-exp-tier.md step 3",
+ "report_file": "handoff/libm-cexp-route.md",
+ "jobs": ["libm-cexp-route-2-check", "libm-cexp-route-2-plants", "libm-cexp-route-2-gate", "libm-cexp-route-2-hottext", "libm-cexp-route-2-percall", "libm-cexp-route-2-counts", "libm-cexp-route-2-sweep"]}

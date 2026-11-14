@@ -41,10 +41,12 @@ wl_local_rev() {
     return 0
 }
 
+command -v wl_key > /dev/null || . "$(dirname "${BASH_SOURCE[0]}")/wl_lock.sh"   # wl_key: products are keyed by sha and profile
+
 # wl_local_src <root> <key>: ~/wl/src/<key> = a copy of the role tree (unless the sources or the products are already there).
 wl_local_src() {
     local root=$1 key=$2 t
-    [ -f "$HOME/wl/products/$key/libc.a" ] || [ -f "$HOME/wl/src/$key/Cargo.toml" ] && return 0
+    [ -f "$HOME/wl/products/$(wl_key "$key")/libc.a" ] || [ -f "$HOME/wl/src/$key/Cargo.toml" ] && return 0
     [ -d "$HOME/wl/src/$key" ] && rm -rf "$HOME/wl/src/$key"   # empty or partial: copy again
     t=$HOME/wl/src/.$key.$$; rm -rf "$t"; mkdir -p "$t" || return 1
     tar -C "$root" --exclude=./target --exclude=./.git --exclude=./.synced --exclude=./.released --exclude=./.changed \
@@ -58,7 +60,7 @@ wl_local_src() {
 #   --base ref: "what this branch changed" is measured against it), else none. `--base none` drops the column.
 #   .synced also holds `base_sha=` (the tip of the sync's --base ref); it is NOT the default here (a branch behind its base
 #   would count the base's newer commits as its own) but `--base <that sha>` names it. base_mb = .synced merge_base ("-" if none).
-#   The base's SOURCE or PRODUCTS must already be on this host (~/wl/src/<sha>, ~/wl/products/<sha>; built and cached by
+#   The base's SOURCE or PRODUCTS must already be on this host (~/wl/src/<sha>, ~/wl/products/$(wl_key <sha>); built and cached by
 #   wl_prep.sh like any rev). Without git here they cannot be fetched: prime them once from a git checkout with
 #   `bash validation/wl_prime_base.sh <host> <sha>` (ships `git archive <sha>`; no git on the host needed).
 wl_local_base() {
@@ -74,8 +76,8 @@ wl_local_base() {
         *) base_why="--base $req as given"; [ "$req" = "$tip" ] && base_why="$base_why (= .synced base_sha)" ;;
     esac
     [ ${#req} = 40 ] || { echo "wl: base '$req' is not a full 40-hex sha" >&2; return 2; }
-    if [ -d "$HOME/wl/src/$req" ] || [ -f "$HOME/wl/products/$req/libc.a" ]; then base=$req; return 0; fi
-    echo "wl: base $req is not on this host (~/wl/src/$req or ~/wl/products/$req missing); prime it from a git checkout: bash validation/wl_prime_base.sh $(hostname | cut -d. -f1) $req (or --base none)" >&2
+    if [ -d "$HOME/wl/src/$req" ] || [ -f "$HOME/wl/products/$(wl_key "$req")/libc.a" ]; then base=$req; return 0; fi
+    echo "wl: base $req is not on this host (~/wl/src/$req or ~/wl/products/$(wl_key "$req") missing); prime it from a git checkout: bash validation/wl_prime_base.sh $(hostname | cut -d. -f1) $req (or --base none)" >&2
     return 2
 }
 

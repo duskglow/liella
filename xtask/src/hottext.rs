@@ -20,35 +20,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
 
+use crate::hotlists::Layout;
 use crate::so::OWN_PREFIX;
 
-/// HOTTEXT-REGEN-UNBLOCK: `cargo xtask so --hottext-regen` builds the products with the dead-key
-/// check of [`group`] reported but not enforced. A stale start-up or fork key blocks the build, and
-/// the build is what `tools/hottext/regen.sh` traces to repair the list, so without this mode a dead
-/// key blocks its own repair. Only `regen.sh --build` passes it, and it then rebuilds without it, so
-/// the rewritten list must pass the check; [`static_check`] fails when anything else names it.
-pub const REGEN_FLAG: &str = "--hottext-regen";
-static REGEN: AtomicBool = AtomicBool::new(false);
-
-/// The arguments of `cargo xtask so`: [`REGEN_FLAG`] turns the regen mode on; it is refused under
-/// CI (the `CI` variable set) and any other argument is an error.
-pub fn regen_mode(args: &[String]) -> Result<(), String> {
-    let mut on = false;
-    for a in args {
-        if a == REGEN_FLAG {
-            on = true;
-        } else {
-            return Err(format!("so: unknown argument {a:?} (the only one is {REGEN_FLAG}, for tools/hottext/regen.sh)"));
-        }
-    }
-    if on && std::env::var_os("CI").is_some_and(|v| !v.is_empty()) {
-        return Err(format!("so: {REGEN_FLAG} is for tools/hottext/regen.sh only, never under CI"));
-    }
-    REGEN.store(on, Ordering::Relaxed);
-    Ok(())
-}
+/// The archive exactly as [`group`] received it in a regen build (`target/product/<profile>/`), kept so
+/// that [`recheck_cmd`] can rerun the grouping alone on the rewritten list.
+pub const PRE_GROUP_ARCHIVE: &str = "hot-text.pre-group.a";
 
 /// A function or section name -> its build-stable key (keep in step with tools/hottext/keys.py):
 /// no `__liella_libc_` prefix, no ThinLTO `.llvm.<n>` suffix, no v0 crate disambiguators
@@ -393,9 +371,6 @@ fn strip_legacy_hash(s: &str) -> String {
 /// The tiers of `hot-text.list` (HOTTEXT-STARTUP-COMPLETE), in first-touch order: the probe that
 /// touched a key first (tools/hottext/regen.sh). Keep in step with tools/hottext/merge.py.
 const TIERS: [&str; 7] = ["startup", "fork", "stdio", "strings", "locale", "tool", "extra"];
-/// The allow-list of keys that legitimately match no function section in one profile's archive,
-/// next to `hot-text.list` (STARTUP-FAULTS-RESTORE): `<key>\t<profile>\t<reason>`.
-pub const ABSENT_LIST: &str = "hot-text.absent";
 
 /// One key of the list: its tier and the profiles whose trace hit it (empty: none recorded).
 #[derive(Debug, PartialEq)]
@@ -442,221 +417,77 @@ fn positions(entries: &[Entry]) -> BTreeMap<String, usize> {
     keys
 }
 
-/// The lines of [`ABSENT_LIST`]: (key, profile) pairs. Every line needs a reason; `#` comments
-/// and blank lines are skipped. Errors name the line.
-fn parse_absent(text: &str) -> Result<BTreeSet<(String, String)>, String> {
-    let mut out = BTreeSet::new();
+/// LAYOUT-FIRST-WINDOW (D-X, pending record): hand-kept keys, next to the list, that the link places
+/// right after the start-up tier, in this file's order: `<key> TAB <reason>`, `#` comments. The
+/// kernel maps a file's text in 64 KiB fault-around windows; the first fault of a static program
+/// maps the 16 pages from the start of its text segment, and the start-up tier fills most of them.
+/// A function every short program with stdio or a zone load runs, but the `true` probe does not
+/// (so it is not start-up tier), sat behind keys no fault-bounded probe runs (`puts`), and a
+/// 0x240-byte start-up growth moved it one page past that window (one more fault in four release
+/// probes, #5026). Listed here, it follows the start-up tier whatever the generated order.
+pub const FIRST_WINDOW_LIST: &str = "hot-text.first-window";
+
+/// The keys of [`FIRST_WINDOW_LIST`] in file order. Every line needs a reason. Errors name the line.
+fn parse_first_window(text: &str) -> Result<Vec<String>, String> {
+    let mut out: Vec<String> = Vec::new();
     for (n, l) in text.lines().enumerate() {
         if l.trim().is_empty() || l.starts_with('#') {
             continue;
         }
-        match l.split('\t').collect::<Vec<_>>()[..] {
-            [k, p @ ("fast" | "release"), why] if !k.is_empty() && !why.trim().is_empty() => {
-                out.insert((k.to_string(), p.to_string()));
-            }
-            _ => return Err(format!("{ABSENT_LIST} line {}: {l:?}: want <key>\\t<fast|release>\\t<reason>", n + 1)),
+        let Some((k, _)) = l.split_once('\t').filter(|(k, r)| !k.is_empty() && !r.trim().is_empty()) else {
+            return Err(format!("{FIRST_WINDOW_LIST} line {}: {l:?}: want <key>\\t<reason>", n + 1));
+        };
+        if out.iter().any(|o| o == k) {
+            return Err(format!("{FIRST_WINDOW_LIST} line {}: {k} is listed twice", n + 1));
         }
+        out.push(k.to_string());
     }
     Ok(out)
 }
 
-/// The dead-key contract (STARTUP-FAULTS-RESTORE; HOTTEXT-STARTUP-COMPLETE guarded the start-up
-/// and fork tiers only). In an archive built with `profile`, every key must match a function
-/// section (`matched`) unless its trace names only the other profile (inlined or absent there)
-/// or [`ABSENT_LIST`] (`absent`) allows it for `profile`: a key that matches nothing places
-/// nothing, so a function renamed (made generic, inlined) silently leaves the group
-/// (DL-BOOT-RELOC-7: `runtime::start` became `start::<false>`, two more start-up faults).
-/// Returns the unmatched keys that break it, the allow-list lines that are stale (the key
-/// matches now, or is not listed), and the count of unmatched keys that are allowed. `profile`
-/// `None` (an archive built with other flags, e.g. the bench's x86-64-v3 copy, whose inlining
-/// differs): nothing is checked, every unmatched key is counted.
-fn unmatched<'a>(entries: &'a [Entry], matched: &BTreeSet<String>, absent: &BTreeSet<(String, String)>, profile: Option<&str>) -> (Vec<&'a Entry>, Vec<String>, usize) {
-    let (mut dead, mut stale, mut allowed) = (Vec::new(), Vec::new(), 0);
-    let Some(p) = profile else {
-        return (dead, stale, entries.iter().filter(|e| !matched.contains(&e.key)).count());
+/// The link position of each key (as [`positions`]) with the keys `first` moved, in their order,
+/// right after the start-up tier (the list's leading `startup` entries). A key must be in the list,
+/// outside the start-up tier (a line that a regen made redundant is stale) and outside every
+/// cluster of `clusters` (list positions: a moved key would split its cluster's range).
+fn link_positions(entries: &[Entry], first: &[String], clusters: &[Cluster]) -> Result<BTreeMap<String, usize>, String> {
+    let list = positions(entries);
+    let head = entries.iter().take_while(|e| e.tier == "startup").count();
+    for k in first {
+        let Some(&p) = list.get(k) else {
+            return Err(format!("{FIRST_WINDOW_LIST}: {k} is not in hot-text.list (renamed or dropped by a regen? update the line)"));
+        };
+        if p < head {
+            return Err(format!("{FIRST_WINDOW_LIST}: {k} is in the start-up tier now (position {p}); remove its line"));
+        }
+        if let Some(c) = clusters.iter().find(|c| (c.first..=c.last).contains(&p)) {
+            return Err(format!("{FIRST_WINDOW_LIST}: {k} (position {p}) lies inside cluster {} ({}..={}); a cluster's keys stay together", c.name, c.first, c.last));
+        }
+    }
+    let moved: BTreeSet<&str> = first.iter().map(String::as_str).collect();
+    let order = entries[..head].iter().map(|e| e.key.as_str()).chain(first.iter().map(String::as_str)).chain(entries[head..].iter().map(|e| e.key.as_str()).filter(|k| !moved.contains(k)));
+    let mut keys = BTreeMap::new();
+    for (i, k) in order.enumerate() {
+        keys.entry(k.to_string()).or_insert(i);
+    }
+    Ok(keys)
+}
+
+/// [`link_positions`] for `entries`, with the hand-written [`FIRST_WINDOW_LIST`] in `inputs`
+/// (none: the list's own positions) and the clusters of `clusters_text` ([`CLUSTER_LIST`]).
+/// `inputs` is the hand-written input directory (hotlists' TRACKED), never the directory of a
+/// train-owned list copy.
+fn first_window_positions(inputs: &Path, entries: &[Entry], clusters_text: Option<&str>) -> Result<BTreeMap<String, usize>, String> {
+    let path = inputs.join(FIRST_WINDOW_LIST);
+    let first = match fs::read_to_string(&path) {
+        Ok(t) => parse_first_window(&t)?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
     };
-    for e in entries.iter().filter(|e| !matched.contains(&e.key)) {
-        let other_only = !e.profiles.is_empty() && !e.profiles.iter().any(|x| x == p);
-        if other_only || absent.contains(&(e.key.clone(), p.to_string())) {
-            allowed += 1;
-        } else {
-            dead.push(e);
-        }
-    }
-    let listed: BTreeSet<&str> = entries.iter().map(|e| e.key.as_str()).collect();
-    for (k, _) in absent.iter().filter(|(_, ap)| ap == p) {
-        if matched.contains(k) || !listed.contains(k.as_str()) {
-            stale.push(k.clone());
-        }
-    }
-    (dead, stale, allowed)
-}
-
-/// The error for keys that break the dead-key contract (`None`: none do).
-fn unmatched_error(dead: &[&Entry], stale: &[String], profile: &str) -> Option<String> {
-    if dead.is_empty() && stale.is_empty() {
-        return None;
-    }
-    let mut msg = String::new();
-    if !dead.is_empty() {
-        msg.push_str(&format!("hot-text.list: {} key(s) match no function section of the {profile}-profile libc.a", dead.len()));
-        for e in dead {
-            let traced = if e.profiles.is_empty() { "no trace".to_string() } else { format!("traced in {}", e.profiles.join(",")) };
-            msg.push_str(&format!("\n  {} ({}, {traced})", e.key, e.tier));
-        }
-        msg.push_str(&format!(
-            "\nrenamed, now generic or inlined: run tools/hottext/regen.sh . --build (in each profile); a key gone from every build: \
-             tools/hottext/prune.py; a key absent from this profile by design: a line in crates/libc-so/{ABSENT_LIST} with its reason"
-        ));
-    }
-    if !stale.is_empty() {
-        msg.push_str(&format!("\n{ABSENT_LIST}: {} stale {profile} line(s) (the key matches a function section now, or is not in hot-text.list): remove them", stale.len()));
-        for k in stale {
-            msg.push_str(&format!("\n  {k}"));
-        }
-    }
-    Some(msg.trim_start().to_string())
-}
-
-/// What [`repair_lists`] changed: the new texts of `hot-text.list` and [`ABSENT_LIST`], the keys
-/// dropped from the list, the (key, profile) lines recorded in the allow-list and the stale
-/// (key, profile) lines removed from it.
-#[derive(Debug, Default, PartialEq)]
-struct Repair {
-    list: String,
-    absent: String,
-    dropped: Vec<String>,
-    recorded: Vec<(String, String)>,
-    removed: Vec<(String, String)>,
-}
-
-/// The cheap dead-key repair (HOTTEXT-DEAD-KEY-REPAIR) of `list` (`hot-text.list`) and `absent`
-/// ([`ABSENT_LIST`]), given each profile's matched keys (`matched`: (profile, keys), both profiles):
-/// a key no profile matches is dropped from the list (as tools/hottext/prune.py does); a key one
-/// profile matches but another does not, where [`unmatched`] does not already allow it, gets an
-/// allow-list line for that profile ("inlined in <profile> at <at>"); an allow-list line that
-/// [`unmatched`] calls stale (its key matches now in its profile, or is no longer listed) is
-/// removed. It never adds a key to the list and never reorders: every other line stays as it is.
-fn repair_lists(list: &str, absent: &str, matched: &[(&str, &BTreeSet<String>)], at: &str) -> Result<Repair, String> {
-    let entries = parse_list(list)?;
-    let allowed = parse_absent(absent)?;
-    let first_field = |l: &str| l.split('\t').next().unwrap_or("").trim().to_string();
-    let is_data = |l: &str| !l.trim().is_empty() && !l.starts_with('#');
-    let mut r = Repair::default();
-    let gone: BTreeSet<&str> = entries.iter().filter(|e| !matched.iter().any(|(_, m)| m.contains(&e.key))).map(|e| e.key.as_str()).collect();
-    for l in list.split_inclusive('\n') {
-        let k = first_field(l);
-        if is_data(l) && gone.contains(k.as_str()) {
-            if !r.dropped.contains(&k) {
-                r.dropped.push(k);
-            }
-        } else {
-            r.list.push_str(l);
-        }
-    }
-    let kept: BTreeSet<&str> = entries.iter().map(|e| e.key.as_str()).filter(|k| !gone.contains(k)).collect();
-    for e in entries.iter().filter(|e| !gone.contains(e.key.as_str())) {
-        for (p, m) in matched {
-            let other_only = !e.profiles.is_empty() && !e.profiles.iter().any(|x| x == p);
-            let pair = (e.key.clone(), p.to_string());
-            if !m.contains(&e.key) && !other_only && !allowed.contains(&pair) && !r.recorded.contains(&pair) {
-                r.recorded.push(pair);
-            }
-        }
-    }
-    for l in absent.split_inclusive('\n') {
-        let mut f = l.trim_end_matches(['\n', '\r']).split('\t');
-        let (k, p) = (f.next().unwrap_or(""), f.next().unwrap_or(""));
-        let matches_now = matched.iter().any(|(mp, m)| *mp == p && m.contains(k));
-        if is_data(l) && (!kept.contains(k) || matches_now) {
-            r.removed.push((k.to_string(), p.to_string()));
-        } else {
-            r.absent.push_str(l);
-        }
-    }
-    if !r.recorded.is_empty() && !r.absent.is_empty() && !r.absent.ends_with('\n') {
-        r.absent.push('\n');
-    }
-    for (k, p) in &r.recorded {
-        r.absent.push_str(&format!("{k}\t{p}\tinlined in {p} at {at} (cargo xtask hottext-repair)\n"));
-    }
-    Ok(r)
-}
-
-/// The dead-key contract of [`unmatched`] for every profile of `matched` on the texts of
-/// `hot-text.list` and [`ABSENT_LIST`]: the errors of [`unmatched_error`], joined.
-fn check_lists(list: &str, absent: &str, matched: &[(&str, &BTreeSet<String>)]) -> Result<(), String> {
-    let (entries, allowed) = (parse_list(list)?, parse_absent(absent)?);
-    let errs: Vec<String> = matched
-        .iter()
-        .filter_map(|(p, m)| {
-            let (dead, stale, _) = unmatched(&entries, m, &allowed, Some(p));
-            unmatched_error(&dead, &stale, p)
-        })
-        .collect();
-    if errs.is_empty() { Ok(()) } else { Err(errs.join("\n")) }
-}
-
-/// `cargo xtask hottext-repair [--at <rev>]` (HOTTEXT-DEAD-KEY-REPAIR): the mechanical repair of
-/// dead hot-text keys after `next` moved under a branch (merged in). Builds both profiles'
-/// processed archives (the step of `cargo xtask so` that writes `target/product/<profile>/
-/// hot-text.matched`, with the dead-key check reported, not enforced, as in [`REGEN_FLAG`]'s mode;
-/// `target/liella` is not touched), applies [`repair_lists`] to `crates/libc-so/hot-text.list` and
-/// [`ABSENT_LIST`], prints what it changed, and fails when the contract still does not hold for
-/// either profile. `<rev>` names the revision in the recorded reasons (default: `git rev-parse
-/// --short=12 origin/next`). No tracing and no new key: a real regen stays tools/hottext/regen.sh.
-pub fn repair_cmd(root: &Path, args: &[String]) -> Result<(), String> {
-    let at = match args {
-        [] => {
-            let o = Command::new("git").arg("-C").arg(root).args(["rev-parse", "--short=12", "origin/next"]).output().map_err(|e| format!("hottext-repair: git: {e}"))?;
-            let sha = String::from_utf8_lossy(&o.stdout).trim().to_string();
-            if !o.status.success() || sha.is_empty() {
-                return Err("hottext-repair: no origin/next here: pass --at <next sha>".into());
-            }
-            sha
-        }
-        [flag, rev] if flag == "--at" && !rev.is_empty() && !rev.contains(char::is_whitespace) => rev.clone(),
-        _ => return Err("usage: cargo xtask hottext-repair [--at <rev>]".into()),
+    let clusters = match clusters_text {
+        Some(t) => parse_clusters(t, &positions(entries))?,
+        None => Vec::new(),
     };
-    let product = root.join("target/product");
-    let profiles = [crate::so::Profile::Fast, crate::so::Profile::Release];
-    let mut sets = Vec::new();
-    for p in profiles {
-        let matched_file = product.join(p.name()).join("hot-text.matched");
-        let _ = fs::remove_file(&matched_file);
-        REGEN.store(true, Ordering::Relaxed);
-        let built = crate::so::build_archive(root, &product, &product.join(p.name()).join("hottext-repair-libc.a"), None, p);
-        REGEN.store(false, Ordering::Relaxed);
-        built?;
-        let text = fs::read_to_string(&matched_file).map_err(|e| format!("hottext-repair: {}: {e}", matched_file.display()))?;
-        sets.push(text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string).collect::<BTreeSet<String>>());
-    }
-    let matched: Vec<(&str, &BTreeSet<String>)> = profiles.iter().map(|p| p.name()).zip(sets.iter()).collect();
-    let (list_path, absent_path) = (root.join("crates/libc-so/hot-text.list"), root.join("crates/libc-so").join(ABSENT_LIST));
-    let read = |p: &Path| fs::read_to_string(p).map_err(|e| format!("hottext-repair: {}: {e}", p.display()));
-    let (list, absent) = (read(&list_path)?, read(&absent_path)?);
-    let r = repair_lists(&list, &absent, &matched, &at)?;
-    for k in &r.dropped {
-        println!("hottext-repair: dropped {k} (no profile matches it)");
-    }
-    for (k, p) in &r.recorded {
-        println!("hottext-repair: {ABSENT_LIST}: recorded {k} for {p} (inlined in {p} at {at})");
-    }
-    for (k, p) in &r.removed {
-        println!("hottext-repair: {ABSENT_LIST}: removed stale {p} line {k}");
-    }
-    if r.list != list {
-        fs::write(&list_path, &r.list).map_err(|e| e.to_string())?;
-    }
-    if r.absent != absent {
-        fs::write(&absent_path, &r.absent).map_err(|e| e.to_string())?;
-    }
-    if r.dropped.is_empty() && r.recorded.is_empty() && r.removed.is_empty() {
-        println!("hottext-repair: nothing dead (no file changed)");
-    } else {
-        println!("hottext-repair: {} key(s) dropped, {} {ABSENT_LIST} line(s) recorded, {} stale line(s) removed", r.dropped.len(), r.recorded.len(), r.removed.len());
-    }
-    check_lists(&r.list, &r.absent, &matched).map_err(|e| format!("hottext-repair: the dead-key check still fails after the repair:\n{e}"))
+    link_positions(entries, &first, &clusters)
 }
 
 /// A function section's name without any hot prefix: `.text.sorted.h<n>.<f>`, the older
@@ -978,15 +809,33 @@ fn is_startup_names(section: &str) -> bool {
 /// Rename the function sections of `archive` whose keys are in `list` to
 /// `.text.sorted.h<position>.<f>`, in place, and any hot section whose key is not listed (or whose
 /// position changed) back to `.text.<f>` (or its new position): cargo may hand back an archive this
-/// already ran on, with another list. `work` is a scratch directory. `profile`: the profile the
-/// archive was built with (`fast`, `release`), `None` for other flags (see [`unmatched`]). Fails when
-/// a start-up or fork key traced in `profile` matches no function section; prints the count of the
-/// other unmatched keys. Returns (hot sections in the result, keys in the list).
-pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option<&str>) -> Result<(usize, usize), String> {
-    let text = fs::read_to_string(list).map_err(|e| format!("{}: {e}", list.display()))?;
+/// already ran on, with another list. `work` is a scratch directory. Returns (hot sections in the
+/// result, keys in the list). `inputs`: the directory of the hand-written inputs ([`CLUSTER_LIST`],
+/// [`FIRST_WINDOW_LIST`]). `layout` (LAYOUT-TRACE-AT-BUILD, LT-5): [`Layout::Traced`]: `list` is a trace of
+/// this archive's own build (`target/product/<profile>/hot-text.list`; no list is committed), so every key
+/// is one this build ran, and a cluster or [`FIRST_WINDOW_LIST`] key the trace lacks (or places elsewhere)
+/// is named as such; [`Layout::Ungrouped`]: `list` is not read, nothing is grouped, no first-window key
+/// moved and no cluster aligned (the start-up names section is still placed).
+pub fn group(ar: &str, archive: &Path, list: &Path, inputs: &Path, work: &Path, layout: Layout) -> Result<(usize, usize), String> {
+    let text = match layout {
+        Layout::Ungrouped => String::new(),
+        _ => fs::read_to_string(list).map_err(|e| format!("{}: {e}", list.display()))?,
+    };
     let entries = parse_list(&text)?;
-    let keys = positions(&entries);
-    let mut matched = BTreeSet::new();
+    let clusters_path = inputs.join(CLUSTER_LIST);
+    let clusters_text = fs::read_to_string(&clusters_path).map_err(|e| format!("{}: {e}", clusters_path.display()));
+    // LT-1: the hand-kept inputs name functions of the committed list; under Traced they are checked
+    // against this build's own trace instead (LT-2 removes the class).
+    let traced = |e: String| match layout {
+        Layout::Traced => format!("trace-at-build: {e}: this build's trace does not reach that function (inlined, renamed or no longer run) or places it elsewhere; {CLUSTER_LIST} and {FIRST_WINDOW_LIST} name internal functions until LT-2 (clusters by probe phase)"),
+        _ => e,
+    };
+    // LAYOUT-FIRST-WINDOW: link positions, the first-window keys right after the start-up tier.
+    // Ungrouped: no list, so nothing is placed and no first-window key applies.
+    let keys = match layout {
+        Layout::Ungrouped => positions(&entries),
+        _ => first_window_positions(inputs, &entries, clusters_text.as_deref().ok()).map_err(traced)?,
+    };
     let _ = fs::remove_dir_all(work);
     fs::create_dir_all(work).map_err(|e| e.to_string())?;
     let archive = fs::canonicalize(archive).map_err(|e| e.to_string())?;
@@ -997,20 +846,12 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     }
     crate::so::run(Command::new(ar).current_dir(work).arg("x").arg(&archive))?;
     let objcopy = std::env::var("OBJCOPY").unwrap_or_else(|_| "objcopy".into());
-    let clusters_path = list.with_file_name(CLUSTER_LIST);
-    let clusters = match fs::read_to_string(&clusters_path) {
-        Ok(t) => parse_clusters(&t, &keys).and_then(|c| Ok((c, clusters_at_end(&t)?))),
-        Err(e) => Err(format!("{}: {e}", clusters_path.display())),
+    let clusters = match (layout, &clusters_text) {
+        (Layout::Ungrouped, _) => Ok((Vec::new(), false)),
+        (_, Ok(t)) => parse_clusters(t, &keys).and_then(|c| Ok((c, clusters_at_end(t)?))).map_err(traced),
+        (_, Err(e)) => Err(e.clone()),
     };
-    // A regen build must not be blocked by a cluster key the old list lacks (D-X.56).
-    let (clusters, at_end) = match clusters {
-        Ok(c) => c,
-        Err(e) if REGEN.load(Ordering::Relaxed) => {
-            println!("so: {REGEN_FLAG}: hot-text clusters NOT aligned for this regen build: {e}");
-            (Vec::new(), false)
-        }
-        Err(e) => return Err(e),
-    };
+    let (clusters, at_end) = clusters?;
     let mut hot = 0;
     let mut startup = 0;
     let mut changed = Vec::new();
@@ -1033,7 +874,6 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
                 continue;
             }
             let Some(f) = function_of(name) else { continue };
-            matched.insert(key(f));
             let mut want = rename_for(name, f, &keys);
             if at_end {
                 if let Some((i, p)) = position_of(&want).and_then(|p| clusters.iter().position(|c| (c.first..=c.last).contains(&p)).map(|i| (i, p))) {
@@ -1094,197 +934,45 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     }
     if !changed.is_empty() {
         crate::so::run(Command::new(ar).current_dir(work).arg("r").arg(&archive).args(&changed))?;
-    }    let checked = check_renames(&archive_headers(&archive)?, &renames).map_err(|e| format!("{}: hot-text grouping: {e}", archive.display()))?;
+    }
+    let checked = check_renames(&archive_headers(&archive)?, &renames).map_err(|e| format!("{}: hot-text grouping: {e}", archive.display()))?;
     println!("so: hot-text grouping: {checked} section renames, all in effect");
     let _ = fs::remove_dir_all(work);
     if startup != 1 {
         return Err(format!("{}: {startup} start-up names sections (STARTUP_NAMES), want 1", archive.display()));
     }
-    let absent_path = list.with_file_name(ABSENT_LIST);
-    let absent = match fs::read_to_string(&absent_path) {
-        Ok(t) => parse_absent(&t)?,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => BTreeSet::new(),
-        Err(e) => return Err(format!("{}: {e}", absent_path.display())),
-    };
-    // The archive's function keys, for tools/hottext/prune.py (a key no build matches is dropped).
-    let mut keys_out: String = matched.iter().map(|k| format!("{k}\n")).collect();
-    keys_out.insert_str(0, "# function keys of this archive (cargo xtask so; tools/hottext/prune.py reads it)\n");
-    fs::write(archive.with_file_name("hot-text.matched"), keys_out).map_err(|e| e.to_string())?;
-    let (dead, stale, allowed) = unmatched(&entries, &matched, &absent, profile);
-    if let Some(e) = dead_key_verdict(unmatched_error(&dead, &stale, profile.unwrap_or("")), REGEN.load(Ordering::Relaxed))? {
-        println!("so: {REGEN_FLAG}: dead-key check NOT enforced for this regen build (regen.sh rewrites the list, then rebuilds with it):\n{e}");
-    }
-    println!("so: {allowed} hot-text keys match no function section (traced in the other profile only, or in {ABSENT_LIST})");
     Ok((hot, keys.len()))
 }
 
-/// The dead-key check's outcome: the error of [`unmatched_error`] fails the build, except in the
-/// regen mode ([`REGEN_FLAG`]), where it is handed back to be printed.
-fn dead_key_verdict(err: Option<String>, regen: bool) -> Result<Option<String>, String> {
-    match err {
-        None => Ok(None),
-        Some(e) if regen => Ok(Some(e)),
-        Some(e) => Err(e),
-    }
+/// LAYOUT-DELETE-LISTS (LT-5): the files no tree may track again. The four lists are written by every
+/// product build from a trace of that build ([`crate::hotlists::GENERATED`], under `target/product/<profile>`);
+/// the other two were hand-kept companions of the committed list (its allow-list of absent keys and its
+/// unpinned-key reasons), meaningless for a list traced from the build itself.
+pub const RETIRED: [&str; 6] = ["hot-text.list", "startup-text.keys", "probe-text.keys", "startup-data.keys", "hot-text.absent", "hot-text.unpinned"];
+
+/// The [`RETIRED`] files among the tracked paths `tracked` (workspace-relative), as errors.
+pub fn retired_lists<S: AsRef<str>>(tracked: &[S]) -> Vec<String> {
+    tracked
+        .iter()
+        .map(AsRef::as_ref)
+        .filter(|p| RETIRED.contains(&p.rsplit('/').next().unwrap_or(p)))
+        .map(|p| {
+            format!("{p}: a committed start-up list (LT-5, LAYOUT-DELETE-LISTS): every product build traces its own layout into target/product/<profile>; never commit a generated or hand-kept list again")
+        })
+        .collect()
 }
 
-/// Whether tracked file `path` may name [`REGEN_FLAG`]: its definition, its one caller
-/// (`tools/hottext/regen.sh`) and prose (`.md`, and the records under `records/`, which only xtask
-/// reads). A gate, CI script or other tool that passed it
-/// would build with the dead-key check off.
-fn may_name_regen_flag(path: &str) -> bool {
-    path == "xtask/src/hottext.rs" || path == "tools/hottext/regen.sh" || path.ends_with(".md")
-        || (path.starts_with("records/") && path.ends_with(".toml"))
-}
-
-/// A key of a non-generic free function in a module path (`_RNvNtC<crate><module>...<fn>`) ->
-/// (crate, modules, function); `None` for generic, impl, closure and C names.
-fn plain_path(key: &str) -> Option<(String, Vec<String>, String)> {
-    let mut s = key.strip_prefix("_RNv")?;
-    let mut depth = 1;
-    while let Some(r) = s.strip_prefix("Nt") {
-        s = r;
-        depth += 1;
-    }
-    s = s.strip_prefix('C')?;
-    let mut idents = Vec::new();
-    for _ in 0..=depth {
-        let n = s.bytes().take_while(u8::is_ascii_digit).count();
-        let len: usize = s.get(..n)?.parse().ok()?;
-        idents.push(s.get(n..n + len)?.to_string());
-        s = &s[n + len..];
-    }
-    if !s.is_empty() {
-        return None;
-    }
-    let f = idents.pop()?;
-    let krate = idents.remove(0);
-    Some((krate, idents, f))
-}
-
-/// Whether every module-level definition of `fn f` in `text` carries `#[inline(never)]` among the
-/// attributes and comments directly above it; `None` when `text` defines no such function.
-fn inline_never(text: &str, f: &str) -> Option<bool> {
-    let lines: Vec<&str> = text.lines().collect();
-    let mut found = None;
-    for (i, l) in lines.iter().enumerate() {
-        let mut rest = *l;
-        for q in ["pub(crate) ", "pub(super) ", "pub ", "const ", "unsafe ", "extern \"C\" "] {
-            rest = rest.strip_prefix(q).unwrap_or(rest);
-        }
-        let Some(after) = rest.strip_prefix("fn ").and_then(|r| r.strip_prefix(f)) else { continue };
-        if !after.starts_with('(') && !after.starts_with('<') {
-            continue;
-        }
-        let marked = lines[..i].iter().rev().take_while(|a| a.starts_with("#[") || a.starts_with("//")).any(|a| a.trim() == "#[inline(never)]");
-        found = Some(found.unwrap_or(true) && marked);
-    }
-    found
-}
-
-/// The source of module `mods` of workspace crate `krate` (its library name): `(path, text)`.
-fn module_source(root: &Path, krate: &str, mods: &[String]) -> Option<(String, String)> {
-    let package = krate.replace('_', "-");
-    let dir = fs::read_dir(root.join("crates")).ok()?.filter_map(Result::ok).map(|e| e.path()).find(|d| {
-        fs::read_to_string(d.join("Cargo.toml")).is_ok_and(|t| t.lines().any(|l| l.trim() == format!("name = \"{krate}\"") || l.trim() == format!("name = \"{package}\"")))
-    })?;
-    let base = dir.join("src").join(mods.join("/"));
-    let candidates = if mods.is_empty() { vec![dir.join("src/lib.rs")] } else { vec![base.with_extension("rs"), base.join("mod.rs")] };
-    candidates.into_iter().find_map(|p| fs::read_to_string(&p).ok().map(|t| (p.strip_prefix(root).unwrap_or(&p).display().to_string(), t)))
-}
-
-/// The tiers whose plain functions must be `#[inline(never)]` (HOTTEXT-REGEN-UNBLOCK): the fork
-/// tier only. Marking the start-up tier too cost 3 to 18 user instructions on the start-up rows
-/// (`process::run_thread_dtors` and `locale::refresh_words` stop being inlined), so it waits for
-/// an owner ruling (handoff/hottext-regen-unblock.md); the fork tier's functions are off the
-/// start-up path.
-const INLINE_NEVER_TIERS: [&str; 1] = ["fork"];
-
-/// `cargo xtask static` (HOTTEXT-REGEN-UNBLOCK): (1) no tracked file but [`may_name_regen_flag`]'s
-/// names [`REGEN_FLAG`], so no gate can build with the dead-key check off; (2) every key of an
-/// [`INLINE_NEVER_TIERS`] tier that names a non-generic function of a workspace crate is
-/// `#[inline(never)]` in the source, so the function keeps its symbol (and its key) in both
-/// profiles whatever unrelated code does to the inliner's budget (two libm merges inlined
-/// `spawn::wait4` away and failed the build on 2026-11-07). Generic, impl and closure keys are
-/// not checked here; the build check of [`group`] still covers them.
+/// `cargo xtask static` (LAYOUT-DELETE-LISTS, LT-5): no tracked file is a [`RETIRED`] list, so the committed
+/// lists cannot creep back (a list in the tree would again be read by nothing and go stale under every change).
 pub fn static_check(root: &Path) -> Result<(), String> {
-    let mut errs = Vec::new();
-    for p in crate::labnames::tracked_with(root, true)? {
-        if may_name_regen_flag(&p) {
-            continue;
-        }
-        if fs::read(root.join(&p)).is_ok_and(|b| String::from_utf8_lossy(&b).contains(REGEN_FLAG)) {
-            errs.push(format!("{p}: names {REGEN_FLAG}; only tools/hottext/regen.sh may build with the dead-key check off"));
-        }
-    }
-    let list = root.join("crates/libc-so/hot-text.list");
-    let entries = parse_list(&fs::read_to_string(&list).map_err(|e| format!("{}: {e}", list.display()))?)?;
-    for e in entries.iter().filter(|e| INLINE_NEVER_TIERS.contains(&e.tier)) {
-        let Some((krate, mods, f)) = plain_path(&e.key) else { continue };
-        if !krate.starts_with("liella") {
-            continue;
-        }
-        match module_source(root, &krate, &mods) {
-            None => errs.push(format!("hot-text.list: {} ({}): module source of {krate}::{} not found", e.key, e.tier, mods.join("::"))),
-            Some((path, text)) => match inline_never(&text, &f) {
-                Some(true) => {}
-                Some(false) => errs.push(format!("{path}: fn {f} ({} key in hot-text.list) needs #[inline(never)]: inlined, its key goes dead and fails `so`", e.tier)),
-                None => errs.push(format!("{path}: no module-level fn {f} ({} key {} in hot-text.list)", e.tier, e.key)),
-            },
-        }
-    }
+    let errs = retired_lists(&crate::labnames::tracked_with(root, true)?);
     if errs.is_empty() { Ok(()) } else { Err(errs.join("\n")) }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ar_members, before_group, check_lists, check_renames, cluster_align, head_alignments, cluster_bytes, cluster_section, clusters_at_end, dead_key_verdict, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, repair_lists, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
+    use super::{ar_members, before_group, check_renames, cluster_align, head_alignments, cluster_bytes, cluster_section, clusters_at_end, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, is_startup_names, key, parse_list, positions, link_positions, parse_first_window, rename_for, retired_lists, section_for, RETIRED};
     use std::collections::{BTreeMap, BTreeSet};
-    use std::sync::atomic::Ordering;
-
-    #[test]
-    fn regen_mode_is_one_explicit_flag_for_regen_sh_only() {
-        // HOTTEXT-REGEN-UNBLOCK (no spec clause: build tooling): `so` takes no argument but the
-        // regen flag, which is refused under CI; only regen.sh (and prose) may name it.
-        assert!(regen_mode(&[]).is_ok());
-        assert!(!REGEN.load(Ordering::Relaxed));
-        assert!(regen_mode(&["--hottext".to_string()]).unwrap_err().contains("unknown argument"));
-        let r = regen_mode(&[REGEN_FLAG.to_string()]);
-        if std::env::var_os("CI").is_some_and(|v| !v.is_empty()) {
-            assert!(r.unwrap_err().contains("never under CI"));
-        } else {
-            assert!(r.is_ok() && REGEN.load(Ordering::Relaxed));
-        }
-        REGEN.store(false, Ordering::Relaxed);
-        // The dead-key error fails the build unless in the regen mode.
-        assert_eq!(dead_key_verdict(Some("dead".to_string()), false), Err("dead".to_string()));
-        assert_eq!(dead_key_verdict(Some("dead".to_string()), true), Ok(Some("dead".to_string())));
-        assert_eq!(dead_key_verdict(None, false), Ok(None));
-        assert!(may_name_regen_flag("tools/hottext/regen.sh") && may_name_regen_flag("xtask/src/hottext.rs") && may_name_regen_flag("handoff/x.md"));
-        assert!(may_name_regen_flag("records/decisions/D-X/D-X.56.toml") && !may_name_regen_flag("records/views.sh"));
-        assert!(!may_name_regen_flag("tools/hottext/merge.py") && !may_name_regen_flag("scripts/ci.sh") && !may_name_regen_flag("xtask/src/affected.rs"));
-    }
-
-    #[test]
-    fn listed_plain_functions_must_be_inline_never() {
-        // HOTTEXT-REGEN-UNBLOCK (no spec clause: build tooling): a start-up/fork key of a plain
-        // function maps to its module, and the definition must carry #[inline(never)].
-        assert_eq!(plain_path("_RNvNtC15liella_boundary5spawn5wait4"), Some(("liella_boundary".to_string(), vec!["spawn".to_string()], "wait4".to_string())));
-        assert_eq!(plain_path("_RNvNtNtC9liella_rt3a_b1c4f_un"), Some(("liella_rt".to_string(), vec!["a_b".to_string(), "c".to_string()], "f_un".to_string())));
-        assert_eq!(plain_path("_RNvC5plain3fun"), Some(("plain".to_string(), vec![], "fun".to_string())));
-        assert_eq!(plain_path("_RINvNtC15liella_boundary7runtime5startKb0_EC15liella_boundary"), None);
-        assert_eq!(plain_path("_RNvMs_NtC9liella_rt4heap4Heap4grow"), None);
-        assert_eq!(plain_path("__waitpid"), None);
-        assert_eq!(plain_path("_RNvNtC15liella_boundary5spawn5wait4x"), None);
-        let src = "/// doc\n#[inline(never)]\npub fn wait4(a: i32) {}\n#[cold]\nfn other() {}\nfn wait44() {}\n";
-        assert_eq!(inline_never(src, "wait4"), Some(true));
-        assert_eq!(inline_never(src, "other"), Some(false));
-        assert_eq!(inline_never(src, "missing"), None);
-        // An attribute separated by a blank line or an indented (method) definition does not count.
-        assert_eq!(inline_never("#[inline(never)]\n\nfn g() {}\n", "g"), Some(false));
-        assert_eq!(inline_never("impl X {\n    #[inline(never)]\n    fn h() {}\n}\n", "h"), None);
-        assert_eq!(inline_never("#[inline(never)]\npub(crate) extern \"C\" fn k<T>() {}\n", "k"), Some(true));
-    }
 
     #[test]
     fn keys_drop_build_hashes() {
@@ -1333,73 +1021,6 @@ mod tests {
         assert!(parse_list("k\tboot\tfast\n").unwrap_err().contains("line 1"));
         assert!(parse_list("# c\nk\tstartup\tdebug\n").unwrap_err().contains("line 2"));
         assert!(parse_list("k\tstartup\n").is_err());
-    }
-
-    #[test]
-    fn unmatched_keys_of_the_built_profile_fail_unless_allowed() {
-        // STARTUP-FAULTS-RESTORE (no spec clause; build contract): in a profile's archive every key
-        // must match a function section, whatever its tier, unless its trace names only the other
-        // profile or hot-text.absent allows it for this profile; a stale allow line fails too;
-        // archives built with other flags (`None`) are only counted.
-        let e = parse_list("start\tstartup\tfast,release\nfk\tfork\tfast\nrel\tstartup\trelease\nio\tstdio\tfast\nbare\nold\textra\t-\n").unwrap();
-        let all: BTreeSet<String> = ["start", "fk", "rel", "io", "bare", "old"].iter().map(|s| s.to_string()).collect();
-        let none = BTreeSet::new();
-        let na: BTreeSet<(String, String)> = BTreeSet::new();
-        let (d, s, a) = unmatched(&e, &all, &na, Some("fast"));
-        assert_eq!((d.len(), s.len(), a), (0, 0, 0));
-        assert_eq!(unmatched_error(&d, &s, "fast"), None);
-        let (d, s, a) = unmatched(&e, &none, &na,Some("fast"));
-        assert_eq!(d.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), ["start", "fk", "io", "bare", "old"]);
-        assert_eq!((s.len(), a), (0, 1));
-        let msg = unmatched_error(&d, &s, "fast").unwrap();
-        assert!(msg.contains("start (startup, traced in fast,release)") && msg.contains("io (stdio, traced in fast)"));
-        assert!(msg.contains("old (extra, no trace)") && msg.contains("renamed, now generic or inlined: run tools/hottext/regen.sh"));
-        let (d, _, a) = unmatched(&e, &none, &na,Some("release"));
-        assert_eq!((d.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), a), (vec!["start", "rel", "bare", "old"], 2));
-        // Allowed for fast only: still an error in release; a stale fast line (the key matches, or
-        // is not in the list) is an error.
-        let absent = parse_absent("# why\nold\tfast\tonly in the release archive\n").unwrap();
-        let some: BTreeSet<String> = ["start", "fk", "rel", "io", "bare"].iter().map(|s| s.to_string()).collect();
-        let (d, s, a) = unmatched(&e, &some, &absent, Some("fast"));
-        assert_eq!((d.len(), s.len(), a), (0, 0, 1));
-        let (d, _, _) = unmatched(&e, &some, &absent, Some("release"));
-        assert_eq!(d.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), ["old"]);
-        let (d, s, _) = unmatched(&e, &all, &absent, Some("fast"));
-        assert_eq!((d.len(), s.clone()), (0, vec!["old".to_string()]));
-        assert!(unmatched_error(&d, &s, "fast").unwrap().contains("hot-text.absent: 1 stale fast line(s)"));
-        let gone = parse_absent("gone\tfast\tx\n").unwrap();
-        assert_eq!(unmatched(&e, &all, &gone, Some("fast")).1, ["gone"]);
-        let (d, s, a) = unmatched(&e, &none, &na,None);
-        assert_eq!((d.len(), s.len(), a), (0, 0, 6));
-        // Every allow line needs a profile and a reason.
-        assert!(parse_absent("k\tfast\t \n").unwrap_err().contains("line 1"));
-        assert!(parse_absent("k\tdebug\twhy\n").is_err());
-        assert!(parse_absent("k\tfast\n").is_err());
-    }
-
-    #[test]
-    fn repair_drops_dead_keys_records_one_profile_inlining_and_keeps_live_keys() {
-        // HOTTEXT-DEAD-KEY-REPAIR (no spec clause: build tooling): after next moved under a branch,
-        // a key no profile matches is dropped, a key one profile inlined is allowed there with a
-        // reason, live keys and every other line keep their place, and stale allow lines go.
-        let list = "# head\nlive_both\tstartup\tfast,release\ndead\tfork\tfast\ninl_rel\tstdio\tfast,release\nfast_only\ttool\tfast\nold_listed\nstale_abs\textra\t-\nabs_ok\tlocale\tfast,release\ngone_abs\textra\t-\n";
-        let absent = "# allow\nstale_abs\trelease\twhy\nabs_ok\trelease\twhy\ngone_abs\tfast\twhy\n";
-        let set = |ks: &[&str]| ks.iter().map(|k| k.to_string()).collect::<BTreeSet<String>>();
-        let fast = set(&["live_both", "inl_rel", "fast_only", "old_listed", "stale_abs", "abs_ok", "other_fn"]);
-        let release = set(&["live_both", "old_listed", "stale_abs"]);
-        let matched = [("fast", &fast), ("release", &release)];
-        assert!(check_lists(list, absent, &matched).unwrap_err().contains("match no function section of the fast-profile"));
-        let r = repair_lists(list, absent, &matched, "abc123").unwrap();
-        assert_eq!(r.list, "# head\nlive_both\tstartup\tfast,release\ninl_rel\tstdio\tfast,release\nfast_only\ttool\tfast\nold_listed\nstale_abs\textra\t-\nabs_ok\tlocale\tfast,release\n");
-        assert_eq!(r.absent, "# allow\nabs_ok\trelease\twhy\ninl_rel\trelease\tinlined in release at abc123 (cargo xtask hottext-repair)\n");
-        assert_eq!(r.dropped, vec!["dead".to_string(), "gone_abs".to_string()]);
-        assert_eq!(r.recorded, vec![("inl_rel".to_string(), "release".to_string())]);
-        assert_eq!(r.removed, vec![("stale_abs".to_string(), "release".to_string()), ("gone_abs".to_string(), "fast".to_string())]);
-        assert_eq!(check_lists(&r.list, &r.absent, &matched), Ok(()));
-        // A repaired (or already clean) pair is left as it is.
-        let again = repair_lists(&r.list, &r.absent, &matched, "def456").unwrap();
-        assert_eq!((again.list.as_str(), again.absent.as_str()), (r.list.as_str(), r.absent.as_str()));
-        assert!(again.dropped.is_empty() && again.recorded.is_empty() && again.removed.is_empty());
     }
 
     #[test]
@@ -1552,36 +1173,23 @@ mod tests {
     }
 
     #[test]
-    fn startup_text_keys_lead_the_hot_text_list() {
-        // LAYOUT-TEXT-PIN-5, ruling #4417 (no spec clause: build layout, D-X.63 / D-X.49): every
-        // startup-text.keys key the list holds is in the start-up tier, and that tier is the head
-        // of the list, so no aligned cluster can split the start-up text across extra windows.
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/libc-so");
-        let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
-        let (head, late) = late_startup_keys(&read("hot-text.list"), &read("startup-text.keys"));
-        assert!(head > 0, "hot-text.list has no start-up tier at its head");
-        assert!(late.is_empty(), "start-up keys after list position {head} (rerun tools/hottext/regen.sh): {late:?}");
-    }
-
-    #[test]
-    fn merge_moves_startup_text_keys_to_the_head() {
-        // LAYOUT-TEXT-PIN-5, ruling #4417 (no spec clause: build tooling): merge.py --startup-head
+    fn order_moves_startup_text_keys_to_the_head() {
+        // LAYOUT-TEXT-PIN-5, ruling #4417 (no spec clause: build tooling): order.py --startup-head
         // gives the listed keys tier startup and puts the start-up tier first, each part in its
-        // merged order; without the option the trace order stands.
+        // traced order; without the option the trace order stands (LT-5: one trace, no old list).
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-        let tmp = root.join(format!("target/xtask-merge-head-test-{}", std::process::id()));
+        let tmp = root.join(format!("target/xtask-order-head-test-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(tmp.join("old"), "").unwrap();
         std::fs::write(tmp.join("new"), "_start1\tstartup\na\tstdio\nvf\tstrings\nb\tstrings\ngr\textra\n").unwrap();
         std::fs::write(tmp.join("skeys"), "# c\nvf\tstartup\tfast\ngr\tstartup\tfast,release\nnot_listed\tstartup\tfast\n").unwrap();
         let run = |head: bool| {
             let mut c = std::process::Command::new("python3");
-            c.arg("-I").arg(root.join("tools/hottext/merge.py")).arg(tmp.join("old")).arg(tmp.join("new")).arg("fast");
+            c.arg("-I").arg(root.join("tools/hottext/order.py")).arg(tmp.join("new")).arg("fast");
             if head {
                 c.arg("--startup-head").arg(tmp.join("skeys"));
             }
-            let o = c.output().expect("python3 runs tools/hottext/merge.py");
-            assert!(o.status.success(), "merge.py: {}", String::from_utf8_lossy(&o.stderr));
+            let o = c.output().expect("python3 runs tools/hottext/order.py");
+            assert!(o.status.success(), "order.py: {}", String::from_utf8_lossy(&o.stderr));
             String::from_utf8(o.stdout).unwrap()
         };
         let (plain, headed) = (run(false), run(true));
@@ -1594,15 +1202,32 @@ mod tests {
     }
 
     #[test]
+    fn trace_writes_the_names_at_one_address_in_byte_order() {
+        // LAYOUT-TRACE-HOST-CANONICAL-3 (no spec clause: build tooling): trace_gdb.py writes every
+        // name at a hit address (aliases such as bcmp / __memcmpeq / liella_machine_equal), and the
+        // list keeps that order. nm sorts by the caller's locale (en_US ignores underscores), so a
+        // Zen 1 host's job under en_US.UTF-8 and a gated job in C gave the same keys in two orders.
+        // The tracer must run nm in the C locale and sort each address's names itself.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let py = std::fs::read_to_string(root.join("tools/hottext/trace_gdb.py")).unwrap();
+        let nm = py.find("subprocess.run([\"nm\", \"--defined-only\", binp]").expect("trace_gdb.py: no nm call");
+        let nm_line = py[nm..].lines().next().unwrap();
+        assert!(nm_line.contains("env=nm_env") && py.contains("nm_env = dict(os.environ, LC_ALL=\"C\")"), "trace_gdb.py runs nm in the caller's locale");
+        let sorted = py.find("names = {a: sorted(ns) for a, ns in names.items()}").expect("trace_gdb.py does not sort the names at one address");
+        let written = py.find("for n in names.get(addr, []):").expect("trace_gdb.py: no names output");
+        assert!(nm < sorted && sorted < written, "trace_gdb.py sorts the names after it writes them");
+    }
+
+    #[test]
     fn a_startup_label_brings_its_section_to_the_head() {
         // LAYOUT-TEXT-PIN-6, #4467 (no spec clause: build tooling, D-X.63): keys.py --aliases maps a
         // label inside a function section (an assembly entry label, an alias) to the section's key,
-        // leaving out the section's own name, data symbols and a name found in two sections; merge.py
+        // leaving out the section's own name, data symbols and a name found in two sections; order.py
         // --alias then brings the section of a start-up key traced at such a label to the head.
         // The symbol names are fictional on purpose: a csys label named here would be an unknown
         // consumer to `cargo xtask affected` and send every change of its .S file to the FULL tier.
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-        let tmp = root.join(format!("target/xtask-merge-alias-test-{}", std::process::id()));
+        let tmp = root.join(format!("target/xtask-order-alias-test-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
         let syms = "\nlibc.a(m.o):     file format elf64-x86-64\n\nSYMBOL TABLE:\n\
             0000000000000000 g     F .text.fixture_set\t0000000000000040 fixture_set\n\
@@ -1624,18 +1249,17 @@ mod tests {
         let aliases = String::from_utf8(o.stdout).unwrap();
         assert_eq!(aliases, "fixture_set_entry\tfixture_set\nmemset\tfixture_set\n");
         std::fs::write(tmp.join("alias"), &aliases).unwrap();
-        std::fs::write(tmp.join("old"), "").unwrap();
         std::fs::write(tmp.join("new"), "_start1\tstartup\nstrlen\tstrings\nfixture_set\tstrings\nb\tstrings\n").unwrap();
         std::fs::write(tmp.join("skeys"), "_start1\tstartup\tfast\nfixture_set_entry\tstartup\tfast\n").unwrap();
         let run = |alias: bool| {
             let mut c = std::process::Command::new("python3");
-            c.arg("-I").arg(root.join("tools/hottext/merge.py")).arg(tmp.join("old")).arg(tmp.join("new")).arg("fast");
+            c.arg("-I").arg(root.join("tools/hottext/order.py")).arg(tmp.join("new")).arg("fast");
             c.arg("--startup-head").arg(tmp.join("skeys"));
             if alias {
                 c.arg("--alias").arg(tmp.join("alias"));
             }
-            let o = c.output().expect("python3 runs tools/hottext/merge.py");
-            assert!(o.status.success(), "merge.py: {}", String::from_utf8_lossy(&o.stderr));
+            let o = c.output().expect("python3 runs tools/hottext/order.py");
+            assert!(o.status.success(), "order.py: {}", String::from_utf8_lossy(&o.stderr));
             String::from_utf8(o.stdout).unwrap()
         };
         let (plain, aliased) = (run(false), run(true));
@@ -1686,58 +1310,172 @@ mod tests {
     }
 
     #[test]
-    fn merge_names_every_key_it_drops() {
-        // LAYOUT-TEXT-PIN-9, ruling #4539 (no spec clause: build tooling): a key the old list held
-        // that this profile's trace missed and no other profile keeps is dropped only out loud
-        // (stderr and --dropped, which regen.sh refuses without --allow-drop); a key the other
-        // profile keeps is not dropped.
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-        let tmp = root.join(format!("target/xtask-merge-dropped-test-{}", std::process::id()));
-        std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(tmp.join("old"), "kept\ttool\tfast,release\ngone\ttool\tfast\nother\tlocale\trelease\n").unwrap();
-        let run = |new: &str| {
-            std::fs::write(tmp.join("new"), new).unwrap();
-            let o = std::process::Command::new("python3")
-                .arg("-I")
-                .arg(root.join("tools/hottext/merge.py"))
-                .arg(tmp.join("old"))
-                .arg(tmp.join("new"))
-                .arg("fast")
-                .arg("--dropped")
-                .arg(tmp.join("dropped"))
-                .output()
-                .expect("python3 runs tools/hottext/merge.py");
-            assert!(o.status.success(), "merge.py: {}", String::from_utf8_lossy(&o.stderr));
-            let dropped = std::fs::read_to_string(tmp.join("dropped")).unwrap();
-            (String::from_utf8(o.stdout).unwrap(), String::from_utf8(o.stderr).unwrap(), dropped)
-        };
-        let (short, short_err, short_dropped) = run("a\tstartup\n");
-        let (full, full_err, full_dropped) = run("a\tstartup\ngone\ttool\n");
-        std::fs::remove_dir_all(&tmp).unwrap();
-        assert_eq!(short, "kept\ttool\trelease\nother\tlocale\trelease\na\tstartup\tfast\n");
-        assert_eq!(short_dropped, "gone\ttool\tfast\n");
-        assert!(short_err.contains("DROPPED") && short_err.contains("gone"), "drop not reported: {short_err:?}");
-        assert_eq!(full, "kept\ttool\trelease\na\tstartup\tfast\ngone\ttool\tfast\nother\tlocale\trelease\n");
-        assert!(full_dropped.is_empty() && full_err.is_empty(), "nothing dropped, yet: {full_dropped:?} {full_err:?}");
-    }
-
-    #[test]
     fn regen_always_traces_the_bounded_tool_and_locale_modes() {
         // LAYOUT-TEXT-PIN-9, ruling #4539 (no spec clause: build tooling): regen.sh traces
         // page_faults.c's `locale` and `tool` modes (the programs hot_text_products.rs bounds) on
-        // every run, not only when they are passed as extra programs, and refuses a dropping list
-        // before it writes either file.
+        // every run, before the fork and extra modes, so their first touches keep the tiers the
+        // bounds count (LT-5: the trace of every build is the list; nothing else is merged in).
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let sh = std::fs::read_to_string(root.join("tools/hottext/regen.sh")).unwrap();
         let at = |s: &str| sh.lines().position(|l| l == s).unwrap_or_else(|| panic!("regen.sh: no top-level line {s:?}"));
-        let extra = at("for cmd in \"$@\"; do");
+        let later = at("stdin=/dev/null follow=child trace fork en_US.UTF-8 ./page_faults fork");
         for mode in ["locale", "tool"] {
             let l = at(&format!("stdin=/dev/null trace {mode} en_US.UTF-8 ./page_faults {mode}"));
-            assert!(l < extra, "regen.sh traces page_faults {mode} after the extra programs");
+            assert!(l < later, "regen.sh traces page_faults {mode} after the fork and extra modes");
         }
-        let refuse = sh.find("if [ $allow_drop = 0 ]; then").expect("regen.sh: no --allow-drop guard");
-        for w in ["mv \"$work/startup.merged\" \"$skeys\"", "mv \"$work/list.merged\" \"$list\""] {
-            assert!(sh.find(w).is_some_and(|p| p > refuse), "regen.sh writes before the drop guard: {w}");
+        assert!(later < at("traces_done"), "regen.sh orders the lists before the fork trace ran");
+    }
+
+    #[test]
+    fn retired_lists_refuse_a_committed_list() {
+        // LAYOUT-DELETE-LISTS, LT-5 (no spec clause: build tooling): `cargo xtask static` refuses a
+        // tracked start-up list, whatever its directory, so the committed lists cannot creep back;
+        // a file that only shares a prefix or suffix with one is not refused, and this tree has none.
+        // The six names spelled out: a name dropped from RETIRED must fail here, not shrink the loop.
+        let six = ["hot-text.list", "startup-text.keys", "probe-text.keys", "startup-data.keys", "hot-text.absent", "hot-text.unpinned"];
+        assert_eq!(RETIRED.len(), six.len());
+        for name in six {
+            let path = format!("crates/libc-so/{name}");
+            let errs = retired_lists(&[path.as_str(), "crates/libc-so/startup-state.list", "crates/libc-so/hot-text.clusters"]);
+            assert_eq!(errs.len(), 1, "{name}: {errs:?}");
+            assert!(errs[0].starts_with(&format!("{path}: a committed start-up list")), "{}", errs[0]);
         }
+        assert!(retired_lists(&["x/hot-text.list.bak", "x/my-hot-text.list", "hot-text.first-window"]).is_empty());
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let tracked = crate::labnames::tracked_with(root, true).expect("git ls-files");
+        assert!(tracked.iter().any(|p| p.ends_with("hot-text.clusters")), "the tracked-file list misses known files");
+        assert_eq!(retired_lists(&tracked), Vec::<String>::new());
+    }
+
+    #[test]
+    fn static_refuses_a_readded_committed_list() {
+        // LAYOUT-DELETE-LISTS, LT-5 (no spec clause: build tooling): end to end through git, as
+        // `cargo xtask static` runs it: a scratch repository that tracks a hand-written input passes;
+        // once a `hot-text.list` is added (staged is tracked) the check fails naming it.
+        let root = std::env::temp_dir().join(format!("xtask-retired-static-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("crates/libc-so")).unwrap();
+        let git = |args: &[&str]| assert!(std::process::Command::new("git").current_dir(&root).args(args).output().unwrap().status.success(), "git {args:?}");
+        git(&["init", "-q"]);
+        std::fs::write(root.join("crates/libc-so/hot-text.clusters"), "# hand-written\n").unwrap();
+        git(&["add", "crates/libc-so/hot-text.clusters"]);
+        assert_eq!(super::static_check(&root), Ok(()));
+        std::fs::write(root.join("crates/libc-so/hot-text.list"), "key\tstartup\tfast\n").unwrap();
+        git(&["add", "crates/libc-so/hot-text.list"]);
+        let e = super::static_check(&root).unwrap_err();
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(e.contains("crates/libc-so/hot-text.list: a committed start-up list"), "{e}");
+    }
+    // LAYOUT-FIRST-WINDOW: first-window keys follow the start-up tier; a stale line fails. No spec clause.
+    #[test]
+    fn first_window_keys_follow_the_startup_tier() {
+        let e = parse_list("a\tstartup\tfast\nb\tstartup\tfast\nputs\tstdio\tfast\nfstat\tstdio\tfast\nc\textra\t-\n").unwrap();
+        let first = parse_first_window("# c\nfstat\tevery stdio program\n").unwrap();
+        let k = link_positions(&e, &first, &[]).unwrap();
+        assert_eq!([k["a"], k["b"], k["fstat"], k["puts"], k["c"]], [0, 1, 2, 3, 4]);
+        assert_eq!(link_positions(&e, &[], &[]).unwrap(), positions(&e));
+        assert!(link_positions(&e, &["b".into()], &[]).unwrap_err().contains("start-up tier"));
+        assert!(link_positions(&e, &["gone".into()], &[]).unwrap_err().contains("not in hot-text.list"));
+        let c = [Cluster { name: "s".into(), first: 2, last: 3 }];
+        assert!(link_positions(&e, &first, &c).unwrap_err().contains("inside cluster s"));
+        assert!(parse_first_window("fstat\n").is_err());
+        assert!(parse_first_window("f\tr\nf\tr\n").unwrap_err().contains("twice"));
+    }
+
+    #[test]
+    fn regen_runner_runs_traces_together_and_keeps_their_order() {
+        // HOTLIST-REGEN-CHEAP (no spec clause: build tooling): tools/hottext/runner.sh, the trace
+        // runner of regen.sh and probe_text.sh. A fake tracer (HOTTEXT_GDB) waits until all four
+        // traces of the run have started, so a runner that runs them one at a time fails here
+        // (iteration budget, a hang guard only). The tagged file names every trace in start order,
+        // each trace writes its own names file with its own environment, a failed trace fails the
+        // wait, and put_changed leaves a file whose bytes did not change untouched. The fake prints
+        // the program's environment as trace_gdb.py builds it (LAYOUT-TRACE-HOST-CANONICAL: exactly
+        // the HOT_TEXT_ENV_<NAME> variables, sorted), so the caller's own LANG must not reach it.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let runner = root.join("tools/hottext/runner.sh");
+        let tmp = root.join(format!("target/xtask-runner-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let run = |name: &str, progs: &[&str]| {
+            let work = tmp.join(name);
+            let barrier = work.join("barrier");
+            std::fs::create_dir_all(&barrier).unwrap();
+            let fake = r#"#!/bin/bash
+while [ "$1" != --args ]; do shift; done; shift
+touch "BARRIER/started.$1"
+i=0
+while [ "$(ls BARRIER | wc -l)" -lt COUNT ]; do
+    i=$((i + 1))
+    if [ $i -gt 3000 ]; then echo "fake tracer: $1 started alone: the traces did not run together" >&2; exit 7; fi
+    sleep 0.01
+done
+if [ "$1" = fail ]; then exit 3; fi
+printf '%s\n' "$@" > "$HOT_TEXT_OUT"
+env | sed -n 's/^HOT_TEXT_ENV_//p' | LC_ALL=C sort >> "$HOT_TEXT_OUT"
+"#
+            .replace("BARRIER", &barrier.to_string_lossy())
+            .replace("COUNT", &progs.len().to_string());
+            let fake_path = work.join("fake-gdb");
+            std::fs::write(&fake_path, fake).unwrap();
+            let driver = r#"set -eu
+work=$1; here=$2; shift 2
+n=0
+: > "$work/tagged"
+. "$here/runner.sh"
+for p in "$@"; do trace_tagged "tier-$p" LANG="lang-$p" -- "$p" arg; done
+traces_wait
+"#;
+            let o = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(driver)
+                .arg("driver")
+                .arg(&work)
+                .arg(runner.parent().unwrap())
+                .args(progs)
+                .env("HOTTEXT_GDB", format!("bash {}", fake_path.display()))
+                .env("LANG", "caller-lang")
+                .env("TZ", "caller-tz")
+                .env("HOTTEXT_JOBS", progs.len().to_string())
+                .output()
+                .expect("bash runs tools/hottext/runner.sh");
+            (work, o.status.success(), String::from_utf8_lossy(&o.stderr).into_owned())
+        };
+        let progs = ["p1", "p2", "p3", "p4"];
+        let (work, ok, err) = run("ok", &progs);
+        assert!(ok, "runner.sh: the four traces did not all run and pass: {err}");
+        let tagged = std::fs::read_to_string(work.join("tagged")).unwrap();
+        let want: String = (1..=progs.len()).map(|i| format!("tier-p{i}={}\n", work.join(format!("names.{i}")).display())).collect();
+        assert_eq!(tagged, want, "runner.sh: tagged does not name every trace in start order");
+        for (i, p) in progs.iter().enumerate() {
+            let names = std::fs::read_to_string(work.join(format!("names.{}", i + 1))).unwrap();
+            assert_eq!(names, format!("{p}\narg\nLANG=lang-{p}\n"), "runner.sh: names.{} is not trace {p}'s output", i + 1);
+        }
+        let (_, ok, err) = run("fail", &["p1", "fail", "p3", "p4"]);
+        assert!(!ok && err.contains("trace failed (rc 3)"), "runner.sh: a failed trace did not fail the wait: {err}");
+        // put_changed: equal bytes keep the tracked file (and its mtime); new bytes replace it.
+        let dir = tmp.join("put");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("tracked"), "a\n").unwrap();
+        let old = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
+        std::fs::File::options().write(true).open(dir.join("tracked")).unwrap().set_modified(old).unwrap();
+        let put = |text: &str| {
+            std::fs::write(dir.join("new"), text).unwrap();
+            let st = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(". \"$1\"; put_changed \"$2/new\" \"$2/tracked\"")
+                .arg("put")
+                .arg(&runner)
+                .arg(&dir)
+                .status()
+                .unwrap();
+            assert!(st.success(), "put_changed failed");
+            assert!(!dir.join("new").exists(), "put_changed left its input behind");
+            (std::fs::read_to_string(dir.join("tracked")).unwrap(), std::fs::metadata(dir.join("tracked")).unwrap().modified().unwrap())
+        };
+        let same = put("a\n");
+        let changed = put("b\n");
+        std::fs::remove_dir_all(&tmp).unwrap();
+        assert_eq!(same, ("a\n".to_string(), old), "put_changed rewrote a file whose bytes did not change");
+        assert_eq!(changed.0, "b\n", "put_changed did not write new bytes");
     }
 }

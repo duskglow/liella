@@ -6,16 +6,17 @@
 #
 # The workload command (wl_workloads.sh) runs unchanged except that @/PROG is a wrapper: its FIRST invocation runs the
 # kit binary DIRECTLY under `gdb -batch -x wl_alloctrace.py` (later invocations, e.g. in a loop of 10, run untraced).
-# Kit: ~/wl/kit/SHA/bin (made by wl_prep.sh). Output: the summary of wl_alloctrace.py, demangled by rustfilt if present.
+# Kit: ~/wl/kit/$(wl_key SHA)/bin (made by wl_prep.sh). Output: the summary of wl_alloctrace.py, demangled by rustfilt if present.
 set -u
 W=${WL:-$HOME/wl}
 here=$(cd "$(dirname "$0")" && pwd)
 sha=$1 want=$2 prog=$3 top=$4
 . "$here/wl_workloads.sh"
+. "$here/wl_lock.sh"   # wl_key: the kit is keyed by sha and products profile (WL-PREP-RELEASE-PROFILE)
 cmd=
 for d in "${WL_DEFS[@]}"; do [ "${d%%|*}" = "$want" ] && cmd=${d#*|}; done
 [ -n "$cmd" ] || { echo "wl_alloctrace: unknown workload $want"; exit 2; }
-kit=$W/kit/$sha/bin
+kit=$W/kit/$(wl_key "$sha")/bin
 if [ -z "$prog" ]; then prog=$(echo "$cmd" | grep -o '@/[a-z0-9]*' | head -1 | cut -c3-); fi
 [ -x "$kit/$prog" ] || { echo "wl_alloctrace: $kit/$prog missing (programs: $(ls "$kit" | tr '\n' ' '))"; exit 2; }
 command -v gdb > /dev/null || { echo "wl_alloctrace: no gdb on this host"; exit 2; }

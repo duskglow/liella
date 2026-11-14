@@ -149,11 +149,17 @@ pub(crate) fn resolv_only(name: &str) {
     assert!(root().join("target/liella/libresolv.a").exists(), "the libresolv.a placeholder is missing");
 }
 
-/// A symbol `ld.so` owns in glibc: in `libc.a` for the programs Liella starts, and local in
-/// `libc.so.6` (a dynamically linked program sees the host loader's).
+/// A symbol `ld.so` owns (versions.tsv, R14-12, D-27.26): in `libc.a` for the programs Liella
+/// starts statically, local in `libc.so.6`, and exported by Liella's `ld.so` as its default
+/// version of the versions.tsv row.
 pub(crate) fn loader_owned(name: &str) {
     archived(name);
     assert!(!dynsym().contains_key(name), "{name} must stay local in libc.so.6");
+    let interp = "ld-linux-x86-64.so.2";
+    let table = std::fs::read_to_string(root().join("spec/abi/versions.tsv")).expect("versions.tsv");
+    let ver = table.lines().map(|l| l.split('\t').collect::<Vec<_>>()).find(|f| f.first() == Some(&interp) && f.get(1) == Some(&name)).and_then(|f| f.get(2).map(|v| (*v).to_string())).unwrap_or_else(|| panic!("versions.tsv has no {interp} row for {name}"));
+    let got = dynsym_of(interp).remove(name).unwrap_or_default();
+    assert!(got.contains(&format!("@{ver}")), "{name}: {interp} must export {name}@@{ver}, exports {got:?}");
 }
 
 /// `name@VERSION` pairs of a product shared object's dynamic symbol table.
@@ -258,24 +264,215 @@ pub(crate) fn dynsym_line(name: &str) -> String {
     String::from_utf8_lossy(&o.stdout).lines().find(|l| l.contains(&format!(" {name}@"))).map(str::to_string).unwrap_or_default()
 }
 
-/// Self-checking conformance programs linked dynamically by the host's compiler and run on the
-/// host's glibc (the oracle): each must exit 0.
-///
-/// The same programs on Liella's `libc.so.6` wait for Liella's own `ld.so` (phase 14, ruling
-/// #814): the host's program interpreter cannot run Liella's `libc.so.6` in place of glibc's
-/// (exit 127). The caller reports that run as a skip (`skip_note::skipped`), never a silent
-/// pass; phase 14 adds it here (run under Liella's interpreter, check Liella's library was the
-/// one loaded). (`skip_note` is not declared here: test binaries that declare it themselves
-/// would load it twice, `clippy::duplicate_mod`.)
+/// A copy of `libc.so.6` in `dir` whose `DT_SONAME` tag is retagged `DT_CHECKSUM`, so a program
+/// linked against it names it by path: Liella's `ld.so` has no library search yet (#4537).
+fn libc_by_path(dir: &std::path::Path) -> PathBuf {
+    let mut so = std::fs::read(root().join("target/liella/libc.so.6")).expect("libc.so.6");
+    let word = |so: &[u8], at: usize, n: usize| so.get(at..at.saturating_add(n)).map_or(0, |b| b.iter().rev().fold(0usize, |v, &x| v.wrapping_shl(8) | usize::from(x)));
+    let (phoff, phentsize, phnum) = (word(&so, 0x20, 8), word(&so, 0x36, 2), word(&so, 0x38, 2));
+    // PT_DYNAMIC (2): its file offset and size.
+    let ph = (0..phnum).map(|i| phoff.wrapping_add(i.wrapping_mul(phentsize))).find(|&p| word(&so, p, 4) == 2).expect("libc.so.6 has PT_DYNAMIC");
+    let (off, len) = (word(&so, ph.wrapping_add(8), 8), word(&so, ph.wrapping_add(32), 8));
+    // DT_SONAME (14) becomes DT_CHECKSUM (0x6ffffdf8).
+    let at = (off..off.saturating_add(len)).step_by(16).find(|&o| word(&so, o, 8) == 14).expect("libc.so.6 has a DT_SONAME");
+    so.get_mut(at..at.saturating_add(8)).expect("the DT_SONAME entry").copy_from_slice(&0x6fff_fdf8u64.to_le_bytes());
+    let out = dir.join("libc-by-path.so");
+    std::fs::write(&out, &so).expect("libc copy");
+    out
+}
+
+/// Liella's link-time archive, `target/liella/libc_nonshared.a` (D-27.28), by its canonical path.
+fn liella_nonshared() -> PathBuf {
+    root().join("target/liella/libc_nonshared.a").canonicalize().expect("target/liella/libc_nonshared.a is missing: run `cargo xtask so`")
+}
+
+/// The link map `map` (ld's `-Map`) loads Liella's `nonshared` archive and no host C library file
+/// (`libc.so.6`, `libc.so`, `libc_nonshared.a`, `libc.a` outside Liella's product directory and
+/// the test's own `scratch` directory, which holds its `libc.so` script).
+fn assert_liella_libc_only(map: &str, nonshared: &std::path::Path, scratch: &std::path::Path, what: &str) {
+    let ours = nonshared.parent().expect("product directory");
+    let loads: Vec<&str> = map.lines().filter_map(|l| l.strip_prefix("LOAD ")).map(str::trim).collect();
+    assert!(loads.iter().any(|p| std::path::Path::new(p) == nonshared), "{what}: Liella's {} is not on the link line: {loads:?}", nonshared.display());
+    let host: Vec<&&str> = loads
+        .iter()
+        .filter(|p| matches!(p.rsplit('/').next(), Some("libc.so.6" | "libc.so" | "libc_nonshared.a" | "libc.a")) && !std::path::Path::new(p).starts_with(ours) && !std::path::Path::new(p).starts_with(scratch))
+        .collect();
+    assert!(host.is_empty(), "{what}: a host C library file is on the link line: {host:?}");
+}
+
+/// The version nodes `readelf -V` lists under `.gnu.version_r` (what the object needs).
+fn needed_versions(obj: &std::path::Path) -> Vec<String> {
+    let o = std::process::Command::new("readelf").arg("-V").arg(obj).output().expect("readelf");
+    let text = String::from_utf8_lossy(&o.stdout).to_string();
+    let needs = text.split_once(".gnu.version_r").map_or("", |(_, r)| r);
+    needs.lines().filter_map(|l| l.split_once("Name: ")).filter_map(|(_, r)| r.split_whitespace().next()).map(str::to_string).collect()
+}
+
+/// A shared object built against Liella's `libc.so`: it registers handlers through the archive.
+const NONSHARED_LIB: &str = r#"#include <pthread.h>
+#include <stdlib.h>
+#include <unistd.h>
+static int *flag;
+static void on_exit_h(void) { *flag |= 1; }
+static void on_quick(void) { *flag |= 2; (void)!write(1, "library quick-exit handler ran\n", 31); }
+static void on_prepare(void) { *flag |= 4; }
+int ns_register(int *f) {
+    flag = f;
+    return atexit(on_exit_h) | at_quick_exit(on_quick) | pthread_atfork(on_prepare, 0, 0);
+}
+"#;
+
+/// The reference's program: loads the library, unloads it, then forks and quick-exits.
+const NONSHARED_MAIN: &str = r#"#include <dlfcn.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <unistd.h>
+static int flag;
+static void main_quick(void) { printf("main quick-exit handler ran, flag %d\n", flag); fflush(stdout); }
+int main(int argc, char **argv) {
+    void *h = dlopen(argv[argc - 1], RTLD_NOW);
+    if (!h) { printf("dlopen: %s\n", dlerror()); return 2; }
+    int (*reg)(int *) = (int (*)(int *))dlsym(h, "ns_register");
+    if (!reg || reg(&flag) != 0) { printf("ns_register failed\n"); return 3; }
+    at_quick_exit(main_quick);
+    dlclose(h);
+    printf("after dlclose, flag %d\n", flag);
+    fflush(stdout);
+    pid_t p = fork();
+    if (p == 0) _exit(0);
+    waitpid(p, 0, 0);
+    printf("after fork, flag %d\n", flag);
+    fflush(stdout);
+    quick_exit(0);
+}
+"#;
+
+/// A program built against Liella's `libc.so`, run on the reference's C library.
+const NONSHARED_PROG: &str = r#"#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <unistd.h>
+static int prepared;
+static void bye(void) { printf("exit handler ran\n"); }
+static void prepare(void) { prepared = 1; }
+int main(void) {
+    if (atexit(bye) != 0 || pthread_atfork(prepare, 0, 0) != 0) return 2;
+    pid_t p = fork();
+    if (p == 0) _exit(0);
+    waitpid(p, 0, 0);
+    printf("prepare ran: %d\n", prepared);
+    return 0;
+}
+"#;
+
+/// D-27.28: Liella's `libc_nonshared.a` and installed `libc.so`, both ways. The script names bare
+/// files (no host path). A shared object and a program are linked with `-L target/liella -lc` only
+/// (the link maps show Liella's archive and no host C library file); they need only `GLIBC_*`
+/// versions, so they run on the reference: the program's handlers run, and the reference's
+/// `dlclose` of the shared object runs its `atexit` handler and drops its `at_quick_exit` and
+/// `pthread_atfork` handlers, as with the reference's own archive (spec/behaviour/dynlink.md).
+pub(crate) fn nonshared_two_way() {
+    require_products();
+    let nonshared = liella_nonshared();
+    let liella = nonshared.parent().expect("product directory").to_path_buf();
+    let script = std::fs::read_to_string(liella.join("libc.so")).expect("target/liella/libc.so is missing: run `cargo xtask so`");
+    let group = script.lines().find(|l| l.starts_with("GROUP")).expect("the libc.so script has a GROUP");
+    assert!(!group.contains('/'), "the installed libc.so names a path: {group}");
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("nonshared-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("scratch");
+    for (file, text) in [("lib.c", NONSHARED_LIB), ("main.c", NONSHARED_MAIN), ("prog.c", NONSHARED_PROG)] {
+        std::fs::write(dir.join(file), text).expect("source");
+    }
+    let against_liella = |extra: &[&str], src: &str, out: &str| {
+        let map = dir.join(format!("{out}.map"));
+        let o = std::process::Command::new("cc")
+            .args(["-std=c17", "-O1", "-nodefaultlibs"])
+            .args(extra)
+            .arg(dir.join(src))
+            .arg(format!("-L{}", liella.display()))
+            .args(["-lc", "-lgcc"])
+            .arg(format!("-Wl,-Map={}", map.display()))
+            .arg("-o")
+            .arg(dir.join(out))
+            .output()
+            .expect("cc");
+        assert!(o.status.success(), "the link against Liella's libc.so failed ({out}): {}", String::from_utf8_lossy(&o.stderr));
+        assert_liella_libc_only(&std::fs::read_to_string(&map).expect("link map"), &nonshared, &dir, out);
+        let needs = needed_versions(&dir.join(out));
+        assert!(!needs.is_empty() && needs.iter().all(|v| v.starts_with("GLIBC_")), "{out} references a version the reference does not export (two-way compatibility): {needs:?}");
+        dir.join(out)
+    };
+    let lib = against_liella(&["-shared", "-fPIC"], "lib.c", "libns.so");
+    let prog = against_liella(&[], "prog.c", "prog");
+    let o = std::process::Command::new(&prog).output().expect("run prog");
+    assert_eq!((o.status.code(), String::from_utf8_lossy(&o.stdout).to_string()), (Some(0), "prepare ran: 1\nexit handler ran\n".to_string()), "a program built against Liella, on the reference");
+    let main = dir.join("main");
+    let cc = std::process::Command::new("cc").args(["-std=c17", "-O1"]).arg(dir.join("main.c")).arg("-o").arg(&main).output().expect("cc");
+    assert!(cc.status.success(), "main.c: {}", String::from_utf8_lossy(&cc.stderr));
+    let o = std::process::Command::new(&main).arg(&lib).output().expect("run main");
+    let out = String::from_utf8_lossy(&o.stdout).to_string();
+    assert!(out.contains("after dlclose, flag 1\n"), "dlclose did not run the library's atexit handler (once): {:?} {out:?}", o.status);
+    assert_eq!((o.status.code(), out.as_str()), (Some(0), "after dlclose, flag 1\nafter fork, flag 1\nmain quick-exit handler ran, flag 1\n"), "dlclose did not drop the library's quick-exit and atfork handlers");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Liella's `ld.so` and a `libc.so` linker script in `dir` for linking against Liella's
+/// `libc.so.6` by path, the way an installed `libc.so` script does: the C library, Liella's link-time
+/// archive (D-27.28), and the loader for the symbols the ABI places in it (`__libc_stack_end`,
+/// `__tls_get_addr`; R14-12), as needed. Link with `-nodefaultlibs`, the script and `-lgcc`.
+pub(crate) fn liella_link_script(dir: &std::path::Path) -> (PathBuf, PathBuf) {
+    require_products();
+    let ld = root().join("target/liella/ld-linux-x86-64.so.2");
+    assert!(ld.exists(), "{} is missing: run `cargo xtask so`", ld.display());
+    let libc = dir.join("libc.so");
+    std::fs::write(&libc, format!("GROUP ( {} {} AS_NEEDED ( {} ) )\n", libc_by_path(dir).display(), liella_nonshared().display(), ld.display())).expect("libc.so script");
+    (ld, libc)
+}
+
+/// Self-checking conformance programs linked dynamically by the host's compiler: run on the
+/// host's glibc (the oracle), then the same source linked with the host's start files against
+/// Liella's `libc.so.6` (by path, through a `libc.so` script) with Liella's `ld.so` as its
+/// interpreter (design §14, D-27.24; #814): each must exit 0 both ways. The link-time archive
+/// `libc_nonshared.a` (`atexit`, `at_quick_exit`, `pthread_atfork`: not in `libc.so.6`'s ABI) is
+/// Liella's (D-27.28), and the link map shows no host C library file on the link line (the start
+/// files `crt1.o`, `crti.o`, `crtn.o` and the compiler's are still the host's). No other shared C library
+/// is named and the loader has no search, so the library that runs is Liella's. A program's `RUN-ARGS`, `RUN-ENV` (distinct
+/// names) and `EXPECT-EXIT` directives apply as in `conformance/run.sh`; any other directive is
+/// refused, so a program that needs one is never run here without it.
 pub(crate) fn conformance_dynamic(names: &[&str]) {
     require_products();
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("dynamic-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("scratch");
+    let (ld, libc) = liella_link_script(&dir);
+    let nonshared = liella_nonshared();
     for name in names {
+        let src = root().join(format!("conformance/c/{name}.c"));
+        let text = std::fs::read_to_string(&src).expect("conformance source");
+        let directive = |d: &str| text.lines().find_map(|l| l.strip_prefix(&format!("/* {d}: "))?.strip_suffix(" */").map(str::to_string));
+        for d in ["LINK-CXX", "LINK-HELPERS", "LINK-LIBM", "LINK-NOW", "LINK-UNWIND", "RUN-SECURE", "RUN-WRAP", "STATIC-PIE", "EXPECT-SIGNAL", "EXPECT-STDERR"] {
+            assert!(directive(d).is_none(), "{name}: {d} is not supported by the dynamic runner");
+        }
+        let args: Vec<String> = directive("RUN-ARGS").map(|a| a.split_whitespace().map(str::to_string).collect()).unwrap_or_default();
+        let env: Vec<(String, String)> = directive("RUN-ENV")
+            .map(|e| e.split_whitespace().map(|kv| kv.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())).expect("RUN-ENV: NAME=value")).collect())
+            .unwrap_or_default();
+        assert_eq!(env.iter().map(|(k, _)| k).collect::<BTreeSet<_>>().len(), env.len(), "{name}: repeated RUN-ENV names need conformance/run.sh");
+        let want: i32 = directive("EXPECT-EXIT").map_or(0, |n| n.trim().parse().expect("EXPECT-EXIT: a number"));
+        let run = |exe: &PathBuf| std::process::Command::new(exe).args(&args).env_clear().envs(env.iter().map(|(k, v)| (k, v))).output().expect("run");
         let exe = dir.join(name);
-        let cc = std::process::Command::new("cc").args(["-std=c17", "-O1"]).arg(root().join(format!("conformance/c/{name}.c"))).arg("-o").arg(&exe).output().expect("cc");
+        let cc = std::process::Command::new("cc").args(["-std=c17", "-O1"]).arg(&src).arg("-o").arg(&exe).output().expect("cc");
         assert!(cc.status.success(), "{name}: {}", String::from_utf8_lossy(&cc.stderr));
-        let o = std::process::Command::new(&exe).env_clear().output().expect("run");
-        assert!(o.status.success(), "{name} dynamic on glibc: {:?} {}", o.status, String::from_utf8_lossy(&o.stderr));    }
+        let o = run(&exe);
+        assert_eq!(o.status.code(), Some(want), "{name} dynamic on glibc: {:?} {}", o.status, String::from_utf8_lossy(&o.stderr));
+        let exe = dir.join(format!("{name}-liella"));
+        let map = dir.join(format!("{name}.map"));
+        let cc = std::process::Command::new("cc").args(["-std=c17", "-O1", "-nodefaultlibs"]).arg(format!("-Wl,--dynamic-linker={}", ld.display())).arg(format!("-Wl,-Map={}", map.display())).arg(&src).arg(&libc).arg("-lgcc").arg("-o").arg(&exe).output().expect("cc");
+        assert!(cc.status.success(), "{name} against Liella's libc.so.6: {}", String::from_utf8_lossy(&cc.stderr));
+        assert_liella_libc_only(&std::fs::read_to_string(&map).expect("link map"), &nonshared, &dir, name);
+        let o = run(&exe);
+        assert_eq!(o.status.code(), Some(want), "{name} dynamic on Liella: {:?} {}", o.status, String::from_utf8_lossy(&o.stderr));
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }

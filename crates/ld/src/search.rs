@@ -20,11 +20,19 @@ pub const PREFIX: &str = match option_env!("LIELLA_PREFIX") {
     None => "/",
 };
 
+/// The directory below the prefix that holds Liella's libraries (R14-3 (a)): `LIELLA_LIBDIR` when
+/// the build sets it, else `lib`. The reference packages set `usr/lib/x86_64-linux-gnu`, the
+/// multiarch directory of their sysroot (docs/install-packages.md, RELEASE-PACKAGING-DEB).
+pub const LIBDIR: &str = match option_env!("LIELLA_LIBDIR") {
+    Some(d) => d,
+    None => "lib",
+};
+
 /// The longest path the loader builds (Linux `PATH_MAX`, NUL included); a longer candidate is skipped.
 pub const PATH_MAX: usize = 4096;
 
 /// Liella's own sonames besides the loader (R14-3 (a), threat model rule 9): libc, libm and the
-/// placeholder libraries (DL-1). They resolve to `<prefix>/lib` before any search.
+/// placeholder libraries (DL-1). They resolve to `<prefix>/<libdir>` ([`LIBDIR`]) before any search.
 pub const PINNED: &[&str] =
     &["libc.so.6", "libm.so.6", "libpthread.so.0", "libdl.so.2", "librt.so.1", "libutil.so.1", "libanl.so.1", "libc_malloc_debug.so.0"];
 
@@ -76,6 +84,12 @@ pub fn prefixed(sub: &[u8], out: &mut PathBuf) -> bool {
     out.push(PREFIX.trim_end_matches('/').as_bytes()) && out.push(b"/") && out.push(sub)
 }
 
+/// `<prefix>/<libdir>` ([`LIBDIR`]) into `out`, then `/<name>` when `name` is not empty: the
+/// directory of Liella's own libraries, or one of them.
+pub fn own_lib(name: &[u8], out: &mut PathBuf) -> bool {
+    prefixed(LIBDIR.trim_matches('/').as_bytes(), out) && (name.is_empty() || (out.push(b"/") && out.push(name)))
+}
+
 /// One object of the requester chain: its `DT_RPATH`, its `DT_RUNPATH` and its `$ORIGIN` (the
 /// directory of its resolved path; `None` when unknown).
 #[derive(Clone, Copy, Debug, Default)]
@@ -111,7 +125,7 @@ pub fn pinned(name: &[u8]) -> bool {
     PINNED.iter().any(|p| p.as_bytes() == name)
 }
 
-/// Whether `dir` is a trusted directory (threat model rule 5): `<prefix>/lib` and, when the prefix
+/// Whether `dir` is a trusted directory (threat model rule 5): `<prefix>/<libdir>` and, when the prefix
 /// is `/`, exactly the default directories [`Arch::SYSTEM_DIRS`] (owner #4237). A trailing `/` is
 /// ignored.
 pub fn trusted<A: Arch>(dir: &[u8]) -> bool {
@@ -120,7 +134,7 @@ pub fn trusted<A: Arch>(dir: &[u8]) -> bool {
         d => d,
     };
     let mut own = PathBuf::default();
-    (prefixed(b"lib", &mut own) && own.as_bytes() == dir) || (PREFIX == "/" && A::SYSTEM_DIRS.iter().any(|t| t.as_bytes() == dir))
+    (own_lib(b"", &mut own) && own.as_bytes() == dir) || (PREFIX == "/" && A::SYSTEM_DIRS.iter().any(|t| t.as_bytes() == dir))
 }
 
 /// The tokens and the value each expands to, in the order they are matched.
@@ -209,6 +223,43 @@ fn in_list<A: Arch>(list: &[u8], seps: &[u8], origin: Option<&[u8]>, name: &[u8]
     false
 }
 
+/// The directories a search for a bare, unpinned name by `chain[0]` tries, in [`search`]'s order,
+/// each expanded (`RTLD_DI_SERINFO`, dlinfo(3)): the `DT_RPATH`s of the chain (when `chain[0]` has
+/// no `DT_RUNPATH`; each object's own only while it has no `DT_RUNPATH`), `LD_LIBRARY_PATH`,
+/// `chain[0]`'s `DT_RUNPATH`, then the default directories. The cache is not a directory and the
+/// `glibc-hwcaps` subdirectories are tried inside each one, so neither is listed. `each` returns
+/// false to stop.
+pub fn dirs<A: Arch>(chain: &[Scope<'_>], ctx: &Ctx<'_>, each: &mut dyn FnMut(&[u8]) -> bool) {
+    let me = chain.first().copied().unwrap_or_default();
+    let program_origin = chain.last().and_then(|s| s.origin);
+    let env_path = if ctx.secure { None } else { ctx.library_path };
+    let mut dir = PathBuf::default();
+    let mut list = |l: &[u8], seps: &[u8], origin: Option<&[u8]>, each: &mut dyn FnMut(&[u8]) -> bool| {
+        l.split(|b| seps.contains(b)).all(|elem| !expand::<A>(elem, origin, ctx, &mut dir) || each(dir.as_bytes()))
+    };
+    if me.runpath.is_none() {
+        for s in chain.iter().filter(|s| s.runpath.is_none()) {
+            if s.rpath.is_some_and(|r| !list(r, b":", s.origin, each)) {
+                return;
+            }
+        }
+    }
+    if env_path.is_some_and(|p| !list(p, b":;", program_origin, each)) {
+        return;
+    }
+    if me.runpath.is_some_and(|r| !list(r, b":", me.origin, each)) {
+        return;
+    }
+    if PREFIX == "/" {
+        let _ = A::SYSTEM_DIRS.iter().all(|d| each(d.as_bytes()));
+        return;
+    }
+    let mut lib = PathBuf::default();
+    if prefixed(b"lib", &mut lib) {
+        let _ = each(lib.as_bytes());
+    }
+}
+
 /// Search for the object `name` needed by `chain[0]` (`chain[1..]`: the objects that loaded it, up
 /// to the program), handing each candidate path to `try_open` until it returns true. Returns
 /// whether an object was found. A name with `/` is tried as given (after token expansion); the
@@ -226,12 +277,12 @@ pub fn search<A: Arch>(name: &[u8], chain: &[Scope<'_>], ctx: &Ctx<'_>, try_open
     }
     if pinned(name) {
         // R14-3 (a): LD_LIBRARY_PATH may override outside secure mode (testing a libc build); then
-        // `<prefix>/lib` only, never the cache, RPATH/RUNPATH or another default directory.
+        // `<prefix>/<libdir>` only, never the cache, RPATH/RUNPATH or another default directory.
         if env_path.is_some_and(|p| in_list::<A>(p, b":;", program_origin, name, ctx, try_open)) {
             return true;
         }
         let mut path = PathBuf::default();
-        return prefixed(b"lib/", &mut path) && path.push(name) && try_open(&mut path);
+        return own_lib(name, &mut path) && try_open(&mut path);
     }
     if me.runpath.is_none() {
         for s in chain.iter().filter(|s| s.runpath.is_none()) {
@@ -254,10 +305,10 @@ pub fn search<A: Arch>(name: &[u8], chain: &[Scope<'_>], ctx: &Ctx<'_>, try_open
         }
     }
     // The default directories: the system's when the prefix is `/` (they include `/lib`), else
-    // `<prefix>/lib` only (R14-3 (a)).
+    // `<prefix>/<libdir>` only (R14-3 (a)).
     if PREFIX == "/" {
         return A::SYSTEM_DIRS.iter().any(|d| in_dir(d.as_bytes(), name, ctx, &mut path, try_open));
     }
     let mut dir = PathBuf::default();
-    prefixed(b"lib", &mut dir) && in_dir(dir.as_bytes(), name, ctx, &mut path, try_open)
+    own_lib(b"", &mut dir) && in_dir(dir.as_bytes(), name, ctx, &mut path, try_open)
 }

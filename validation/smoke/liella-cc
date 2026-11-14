@@ -1,0 +1,54 @@
+#!/bin/sh
+# validation/smoke/liella-cc (and liella-c++, a link to it): the compiler a smoke build uses as CC/CXX.
+# Made for validation/smoke/smoke.sh, which sets the environment below; see validation/smoke/README.md.
+#
+# Compiling is the system compiler with the system's headers, unchanged (Liella has no header set; it is
+# ABI-compatible with the glibc 2.39 headers). Linking follows the dynamic link line of conformance/run.sh:
+# the loader does not search for libraries by soname yet, so Liella's libc.so.6 is linked by path (a copy
+# without DT_SONAME in $LIELLA_SMOKE_SYSROOT, which smoke.sh makes) and libm from Liella's libm.a (its
+# libm.so.6 names libc.so.6 by soname, which needs the search), the program interpreter is
+# Liella's loader, and no other C library is named. -L$LIELLA_SMOKE_SYSROOT comes first, so -lm, -lpthread,
+# -ldl, -lrt, -lutil, -lanl and -lresolv resolve to Liella's objects, never to the system's.
+# C++ links libstdc++ and the unwinder statically (no libstdc++.so.6 / libgcc_s.so.1 to search for).
+#
+# Every program a smoke build makes is checked afterwards (check-elf.sh), so a link that falls back to the
+# system's C library fails the run instead of passing on the wrong library.
+#
+# Environment: LIELLA_SMOKE_SYSROOT, LIELLA_SMOKE_LDSO (required); LIELLA_REAL_CC (default gcc),
+# LIELLA_REAL_CXX (default g++).
+set -eu
+sys=${LIELLA_SMOKE_SYSROOT:?liella-cc: LIELLA_SMOKE_SYSROOT is not set (run through validation/smoke/smoke.sh)}
+ldso=${LIELLA_SMOKE_LDSO:?liella-cc: LIELLA_SMOKE_LDSO is not set}
+
+case ${0##*/} in
+    *++) cc=${LIELLA_REAL_CXX:-g++}; cxx=yes ;;
+    *) cc=${LIELLA_REAL_CC:-gcc}; cxx=no ;;
+esac
+
+[ $# -eq 1 ] && [ "$1" = -v ] && exec "$cc" -v
+mode=dynamic
+for a in "$@"; do
+    case $a in
+        -c | -S | -E | -M | -MM | --version | -dumpversion | -dumpfullversion | -dumpmachine | -print-* | -V | -qversion)
+            exec "$cc" "$@" ;;
+        -shared) mode=shared ;;
+        -static | -static-pie)
+            echo "liella-cc: $a is not supported by the smoke harness (the dynamic link is what it checks)" >&2
+            exit 2 ;;
+    esac
+done
+
+if [ ! -f "$sys/libc.so" ] || [ ! -x "$ldso" ]; then
+    echo "liella-cc: $sys/libc.so or $ldso is missing (smoke.sh setup makes them)" >&2
+    exit 1
+fi
+
+if [ $cxx = yes ]; then
+    set -- "$@" -Wl,-Bstatic -lstdc++ -Wl,-Bdynamic -lm
+fi
+# `-x none`: a `-x LANG` among the program's arguments (`-xc -`) must not make the libc.so script a source.
+if [ $mode = dynamic ]; then
+    exec "$cc" -nodefaultlibs -L"$sys" "-Wl,--dynamic-linker=$ldso" "$@" \
+        -x none -Wl,--start-group "$sys/libc.so" -lgcc -lgcc_eh -Wl,--end-group
+fi
+exec "$cc" -nodefaultlibs -L"$sys" "$@" -x none -Wl,--start-group "$sys/libc.so" -lgcc -lgcc_eh -Wl,--end-group

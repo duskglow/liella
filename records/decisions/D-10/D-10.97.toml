@@ -1,0 +1,10 @@
+id = "D-10.97"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+story = "LIBM-F128-TRIG-INT-5"
+date = "2026-11-11"
+body = '''
+**`_Float128` `asin`/`acos`: the three-limb integer first tier through the `atan2` route (exact `1 − a²`, a 192-bit root, D-10.96's kernel on 192-bit operands), proved within `2^-160.2` relative and rounded by the binary128 rounding test** (LIBM-F128-TRIG-INT-5/-6; extends D-10.96 to the inverse sine and cosine; contract D-10.19 unchanged: correctly rounded in every mode, the 384-bit route settles what the test cannot decide). Method: `asin a = atan(a/√(1 − a²))`, `acos a = atan(√(1 − a²)/a)` (composed with `π` for `a < 0`), with `1 − a²` exact (`A²` in 256 bits), the root from a correctly rounded `double` square root (`sqrtsd` at the boundary, as the `long double` rows) refined by one 128-bit and one 192-bit Newton step with the reciprocal refined once (`2^-98.8`), the root within `2^-186`; then Tang's table method on the numerator and denominator (`y − cx`, `x + cy` on the 192-bit significands) and the binary128 quotient. A direct `asin` kernel (Taylor centres with their own coefficients) was rejected: about 20 terms of 192 bits per centre (tens of KB of table) and a root needed above `1/2` anyway. Proof in `crates/math/src/wide_int/quad/arc.rs` steps 7-9 (module doc). Evidence: unit tests, 21 120 hard cases and a 10^7 release sweep with 0 undecided, worst error `2^-161.36`; plants in handoff/LIBM-F128-TRIG-INT-6-plants.txt. Sources (specifications): P. T. P. Tang, "Table-lookup algorithms for elementary functions and their error analysis", ARITH 10 (1991); R. P. Brent and P. Zimmermann, Modern Computer Arithmetic, ch. 3-4 (Newton iteration for the root and reciprocal); J.-M. Muller, Elementary Functions, ch. 2 (argument reduction and error analysis).
+'''

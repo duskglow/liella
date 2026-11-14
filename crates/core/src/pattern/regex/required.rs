@@ -38,7 +38,9 @@ fn ix(pc: u32) -> usize {
 fn succ(p: &ProgRef<'_>, pc: u32) -> [u32; 2] {
     let Some(i) = get(p, pc) else { return [NONE, NONE] };
     let s = match i.op {
-        OP_BYTE | OP_SET | OP_OPEN | OP_CLOSE | OP_ASSERT | OP_BACKREF | OP_ENTER => [i.b, NONE],
+        OP_BYTE | OP_SET | OP_OPEN | OP_CLOSE | OP_ASSERT | OP_BACKREF => [i.b, NONE],
+        // `c`: an optional iteration's skip, or `NONE`.
+        OP_ENTER => [i.b, i.c],
         OP_SPLIT => [i.a, i.b],
         OP_JMP => [i.a, NONE],
         OP_EXIT => [i.b, i.c],
@@ -178,7 +180,9 @@ fn chain(p: &ProgRef<'_>, mut pc: u32) -> Option<TryVec<u8>> {
                 }
                 pc = i.b;
             }
-            OP_OPEN | OP_CLOSE | OP_ASSERT | OP_ENTER => pc = i.b,
+            // An `ENTER` with a skip (`c`) is a split: its iteration is not on every path.
+            OP_OPEN | OP_CLOSE | OP_ASSERT => pc = i.b,
+            OP_ENTER if i.c == NONE => pc = i.b,
             OP_JMP => pc = i.a,
             _ => break,
         }

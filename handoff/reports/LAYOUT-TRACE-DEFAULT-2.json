@@ -1,0 +1,62 @@
+{
+ "task": "LAYOUT-TRACE-DEFAULT-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "trace-at-build default proven on mei and keke (same fault table base vs libm-merged, both profiles); start-up bounds ratcheted to the traced counts; layout rule d counts pending decision records",
+ "branch": "task/layout-trace-default-2",
+ "head": "5e9cb79d2",
+ "gate": {
+  "affected": "running at hand-back (layout-trace-default-2-gate2, escalated to FULL)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "layout rule d now accepts a changed pending decision record (records/pending/, id D-...) as the decision change for a contracts.tsv change; it was red for any contract change waiting for its id",
+   "recommendation": "accept; the coordinator still assigns the id and CI still holds the branch until then"
+  }
+ ],
+ "informational": [
+  "Release libc.a is byte-identical across Skylake-SP and Zen 1 hosts for the same tree; a libm-only change leaves every .text section of release libc.a unchanged",
+  "Fast profile: a libm-only change recompiles about 290 functions outside libm (inlining), runtime::start among them; lists follow, fault table does not move",
+  "Fast hot-text.list held one extra-tier key (Catalogs::identity) in two of three builds of the same product sources; fault table identical",
+  "Bounds sit at the measured counts with no margin; shiki and kanon were not measured",
+  "Release check for CI: LIELLA_FULL_PROFILE=1 cargo xtask so && LIELLA_FULL_PROFILE=1 cargo test -p liella --test hot_text_products, after the fast gate in the same tree; about 5 min on quiet mei, 9-10 min under load"
+ ],
+ "refused": [],
+ "impact": [
+  {
+   "kind": "correctness",
+   "what": "start-up page-fault bounds tightened: TRUE 17->11, LOCALE 51->47, TOOL 56->50, FORK 6->5, LOCALTIME and LOCALTIME_MKTIME 20->18, FLOAT 5->3; contracts STARTUP-TEXT-WINDOWS 4/4->2/2, STARTUP-DATA-WINDOWS rw 20/21->11/14",
+   "before": null,
+   "after": null,
+   "unit": "page faults",
+   "measured": true
+  },
+  {
+   "kind": "coverage",
+   "what": "rule d tests and plants for pending decision records",
+   "before": 5,
+   "after": 8,
+   "unit": "plants",
+   "measured": true
+  },
+  {
+   "kind": "unblock",
+   "what": "stories held on start-up layout jitter (owner ruling #4347) once this lands; LT-5",
+   "before": null,
+   "after": null,
+   "unit": null,
+   "measured": false
+  }
+ ],
+ "improvement": "run handback-check's id scan (or a static step doing the same) before starting long jobs: a placeholder id in a test string cost a full restart of gate, plants and proof",
+ "next_step": "coordinator: assign the D-X id of records/pending/LAYOUT-TRACE-DEFAULT-1.toml, read gate2, plants3 and proof2, wire the release check into the CI gate; then LT-5",
+ "report_file": "handoff/LAYOUT-TRACE-DEFAULT.md",
+ "jobs": [
+  "layout-trace-default-2-gate2",
+  "layout-trace-default-2-plants3",
+  "layout-trace-default-2-proof2",
+  "layout-trace-default-2-lint3"
+ ]
+}

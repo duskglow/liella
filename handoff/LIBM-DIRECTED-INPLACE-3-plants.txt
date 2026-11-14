@@ -1,0 +1,8 @@
+# LIBM-DIRECTED-INPLACE-3 plants: the directed exp quick phase's direction chosen by instance (D-10.94)
+dir3-instances-swapped | crates/boundary/src/hot/exp_log.rs | lit:{ exp_directed_in::<true>(x) } else { exp_directed_in::<false>(x) } ==> { exp_directed_in::<false>(x) } else { exp_directed_in::<true>(x) } | cargo test -p liella-boundary --test exp_quick | msg:exp_directed_.*FAILED|correctly rounded
+dir3-down-takes-up | crates/boundary/src/hot/exp_log.rs | lit:else { exp_directed_in::<false>(x) } ==> else { exp_directed_in::<true>(x) } | cargo test -p liella-boundary --test exp_quick | msg:exp_directed_.*FAILED|correctly rounded
+dir3-h-sign | crates/math/src/fast64/quick.rs | lit:let h = if UP { -0.5 } else { 0.5 }; ==> let h = if UP { 0.5 } else { -0.5 }; | cargo test -p liella-boundary --test exp_quick | msg:exp_directed_.*FAILED|correctly rounded
+# cargo xtask plants results (3 plants: 3 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# dir3-instances-swapped: CAUGHT, caught by exp_quick exp_directed_declines_at_breakpoints_and_the_entry_rounds_them
+# dir3-down-takes-up: CAUGHT, caught by exp_quick exp_directed_rounds_correctly_in_both_builds
+# dir3-h-sign: CAUGHT, caught by exp_quick exp_directed_declines_at_breakpoints_and_the_entry_rounds_them

@@ -272,7 +272,7 @@ fn bessel_n_rounding_tests_decline_straddles() {
 }
 
 #[test]
-#[ignore = "10^7 operands per function: run by the accuracy job (LIELLA_BESSEL_N_SWEEP)"]
+#[ignore = "10^7 operands per function (LIELLA_BESSEL_N_SWEEP): cargo xtask long-sweeps runs it in release (nightly and release runs)"]
 fn bessel_n_tier_sweep() {
     // Clauses: s10_3_c_0 (D-10.13, D-10.76).
     // `LIELLA_BESSEL_N_SWEEP` operands (default 10^7) per function over the regimes, every mode,

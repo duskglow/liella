@@ -1,0 +1,19 @@
+{"task": "STARTUP-DATA-PAGE-ALIGN-3", "model": "opus", "tokens": null,
+ "result": "proof done on mei, keke and kanon from scratch clones of origin: head and head+LIBM-F32-BESSEL-LARGE-6 give 7 fast / 8 release written start-up pages on every host (next 11 / 14); global_locale::SLOTS page-aligned (release 9 -> 8); release budget 9 -> 8",
+ "branch": "task/startup-data-page-align-3", "head": "86b947476",
+ "gate": {"affected": "32 suites, 11760 passed / 0 failed; conformance 134 passed / 0 failed (sdpa3-gate3, shiki)", "peak": "11G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["At today's next (545ad4882) merging LIBM-F32-BESSEL-LARGE-6 no longer moves next's own count on mei or keke (11 / 14 both); the head's count is unchanged by the merge on mei, keke and kanon", "the remaining extra relro page per profile (fast 0x85a000, release 0x7b6000 on mei) holds only .got entries: placing .got next to the cluster could save one more page"],
+ "refused": [],
+ "impact": [
+  {"kind": "faults", "what": "written start-up data pages (STARTUP-DATA-WINDOWS), release, mei/keke/kanon", "before": 9, "after": 8, "unit": "pages", "measured": true},
+  {"kind": "faults", "what": "written start-up data pages, fast / release, branch vs today's next on mei and keke", "before": 11, "after": 7, "unit": "pages (fast; release 14 -> 8)", "measured": true},
+  {"kind": "size", "what": "SLOTS alignment: release libc.a 11692274 and libc.so.6 5297248, identical to run 2's head (.lbss is NOBITS)", "before": 5297248, "after": 5297248, "unit": "bytes", "measured": true},
+  {"kind": "coverage", "what": "plants (adds sdpa-slots-align; sdpa-reserve-align msg now matches the contract's catch) and the SLOTS alignment check in the products test", "before": 4, "after": 5, "unit": "plants", "measured": true},
+  {"kind": "unblock", "what": "LIBM-F32-BESSEL-LARGE-7, SMOKE-ERRNO-FIXES-3 (held on this story)", "before": null, "after": null, "unit": null, "measured": false}
+ ],
+ "improvement": "the Edit tool silently dropped a TAB in a .tsv replacement (contracts row went 5 columns, a gate+plants cycle lost); a pre-push check that every row of layout/contracts.tsv has 6 columns, or a static check run before sync, would catch it in seconds",
+ "next_step": "land; optional: place .got beside the start-up relro cluster (one page per profile)",
+ "report_file": "handoff/STARTUP-DATA-PAGE-ALIGN.md",
+ "jobs": ["sdpa3-gate3", "sdpa3-plants2", "mei:sdpa3-proof2-next", "mei:sdpa3-proof2-head", "keke:sdpa3-proof2-next", "keke:sdpa3-proof2-head", "kanon:sdpa3-proof2-head"]}

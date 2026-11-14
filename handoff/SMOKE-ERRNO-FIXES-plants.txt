@@ -1,0 +1,11 @@
+# SMOKE-ERRNO-FIXES plants (docs/plants.md format: id | path | pattern | cmd | msg:<regex>)
+# P1: the removed directory's ENOENT reported again (the old behaviour): s13_2_f_0 must catch it.
+P1-removed-dir-enoent | crates/core/src/fs/dir.rs | lit:Err(Errno::ENOENT) => return Ok(false), ==> Err(Errno::ENOENT) => return Err(Errno::ENOENT), | cargo test -p liella --test s13_filesystem_clauses s13_2_f_0 | msg:removed directory: the end, errno left alone
+# P2: a failed setlocale leaves errno alone (the old behaviour): s7_2_f_0 must catch it.
+P2-setlocale-no-errno | crates/boundary/src/locale.rs | lit:crate::errno::set(if known { ==> let _ = (if known { | cargo test -p liella --test s07_locale_clauses s7_2_f_0 | msg:fails with ENOENT
+# P3: LC_ALL taken for an unknown category (every LC_ALL failure EINVAL): s7_2_f_0 must catch it.
+P3-setlocale-lc-all-einval | crates/boundary/src/locale.rs | lit:let known = category == 6 ==> let known = category == 99 | cargo test -p liella --test s07_locale_clauses s7_2_f_0 | msg:fails with ENOENT
+# cargo xtask plants results (3 plants: 3 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG, 0 BUILD-TIMEOUT):
+# P1-removed-dir-enoent: CAUGHT, caught by s13_filesystem_clauses s13_2_f_0
+# P2-setlocale-no-errno: CAUGHT, caught by s07_locale_clauses s7_2_f_0
+# P3-setlocale-lc-all-einval: CAUGHT, caught by s07_locale_clauses s7_2_f_0

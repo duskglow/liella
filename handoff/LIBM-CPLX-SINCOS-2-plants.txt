@@ -1,0 +1,8 @@
+# LIBM-CPLX-SINCOS-2: the csinh/csin quick tier (crates/math/src/complex_fast_sinh.rs, fast32/csinh.rs)
+sinh-recip-lo | crates/math/src/complex_fast_sinh.rs | perl:s/\(\(1\.0 - p\.hi\) - p\.lo\) - e\.lo \* r0;/((1.0 - p.hi) - p.lo);/ | cargo test -p liella-math --lib complex_fast::sinh | msg:(hyperbolic_factors_are_within_their_bounds|csinh_quick_tier_[a-z_0-9]+) \.\.\. FAILED
+sinh-series-t2 | crates/math/src/complex_fast_sinh.rs | perl:s/u\.lo \+ \(t1\.lo \+ t2\)/u.lo + t1.lo/ | cargo test -p liella-math --lib complex_fast::sinh | msg:(hyperbolic_factors_are_within_their_bounds|csinh_quick_tier_[a-z_0-9]+) \.\.\. FAILED
+sinh-q-cut | crates/math/src/complex_fast_sinh.rs | perl:s/if a <= Q_MAX \{/if a <= 20.0 {/ | cargo test -p liella-math --lib complex_fast::sinh | msg:hyperbolic_factors_are_within_their_bounds \.\.\. FAILED
+sinh-sign | crates/math/src/complex_fast_sinh.rs | perl:s/if x < 0\.0 \{ sh\.neg\(\) \} else \{ sh \}/sh/ | cargo test -p liella-math --lib complex_fast::sinh | msg:csinh_quick_tier_[a-z_0-9]+ \.\.\. FAILED
+sinh-swap | crates/math/src/complex_fast_sinh.rs | perl:s/if swap \{ \(p1, p0\) \}/if swap { (p0, p1) }/ | cargo test -p liella-math --lib complex_fast::sinh | msg:csinh_quick_tier_[a-z_0-9]+ \.\.\. FAILED
+sinh-nearest-args | crates/math/src/complex_fast_sinh.rs | perl:s/both\(y, x, true, Rounding::Nearest\)/both(x, y, true, Rounding::Nearest)/ | cargo test -p liella-math --lib complex_fast::sinh | msg:csinh_quick_tier_matches_the_384_bit_route_in_every_mode \.\.\. FAILED
+sinhf-cosh-core | crates/math/src/fast32/csinh.rs | perl:s/let sh = sinh_core\(x\)\?;/let sh = cosh_core(x)?;/ | cargo test -p liella-math --lib complex_fast::sinh | msg:csinhf_quick_tier_matches_the_route_in_every_mode \.\.\. FAILED

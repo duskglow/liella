@@ -1,0 +1,25 @@
+{"task": "REGCOMP-DEEP-NESTING-4", "model": "opus", "tokens": null,
+ "result": "hybrid regex compiler (ruling #5529): recursion below 64 nested calls, explicit stack beyond; every regcomp/regexec percall row equal or better than base; depth 100,000 still compiles on a 64 KiB stack",
+ "branch": "task/regcomp-deep-nesting-4", "head": "a787339d17bb34f921868e0d9a9e927546e6f746",
+ "gate": {"affected": "3999 passed / 0 failed (6 suites, 68 ignored), conformance 2/2; clippy + static clean (gate3); plants3 12 CAUGHT / 0 SURVIVED / 1 EQUIVALENT, no WARN", "peak": "1.7G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "Switch-depth-0 plant is caught by a deterministic unit test of the hand-off point (test-only counter), not by an instruction-count test: both paths build the same program, so a cost assertion needs a reference the plant does not move, and absolute instruction bounds drift with unrelated code.",
+   "Stack bound: node frame 160 B, rep_rec 192 B (release objdump); 64 levels = 22.5 KiB worst case.",
+   "Process slip: one local file edit used a heredoc (python3 - <<EOF) against the brief's no-heredoc rule; no effect on the tree."
+ ],
+ "refused": [],
+ "impact": [
+   {"kind": "perf", "what": "regcomp_literal_nosub (regcomp+regfree) per call vs base d53c0d551", "before": 17559, "after": 17475, "unit": "instr/call", "measured": true},
+   {"kind": "perf", "what": "regcomp_ipv4 per call vs base", "before": 132910, "after": 131161, "unit": "instr/call", "measured": true},
+   {"kind": "perf", "what": "regcomp_sed_groups per call vs base", "before": 77906, "after": 75673, "unit": "instr/call", "measured": true},
+   {"kind": "perf", "what": "regcomp_email_alt per call vs base", "before": 106428, "after": 101981, "unit": "instr/call", "measured": true},
+   {"kind": "perf", "what": "regcomp_kv_bre per call vs base", "before": 74139, "after": 70854, "unit": "instr/call", "measured": true},
+   {"kind": "correctness", "what": "regcomp of patterns nested 256+ deep (groups, alternations) compiles instead of REG_ESPACE; 100,000 levels on a 64 KiB stack", "before": null, "after": null, "unit": null, "measured": true},
+   {"kind": "coverage", "what": "tests added in run 4 (hand-off bound, recursion/explicit-stack equivalence over 22 patterns, nullable facts) and 13 plants", "before": null, "after": 3, "unit": "tests", "measured": true}
+ ],
+ "improvement": "Run 3's plants file was never run; a plant written but not run hid a test gap (nullable facts) for a whole run: run plants in the same run they are written, before the hand-back.",
+ "next_step": "Land; follow-ups REGCOMP-SCOPE-COST (ruling #5505) and matcher capture cost with many groups.",
+ "report_file": "handoff/regex-deep-nesting.md",
+ "jobs": ["regcomp-deep-nesting-4-gate3", "regcomp-deep-nesting-4-plants3", "regcomp-deep-nesting-4-percall3"]}
