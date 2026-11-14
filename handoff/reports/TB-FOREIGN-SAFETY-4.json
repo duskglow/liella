@@ -1,0 +1,15 @@
+{"task": "TB-FOREIGN-SAFETY-4", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: merged next; next's new STARTUP-DATA-WINDOWS contract fails on this branch (fast 4>3, release 5>4 ro windows) because ThinLTO text churn moves .rodata across 64 KiB boundaries; no start-up data added; clippy+static green; gate/plants/counts blocked",
+ "branch": "task/tb-foreign-safety-4", "head": "9698c773b",
+ "gate": {"affected": "not run (cargo xtask so fails the layout contract)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [
+   {"item": "STARTUP-DATA-WINDOWS ro budget moves with total text size mod 64 KiB; this branch is +1 window per profile with +0x30 bytes rodata", "recommendation": "cut the D-X.50 item-3 follow-up for read-only start-up data (one placement section, e.g. .rodata1) and land this branch on top; else accept +1 ro window per profile (owner's call)"},
+   {"item": "#4287 +2 instructions per locale-word access", "recommendation": "count on the head after the layout ruling (base saved, join script ready)"}
+ ],
+ "informational": ["origin/next on the same host: fast 2 ro windows / 20 rw pages (rw at budget)", "release lone window: tunables type string compared by runtime::start, present on next"],
+ "refused": [],
+ "improvement": "layout budgets for quantities that depend on text size mod 64 KiB should come with the grouping that makes them stable, or every text-growing branch flips them by luck",
+ "next_step": "apply the layout ruling, then regen hot-text in both profiles, tests, gate, plants, counts (handoff Exact next step)",
+ "report_file": "handoff/TB-FOREIGN-SAFETY.md",
+ "jobs": ["tbfs4-lint-2"]}

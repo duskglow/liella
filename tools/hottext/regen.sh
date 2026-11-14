@@ -20,6 +20,9 @@
 #   LAYOUT-TRACE-AT-BUILD-2: the trace set is checked against the modes of page_faults.c (the modes
 #   hot_text_products.rs measures); a mode not traced fails by name.
 set -eu
+# No __pycache__ in the tree: a compiled module embeds this tree's absolute path, which the
+# private-paths check of `cargo xtask static` rejects in a role tree.
+export PYTHONDONTWRITEBYTECODE=1
 here=$(cd "$(dirname "$0")" && pwd)
 T=$(cd "$1" && pwd); shift
 L=${LIELLA_HOT_LISTS:-}
