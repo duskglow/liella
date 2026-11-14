@@ -13,7 +13,8 @@
   "rulings": [],
   "informational": [
     "fault table (keke, Zen 1, traced default, lowest of 5): startup 11/10/11, setlocale+printf 47/47/46, coreutils-shaped 51/49/50, fork 5/5/5 for branch fast / branch release / next fast; bounds 11, 47, 50, 5",
-    "the +1 in fast comes with this branch's setlocale code (setlocale_env path), so it is not unrelated layout jitter; no bound was changed"
+    "the +1 in fast comes with this branch's setlocale code (setlocale_env path), so it is not unrelated layout jitter; no bound was changed",
+    "evidence jobs, not on the final tree: setlocale-ctype-env-4-lint0 (step 0 on inherited head a224aa144, rc 0), setlocale-ctype-env-4-nextfaults (next 8f3e2993e fast, rc 0)"
   ],
   "refused": [],
   "impact": [
@@ -40,8 +41,6 @@
   "jobs": [
     "setlocale-ctype-env-4-gate",
     "setlocale-ctype-env-4-layout",
-    "setlocale-ctype-env-4-layout-rel",
-    "setlocale-ctype-env-4-nextfaults",
-    "setlocale-ctype-env-4-lint0"
+    "setlocale-ctype-env-4-layout-rel"
   ]
 }
