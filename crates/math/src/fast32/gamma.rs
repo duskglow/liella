@@ -172,13 +172,11 @@ const EDGE_MAX_MARGIN: f64 = 67_108_864.0;
 
 /// lnΓ(x) for x < -42 by [`lgamma_reflect`] (its margin is not [`lgamma_edge`]'s: the fourth
 /// value is false), `None` for every other x (NaN included). Reached only where the `double`
-/// pieces and [`lgamma_edge`]'s kernel's domain have refused x, and its own function: inlined
-/// into [`lgamma_edge`], the reflection made that function's prologue save more registers, and
-/// a test ahead of [`lgamma_edge`] in [`lgamma_core_signed`] split its two refusal calls into
-/// two call sites; each cost the cbench row beside the zero at -3.14382577 4 to 6 instructions
-/// per call (LIBM-LGAMMAF-EDGE-3, -4).
-#[cold]
-#[inline(never)]
+/// pieces and [`lgamma_edge`]'s kernel's domain have refused x: a test ahead of [`lgamma_edge`]
+/// in [`lgamma_core_signed`] split its two refusal calls into two call sites, and a test first
+/// in [`lgamma_edge`] sat on the path of every operand it takes; each cost the cbench row beside
+/// the zero at -3.14382577 4 to 6 instructions per call (LIBM-LGAMMAF-EDGE-3, -4).
+#[inline(always)]
 fn lgamma_wide(xd: f64) -> Option<(f64, u64, i32, bool)> {
     if xd < -42.0 {
         return lgamma_reflect(xd);
