@@ -34,7 +34,7 @@
 use core::cmp::Ordering;
 
 use crate::dd::{self, two_prod, Dd};
-use crate::fast32;
+use crate::fast32::{self, Fast};
 use crate::fast64;
 use crate::status::{Flags, Rounding, Status};
 
@@ -374,19 +374,16 @@ pub fn yn(n: i32, x: f64, mode: Rounding) -> Option<(f64, Status)> {
 }
 
 /// `jnf(n, x)` through the `double` kernels, or `None` (zero, subnormal and non-finite `x`).
-/// Orders 0 and ±1 are `j0f` and `j1f` themselves (`J_{−1}(x) = J_1(−x)`; a NaN keeps its sign on
-/// the accurate path), so they share the large band (D-10.109). The order is tested first, in the
-/// match the higher orders take anyway: they pay nothing for it (LIBM-JNF-LARGE).
+/// (`special::jn` answers orders 0 and ±1 by `j0f` and `j1f` before this tier.)
 pub fn jnf(n: i32, x: f32, mode: Rounding) -> Option<(f32, Status)> {
+    if !x.is_normal() {
+        return None;
+    }
     let (m, flip) = order(n);
     match m {
-        0 => Some(crate::special::j0(x, mode)),
-        1 if !flip => Some(crate::special::j1(x, mode)),
-        1 if !x.is_nan() => Some(crate::special::j1(-x, mode)),
+        0 => fast32::eval(Fast::J0, x, mode),
+        1 => fast32::eval(Fast::J1, if flip { -x } else { x }, mode),
         _ => {
-            if !x.is_normal() {
-                return None;
-            }
             let (y, eps, e) = jn_kernel(m, f64::from(x.abs()))?;
             let neg = flip != (m % 2 == 1 && x < 0.0);
             near32(if neg { y.neg() } else { y }, eps, e, mode)
@@ -394,21 +391,18 @@ pub fn jnf(n: i32, x: f32, mode: Rounding) -> Option<(f32, Status)> {
     }
 }
 
-/// `ynf(n, x)` through the `double` kernels, or `None`. Orders 0 and ±1 are `y0f` and `y1f`
-/// themselves, as in [`jnf`] (`Y_{−1}(x) = −Y_1(x)` rounded in the mirrored mode, finite x > 0).
+/// `ynf(n, x)` through the `double` kernels, or `None`. (`special::yn` answers orders 0 and ±1
+/// by `y0f` and `y1f` before this tier.)
 pub fn ynf(n: i32, x: f32, mode: Rounding) -> Option<(f32, Status)> {
+    if !x.is_normal() || x.is_sign_negative() {
+        return None;
+    }
     let (m, flip) = order(n);
     match m {
-        0 => Some(crate::special::y0(x, mode)),
-        1 if !flip => Some(crate::special::y1(x, mode)),
-        1 if x > 0.0 && x < f32::INFINITY => {
-            let (v, st) = crate::special::y1(x, mirrored(mode));
-            Some((-v, st))
-        }
+        0 => fast32::eval(Fast::Y0, x, mode),
+        1 if flip => fast32::eval(Fast::Y1, x, mirrored(mode)).map(|(v, st)| (-v, st)),
+        1 => fast32::eval(Fast::Y1, x, mode),
         _ => {
-            if !x.is_normal() || x.is_sign_negative() {
-                return None;
-            }
             let (y, eps) = yn_kernel(m, f64::from(x))?;
             near32(if flip { y.neg() } else { y }, eps, 0, mode)
         }

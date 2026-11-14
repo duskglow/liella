@@ -984,14 +984,23 @@ fn limit<F: Float>() -> i64 {
 }
 
 /// `jn(n, x)`: `double` and `float` try the recurrence tier ([`crate::fast_bessel::n`]) first, then
-/// [`jn_accurate`]. The `float` tier answers orders 0 and ±1 by [`j0`] and [`j1`] themselves, so
-/// they share the large band (D-10.109) and agree with `j0f`/`j1f` bit for bit.
+/// [`jn_accurate`]. `float` orders 0 and ±1 are [`j0`] and [`j1`] themselves (`J_{−1}(x) = J_1(−x)`;
+/// a NaN keeps its sign on the accurate path), so they share the large band (D-10.109) and agree
+/// with `j0f`/`j1f` bit for bit; one range test, so the higher orders pay one compare.
 pub fn jn<F: Float>(n: i32, x: F, mode: Rounding) -> (F, Status) {
     if F::PREC == 53 {
         if let Some(r) = from_fast("jn", fast_bessel::n::jn(n, as_f64(x), mode)) {
             return r;
         }
     } else if F::PREC == 24 {
+        if n.unsigned_abs() <= 1 {
+            return match n {
+                0 => j0(x, mode),
+                1 => j1(x, mode),
+                _ if f32::from_bits(x.to_bits() as u32).is_nan() => jn_accurate(n, x, mode),
+                _ => j1(F::from_bits(x.to_bits() ^ 0x8000_0000), mode),
+            };
+        }
         let r = fast_bessel::n::jnf(n, f32::from_bits(x.to_bits() as u32), mode);
         crate::stats::record("jnf", r.is_some());
         if let Some((v, st)) = r {
@@ -1008,6 +1017,20 @@ pub fn yn<F: Float>(n: i32, x: F, mode: Rounding) -> (F, Status) {
             return r;
         }
     } else if F::PREC == 24 {
+        // Orders 0 and ±1 are y0f and y1f themselves, as in [`jn`]; `Y_{−1} = −Y_1` (mirrored
+        // mode) for finite x > 0, the rest of order −1 on the accurate path.
+        if n.unsigned_abs() <= 1 {
+            let xf = f32::from_bits(x.to_bits() as u32);
+            return match n {
+                0 => y0(x, mode),
+                1 => y1(x, mode),
+                _ if !(xf > 0.0 && xf < f32::INFINITY) => yn_accurate(n, x, mode),
+                _ => {
+                    let (v, st) = y1(x, fast_bessel::mirrored(mode));
+                    (F::from_bits(v.to_bits() ^ 0x8000_0000), st)
+                }
+            };
+        }
         let r = fast_bessel::n::ynf(n, f32::from_bits(x.to_bits() as u32), mode);
         crate::stats::record("ynf", r.is_some());
         if let Some((v, st)) = r {
