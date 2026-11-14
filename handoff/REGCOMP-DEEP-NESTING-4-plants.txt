@@ -1,0 +1,26 @@
+# REGCOMP-DEEP-NESTING-4 plants (cargo xtask plants; docs/plants.md)
+# Hybrid compiler (ruling #5529). The switch depth set to infinity: deep trees recurse on the native stack.
+switch-infinite | crates/core/src/pattern/regex/program.rs | lit:const RECURSE_DEPTH: u32 = 64; ==> const RECURSE_DEPTH: u32 = u32::MAX; | cargo test -p liella --test regex_deep_nesting | msg:overflowed its stack|SIGSEGV|SIGABRT
+# The switch depth set to 0: every tree goes to the explicit-stack compiler (same program, the slower path).
+switch-zero | crates/core/src/pattern/regex/program.rs | lit:const RECURSE_DEPTH: u32 = 64; ==> const RECURSE_DEPTH: u32 = 0; | cargo test -p liella --lib recursion_tests | msg:compiler_recurses_below_its_bound_and_hands_off_at_it.*FAILED|left the recursion
+# The recursion stops counting its depth: it never reaches the switch.
+depth-uncounted | crates/core/src/pattern/regex/program.rs | lit:let d = depth + 1; ==> let d = depth; | cargo test -p liella --test regex_deep_nesting | msg:overflowed its stack|SIGSEGV|SIGABRT
+# The recursive repetition's scoped mandatory copies off by one (the path shallow patterns use).
+rep-rec-last | crates/core/src/pattern/regex/program.rs | perl:s/(fn rep_rec.*?)last = m - 1;/${1}last = m;/s | cargo test -p liella --lib recursion_tests | msg:recursion_and_explicit_stack_build_the_same_program.*FAILED|panicked
+# Run 2/3 plants on the current code. The explicit-stack compiler recurses again for a group's body.
+compile-recurses | crates/core/src/pattern/regex/program.rs | lit:Step::Call(Call { id: x, next: close, chain, share: NONE, bare: false }) ==> Step::Done(self.compile(t, Call { id: x, next: close, chain, share: NONE, bare: false })?) | cargo test -p liella --test regex_deep_nesting | msg:overflowed its stack|SIGSEGV|SIGABRT
+# The depth limit reintroduced: the parser refuses a group past 256 open ones.
+depth-limit | crates/core/src/pattern/regex/parse.rs | lit:self.open += 1; ==> self.open += 1; if self.open > 256 { return Err(ReError::ESpace); } | cargo test -p liella --test regex_deep_nesting --test regex_pre14_triage | msg:deep_groups_and_alternations_compile_and_match.*FAILED|ESpace
+# The heap stacks cannot grow past their inline entries: a fixed limit again, everywhere they are used.
+stack-no-spill | crates/core/src/pattern/regex/parse.rs | lit:nomem(self.heap.push(v))?; ==> return Err(ReError::ESpace); | cargo test -p liella --test regex_deep_nesting | msg:deep_groups_and_alternations_compile_and_match.*FAILED|ESpace
+# The explicit-stack compiler's leaf loops: a concatenation skips an item, an alternation a branch, a repetition
+# continues from a wrong entry. Reached past the switch depth; the equivalence test compiles from the root with it.
+cat-leaf-skip | crates/core/src/pattern/regex/program.rs | lit:(k, next) = (j, pc); ==> (k, next) = (j.saturating_sub(1), pc); | cargo test -p liella --lib recursion_tests | msg:recursion_and_explicit_stack_build_the_same_program.*FAILED|panicked
+alt-leaf-skip | crates/core/src/pattern/regex/program.rs | lit:k += 1; ==> k += 2; | cargo test -p liella --lib recursion_tests | msg:recursion_and_explicit_stack_build_the_same_program.*FAILED|panicked
+rep-leaf-entry | crates/core/src/pattern/regex/program.rs | lit:ret = pc; ==> ret = pc.saturating_add(1); | cargo test -p liella --lib recursion_tests | msg:recursion_and_explicit_stack_build_the_same_program.*FAILED|panicked
+# The parser's leaf facts: an assertion or empty node no longer nullable.
+leaf-facts-nullable | crates/core/src/pattern/regex/parse.rs | perl:s/(Node::Backref\(_\) => Item \{ node, nullable: )true/${1}false/ | cargo test -p liella --test s14_search_clauses --test regex_subpatterns --test regex_anchor_repeat --test regex_stacked | msg:FAILED|panicked
+# An alternation's facts: nullable only when every branch is (was: when any is).
+alt-facts-nullable | crates/core/src/pattern/regex/parse.rs | lit:any |= n; ==> any &= n; | cargo test -p liella --test s14_search_clauses --test regex_subpatterns --test regex_anchor_repeat --test regex_stacked | msg:FAILED|panicked
+# The leaf fast path off: every leaf goes through a call (recursion) or a frame and a step (explicit stack).
+quick-off | crates/core/src/pattern/regex/program.rs | perl:s/(fn quick.*?)self\.leaf\(it, next, chain\)/${1}Ok(None)/s | cargo test -p liella --lib recursion_tests | equivalent:performance only (same program emitted, as recursion_and_explicit_stack_build_the_same_program shows); the regcomp percall rows measure it
