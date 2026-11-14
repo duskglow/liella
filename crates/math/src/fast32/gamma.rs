@@ -139,7 +139,7 @@ fn lgamma_core_signed(x: f32) -> Option<(f64, u64, i32, bool)> {
         let s = w * (1.0 / 12.0 + w2 * (-1.0 / 360.0 + w2 * (1.0 / 1260.0)));
         return Some(((xd - 0.5) * (lx - 1.0) + (HALF_LN_2PI_M_HALF + s), LGAMMA_DELTA, 1, false));
     }
-    let Some(g) = gamma_core(xd) else { return lgamma_edge(xd) };
+    let Some(g) = gamma_core(xd) else { return lgamma_wide(xd) };
     let y = ln64(crate::dd::abs(g));
     let a = crate::dd::abs(y);
     if a >= 1.0 {
@@ -156,10 +156,23 @@ const LGAMMA_TINY: f64 = f64::from_bits(0x3c30_0000_0000_0000);
 /// 2^26: the largest margin [`lgamma_edge`] hands to [`super::round`] (whose test holds below 2^27).
 const EDGE_MAX_MARGIN: f64 = 67_108_864.0;
 
+/// lnΓ(x) where [`gamma_core`] refuses x: x < -42 by [`lgamma_reflect`] (its margin is not
+/// [`lgamma_edge`]'s: the fourth value is false there), the rest by [`lgamma_edge`]. Its own
+/// function, so that [`lgamma_edge`]'s other call (|y| < 2^-8, the cbench row's x = -3.14382577)
+/// does not pass the test (the test and the inlined reflection inside [`lgamma_edge`] cost that
+/// row 6 instructions per call, LIBM-LGAMMAF-EDGE-3).
+#[cold]
+#[inline(never)]
+fn lgamma_wide(xd: f64) -> Option<(f64, u64, i32, bool)> {
+    if xd < -42.0 {
+        return lgamma_reflect(xd);
+    }
+    lgamma_edge(xd)
+}
+
 /// lnΓ(x) for the operands [`lgamma_core_signed`]'s `double` pieces refuse, as its (y, margin in
-/// ulp of y, sign of Γ(x)), or `None` (the poles, -42 ≤ x ≤ -16, x ≤ -2^23, ±∞, 0, NaN: the
-/// accurate path). x < -42 goes to [`lgamma_reflect`] (its margin is not [`lgamma_edge`]'s: the
-/// fourth value is false there).
+/// ulp of y, sign of Γ(x)), or `None` (the poles, x ≤ -16 off the poles, 0, NaN: the accurate
+/// path; [`lgamma_wide`] takes x < -42 before it).
 /// Cold: on the cbench row's 256 operands only x = -3.14382577 comes here (LIBM-F32-REST-NEXT).
 /// * |y| < 2^-8 beside the negative zeros, and 2^-60 ≤ |x| < 2^-20: the `double` tier's
 ///   double-double kernel ([`crate::fast_gamma::lgamma_kernel`], x in its domain: |x| < 16, not a
@@ -183,9 +196,6 @@ const EDGE_MAX_MARGIN: f64 = 67_108_864.0;
 #[cold]
 #[inline(never)]
 fn lgamma_edge(xd: f64) -> Option<(f64, u64, i32, bool)> {
-    if xd < -42.0 {
-        return lgamma_reflect(xd);
-    }
     let a = crate::dd::abs(xd);
     if a < LGAMMA_TINY {
         if a == 0.0 {
