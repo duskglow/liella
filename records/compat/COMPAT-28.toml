@@ -1,4 +1,4 @@
-id = "COMPAT-NEW"
+id = "COMPAT-28"
 behaviour = "`dl_iterate_phdr` callbacks and the loader lock (§27.1, `s27_1_c_8`; D-27.1, rulings #5394/#5418)"
 glibc = "The spec says the loader lock is held during the callback, so a `dlopen` in another thread waits until the callback returns (cross-thread waiting not probed); a callback's own `dlopen` returns and the running walk visits the new object (probe R-2)"
 liella = "The callback runs with no loader lock held: a `dlopen` in another thread proceeds meanwhile, and the running walk lists each object once its `dlopen` publishes it (after relocation and IFUNC resolution, before its constructors); a callback's own `dlopen` returns, as in the reference"
