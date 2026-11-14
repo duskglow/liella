@@ -6,3 +6,11 @@ libc-no-iterate-entry | crates/boundary/src/runtime.rs | lit:LOADER_ITERATE.stor
 publish-before-pass-2 | crates/boundary/src/ld/dlopen.rs | lit:    // Pass 2: the IFUNC resolvers, only now (ruling #5125). ==>     super::readers::publish(k, k - base); // Pass 2: the IFUNC resolvers, only now (ruling #5125). | cargo xtask so && cargo test -p liella-ld --test dlopen_concurrent s27_1_c_8_readers | msg:readers check Some\(15\) failed
 tls-of-no-program | crates/boundary/src/ld/readers.rs | lit:    for m in THREAD_MODS.iter().take(n) { ==>     for m in THREAD_MODS.iter().take(n).skip(1) { | cargo xtask so && cargo test -p liella-ld --test dlopen_concurrent s27_1_c_8_readers | msg:readers check Some\(27\) failed
 walk-skips-live-thread | crates/boundary/src/thread.rs | lit:call(tp); ==> if tp == me { call(tp); } | cargo xtask affected --only conformance:s27_dlopen_tls_surplus --with-exports --run | msg:s27_dlopen_tls_surplus: T1: line [0-9]+
+# cargo xtask plants results (7 plants: 7 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG, 0 BUILD-TIMEOUT):
+# dlsym-keeps-state: CAUGHT, caught by dlopen_concurrent s27_1_c_1_fork_during_dlopen_child_can_load
+# dlsym-keeps-call: CAUGHT, caught by dlopen_concurrent s27_1_c_1_fork_during_dlopen_child_can_load
+# libc-no-dlsym-entry: CAUGHT, caught by dlopen_concurrent s27_1_c_1_fork_during_dlopen_child_can_load
+# libc-no-iterate-entry: CAUGHT, caught by dlopen_concurrent s27_1_c_8_readers_see_published_objects_only
+# publish-before-pass-2: CAUGHT, caught by dlopen_concurrent s27_1_c_8_readers_see_published_objects_only
+# tls-of-no-program: CAUGHT, caught by dlopen_concurrent s27_1_c_8_readers_see_published_objects_only
+# walk-skips-live-thread: CAUGHT, caught by no test the log names
