@@ -1,0 +1,20 @@
+{"task": "REGCOMP-SCOPE-COST-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: scope ENTER/EXIT fusion done (rep/rep2 depth 915 -> 1446, plus 1181, bnd 14; 11/11 plants caught; gate green on 6175febcb) but rx_backref rows +62/+62/+300 instr/call over base: do not land until profiled",
+ "branch": "task/regcomp-scope-cost-2", "head": "3c5954c81",
+ "gate": {"affected": "green on 6175febcb (regcomp-scope-cost-2-gate2); head 3c5954c81 not gated (clippy+static+percall only)", "peak": "2.2G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["bnd ((a){1,2}){1,2}: Liella now compiles 14, REG_ESPACE from 15 (reference 16); recorded per ruling #5595"],
+ "refused": [],
+ "impact": [
+  {"kind": "correctness", "what": "((a)*)* and ((a*)*)* compile through depth 1446 (was 914); REG_ESPACE from 1447", "before": 914, "after": 1446, "unit": "depth", "measured": true},
+  {"kind": "size", "what": "regcomp peak RSS for ((a)*)* at depth 914", "before": 146056, "after": 66608, "unit": "KiB", "measured": true},
+  {"kind": "perf", "what": "regcomp_ipv4 per call", "before": 131161, "after": 121052, "unit": "instr/call", "measured": true},
+  {"kind": "cost", "what": "rx_backref_long_c per call (fix-forward: profile in a continuation)", "before": 73617, "after": 73917, "unit": "instr/call", "measured": true},
+  {"kind": "cost", "what": "rx_backref per call", "before": 21999, "after": 22061, "unit": "instr/call", "measured": true},
+  {"kind": "coverage", "what": "plants added (all caught) + 2 tests (depth sweep, one-pass path)", "before": null, "after": 11, "unit": "plants", "measured": true}
+ ],
+ "improvement": "the role's percall base was not primed for a stacked branch (merge base = run 1's head); sync_role could prime it when it writes merge_base",
+ "next_step": "profile rx_backref rows (wl_trace.sh, base 32c24df04 primed on mei), fix the +62/+300, then gate + plants on the final head",
+ "report_file": "handoff/regex-scope-cost.md",
+ "jobs": ["regcomp-scope-cost-2-percall3"]}
