@@ -1,0 +1,11 @@
+# REGCOMP-DEEP-NESTING-2 plants (cargo xtask plants; docs/plants.md)
+# A recursive pass restored: the compiler compiles a group's body by calling itself again.
+compile-recurses | crates/core/src/pattern/regex/program.rs | lit:part(x, close) ==> Step::Done(self.compile(t, x, close, chain)?) | cargo test -p liella --test regex_deep_nesting | msg:overflowed its stack|SIGSEGV|SIGABRT
+# The depth limit reintroduced: the parser refuses a group past 256 open ones.
+depth-limit | crates/core/src/pattern/regex/parse.rs | lit:self.open += 1; ==> self.open += 1; if self.open > 256 { return Err(ReError::ESpace); } | cargo test -p liella --test regex_deep_nesting --test regex_pre14_triage | msg:deep_groups_and_alternations_compile_and_match.*FAILED|ESpace
+# The heap stacks cannot grow past their inline entries: a fixed limit again, everywhere they are used.
+stack-no-spill | crates/core/src/pattern/regex/parse.rs | lit:nomem(self.heap.push(v))?; ==> return Err(ReError::ESpace); | cargo test -p liella --test regex_deep_nesting | msg:deep_groups_and_alternations_compile_and_match.*FAILED|ESpace
+# cargo xtask plants results (3 plants: 3 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# compile-recurses: CAUGHT, caught by regex_deep_nesting (the log names no failing test)
+# depth-limit: CAUGHT, caught by regex_deep_nesting deep_nesting_runs_on_a_small_stack
+# stack-no-spill: CAUGHT, caught by regex_deep_nesting deep_groups_and_alternations_compile_and_match

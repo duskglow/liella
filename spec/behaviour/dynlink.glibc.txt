@@ -728,6 +728,19 @@ align3.so: ok
 fail then NOLOAD miss: handle NULL, dlerror NULL
 fail then successful open: handle non-NULL, dlerror NULL
 fail then NOLOAD hit: handle non-NULL, dlerror NULL
+== readers (DL-16c)
+R-1 program text: rc 0, range whole PT_LOAD span, flags 0, eh_frame set, link_map == handle
+R-1 program data: rc 0, range whole PT_LOAD span, flags 0, eh_frame set, link_map == handle
+R-1 libc text: rc 0, range whole PT_LOAD span, flags 0, eh_frame set, link_map non-null
+R-1 dlopen'd text: rc 0, range whole PT_LOAD span, flags 0, eh_frame set, link_map == handle
+R-4 stack pc: rc -1
+R-3 object "" name empty adds 5 subs 0 tls_modid 0
+R-3 object linux-vdso.so.1 name as given adds 5 subs 0 tls_modid 0
+R-3 object libc.so.6 name absolute adds 5 subs 0 tls_modid 1
+R-3 object ld-linux-x86-64.so.2 name absolute adds 5 subs 0 tls_modid 0
+R-3 object libR1.so name absolute adds 5 subs 0 tls_modid 0
+R-2 dlopen in a callback: returned 1, the running walk visits it 1, adds first 5 last 6, objects walked 6
+R-2 next walk: visits it 1, objects walked 6, adds 6
 == dladdr-dlinfo (DL-18 DL-DLADDR): sh tools/probe/dl/dladdr/run.sh SCRATCH, Skylake-SP build host, Ubuntu 24.04 glibc 2.39, gcc 13, 2026-11-14; raw addresses (arg0 of requests 2 and 11) vary per run
 == probe (no -rdynamic, DT_RPATH /prog/rp)
 == dladdr in the probe object

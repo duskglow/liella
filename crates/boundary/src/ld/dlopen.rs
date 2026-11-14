@@ -8,8 +8,10 @@
 //!   their lookup views, the link-map nodes (the public `struct link_map` prefix first), the global
 //!   scope, and two bump arenas (paths, dependency lists). The chain only grows (DL-16 never
 //!   unloads): a new set is linked in with one Release store.
-//! * **Lock.** One futex lock, re-entrant for its owner (a constructor may call `dlopen`), held for
-//!   the whole call. The `&mut Loader` borrow ends before any foreign code runs.
+//! * **Locks.** The writer lock [`CALL`], re-entrant for its owner (a constructor may call
+//!   `dlopen`), held for the whole call; inside it [`STATE`] while the call changes the loader's
+//!   state, which `fork` waits for (DL-16c). The `&mut Loader` borrow ends before any constructor
+//!   runs. Readers take neither (`super::readers`); the lock order is written at [`CALL`].
 //! * **A new set.** The name is found (the caller's object as requester), every object of the set
 //!   is opened, checked ([`liella_ld::dlopen::check`]), identified by (`st_dev`, `st_ino`) and
 //!   mapped; versions are checked; pass 1 of the relocation resolves every reference of the whole
@@ -18,8 +20,8 @@
 //!   `init::init_order`. Any failure before publication unmaps every new object and leaves the
 //!   loader as it was, with one dlerror text set.
 //!
-//! Not here yet (plan §6): `dlsym`/`dlvsym` (DL-16b), the counters and `dl_iterate_phdr` over the
-//! chain (DL-16c), objects with `PT_TLS` (DL-16d), unloading (DL-17), lazy binding (DL-20).
+//! Not here yet (plan §6): `dlsym`/`dlvsym` (DL-16b), objects with `PT_TLS` (DL-16d), unloading
+//! (DL-17), lazy binding (DL-20).
 
 use super::{array_words, c_string, dyn_string, env_entries, image_view, open_whole, own_object, read_auxv, ProcImage, SysMapper};
 use super::{AT_FDCWD, AUXV_WORDS_MAX, INITIAL_TAIL, MAP_ANONYMOUS_I32, MAP_PRIVATE_I32, START_INTERP, START_N, START_OBJS, START_ARGS, START_PAGE};
@@ -41,7 +43,7 @@ use liella_ld::tls::{self as ltls, Module, Placed};
 use liella_ld::{init, map, start};
 
 /// Objects the process can hold, the start-time ones included; one more is refused with a text.
-const CAP: usize = 512;
+pub(super) const CAP: usize = 512;
 /// Objects one `dlopen` can add (the bound of `init::init_order`).
 const NEW_MAX: usize = init::OBJECTS_MAX;
 /// Bytes of the path arena.
@@ -199,47 +201,83 @@ struct Loader {
 /// The loader's address (0: not made yet).
 static LOADER: AtomicUsize = AtomicUsize::new(0);
 
-/// The writer lock: 0 free, 1 held, 2 held with waiters (a three-state futex mutex).
-static LOCK: AtomicU32 = AtomicU32::new(0);
-/// The holder's thread pointer and its depth (written by the holder only).
-static OWNER: AtomicUsize = AtomicUsize::new(0);
-static DEPTH: AtomicUsize = AtomicUsize::new(0);
-
-fn futex(op: i64, val: u32) {
-    let addr = LOCK.as_ptr().cast::<c_void>();
-    let _ = crate::ffi_sys::liella_sys_futex(addr, op, i64::from(val), core::ptr::null(), core::ptr::null_mut(), 0);
+/// A futex mutex re-entrant for its owner: `word` 0 free, 1 held, 2 held with waiters; the
+/// holder's thread pointer and depth are written by the holder only.
+struct Reentrant {
+    word: AtomicU32,
+    owner: AtomicUsize,
+    depth: AtomicUsize,
 }
 
-fn lock() {
-    let me = tb::tp();
-    if OWNER.load(Relaxed) == me {
-        DEPTH.store(DEPTH.load(Relaxed).saturating_add(1), Relaxed);
-        return;
+impl Reentrant {
+    const fn new() -> Reentrant {
+        Reentrant { word: AtomicU32::new(0), owner: AtomicUsize::new(0), depth: AtomicUsize::new(0) }
     }
-    if let Err(mut c) = LOCK.compare_exchange(0, 1, Acquire, Relaxed) {
-        if c != 2 {
-            c = LOCK.swap(2, Acquire);
+
+    fn futex(&self, op: i64, val: u32) {
+        let addr = self.word.as_ptr().cast::<c_void>();
+        let _ = crate::ffi_sys::liella_sys_futex(addr, op, i64::from(val), core::ptr::null(), core::ptr::null_mut(), 0);
+    }
+
+    fn lock(&self) {
+        let me = tb::tp();
+        if self.owner.load(Relaxed) == me {
+            self.depth.store(self.depth.load(Relaxed).saturating_add(1), Relaxed);
+            return;
         }
-        while c != 0 {
-            futex(FUTEX_WAIT_PRIVATE, 2);
-            c = LOCK.swap(2, Acquire);
+        if let Err(mut c) = self.word.compare_exchange(0, 1, Acquire, Relaxed) {
+            if c != 2 {
+                c = self.word.swap(2, Acquire);
+            }
+            while c != 0 {
+                self.futex(FUTEX_WAIT_PRIVATE, 2);
+                c = self.word.swap(2, Acquire);
+            }
+        }
+        self.owner.store(me, Relaxed);
+        self.depth.store(1, Relaxed);
+    }
+
+    fn unlock(&self) {
+        let d = self.depth.load(Relaxed).saturating_sub(1);
+        self.depth.store(d, Relaxed);
+        if d != 0 {
+            return;
+        }
+        self.owner.store(0, Relaxed);
+        if self.word.swap(0, Release) == 2 {
+            self.futex(FUTEX_WAKE_PRIVATE, 1);
         }
     }
-    OWNER.store(me, Relaxed);
-    DEPTH.store(1, Relaxed);
+
+    /// In a `fork` child, whose only thread is the caller: free the lock when another thread (one
+    /// that does not exist here) held it; the caller's own hold stays.
+    fn reset_in_child(&self) {
+        if self.owner.load(Relaxed) != tb::tp() {
+            self.owner.store(0, Relaxed);
+            self.depth.store(0, Relaxed);
+            self.word.store(0, Relaxed);
+        }
+    }
 }
 
-fn unlock() {
-    let d = DEPTH.load(Relaxed).saturating_sub(1);
-    DEPTH.store(d, Relaxed);
-    if d != 0 {
-        return;
-    }
-    OWNER.store(0, Relaxed);
-    if LOCK.swap(0, Release) == 2 {
-        futex(FUTEX_WAKE_PRIVATE, 1);
-    }
-}
+// Lock order (plan/ph14/dl-16-dlopen.md §4, one rule for every story): the loader's writer lock
+// [`CALL`] -> its state lock [`STATE`] -> DL-15's thread-list lock (`thread::list_lock`) -> the
+// loader arena's lock (DL-19's dynamic blocks; the dlerror records take none) -> the C library's
+// internal locks (heap, stdio, ...). A constructor runs holding `CALL` only, so it may call
+// `malloc`, stdio, `pthread_create` and the loader itself (both locks are re-entrant); `fork`'s
+// prepare step takes `STATE` before every library lock (`crate::fork::lock_all`). Readers take no
+// lock (`super::readers`). Checked by crates/ld/tests/dlopen_concurrent.rs (constructors that call
+// into the library and the loader; `fork` during another thread's `dlopen`).
+
+/// The writer lock: held for a whole `dlopen` call, constructors included, so `dlopen`s run one at
+/// a time (probe P-8: a second thread's `dlopen` waits for the first's constructors).
+static CALL: Reentrant = Reentrant::new();
+/// The state lock: held (inside `CALL`) only while a call changes the loader's state, which runs
+/// no foreign code but IFUNC resolvers. `fork` takes it, so a child never sees half a change, and
+/// never waits for a constructor (probe P-9: `fork` returns while another thread's constructor
+/// runs, and the child can `dlopen`).
+static STATE: Reentrant = Reentrant::new();
 
 pub(super) mod dladdr;
 pub(super) mod dlsym;
@@ -369,15 +407,49 @@ pub(super) fn entry_address() -> usize {
     (entry as *const ()).expose_provenance()
 }
 
+/// The address of [`fork_step`], for `StartInfo::dl_fork`.
+pub(super) fn fork_address() -> usize {
+    #[allow(clippy::as_conversions)] // a function's address has no conversion other than `as`
+    (fork_step as *const ()).expose_provenance()
+}
+
+/// `fork`'s loader step (`crate::fork::lock_all`/`unlock_all`, while other threads exist): 0 takes
+/// [`STATE`] before the clone, 1 (parent) releases it, 2 (child) releases it and frees [`CALL`]
+/// when a thread that is gone held it. The child keeps every published object, those whose
+/// constructors that thread was running included (probe P-9: listed, `RTLD_NOLOAD` finds them).
+extern "C" fn fork_step(step: usize) -> usize {
+    match step {
+        0 => STATE.lock(),
+        1 => STATE.unlock(),
+        _ => {
+            STATE.unlock();
+            CALL.reset_in_child();
+        }
+    }
+    0
+}
+
 /// `dlopen(file, mode)` called from `caller` (a return address in the calling object): the handle,
 /// or 0 with the calling thread's dlerror text set (none for an `RTLD_NOLOAD` miss).
 extern "C" fn entry(file: usize, mode: i32, caller: usize) -> usize {
-    lock();
+    CALL.lock();
+    STATE.lock();
     let (handle, ctors) = open_locked(file, mode, caller);
+    STATE.unlock();
     // The loader borrow has ended: constructors may call back into the loader.
     ctors.run();
-    unlock();
+    CALL.unlock();
     handle
+}
+
+/// The address of node `i` (its link map) once the loader's state exists, else 0; no reference to
+/// the state is made (readers call this while a `dlopen` may hold `&mut Loader`).
+pub(super) fn node_address(i: usize) -> usize {
+    let at = LOADER.load(Acquire);
+    if at == 0 || i >= CAP {
+        return 0;
+    }
+    at.wrapping_add(core::mem::offset_of!(Loader, nodes)).wrapping_add(i.wrapping_mul(size_of::<Node>()))
 }
 
 /// The loader, made (with the start-time objects) at the first call. The caller holds the lock
@@ -830,11 +902,13 @@ fn candidate(l: &mut Loader, path: &[u8], given: &'static [u8], k: usize, search
     let Ok(sym) = Object::new(dynm) else {
         loaded.unmap(&mut SysMapper { fd: -1 });
         let _ = raw::munmap(at, len);
+        super::readers::count_unmapped(1);
         return refused(l, Refusal::Malformed);
     };
     let Some(span) = l.keep(shown) else {
         loaded.unmap(&mut SysMapper { fd: -1 });
         let _ = raw::munmap(at, len);
+        super::readers::count_unmapped(1);
         return Some(Found::Full(b"out of room for object names"));
     };
     let o = Obj { elf, dynm, bias: loaded.bias, name: given, tls: None };
@@ -851,6 +925,8 @@ fn candidate(l: &mut Loader, path: &[u8], given: &'static [u8], k: usize, search
     node.fini = [0; 3];
     node.file = (at, len);
     node.reserve = (loaded.base, loaded.span);
+    // Its reader entry, invisible until the set is published.
+    super::readers::stage(k, node.l_addr, name, usize::try_from(loaded.phdr).unwrap_or(0), usize::from(loaded.phnum));
     Some(Found::New(k))
 }
 
@@ -970,6 +1046,7 @@ fn unwind(l: &mut Loader, base: usize, k: usize, names_top: usize, deps_top: usi
         map::Mapper::unmap(&mut SysMapper { fd: -1 }, node.reserve.0, node.reserve.1);
         let _ = raw::munmap(node.file.0, node.file.1);
     }
+    super::readers::count_unmapped(k.saturating_sub(base));
     l.names_top = names_top;
     l.deps_top = deps_top;
     l.unique.truncate(l.unique_mark);
@@ -1204,7 +1281,9 @@ fn load_set(l: &mut Loader, given: &'static [u8], m: Mode, caller: usize) -> Res
     if new_tls.len > 0 {
         super::publish_tls(l.thread_walk, &mut new_tls);
     }
-    // Publication: one Release store links the whole new set (plan §4).
+    // Publication, after pass 2 and before the constructors (plan §4): one Release store links the
+    // whole new set into the chain, one makes it visible to the readers (`dl_iterate_phdr`,
+    // `_dl_find_object`) with `dlpi_adds`.
     for i in base..k {
         let next = if i + 1 < k { l.node_addr(i + 1) } else { 0 };
         l.nodes[i].l_next.store(next, Relaxed);
@@ -1212,6 +1291,7 @@ fn load_set(l: &mut Loader, given: &'static [u8], m: Mode, caller: usize) -> Res
     l.n = k;
     let first = l.node_addr(base);
     l.nodes[base - 1].l_next.store(first, Release);
+    super::readers::publish(k, k - base);
     l.nodes[base].opens = 1;
     l.nodes[base].nodelete |= m.nodelete;
     pin_unique(l, l.unique_mark);

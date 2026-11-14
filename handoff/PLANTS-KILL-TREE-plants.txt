@@ -1,0 +1,3 @@
+kill1 | xtask/src/plants.rs | lit:    kill_group(pgid); ==>     let _ = pgid; | cargo test -p xtask --bin xtask a_timed_out_step | msg:survived the step's timeout
+# cargo xtask plants results (1 plants: 1 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG, 0 BUILD-TIMEOUT):
+# kill1: CAUGHT, caught by xtask plants::tests::a_timed_out_step_leaves_no_process_of_its_group

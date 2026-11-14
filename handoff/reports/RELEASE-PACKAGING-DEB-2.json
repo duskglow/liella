@@ -1,0 +1,20 @@
+{"task": "RELEASE-PACKAGING-DEB-2", "model": "opus", "tokens": null,
+ "result": "Owner rulings applied: Maintainer Liella Maintainers <liella@koiren.ai> (bogus-mail-host gone), proof.sh MIRROR; Devuan excalibur proof from the owner's mirror pass=15 fail=0 wait=5 known=1, trixie the same; reproducible build; build.sh copies without cargo build dirs and stops on a failed copy",
+ "branch": "task/release-packaging-deb-2", "head": "06e2a025d",
+ "gate": {"affected": "459 passed / 0 failed", "peak": "1022M"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "Smoke programs waiting: dynamic hello/threads/except/iostream on the loader's start-time DT_NEEDED search; dlopen on dlsym/dlclose (DL-16b, DL-17); static iostream on NEWLOCALE-LC-ALL-BIT (#5411)",
+  "shiki has no mmdebstrap/lintian/Debian keyring installed: run 1's mmdebstrap 1.5.7 and debian-archive-keyring 2025.1 .debs copied from mei (sha256 checked) and unpacked in ~/work/RELEASE-PACKAGING-DEB-2/tools/root; lintian runs inside the chroot"
+ ],
+ "refused": [],
+ "impact": [
+  {"kind": "correctness", "what": "excalibur (Devuan 6) proof of the reference packages: install, smoke, coexistence with libc6, purge", "before": null, "after": "15 pass / 0 fail", "unit": "proof checks", "measured": true},
+  {"kind": "correctness", "what": "lintian bogus-mail-host / bogus-mail-host-in-debian-changelog errors removed (owner's maintainer address)", "before": 2, "after": 0, "unit": "lintian E tags", "measured": true},
+  {"kind": "tooling", "what": "build.sh from a role dir: no longer copies cargo build dirs (fuzz/target) that a concurrent job writes; a failed export or copy stops the build", "before": null, "after": null, "unit": null, "measured": false}
+ ],
+ "improvement": "Plants files that name products of a role build carry a host path; a plants option for a prebuilt-products directory relative to the role would make them portable across hosts",
+ "next_step": "snapshot release: build.sh, check.sh, proof.sh trixie and excalibur on its tag (MIRROR= for the owner's Debian mirror once up); rerun the dynamic smoke set when the loader's start-time search lands",
+ "report_file": "handoff/RELEASE-PACKAGING-DEB.md",
+ "jobs": ["rpd2-gate-2", "rpd2-plants-1", "rpd2-deb-2", "rpd2-lint-1"]}

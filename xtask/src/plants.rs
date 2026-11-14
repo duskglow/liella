@@ -29,6 +29,7 @@
 
 use std::fs;
 use std::io::Write as _;
+use std::os::unix::process::CommandExt;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::time::Instant;
@@ -81,6 +82,9 @@ pub struct Plant {
     pub pattern: Pattern,
     pub cmd: String,
     pub expect: Expect,
+    /// PLANTS-UNGROUPED-MUTANTS: the plant is marked `layout:traced` (its command measures the start-up layout).
+    /// A command that names a layout test is traced without the mark ([`targets_layout`]).
+    pub layout: bool,
 }
 
 /// The verdict on one plant.
@@ -184,6 +188,32 @@ pub fn cmd_uses_products(cmd: &str, lookup: impl Fn(Option<&str>, &str) -> Optio
     tests.into_iter().any(|t| lookup(package, t) != Some(false))
 }
 
+/// PLANTS-UNGROUPED-MUTANTS: whether `cmd` measures the start-up layout, so its products must be built traced
+/// (`LIELLA_LAYOUT_TRACE=1`) rather than ungrouped: it names a start-up layout test (`cargo xtask affected`'s
+/// [`crate::affected::LAYOUT_TESTS`]) or `layout-check`, or it is a `cargo xtask affected ... --run` without
+/// `--only` (a change that reaches `libc.a` selects the layout tests). Any other plant can mark itself `layout:traced`.
+pub fn targets_layout(cmd: &str) -> bool {
+    let names = |w: &str| w.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-')).any(|t| t == "layout-check" || crate::affected::LAYOUT_TESTS.iter().any(|(_, name)| t == *name));
+    let words: Vec<&str> = cmd.split_whitespace().collect();
+    let affected_run = words.windows(2).any(|w| w == ["xtask", "affected"]) && words.contains(&"--run") && !words.iter().any(|w| w.starts_with("--only"));
+    affected_run || words.iter().any(|w| names(w))
+}
+
+/// The start-up layout of a plants run's product build (`LIELLA_LAYOUT_TRACE`, [`crate::hotlists::TRACE_ENV`]).
+fn layout_env(layout: crate::hotlists::Layout) -> &'static str {
+    match layout {
+        crate::hotlists::Layout::Traced => "1",
+        crate::hotlists::Layout::Ungrouped => "ungrouped",
+    }
+}
+
+fn layout_name(layout: crate::hotlists::Layout) -> &'static str {
+    match layout {
+        crate::hotlists::Layout::Traced => "traced",
+        crate::hotlists::Layout::Ungrouped => "ungrouped",
+    }
+}
+
 /// The outcome of a run: the exit status and the verdict per plant (in file order).
 #[derive(Debug)]
 pub struct Outcome {
@@ -258,7 +288,18 @@ pub fn parse_plants(text: &str) -> Result<Vec<Plant>, String> {
 }
 
 fn parse_line(line: &str) -> Result<Plant, String> {
-    let fields: Vec<&str> = line.split(" | ").map(str::trim).collect();
+    let mut fields: Vec<&str> = line.split(" | ").map(str::trim).collect();
+    // PLANTS-UNGROUPED-MUTANTS: an optional last field `layout:traced`, after the expectation.
+    let mut layout = false;
+    if fields.len() >= 5 {
+        if let Some(v) = fields[fields.len() - 1].strip_prefix("layout:") {
+            if v.trim() != "traced" {
+                return Err(format!("`layout:{v}`: the only layout mark is `layout:traced` (the plant's products are built with the traced start-up layout)"));
+            }
+            layout = true;
+            fields.pop();
+        }
+    }
     if fields.len() < 4 {
         return Err("expected `id | path | pattern | cmd | msg:<regex>` (or `equivalent:<reason>` last)".into());
     }
@@ -303,7 +344,7 @@ fn parse_line(line: &str) -> Result<Plant, String> {
             return Err(format!("{id}: a plant on a .S file must name its `liella_machine_<fn>:` label (e.g. perl:s/(liella_machine_<fn>:.*?)<pattern>/$1<replacement>/s)"));
         }
     }
-    Ok(Plant { id: id.to_string(), path: path.to_string(), pattern, cmd, expect })
+    Ok(Plant { id: id.to_string(), path: path.to_string(), pattern, cmd, expect, layout })
 }
 
 /// A `perl:` pattern is one `s` substitution changing one site: no `g` (every site) and no `r`
@@ -397,22 +438,40 @@ fn on_ram(dir: &Path) -> Option<bool> {
     Some(best.2 == "tmpfs" || best.2 == "ramfs" || best.0.starts_with("/dev/zram"))
 }
 
-/// Run `argv` (or `sh -c <cmd>`) in `cwd` under `timeout`, its output into `log`; the exit code.
-fn run_logged(cwd: &Path, argv: &[String], log: &Path, timeout: u64) -> Result<i32, String> {
+/// Run `argv` (or `sh -c <cmd>`) in `cwd` under `timeout`, its output into `log`, with `LIELLA_LAYOUT_TRACE` set
+/// for `layout` (a product build, and a command that builds the products itself, get the plant's layout); the exit code.
+fn run_logged(cwd: &Path, argv: &[String], log: &Path, timeout: u64, layout: crate::hotlists::Layout) -> Result<i32, String> {
     let file = fs::File::create(log).map_err(|e| format!("cannot create {}: {e}", log.display()))?;
     let err = file.try_clone().map_err(|e| e.to_string())?;
-    let status = Command::new("timeout")
+    // The child leads its own process group (timeout(1) makes the same group), so one group signal reaches every
+    // grandchild, such as the gdb and probes a build-time trace starts, however the step ended.
+    let mut child = Command::new("timeout")
+        .args(["-k", "10"])
         .arg(timeout.to_string())
         .args(argv)
         .current_dir(cwd)
         // A target directory from the environment would build (and test) outside the copy.
         .env_remove("CARGO_TARGET_DIR")
+        .env(crate::hotlists::TRACE_ENV, layout_env(layout))
         .stdin(Stdio::null())
         .stdout(file)
         .stderr(err)
-        .status()
+        .process_group(0)
+        .spawn()
         .map_err(|e| format!("cannot run {argv:?}: {e}"))?;
+    let pgid = child.id();
+    let status = child.wait().map_err(|e| format!("cannot wait for {argv:?}: {e}"))?;
+    kill_group(pgid);
     Ok(status.code().unwrap_or(128))
+}
+
+/// End every process left in group `pgid`: TERM, then KILL when the group is still there after a grace period.
+fn kill_group(pgid: u32) {
+    let signal = |sig: &str| Command::new("kill").args([sig, "--"]).arg(format!("-{pgid}")).stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success());
+    if signal("-TERM") {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        signal("-KILL");
+    }
 }
 
 fn sh(cmd: &str) -> Vec<String> {
@@ -622,25 +681,49 @@ pub fn run(cfg: &Config) -> Outcome {
         }
         Err(e) => return refused(format!("cannot list the source paths of {}: {e}", cfg.src.display())),
     }
-    // The products, then each distinct command on the unmutated copy.
-    let mut baseline: Vec<(String, Vec<String>)> = vec![("so".into(), cfg.prepare.clone())];
-    for p in &cfg.plants {
-        if !baseline.iter().skip(1).any(|(_, argv)| argv[2] == p.cmd) {
-            baseline.push((format!("baseline-{}", baseline.len()), sh(&p.cmd)));
+    // PLANTS-UNGROUPED-MUTANTS: a plant's products are built ungrouped (a compile only: a mutant's behaviour does not
+    // depend on the start-up layout) unless the plant measures the layout ([`targets_layout`] or `layout:traced`).
+    use crate::hotlists::Layout;
+    let layouts: Vec<Layout> = cfg.plants.iter().map(|p| if p.layout || targets_layout(&p.cmd) { Layout::Traced } else { Layout::Ungrouped }).collect();
+    // The products, then each distinct command on the unmutated copy, once per layout the plants use (ungrouped
+    // first): each command's baseline sees the products in the layout its plants are built with.
+    let mut baseline: Vec<(String, Vec<String>, Layout)> = Vec::new();
+    let mut n = 0;
+    for layout in [Layout::Ungrouped, Layout::Traced] {
+        if !layouts.contains(&layout) {
+            continue;
+        }
+        let so = if layout == Layout::Traced && layouts.contains(&Layout::Ungrouped) { "so-traced" } else { "so" };
+        baseline.push((so.into(), cfg.prepare.clone(), layout));
+        let start = baseline.len();
+        for (p, _) in cfg.plants.iter().zip(&layouts).filter(|(_, l)| **l == layout) {
+            if !baseline[start..].iter().any(|(_, argv, _)| argv[2] == p.cmd) {
+                n += 1;
+                baseline.push((format!("baseline-{n}"), sh(&p.cmd), layout));
+            }
         }
     }
-    for (i, (name, argv)) in baseline.iter().enumerate() {
+    // The layout the products in the copy hold (the last build's).
+    let mut held = Layout::Ungrouped;
+    for (name, argv, layout) in &baseline {
         let log = logs.join(format!("{name}.log"));
-        // The first entry is the product build: it has its own limit.
-        let limit = if i == 0 { cfg.prepare_timeout } else { cfg.timeout };
-        match run_logged(&copy, argv, &log, limit) {
-            Ok(0) => println!("plants: {name} ok ({})", argv.join(" ")),
-            Ok(TIMED_OUT) if i == 0 => {
-                println!("plants: BASELINE FAILED: so timed out after {limit} s (prepare timeout; --prepare-timeout <secs>); no plant was applied. Last lines of {}:\n{}", log.display(), tail(&log, 20));
+        // A product build has its own limit.
+        let build = name.starts_with("so");
+        let limit = if build { cfg.prepare_timeout } else { cfg.timeout };
+        let start = Instant::now();
+        match run_logged(&copy, argv, &log, limit, *layout) {
+            Ok(0) if build => {
+                held = *layout;
+                println!("plants: {name} ok ({}; layout {}, LIELLA_LAYOUT_TRACE={}, in {:.0}s)", argv.join(" "), layout_name(*layout), layout_env(*layout), start.elapsed().as_secs_f64());
+            }
+            Ok(0) => println!("plants: {name} ok ({}; layout {})", argv.join(" "), layout_name(*layout)),
+            Ok(TIMED_OUT) if build => {
+                println!("plants: BASELINE FAILED: {name} timed out after {limit} s (prepare timeout; --prepare-timeout <secs>); no plant was applied. Last lines of {}:\n{}", log.display(), tail(&log, 20));
                 return Outcome { code: EXIT_BASELINE, verdicts: Vec::new() };
             }
             Ok(rc) => {
-                println!("plants: BASELINE FAILED: {name} rc {rc} ({}); no plant was applied. Last lines of {}:\n{}", argv.join(" "), log.display(), tail(&log, 20));
+                let hint = if *layout == Layout::Ungrouped && !build { " (built ungrouped; a command that measures the start-up layout needs `layout:traced` on its plants, docs/plants.md)" } else { "" };
+                println!("plants: BASELINE FAILED: {name} rc {rc} ({}; layout {}){hint}; no plant was applied. Last lines of {}:\n{}", argv.join(" "), layout_name(*layout), log.display(), tail(&log, 20));
                 return Outcome { code: EXIT_BASELINE, verdicts: Vec::new() };
             }
             Err(e) => {
@@ -656,15 +739,19 @@ pub fn run(cfg: &Config) -> Outcome {
     let mut verdicts = Vec::new();
     let mut results: Vec<String> = Vec::new();
     let mut failed = false;
-    for (p, &products) in cfg.plants.iter().zip(&uses) {
-        let mut build = "the baseline products, not rebuilt".to_string();
+    for ((p, &uses_products), &layout) in cfg.plants.iter().zip(&uses).zip(&layouts) {
+        // A plant that measures the layout reads the products by definition.
+        let products = uses_products || layout == Layout::Traced;
+        let mut build = format!("the baseline products (layout {}), not rebuilt", layout_name(held));
         if !products && products_hold_mutant {
             let log = logs.join(format!("{}.so-restore.log", p.id));
             let start = Instant::now();
-            match run_logged(&copy, &cfg.prepare, &log, cfg.prepare_timeout) {
+            // Only commands that do not read the products follow: ungrouped is enough.
+            match run_logged(&copy, &cfg.prepare, &log, cfg.prepare_timeout, Layout::Ungrouped) {
                 Ok(0) => {
                     products_hold_mutant = false;
-                    build = format!("the products, rebuilt unmutated after the last plant in {:.0}s (log {})", start.elapsed().as_secs_f64(), log.display());
+                    held = Layout::Ungrouped;
+                    build = format!("the products, rebuilt unmutated after the last plant, layout ungrouped, in {:.0}s (log {})", start.elapsed().as_secs_f64(), log.display());
                 }
                 rc => {
                     println!("plants: {}: ERROR: rebuilding the unmutated products: {rc:?}; stopping (log {})", p.id, log.display());
@@ -703,8 +790,9 @@ pub fn run(cfg: &Config) -> Outcome {
             products_hold_mutant = true;
             let so_log = logs.join(format!("{}.so.log", p.id));
             let start = Instant::now();
-            built = run_logged(&copy, &cfg.prepare, &so_log, cfg.prepare_timeout);
-            build = format!("the products, rebuilt with the mutant in {:.0}s (log {})", start.elapsed().as_secs_f64(), so_log.display());
+            built = run_logged(&copy, &cfg.prepare, &so_log, cfg.prepare_timeout, layout);
+            held = layout;
+            build = format!("the products, rebuilt with the mutant, layout {}, in {:.0}s (log {})", layout_name(layout), start.elapsed().as_secs_f64(), so_log.display());
             if !matches!(built, Ok(0)) {
                 // The mutant does not build: judged on the build's log, the command is not run.
                 build = format!("the products build failed on the mutant: {build}");
@@ -712,7 +800,7 @@ pub fn run(cfg: &Config) -> Outcome {
             }
         }
         let build_timed_out = products && matches!(built, Ok(TIMED_OUT));
-        let rc = if matches!(built, Ok(0)) { run_logged(&copy, &sh(&p.cmd), &log, cfg.timeout) } else { built };
+        let rc = if matches!(built, Ok(0)) { run_logged(&copy, &sh(&p.cmd), &log, cfg.timeout, layout) } else { built };
         // Restore by writing (a fresh mtime) before anything else can go wrong.
         if let Err(e) = write_fresh(&file, &original) {
             println!("plants: {}: ERROR: restore: {e}; stopping (the copy holds the mutant)", p.id);
@@ -823,6 +911,75 @@ mod tests {
         assert!(!dir.join("logs/u1.so.log").exists() && !dir.join("logs/u1.so-restore.log").exists());
         assert_eq!(fs::read_to_string(dir.join("src/product.txt")).unwrap(), "answer=42\nother=7\nother=7\n");
         let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    // no spec clause (PLANTS-UNGROUPED-MUTANTS): an ordinary plant's products (and its baseline) are built ungrouped, a
+    // plant that measures the layout (marked `layout:traced`, or naming a layout test) is built traced, and each command
+    // sees its plant's layout in LIELLA_LAYOUT_TRACE
+    #[test]
+    fn ordinary_plants_build_ungrouped_and_layout_plants_traced() {
+        let (src, dir) = toy("layout");
+        let product = "grep -q answer=42 product.txt || { echo WRONG-PRODUCT; exit 1; }";
+        let plants = format!(
+            "or | src/value.txt | lit:answer=42 ==> answer=43 | echo cmd-or=$LIELLA_LAYOUT_TRACE >> cmds.txt; {product} | msg:WRONG-PRODUCT\n\
+             mk | src/value.txt | perl:s/answer=42/answer=44/ | echo cmd-mk=$LIELLA_LAYOUT_TRACE >> cmds.txt; {product} | msg:WRONG-PRODUCT | layout:traced\n\
+             nm | src/value.txt | lit:answer=42 ==> answer=45 | echo hot_text_products cmd-nm=$LIELLA_LAYOUT_TRACE >> cmds.txt; {product} | msg:WRONG-PRODUCT\n"
+        );
+        let mut cfg = config(&src, &dir, &plants);
+        cfg.prepare = sh("cp src/value.txt product.txt && echo \"$(head -1 src/value.txt) layout=$LIELLA_LAYOUT_TRACE\" >> builds.txt");
+        // Only the ordinary plant's command is known to read the products: the layout plants rebuild regardless.
+        cfg.uses_products = |_, ps| ps.iter().map(|p| p.id == "or").collect();
+        let out = run(&cfg);
+        assert_eq!(out.verdicts, vec![("or".into(), Verdict::Caught), ("mk".into(), Verdict::Caught), ("nm".into(), Verdict::Caught)]);
+        assert_eq!(out.code, EXIT_OK);
+        // Baseline ungrouped, then traced; then each plant's mutant in its own layout.
+        let builds = fs::read_to_string(dir.join("src/builds.txt")).unwrap();
+        assert_eq!(builds, "answer=42 layout=ungrouped\nanswer=42 layout=1\nanswer=43 layout=ungrouped\nanswer=44 layout=1\nanswer=45 layout=1\n");
+        assert!(dir.join("logs/so.log").is_file() && dir.join("logs/so-traced.log").is_file());
+        // The baseline of each command, then the plant's run, each in the plant's layout.
+        let cmds = fs::read_to_string(dir.join("src/cmds.txt")).unwrap();
+        assert_eq!(cmds, "cmd-or=ungrouped\ncmd-mk=1\nhot_text_products cmd-nm=1\ncmd-or=ungrouped\ncmd-mk=1\nhot_text_products cmd-nm=1\n");
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    // no spec clause (PLANTS-UNGROUPED-MUTANTS): a file without layout plants never builds traced
+    #[test]
+    fn a_file_without_layout_plants_builds_ungrouped_only() {
+        let (src, dir) = toy("ungrouped");
+        let plants = format!("pr | src/value.txt | lit:answer=42 ==> answer=43 | {PRODUCT_CHECK} | msg:WRONG-PRODUCT\n");
+        let mut cfg = config(&src, &dir, &plants);
+        cfg.prepare = sh("cp src/value.txt product.txt && echo layout=$LIELLA_LAYOUT_TRACE >> builds.txt");
+        cfg.uses_products = |_, ps| vec![true; ps.len()];
+        let out = run(&cfg);
+        assert_eq!(out.verdicts, vec![("pr".into(), Verdict::Caught)]);
+        assert_eq!(fs::read_to_string(dir.join("src/builds.txt")).unwrap(), "layout=ungrouped\nlayout=ungrouped\n");
+        assert!(!dir.join("logs/so-traced.log").exists());
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    // no spec clause (PLANTS-UNGROUPED-MUTANTS): the commands that measure the start-up layout
+    #[test]
+    fn which_commands_target_the_layout() {
+        for cmd in [
+            "cargo test -p liella --test hot_text_products",
+            "cargo test -p liella --test=heap_meta_products",
+            "cargo test -p liella --test cold_bss_products startup",
+            "cargo xtask layout-check",
+            "cargo xtask affected --only test:liella:hot_text_products --run",
+            "cargo xtask affected --files csys/src/x.c --run",
+        ] {
+            assert!(targets_layout(cmd), "{cmd}");
+        }
+        for cmd in [
+            "cargo test -p liella --test stdio_short_io",
+            "cargo xtask affected --only conformance:s27_dladdr --with-exports --run",
+            "cargo xtask affected --files csys/src/x.c --list",
+            "cargo test -p xtask --bin xtask affected::tests --run",
+            "cargo test -p xtask --bin xtask layout::tests",
+            "cargo test -p liella --test hot_text_products_helper",
+        ] {
+            assert!(!targets_layout(cmd), "{cmd}");
+        }
     }
 
     // no spec clause (XTASK-PLANTS-PRODUCTS-REBUILD): a mutant whose products do not build is judged on the build's log
@@ -997,6 +1154,12 @@ mod tests {
         assert!(parse_plants("x | a | a ==> b | true | msg:X").is_err());
         assert_eq!(parse_plants("d | a | lit:drop me ==> | true").unwrap()[0].pattern, Pattern::Literal { old: "drop me".into(), new: String::new() });
         assert!(names_machine_anchor("(liella_machine_toyfn:.*?)x") && !names_machine_anchor("liella_machine_:") && !names_machine_anchor("liella_machine_x"));
+        // PLANTS-UNGROUPED-MUTANTS: `layout:traced` after the expectation (or alone after the command).
+        let l = parse_plants("a | f | lit:x ==> y | c1 | c2 | msg:BAD | layout:traced\nb | f | lit:x ==> y | c3 | layout:traced\nc | f | lit:x ==> y | c4 | msg:Z\n").unwrap();
+        assert_eq!((l[0].cmd.as_str(), &l[0].expect, l[0].layout), ("c1 | c2", &Expect::Msg("BAD".into()), true));
+        assert_eq!((l[1].cmd.as_str(), &l[1].expect, l[1].layout), ("c3", &Expect::RcOnly, true));
+        assert!(!l[2].layout);
+        assert!(parse_plants("a | f | lit:x ==> y | c | msg:X | layout:yes").unwrap_err().contains("layout:traced"));
     }
 
     // no spec clause: the default per-plant limit is 600 s (the project rule), and --timeout overrides it
@@ -1130,6 +1293,29 @@ mod tests {
         let out = run(&cfg);
         assert_eq!(out.verdicts, vec![("h1".to_string(), Verdict::Caught)]);
         assert_eq!(out.code, EXIT_OK);
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    // no spec clause: a step that ends at its limit leaves no process of its group alive (a grandchild that ignores TERM, as the step's own leader does not)
+    #[test]
+    fn a_timed_out_step_leaves_no_process_of_its_group() {
+        let (src, dir) = toy("killtree");
+        fs::create_dir_all(&dir).unwrap();
+        let pidfile = dir.join("grandchild.pid");
+        let log = dir.join("step.log");
+        let cmd = format!("(trap '' TERM; exec sleep 300) & echo $! > {}; wait", pidfile.display());
+        let rc = run_logged(&dir, &sh(&cmd), &log, 1, crate::hotlists::Layout::Ungrouped).unwrap();
+        assert_eq!(rc, TIMED_OUT);
+        let pid = fs::read_to_string(&pidfile).unwrap().trim().to_string();
+        let alive = |pid: &str| fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|st| !st.rsplit(')').next().unwrap_or("").trim_start().starts_with('Z'));
+        // Reaping by init may lag the kill: poll a bounded number of times.
+        for _ in 0..500 {
+            if !alive(&pid) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(!alive(&pid), "grandchild {pid} survived the step's timeout");
         let _ = fs::remove_dir_all(src.parent().unwrap());
     }
 }

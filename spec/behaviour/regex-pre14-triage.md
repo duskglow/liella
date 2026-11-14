@@ -27,6 +27,8 @@ Test: `crates/core/tests/regex_pre14_triage.rs`.
 ## T30: deep nesting (bounded sizes only: 200 to 10,000 levels)
 * Unbalanced `(`×n, `(`×n `a`, `\(`×n (BRE), `(a`×n `b`, `(a|`×n `b`, `(a*`×n `b`: `REG_EPAREN` at every size probed.
 * Balanced `(`×n `a` `)`×n: compiles (rc 0) up to 1,000. `[`×n: `REG_EBRACK`.
-* Liella keeps its bound of 256 levels. Past the bound it reports `REG_EPAREN` for an unbalanced pattern
-  and `REG_EBRACK` for an open bracket. A balanced pattern past the bound is `REG_ESPACE`; this is the kept
-  difference (the gain: bounded parser depth).
+* Liella has no nesting bound (REGCOMP-DEEP-NESTING, 2026-11-13; it had one of 256 levels before): the parser,
+  the tree passes and the compiler keep their work on heap stacks, so a balanced pattern compiles at any depth
+  memory and the program-size cap (D-14.8) allow, on any thread stack. Unbalanced patterns are `REG_EPAREN`
+  and an open bracket `REG_EBRACK`, as above. Later probes (main thread, ERE): balanced groups and nested
+  alternations at 255, 256, 1,000 and 10,000 levels compile and match with every subexpression set.
