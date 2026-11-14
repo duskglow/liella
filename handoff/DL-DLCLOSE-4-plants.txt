@@ -1,9 +1,10 @@
 # DL-DLCLOSE-4 (DL-17 dlclose merged with DL-18 dladdr): plants on the merge's own code. dladdr/dlinfo
 # read inside the counted reader section; dlclose unlinks a node at its predecessor only and keeps the
 # node's own l_next and range; lookups of a caller under the lock skip gone nodes (D-27.50 (3)).
-# The two race plants run the concurrent-readers test ten times (iteration budgets, no wall-clock).
+# The two race plants repeat the concurrent-readers test (iteration budgets, no wall-clock): dladdr-not-counted
+# crashed on the 3rd of 10 runs in plants-1; unlinked-node-ends-walk is aimed at by its chain phase (check 58).
 # Run: cargo xtask plants handoff/DL-DLCLOSE-4-plants.txt --dir <new RAM dir> --timeout 600
 chain-not-unlinked | crates/boundary/src/ld/dlopen.rs | lit:p.l_next.store(next, Release); ==> p.l_next.store(p.l_next.load(Relaxed), Release); | cargo test -p liella-ld --test dlclose s27_1_c_4_dlclose_unloads_finalises_and_reclaims | msg:basic check
 caller-in-gone-node | crates/boundary/src/ld/dlopen/dlsym.rs | lit:!nd.gone && (nd.lo..nd.hi) ==> (nd.lo..nd.hi) | cargo test -p liella-ld --test dlclose s27_1_c_4_dlclose_unloads_finalises_and_reclaims | msg:basic check Some\(46\)
 dladdr-not-counted | crates/boundary/src/ld/dlopen.rs | lit:Some(super::readers::read_section(|_| f(&View { at }))) ==> Some(f(&View { at })) | for i in 1 2 3 4 5 6 7 8 9 10; do cargo test -p liella-ld --test dlclose s27_1_c_4_dlclose_concurrent_with_readers || exit 1; done | msg:concurrent check
-unlinked-node-ends-walk | crates/boundary/src/ld/dlopen.rs | lit:nd.opens = 0; ==> nd.opens = 0; nd.l_next.store(0, Relaxed); | for i in 1 2 3 4 5 6 7 8 9 10; do cargo test -p liella-ld --test dlclose s27_1_c_4_dlclose_concurrent_with_readers || exit 1; done | msg:concurrent check Some\(54\)
+unlinked-node-ends-walk | crates/boundary/src/ld/dlopen.rs | lit:nd.opens = 0; ==> nd.opens = 0; nd.l_next.store(0, Relaxed); | for i in 1 2 3; do cargo test -p liella-ld --test dlclose s27_1_c_4_dlclose_concurrent_with_readers || exit 1; done | msg:concurrent check Some\(5[48]\)

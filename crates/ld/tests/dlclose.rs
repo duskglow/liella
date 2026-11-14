@@ -362,6 +362,31 @@ static void concurrent(void) {
     for (int i = 0; i < 4; i++) pthread_join(th[i], NULL);
     CHECK(53, !loaded("libP.so") && !loaded("libA.so"), "still loaded");
     CHECK(54, dl_wrong < 0, "dladdr missed open libA.so (generation %ld)", dl_wrong);
+    /* Objects leave the chain while dladdr walks past them: L0..L31 (copies of libR.so), then A
+       after them; with A open, the Ls are closed one by one while a dladdr-only reader looks A up
+       (a walk over the Ls), so it often stands on an L as that L is unlinked: it must walk on. */
+    pthread_t t;
+    done = 0;
+    CHECK(55, pthread_create(&t, NULL, addr_reader, (void *)2000000000L) == 0, "pthread_create");
+    for (unsigned long i = 0; i < 100; i++) {
+        void *l[32];
+        char n[32];
+        for (int k = 0; k < 32; k++) {
+            snprintf(n, sizeof n, "libL%d.so", k);
+            l[k] = dlopen(P(n), RTLD_NOW);
+            CHECK(56, l[k] != NULL, "open %s: %s", n, err());
+        }
+        void *a = dlopen(P("libA.so"), RTLD_NOW);
+        CHECK(56, a != NULL, "open libA.so: %s", err());
+        __atomic_store_n(&a_text, dlsym(a, "a_fn"), __ATOMIC_SEQ_CST);
+        __atomic_store_n(&a_gen, 100000 + 2 * i + 1, __ATOMIC_SEQ_CST);
+        for (int k = 0; k < 32; k++) CHECK(57, dlclose(l[k]) == 0, "close L%d: %s", k, err());
+        __atomic_store_n(&a_gen, 100000 + 2 * i + 2, __ATOMIC_SEQ_CST);
+        CHECK(57, dlclose(a) == 0, "close libA.so: %s", err());
+    }
+    done = 1;
+    pthread_join(t, NULL);
+    CHECK(58, dl_wrong < 0, "dladdr stopped at an unlinked object before open libA.so (generation %ld)", dl_wrong);
 }
 
 /* Ruling #5651: past a retired threshold (a quarter of the 512-object table) dlopen and dlclose
@@ -591,6 +616,10 @@ fn corpus(d: &Path, ld: &Path, libc: &Path, crt1: &Path) -> PathBuf {
     std::fs::create_dir_all(d.join("sub")).unwrap();
     build(d, "libQ.so", LIB, &["-nostdlib", "-fPIC", "-shared", "-DKIND_Q", "-Wl,--enable-new-dtags,-rpath,$ORIGIN"]);
     std::fs::copy(d.join("libQ.so"), d.join("sub/libQ.so")).unwrap();
+    // 32 distinct objects (own inodes) for the concurrent mode's chain phase.
+    for k in 0..32 {
+        std::fs::copy(d.join("libR.so"), d.join(format!("libL{k}.so"))).unwrap();
+    }
     build(d, "sub/libZ.so", LIB, &["-nostdlib", "-fPIC", "-shared", "-DKIND_Z"]);
     let interp = format!("-Wl,--dynamic-linker={}", ld.display());
     build(d, "prog", PROG, &["-nostdlib", "-fPIE", "-pie", "-Wl,--export-dynamic", &interp, crt1.to_str().unwrap(), libc.to_str().unwrap(), ld.to_str().unwrap(), "-lgcc"])
@@ -631,7 +660,8 @@ fn s27_1_c_4_dlclose_unloads_finalises_and_reclaims() {
 /// visited object's headers), `dlsym` and `_dl_find_object` while the main thread opens and closes
 /// two objects 3000 times (iteration budgets): no reader faults and nothing stays loaded; a
 /// `dladdr` of the second object while the first is closed finds it (D-27.50 (3)), and a fourth
-/// thread calling only `dladdr` on it while it is closed never faults.
+/// thread calling only `dladdr` on it while it is closed never faults. Then 100 rounds close 32
+/// objects in front of an open one while a `dladdr` of it walks past them: it is always found.
 #[test]
 fn s27_1_c_4_dlclose_concurrent_with_readers() {
     let Some((d, ld, libc, crt1)) = setup("concurrent") else { return };
