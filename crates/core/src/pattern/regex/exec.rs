@@ -25,7 +25,7 @@ use crate::locale::Locale;
 use crate::mem::TryVec;
 
 use super::policy::Policy;
-use super::program::{ProgRef, NONE, OP_ASSERT, OP_BACKREF, OP_BYTE, OP_CLOSE, OP_ENTER, OP_EXIT, OP_JMP, OP_MATCH, OP_OPEN, OP_SET, OP_SPLIT};
+use super::program::{ProgRef, NONE, OP_ASSERT, OP_BACKREF, OP_BYTE, OP_CLOSE, OP_ENTER, OP_EXIT, OP_JMP, OP_MATCH, OP_OPEN, OP_SET, OP_SPLIT, SCOPE_GROUP};
 use super::scratch::{self, Buf, Grow, Pool};
 use super::text::{self, Mode, Unit};
 use super::ReError;
@@ -1164,45 +1164,14 @@ impl<P: Policy> Matcher<'_, P> {
                     }
                     prog.node(inst.b, j)
                 }
+                // An optional iteration (its split fused in): out of line, see `walk_optional`.
+                OP_ENTER if inst.c != NONE => self.walk_optional(st, pos, inst, j, start, caps, depth)?,
                 OP_ENTER => {
-                    let body = prog.node(inst.b, super::program::enter_j(inst, j));
-                    if inst.c == NONE {
-                        st.carry = None;
-                        if st.run.caps {
-                            self.enter_caps(inst, caps, at_pos);
-                        }
-                        body
-                    } else {
-                        // An optional iteration (its split fused in): the iteration first, on a
-                        // copy of the captures, as a split's first branch; the skip goes on here.
-                        let skip = prog.node(inst.c, j);
-                        let mut copy = [0i32; EPS_LOCAL];
-                        match copy.get_mut(..caps.len()) {
-                            Some(c) if depth < EPS_DEPTH && Self::inlined(st, body) => {
-                                copy_caps(c, caps);
-                                if st.run.caps {
-                                    self.enter_caps(inst, c, at_pos);
-                                }
-                                let carry = st.carry;
-                                st.carry = None;
-                                let r = self.reach(st, pos, body, start, c, depth + 1);
-                                st.carry = carry;
-                                r?;
-                                skip
-                            }
-                            _ => {
-                                // No copy (the iteration takes a bucket anyway, or no copy fits):
-                                // the skip takes its bucket with the captures as they are, then
-                                // the iteration changes them in place.
-                                self.insert(st, pos, skip, start, caps)?;
-                                st.carry = None;
-                                if st.run.caps {
-                                    self.enter_caps(inst, caps, at_pos);
-                                }
-                                body
-                            }
-                        }
+                    st.carry = None;
+                    if st.run.caps {
+                        self.enter_caps(inst, caps, at_pos);
                     }
+                    prog.node(inst.b, super::program::enter_j(inst, j))
                 }
                 OP_ASSERT if !self.assert_ok(inst.a, pos) => return Ok(()),
                 OP_ASSERT => prog.node(inst.b, j),
@@ -1221,15 +1190,19 @@ impl<P: Policy> Matcher<'_, P> {
                     }
                     if inst.b == NONE { NONE } else { prog.node(inst.b, j) }
                 }
-                OP_JMP | OP_EXIT => {
-                    if inst.op == OP_EXIT {
-                        if let Some(g) = prog.head(inst) {
-                            st.carry = None;
-                            if st.run.caps {
-                                Self::set_cap(caps, idx(g.saturating_sub(1)) * 2 + 1, at_pos);
-                            }
+                // A fused group's close (`SCOPE_GROUP`), then the exit's successor as below; a
+                // separate arm keeps the plain jump's path free of the test.
+                OP_EXIT if inst.a & SCOPE_GROUP != 0 => {
+                    if let Some(g) = prog.head(inst) {
+                        st.carry = None;
+                        if st.run.caps {
+                            Self::set_cap(caps, idx(g.saturating_sub(1)) * 2 + 1, at_pos);
                         }
                     }
+                    let (t, tj) = eps_of(inst, j).next().unwrap_or((NONE, 0));
+                    if t == NONE { NONE } else { prog.node(t, tj) }
+                }
+                OP_JMP | OP_EXIT => {
                     let (t, tj) = eps_of(inst, j).next().unwrap_or((NONE, 0));
                     if t == NONE { NONE } else { prog.node(t, tj) }
                 }
@@ -1243,6 +1216,46 @@ impl<P: Policy> Matcher<'_, P> {
             let (pc, nj, _, _) = Self::node_info(st.info, next);
             inst = prog.inst(pc);
             j = nj;
+        }
+    }
+
+    /// [`Self::walk`]'s step over an optional iteration's `ENTER` `inst` (its split fused in,
+    /// `inst.c` the skip): the iteration first, on a copy of the captures, as a split's first
+    /// branch; the skip is returned for the walk to go on. Out of line (REGCOMP-SCOPE-COST-3): its
+    /// copy and recursion inside `walk` grew every walk's frame and set-up, back-reference
+    /// patterns without such a scope included.
+    #[inline(never)]
+    #[allow(clippy::too_many_arguments)] // one thread's state, as `walk`
+    fn walk_optional(&self, st: &mut State<'_, '_>, pos: usize, inst: super::program::Inst, j: u32, start: usize, caps: &mut [i32], depth: u32) -> Result<u32, Fail> {
+        let prog = self.prog;
+        let at_pos = i32::try_from(pos).map_err(|_| Fail::Re(ReError::ESpace))?;
+        let body = prog.node(inst.b, super::program::enter_j(inst, j));
+        let skip = prog.node(inst.c, j);
+        let mut copy = [0i32; EPS_LOCAL];
+        match copy.get_mut(..caps.len()) {
+            Some(c) if depth < EPS_DEPTH && Self::inlined(st, body) => {
+                copy_caps(c, caps);
+                if st.run.caps {
+                    self.enter_caps(inst, c, at_pos);
+                }
+                let carry = st.carry;
+                st.carry = None;
+                let r = self.reach(st, pos, body, start, c, depth + 1);
+                st.carry = carry;
+                r?;
+                Ok(skip)
+            }
+            _ => {
+                // No copy (the iteration takes a bucket anyway, or no copy fits): the skip takes
+                // its bucket with the captures as they are, then the iteration changes them in
+                // place.
+                self.insert(st, pos, skip, start, caps)?;
+                st.carry = None;
+                if st.run.caps {
+                    self.enter_caps(inst, caps, at_pos);
+                }
+                Ok(body)
+            }
         }
     }
 
