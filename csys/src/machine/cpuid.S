@@ -2,7 +2,7 @@
  * liella_machine_cpuid(uint32_t leaf, uint32_t subleaf, uint32_t out[4]): out = eax, ebx, ecx, edx.
  * liella_machine_xgetbv0(void): XCR0 (callers check CPUID.1:ECX.OSXSAVE first).
  * One section per function (HOT-ORDER): startup runs both, so the hot-text list can place them
- * in the startup group (crates/libc-so/hot-text.list). */
+ * in the startup group (the build's traced hot-text.list). */
 	.section .text.liella_machine_cpuid,"ax",@progbits
 	.globl liella_machine_cpuid
 	.type liella_machine_cpuid, @function

@@ -52,6 +52,12 @@ static OWN_BASE: AtomicUsize = AtomicUsize::new(0);
 /// module with TLS after start (DL-15/DL-16) moves it on. 0 for the initially loaded objects.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 
+/// Whether this loader started the process (D-X.58: ownership is a process-level fact, never a word
+/// of a thread block): set by [`install_tls`] once the initial thread runs on the block it built.
+/// Its threads then all have blocks of this runtime; in a process another loader started (this
+/// object loaded as a library) it stays false and no thread block is read as this loader's.
+static STARTED_HERE: AtomicBool = AtomicBool::new(false);
+
 /// `__rseq_offset` (§22.9, `GLIBC_2.35` of `ld.so`): the rseq area's offset from the thread pointer
 /// (`liella_rt::tls::RSEQ_OFFSET`, the same in every thread), published with [`__rseq_size`].
 // UNSAFE(export): an exported data object of the ld.so product.
@@ -483,6 +489,7 @@ fn install_tls(mods: &[Option<Module>], biases: &[u64], placed: &[Option<Placed>
     if crate::arch::set_thread_pointer(tp).is_err() {
         fail()
     }
+    STARTED_HERE.store(true, Release);
 }
 
 /// Every module's static block, which each thread's static area holds (DL-15 `DL-TLS-THREADS`,
@@ -742,20 +749,26 @@ pub static __libc_stack_end: AtomicUsize = AtomicUsize::new(0);
 #[unsafe(no_mangle)]
 #[allow(unsafe_code)]
 pub extern "C" fn __tls_get_addr(ti: usize) -> usize {
-    // Only a block this loader made has its dtv word (D-5.11 safety, design §7): never read the
-    // word of a block another loader made as a pointer.
-    if crate::tb::read32::<crate::tb::Flags>() & FLAG_OWN == 0 {
-        refuse(b"ld.so: __tls_get_addr called on a thread block this loader did not make\n");
+    // Only a block this loader's runtime made has its dtv word (D-5.11 safety, design §7; D-X.58):
+    // in a process another loader started, never read the word of a block it made as a pointer.
+    // The test is the process-level byte, never the block's own flags word (another library's data).
+    if !STARTED_HERE.load(Acquire) {
+        refuse(b"ld.so: __tls_get_addr called in a process this loader did not start\n");
     }
     let dtv = crate::tb::read::<crate::tb::Dtv>();
+    if dtv == 0 {
+        // A thread the runtime made without a vector (DL-12: threads get theirs with DL-15/DL-16).
+        refuse(b"ld.so: __tls_get_addr: this thread has no TLS vector\n");
+    }
     // UNSAFE(slice): the caller's `tls_index`.
     #[allow(unsafe_code)]
     // SAFETY: the psABI caller passes the address of a two-word `tls_index` in its GOT (⚑ ABI).
     let index = unsafe { conv::words_at(ti, 2) };
     let (module, offset) = (index.first().copied().unwrap_or(0), index.get(1).copied().unwrap_or(0));
-    // The thread block is this loader's (FLAG_OWN, checked above), so its dtv word points at a
-    // vector this loader built with `THREAD_DTV_WORDS` words; `ltls::lookup` reads a slot only after
-    // checking it against the count in word 1.
+    // This loader started the process (`STARTED_HERE`, checked above), so the thread block is its
+    // runtime's and its non-zero dtv word (checked above) points at a vector this loader built with
+    // `THREAD_DTV_WORDS` words; `ltls::lookup` reads a slot only after checking it against the count
+    // in word 1.
     let words = dtv_words(dtv, usize::try_from(THREAD_DTV_WORDS.load(Relaxed)).unwrap_or(0));
     let word = |i: u64| -> u64 { usize::try_from(i).ok().and_then(|i| words.get(i)).map_or(0, |w| w.load(Relaxed)) };
     match ltls::lookup::<Native>(word, GENERATION.load(Relaxed), module, offset).and_then(|a| usize::try_from(a).ok()) {
@@ -1267,6 +1280,10 @@ fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<
             tls_init: fn_addr(thread_tls_init),
             tls_release: fn_addr(thread_tls_release),
             dlopen: dlopen::entry_address(),
+            dlsym: dlopen::dlsym::entry_address(),
+            dl_iterate: readers::iterate_address(),
+            dl_find_object: readers::find_object_address(),
+            dl_fork: dlopen::fork_address(),
         };
         let at = core::ptr::from_ref(&info).expose_provenance();
         let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), args(at), 0, 0);
@@ -1678,6 +1695,7 @@ fn list(env: &List<'_>, prog: &'static [u8], strict: bool) -> ! {
 const AUXV_WORDS_MAX: usize = 256;
 
 mod dlopen;
+mod readers;
 /// Words per program header.
 const PHDR_WORDS: usize = liella_rt::start::PHDR_WORDS;
 

@@ -1,0 +1,10 @@
+id = "D-31.1"
+section = "s31"
+spec = "§31"
+ann = "—"
+status = "active"
+story = "UTIL-SPEC"
+date = "2026-11-14"
+body = '''
+**The utilities are spec §31 with their own decision series D-31 and view `s31` (UTIL-0; `plan/utilities.md` Q7, owner's approval 2026-11-14).** §31 specifies what callers depend on (command names and paths, options, output formats, exit codes, files read and written, environment) for ldconfig, ldd, getent, getconf, iconv, locale, localedef, zic, zdump, tzselect, gencat and pldd, and what is not provided (§31.14); each item cites POSIX, a man page, RFC 8536, Appendix D, or a case of `spec/behaviour/utilities.glibc.txt` (black-box probe `tools/probe/util_spec.sh`, run as an ordinary user on the reference). A behaviour the design decided differently is marked **Liella rule**, with a differences row and a D-31 decision. Tooling: `cargo xtask stubs` reads the sections after §30 (§30, the pattern catalogue, gives no clauses: `spec::NO_CLAUSES`), so §31's clauses are `s31_<sub>_<field>_<n>` and their stubs are `crates/core/tests/s31_utilities_clauses.rs`; `spec/schedule.tsv` gives §31 to the track `UTIL` (from VAL, started 2026-11-14), so each UTIL story specifies its clauses in place.
+'''

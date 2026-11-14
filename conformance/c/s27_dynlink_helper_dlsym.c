@@ -2,7 +2,6 @@
  * against is found by name in the global scope and calls through the returned address. Proves
  * the runner's dynamic-link mode (LINK-HELPERS). Each failing check exits with its line number. */
 /* LINK-HELPERS: dlh_add */
-/* PENDING-LIELLA: DL-16b (DL-DLSYM) */
 #define _GNU_SOURCE
 #include <dlfcn.h>
 

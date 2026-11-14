@@ -1,0 +1,28 @@
+{
+  "task": "TB-FOREIGN-SAFETY-11",
+  "model": "opus",
+  "tokens": null,
+  "result": "PENDING JOBS: next d53c0d551 (trace-at-build default) merged; run 9's hand-placed each_block key dropped (next's hot-text.list); ld.rs __tls_get_addr takes next's atomic dtv view under STARTED_HERE; lint green; merge tests 101/101 incl. all hot_text_products (locale bound met); escalated FULL gate pending",
+  "branch": "task/tb-foreign-safety-11",
+  "head": "a3f2723cd",
+  "gate": {
+    "affected": "merge-tests (--only, NOT A GATE) 101 passed / 0 failed; gate-1 (affected --run --base origin/next, escalated FULL) pending at hand-back",
+    "peak": null
+  },
+  "accepted_first_attempt": null,
+  "rulings": [],
+  "informational": [
+    "next's ld.rs tls_visit (DL-16 dlopen TLS publish) reads the listed thread block's FLAG_OWN word; it is reached only via publish_tls with __liella_thread_walk found among this loader's start-time objects, i.e. only in a process this loader linked, where D-X.58 takes every block as its runtime's. Not changed (coordinator: nothing else). If it becomes reachable another way it needs the process-level STARTED_HERE gate and a foreign-block test.",
+    "-10's red verify (lint-0 tested a tree with next's dlf_* helpers) is moot: lint-1 ran on the synced final code head."
+  ],
+  "refused": [],
+  "impact": [
+    {"kind": "correctness", "what": "D-X.58: Liella never reads or writes its thread-block words in a thread block another C library made (lands the TB-FOREIGN-SAFETY chain)", "before": null, "after": null, "unit": null, "measured": true},
+    {"kind": "faults", "what": "setlocale + printf start-up page-fault bound (51) on the traced build: hot_text_products all 25 pass (run 10, hand layout: 52, red)", "before": 52, "after": null, "unit": "minor faults", "measured": true},
+    {"kind": "cost", "what": "mb_cur_max/toupper/iswalpha/towupper Release per call vs next (run 8 measurement; ruling #4779 allows +2)", "before": 12, "after": 14, "unit": "instr/call (mb_cur_max)", "measured": false}
+  ],
+  "improvement": "A merge-only continuation still pays a FULL gate because list files and csys escalate; a 'merge of next with no new hunks outside conflict files' tier would make these releases a direct-tier gate.",
+  "next_step": "Land when mei tb-foreign-safety-11-gate-1 and tb-foreign-safety-11-plants-1 are green.",
+  "report_file": "handoff/TB-FOREIGN-SAFETY.md",
+  "jobs": ["tb-foreign-safety-11-lint-1", "tb-foreign-safety-11-merge-tests", "tb-foreign-safety-11-plants-1", "tb-foreign-safety-11-gate-1"]
+}
