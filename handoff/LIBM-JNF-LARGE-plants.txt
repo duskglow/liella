@@ -1,0 +1,7 @@
+# LIBM-JNF-LARGE plants: jnf/ynf orders 0 and +-1 routed through j0f/j1f/y0f/y1f (special::jn, special::yn).
+route0 | crates/math/src/special.rs | perl:s/0 => return j0\(x, mode\),/0 => return j1(x, mode),/ | cargo test -p liella-math --lib jnf_ynf_low_orders_take_the_large_band | msg:jnf\(0, [0-9.e+-]+\) [A-Za-z]+
+jneg | crates/math/src/special.rs | perl:s/return j1\(F::from_bits\(x\.to_bits\(\) \^ 0x8000_0000\), mode\)/return j1(x, mode)/ | cargo test -p liella-math --lib jnf_ynf_low_orders_take_the_large_band | msg:jnf\(-1, [0-9.e+-]+\) [A-Za-z]+
+route1y | crates/math/src/special.rs | perl:s/1 => return y1\(x, mode\),/1 => return y0(x, mode),/ | cargo test -p liella-math --lib jnf_ynf_low_orders_take_the_large_band | msg:ynf\(1, [0-9.e+-]+\) [A-Za-z]+
+ymir | crates/math/src/special.rs | perl:s/y1\(x, fast_bessel::mirrored\(mode\)\)/y1(x, mode)/ | cargo test -p liella-math --lib jnf_ynf_low_orders_take_the_large_band | msg:ynf\(-1, [0-9.e+-]+\) (Up|Down)
+yneg | crates/math/src/special.rs | perl:s/return \(F::from_bits\(v\.to_bits\(\) \^ 0x8000_0000\), st\);/return (v, st);/ | cargo test -p liella-math --lib jnf_ynf_low_orders_take_the_large_band | msg:ynf\(-1, [0-9.e+-]+\) [A-Za-z]+
+sweep | crates/math/src/special.rs | perl:s/0 => return y0\(x, mode\),/0 => return y1(x, mode),/ | LIELLA_SWEEP_STRIDE=65537 cargo test -p liella-math --release --lib jnf_ynf_low_orders_are_the_order_functions_exhaustively -- --ignored | msg:ynf\(0, [-0-9.e+a-z]+\) [A-Za-z]+
