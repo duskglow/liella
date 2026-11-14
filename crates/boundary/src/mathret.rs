@@ -635,7 +635,9 @@ impl Hypot for f64 {
         elem_fast::<{ Status::HW_ANY.0 }, (f64, f64), f64>(
             (self, y),
             |(x, y)| crate::hot::hypot_nearest(x, y),
-            |(x, y), m| liella_math::pow::hypot_with::<f64, crate::hot::Hw>(x, y, m),
+            // The kernel in its build chosen at startup (LIBM-HYPOT-DIRECTED-FAST); a NaN or an
+            // infinity (the kernel's `None`) takes the exact path, as in `pow::hypot_with`.
+            |(x, y), m| crate::hot::hypot_rounded(x, y, m).unwrap_or_else(|| liella_math::pow::hypot_exact(x, y, m)),
         )
     }
 }

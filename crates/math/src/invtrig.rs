@@ -487,6 +487,79 @@ macro_rules! kernels {
             }
             None
         }
+
+        /// `hypot(x, y)` correctly rounded in `mode`, with its flags and `errno` (D-10.104); `None`
+        /// only for a NaN or an infinity. The arithmetic runs in round-to-nearest (the default
+        /// environment). Every finite pair: a zero operand, the both-subnormal integer root, the gap
+        /// exit (`a`, or its successor upward), else the scaled root with Ziv's test (`2^-98`) and,
+        /// within it, the exact integer sign of `a^2 + b^2 − m^2` at `yh` or at the midpoint (a tie
+        /// goes to even); scaled back, an overflow is `inf` (nearest, upward; `ERANGE`) or `DBL_MAX`.
+        /// The first root is `O::sqrt` ([`HwOps`]): the boundary passes its `sqrtsd`, the tests both.
+        /// The FMA build (`fused`, LIBM-HYPOT-DIRECTED-FAST) gives the same result bit for bit: its
+        /// exact products are FMAs (module comment).
+        ///
+        /// # Safety
+        ///
+        /// The FMA build (`fused`) only: the CPU must support FMA and the OS must save the AVX state.
+        $(#[$a])*
+        pub fn hypot_rounded<O: HwOps>(x: f64, y: f64, mode: Rounding) -> Option<(f64, Status)> {
+            use core::cmp::Ordering::{Equal, Greater, Less};
+            let (ab, bb) = (x.to_bits() & !SIGN, y.to_bits() & !SIGN);
+            let (hi, lo) = if ab >= bb { (ab, bb) } else { (bb, ab) };
+            if hi >= INF_BITS {
+                return None;
+            }
+            if lo == 0 {
+                return Some((f64::from_bits(hi), Status::OK));
+            }
+            let (ea, eb) = (hi >> 52, lo >> 52);
+            if ea == 0 {
+                return Some(hypot_tiny::<O>(hi, lo, mode));
+            }
+            let up = mode == Rounding::Up;
+            if ea >= eb + HYPOT_GAP {
+                return Some(hypot_finish(hi + u64::from(up), 1.0, false, mode));
+            }
+            let k = ea.min(0x7fd);
+            let scale = f64::from_bits((0x7fe - k) << 52);
+            let (a, b) = (f64::from_bits(hi) * scale, f64::from_bits(lo) * scale);
+            let r = hypot_root(a, b, O::sqrt);
+            let (yb, eta, t) = (r.hi.to_bits(), EPS_HYPOT * r.hi, dd::abs(r.lo));
+            let (ym, ye) = parts(r.hi);
+            let at_y = |_: ()| if t > eta { if r.lo > 0.0 { Greater } else { Less } } else { sq_cmp(a, b, ym, ye) };
+            let (q, exact) = if mode == Rounding::Nearest {
+                let half = f64::from_bits((yb & !MANT) - (53 << 52));
+                let pow2_below = yb & MANT == 0 && r.lo < 0.0;
+                let gap = if pow2_below { 0.5 * half } else { half };
+                if t <= eta {
+                    (yb, sq_cmp(a, b, ym, ye) == Equal)
+                } else if gap - t > eta {
+                    (yb, false)
+                } else {
+                    let (mm, me, other) = if r.lo > 0.0 {
+                        (2 * ym + 1, ye - 1, yb + 1)
+                    } else if pow2_below {
+                        (4 * ym - 1, ye - 2, yb - 1)
+                    } else {
+                        (2 * ym - 1, ye - 1, yb - 1)
+                    };
+                    let q = match (sq_cmp(a, b, mm, me), r.lo > 0.0) {
+                        (Equal, _) => if yb & 1 == 0 { yb } else { other },
+                        (Greater, true) | (Less, false) => other,
+                        _ => yb,
+                    };
+                    (q, false)
+                }
+            } else {
+                match (at_y(()), up) {
+                    (Equal, _) => (yb, true),
+                    (Greater, true) => (yb + 1, false),
+                    (Less, false) => (yb - 1, false),
+                    _ => (yb, false),
+                }
+            };
+            Some(hypot_finish(q, f64::from_bits(k << 52), exact, mode))
+        }
     };
 }
 
@@ -553,72 +626,6 @@ fn hypot_tiny<O: HwOps>(hi: u64, lo: u64, mode: Rounding) -> (f64, Status) {
     (f64::from_bits(r), Status::flags(flags))
 }
 
-/// `hypot(x, y)` correctly rounded in `mode`, with its flags and `errno` (D-10.104); `None`
-/// only for a NaN or an infinity. The arithmetic runs in round-to-nearest (the default
-/// environment). Every finite pair: a zero operand, the both-subnormal integer root, the gap
-/// exit (`a`, or its successor upward), else the scaled root with Ziv's test (`2^-98`) and,
-/// within it, the exact integer sign of `a^2 + b^2 − m^2` at `yh` or at the midpoint (a tie
-/// goes to even); scaled back, an overflow is `inf` (nearest, upward; `ERANGE`) or `DBL_MAX`.
-/// The first root is `O::sqrt` ([`HwOps`]): the boundary passes its `sqrtsd`, the tests both.
-pub fn hypot_rounded<O: HwOps>(x: f64, y: f64, mode: Rounding) -> Option<(f64, Status)> {
-    use core::cmp::Ordering::{Equal, Greater, Less};
-    let (ab, bb) = (x.to_bits() & !SIGN, y.to_bits() & !SIGN);
-    let (hi, lo) = if ab >= bb { (ab, bb) } else { (bb, ab) };
-    if hi >= INF_BITS {
-        return None;
-    }
-    if lo == 0 {
-        return Some((f64::from_bits(hi), Status::OK));
-    }
-    let (ea, eb) = (hi >> 52, lo >> 52);
-    if ea == 0 {
-        return Some(hypot_tiny::<O>(hi, lo, mode));
-    }
-    let up = mode == Rounding::Up;
-    if ea >= eb + HYPOT_GAP {
-        return Some(hypot_finish(hi + u64::from(up), 1.0, false, mode));
-    }
-    let k = ea.min(0x7fd);
-    let scale = f64::from_bits((0x7fe - k) << 52);
-    let (a, b) = (f64::from_bits(hi) * scale, f64::from_bits(lo) * scale);
-    let r = hypot_root(a, b, O::sqrt);
-    let (yb, eta, t) = (r.hi.to_bits(), EPS_HYPOT * r.hi, dd::abs(r.lo));
-    let (ym, ye) = parts(r.hi);
-    let at_y = |_: ()| if t > eta { if r.lo > 0.0 { Greater } else { Less } } else { sq_cmp(a, b, ym, ye) };
-    let (q, exact) = if mode == Rounding::Nearest {
-        let half = f64::from_bits((yb & !MANT) - (53 << 52));
-        let pow2_below = yb & MANT == 0 && r.lo < 0.0;
-        let gap = if pow2_below { 0.5 * half } else { half };
-        if t <= eta {
-            (yb, sq_cmp(a, b, ym, ye) == Equal)
-        } else if gap - t > eta {
-            (yb, false)
-        } else {
-            let (mm, me, other) = if r.lo > 0.0 {
-                (2 * ym + 1, ye - 1, yb + 1)
-            } else if pow2_below {
-                (4 * ym - 1, ye - 2, yb - 1)
-            } else {
-                (2 * ym - 1, ye - 1, yb - 1)
-            };
-            let q = match (sq_cmp(a, b, mm, me), r.lo > 0.0) {
-                (Equal, _) => if yb & 1 == 0 { yb } else { other },
-                (Greater, true) | (Less, false) => other,
-                _ => yb,
-            };
-            (q, false)
-        }
-    } else {
-        match (at_y(()), up) {
-            (Equal, _) => (yb, true),
-            (Greater, true) => (yb + 1, false),
-            (Less, false) => (yb - 1, false),
-            _ => (yb, false),
-        }
-    };
-    Some(hypot_finish(q, f64::from_bits(k << 52), exact, mode))
-}
-
 /// A scaled result `q` (bits) times `unscale` (exact unless it overflows), with its flags.
 fn hypot_finish(q: u64, unscale: f64, exact: bool, mode: Rounding) -> (f64, Status) {
     let v = f64::from_bits(q) * unscale;
@@ -641,6 +648,7 @@ fn hypot_finish(q: u64, unscale: f64, exact: bool, mode: Rounding) -> (f64, Stat
 pub mod fused {
     use super::{comb, done, index, two_sum, fast_two_sum, t, Dd, Table, dd, pow2_bits};
     use super::{HYPOT_GAP, INF_BITS, M60_FIELD, ZIV_HYPOT};
+    use super::{hypot_finish, hypot_tiny, parts, sq_cmp, HwOps, Rounding, Status, MANT};
     use super::{C3, C5, C7, C9, EPS_HYPOT, HALF_MINUS, HALF_PLUS, PI_HI, PI_LO, PI_MINUS, RECIP, SIGN, TWO_M60};
 
     kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma, dd::two_prod_fma, dd::two_prod_fma);

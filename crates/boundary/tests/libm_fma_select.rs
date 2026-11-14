@@ -96,6 +96,88 @@ fn libm_product_selects_the_fma_builds() {
     assert!(fused + CALLS <= plain, "libm FMA selection: default {fused} instructions, -FMA {plain}: the FMA builds did not run (or the tunable was ignored)");
 }
 
+/// `hypot` upward over a fixed pair set (hypot_near's shape: every binade, ratio in [1/4, 4]):
+/// the counted loop and an XOR of the result bits, so the two builds' work and bits compare.
+const HYPOT_PROGRAM: &str = r#"
+#include <errno.h>
+#include <fenv.h>
+#include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+long syscall(long, ...);
+int main(void) {
+    uint64_t attr[16] = {0};
+    attr[0] = (uint64_t)64 << 32;
+    attr[1] = 1;
+    attr[5] = 1 | 1 << 5 | 1 << 6;
+    volatile double x = 0.75, y = 0.5;
+    uint64_t bits = 0;
+    fesetround(FE_UPWARD);
+    long fd = syscall(298, attr, 0, -1, -1, 0);
+    if (fd < 0) { printf("noperf %d\n", errno); return 0; }
+    ioctl(fd, 0x2403, 0);
+    ioctl(fd, 0x2400, 0);
+    for (int i = 0; i < 4000; i++) {
+        double r = hypot(ldexp(x + i * 1e-4, i % 2000 - 1000), ldexp(y + i * 3e-4, i % 2000 - 1000));
+        uint64_t u; memcpy(&u, &r, sizeof u); bits ^= u + (uint64_t)i;
+    }
+    ioctl(fd, 0x2401, 0);
+    fesetround(FE_TONEAREST);
+    uint64_t n = 0;
+    if (read(fd, &n, sizeof n) != sizeof n) { printf("noperf read %d\n", errno); return 0; }
+    printf("%llu %016llx\n", (unsigned long long)n, (unsigned long long)bits);
+    return 0;
+}
+"#;
+
+#[test]
+fn libm_product_selects_the_fma_hypot_kernel_in_a_directed_mode() {
+    // Trace: no spec clause (D-10.25 run-time FMA builds; the directed `hypot` kernel's FMA build,
+    // LIBM-HYPOT-DIRECTED-FAST). Both builds return the same bits; the FMA one does less work.
+    if !std::arch::is_x86_feature_detected!("fma") {
+        println!("SKIP: this CPU has no FMA (or the OS does not save the AVX state): one build only");
+        return;
+    }
+    let products = std::env::var_os("LIELLA_PRODUCTS").map_or_else(|| root().join("target/liella"), PathBuf::from);
+    assert!(products.join("libc.a").exists() && products.join("libm.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = root().join("target/test-scratch/libm_fma_select_hypot").join(format!("{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("h.c"), HYPOT_PROGRAM).unwrap();
+    let out = Command::new(root().join("scripts/liella-cc"))
+        .env("LIELLA_PRODUCTS", &products)
+        .env_remove("LIELLA_CC_NO_LIBM")
+        .env_remove("LIELLA_CC_EXTRA")
+        .current_dir(&dir)
+        .args(["-O1", "-o", "h", "h.c", "-lm"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "liella-cc failed: {}", String::from_utf8_lossy(&out.stderr));
+    let run = |t: Option<&str>| -> Option<(u64, String)> {
+        let mut cmd = Command::new(dir.join("h"));
+        cmd.env_remove("GLIBC_TUNABLES");
+        if let Some(t) = t {
+            cmd.env("GLIBC_TUNABLES", t);
+        }
+        let out = cmd.output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if text.starts_with("noperf") {
+            println!("SKIP: no user-mode instruction counter for this process ({text}): perf_event_open refused");
+            return None;
+        }
+        let (n, bits) = text.split_once(' ').unwrap_or_else(|| panic!("unexpected output {text:?}"));
+        Some((n.parse().unwrap_or_else(|_| panic!("unexpected output {text:?}")), bits.to_string()))
+    };
+    let Some((fused, fused_bits)) = run(None) else { return };
+    let Some((plain, plain_bits)) = run(Some("glibc.cpu.hwcaps=-FMA")) else { return };
+    println!("user instructions for {CALLS} upward hypot calls: FMA build {fused}, -FMA {plain}");
+    assert_eq!(fused_bits, plain_bits, "hypot upward: the FMA build's bits differ from the baseline's");
+    assert!(fused + CALLS <= plain, "hypot FMA selection: default {fused} instructions, -FMA {plain}: the FMA kernel did not run in the directed mode");
+}
+
 /// The `double` trig exports' bits over a fixed argument set: every binade 2^-36..2^20 (both
 /// signs) and multiples of pi/2, the range of the in-place fast entries (LIBM-F64-TRIG-TIER).
 const TRIG_PROGRAM: &str = r#"
