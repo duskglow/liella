@@ -1081,12 +1081,38 @@ fn elem_switched<A: Denorm, R: CVal<C = R> + Denorm>(
     saved: u32,
     f: impl FnOnce(A, Rounding) -> (R, Status),
 ) -> R {
+    if fpu::is_default_but_rounding(saved) {
+        return elem_rounding_switched(x, saved, f);
+    }
     fpu::switch_default(&CSys);
     let e = Entry { saved, in_place: false };
     let x = core::hint::black_box(e.operand(x));
     let (v, mut st) = core::hint::black_box(f(x, fpu::rounding_of(saved)));
     let v = e.result(v, &mut st);
     exit(e, st);
+    v
+}
+
+/// [`elem_switched`] under a word that is the default one but for its rounding field (a directed
+/// mode with no DAZ, no FTZ and every trap masked; LIBM-HYPOT-DIRECTED-FAST): the
+/// computation runs in the default word, then MXCSR becomes `saved` with the reported flags set,
+/// in one write. That is what [`Entry`] and [`exit`] do for this word, without their tests: the
+/// operand and the result pass unchanged (no DAZ, no FTZ), every flag's trap is masked, so
+/// raising a flag is setting it, and the flags the arithmetic raised in hardware are dropped by
+/// the write. The values written are `MX_DEFAULT` and a word the hardware gave plus flag bits, so
+/// no reserved bit is set and the `MXCSR_MASK` filter of `CSys::set_mxcsr` is not needed.
+#[inline(always)]
+fn elem_rounding_switched<A: Denorm, R: CVal<C = R> + Denorm>(
+    x: A,
+    saved: u32,
+    f: impl FnOnce(A, Rounding) -> (R, Status),
+) -> R {
+    crate::ffi::liella_machine_mxcsr_set(fpu::MX_DEFAULT_WORD);
+    // As in `elem_switched`: the barriers keep the computation between the two writes.
+    let x = core::hint::black_box(x);
+    let (v, st) = core::hint::black_box(f(x, fpu::rounding_of(saved)));
+    crate::ffi::liella_machine_mxcsr_set(fpu::with_flags(saved, st.flags));
+    store_error(st.error);
     v
 }
 

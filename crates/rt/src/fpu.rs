@@ -442,6 +442,16 @@ pub fn settle(m: &impl Machine, saved: u32, flags: Flags, hw: Flags) {
     }
 }
 
+/// The default MXCSR word ([`switch_default`]'s value) for a caller that writes it itself.
+pub const MX_DEFAULT_WORD: u32 = MX_DEFAULT;
+
+/// The MXCSR value `saved` with the IEEE flags of `flags` set: the word a computation run in the
+/// default word leaves when the caller's word `saved` masks every trap, so raising a flag is
+/// setting it (LIBM-HYPOT-DIRECTED-FAST).
+pub fn with_flags(saved: u32, flags: Flags) -> u32 {
+    saved | u32::from(flags.and(Flags::ALL).0)
+}
+
 /// Set the flags of `mask` to their state in `saved`, without traps (`fesetexceptflag`).
 pub fn restore_flags(m: &impl Machine, saved: Flags, mask: Flags) {
     clear(m, mask);
