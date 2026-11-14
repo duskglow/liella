@@ -11,7 +11,8 @@
  *   - dladdr1: RTLD_DL_SYMENT the Elf64_Sym (NULL with no holder), RTLD_DL_LINKMAP the handle
  *     (the program's: dlopen(NULL)); other flags leave *extra alone;
  *   - an address no object holds (NULL, -1, the stack, the heap): 0, *info and *extra untouched;
- *   - the program (-rdynamic): dli_fname is argv[0], main found; libc found;
+ *   - the program (-rdynamic): dli_fname is argv[0], main found; libc found; also when dladdr is
+ *     the process's first loader call;
  *   - a backtrace: return addresses through the helper's dla_call map to dla_call and to main.
  * Each failed check prints its line; the exit status is the number of failed checks. */
 /* DLOPEN-HELPERS: dla_syms */
@@ -149,6 +150,10 @@ int main(int argc, char **argv)
     const char *dir = getenv("CONF_HELPERS");
     if (argc < 1 || dir == NULL)
         return 100;
+    /* The process's first loader call is a reader (no dlopen, dlsym or dlinfo before it): it
+     * still finds the program. */
+    Dl_info first;
+    CHECK(dladdr((void *)main, &first) == 1 && first.dli_fname && strcmp(first.dli_fname, argv[0]) == 0);
     char p[4096];
     snprintf(p, sizeof p, "%s/libdla_syms.so", dir);
     path = p;

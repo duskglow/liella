@@ -1,0 +1,4 @@
+# DL-DLADDR-4: the two sites this run changed after merging origin/next (dlinfo's TLS answers from the module
+# table; the first reader's build under STATE). The nine earlier plants (DL-DLADDR-3-plants-a/b) still apply.
+tls-place-no-bias | crates/boundary/src/ld/dlopen/dladdr.rs | lit:let image = o.bias.wrapping_add(o.elf.find(pt::TLS)?.vaddr); ==> let image = o.elf.find(pt::TLS)?.vaddr; | cargo xtask affected --only conformance:s27_dladdr,conformance:s27_dlinfo --with-exports --run | msg:s27_dlinfo: line [0-9]+: dlinfo\(syms, RTLD_DI_TLS_MODID, &modid\) == 0 && modid != 0
+first-reader-refuses | crates/boundary/src/ld/dlopen.rs | lit:if STATE.owner.load(Relaxed) == tb::tp() { ==> if STATE.owner.load(Relaxed) != tb::tp() { | cargo xtask affected --only conformance:s27_dladdr,conformance:s27_dlinfo --with-exports --run | msg:s27_dladdr: line [0-9]+: dladdr\(\(void \*\)main, &first\)
