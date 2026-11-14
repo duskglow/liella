@@ -321,6 +321,14 @@ fn double_hypot_kernel_is_the_exact_path_in_every_direction() {
             for fma in builds() {
                 selftest::set_math_fma(fma);
                 assert_eq!(m::hypot(x, y).to_bits(), w.to_bits(), "hypot({x:e}, {y:e}) by the entry (fma {fma}): entry FAILED");
+                // The directed entry runs the kernel in the selected build (LIBM-HYPOT-DIRECTED-FAST).
+                for (rc, mode) in [(0x800, Rounding::Up), (0x400, Rounding::Down), (0xc00, Rounding::Zero)] {
+                    let w = pow::hypot_exact::<f64>(x, y, mode).0;
+                    assert_eq!(liella_boundary::posix::s10_math::fesetround(rc), 0);
+                    let g = m::hypot(x, y);
+                    assert_eq!(liella_boundary::posix::s10_math::fesetround(0), 0);
+                    assert_eq!(g.to_bits(), w.to_bits(), "hypot({x:e}, {y:e}) {mode:?} by the entry (fma {fma}): directed entry FAILED");
+                }
             }
         }
     }

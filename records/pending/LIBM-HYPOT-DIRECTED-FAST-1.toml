@@ -1,0 +1,12 @@
+id = "D-NEW"
+series = "D-10"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+amends = ["D-10.112"]
+story = "LIBM-HYPOT-DIRECTED-FAST"
+date = "2026-11-14"
+body = '''
+**Directed-mode math envelope in two MXCSR writes; the `double` `hypot` kernel in an FMA build** (LIBM-HYPOT-DIRECTED-FAST; amends D-10.112). (1) `mathret::elem_switched` under a caller's word that is the default one but for its rounding field (no DAZ, no FTZ, every trap masked) writes the default word, runs the computation and writes the caller's word with the reported flags set, then stores `errno`; the operand and result tests and `raise`'s two MXCSR reads are skipped because for that word they are identities (raising a masked flag is setting it). Every other word keeps the full switched envelope. Every `elem_fast`/`elem_fast_dir` function's directed path takes it. (2) `invtrig::hypot_rounded` moves into the `kernels!` macro, so it has the FMA build (`invtrig::fused`, exact products by FMA, the same bits); the `double` `hypot` entry's fallback (directed modes, refused nearest calls) calls the build chosen at startup through `hot::hypot_rounded` (`dispatch::fma`), and a NaN or infinity goes to `pow::hypot_exact` as before. Measured (Skylake-SP host, instructions per call, `validation/percall/hypot.c`): the three directed rows 296.6 -> 236.6 (envelope) -> 228.6 (FMA kernel), glibc 68.8; nearest rows unchanged. Tests: `libm_fma_select::libm_product_selects_the_fma_hypot_kernel_in_a_directed_mode` (both builds' bits and the FMA build's lower count upward), `invtrig::double_hypot_kernel_is_the_exact_path_in_every_direction` (the entry in every directed mode under both builds). No paper method; the change is in the envelope and dispatch only.
+'''
