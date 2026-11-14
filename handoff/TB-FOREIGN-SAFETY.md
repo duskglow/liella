@@ -1,6 +1,6 @@
 # TB-FOREIGN-SAFETY: Liella's thread-block words never trusted or written in a block Liella did not make
 
-State: branch `task/tb-foreign-safety-12` (run 12; continues -11's head ac9a4d95a, which merged origin/next d53c0d551
+State: branch `task/tb-foreign-safety-13` (run 13 = finish-only rerun of the percall job; code as run 12, which continues -11's head ac9a4d95a, which merged origin/next d53c0d551
 with trace-at-build the default). Code commits 15e4256d4 + 8cb30e97a (then the handoff/report commit). Decision in force:
 **D-X.58** (records/decisions/D-X/D-X.58.toml; rulings #4212, #4213, #4214, #4241, #4253, #4287, #4779, #4828, #4888,
 #4889, #5344). **The gate now costs the one-access locale rows nothing: per call they equal next's counts (table).**
@@ -39,6 +39,14 @@ In a process another C library started, `thread::words()` / `foreign_words()` gi
   plants file should add `SIGABRT|signal: 6` to it); tb-foreign-safety-12-gate-2 (`affected --run --base
   origin/next`, escalates to FULL as every run of this story), pending at hand-back.
 
+## Run 13 (finish only, no code change; branch `task/tb-foreign-safety-13`, code = 10301e40c, head 94a1c46a1 + this note)
+- Why -12 went red: its percall-2 ran on 8cb30e97a, before 10301e40c changed crates/boundary/tests/tb_foreign_words.rs.
+- mei tb-foreign-safety-12-gate-2 (on 10301e40c) ended rc 0, and so did plants-2 and lint-3.
+- keke tb-foreign-safety-13-lint on 94a1c46a1 (workspace clippy --all-features -D warnings, xtask clippy, static): rc 0.
+- keke tb-foreign-safety-13-percall on 94a1c46a1 (Zen 1), same 8 cases:
+  `bash validation/wl_percall.sh --spec validation/percall/locale.c --cases mb_cur_max,toupper_ascii,iswalpha_2byte,towupper_2byte,wcwidth_2byte,wcrtomb_2byte,mbrtowc_ascii,mbstowcs_short .`
+  rc 0. It gave the same numbers as the table below, case for case (glibc mbstowcs_short 452.1 there).
+
 ## Counts (instructions:u per call, validation/percall/locale.c, Release, mei Skylake-SP, base = next d53c0d551)
 mei tb-foreign-safety-12-percall-2 on 8cb30e97a (percall on 15e4256d4 in brackets):
 | case | glibc | next | run 12 | delta |
@@ -54,8 +62,9 @@ mei tb-foreign-safety-12-percall-2 on 8cb30e97a (percall on 15e4256d4 in bracket
 (cbench_hot measures the same entries with less loop overhead: next 10 there, limit 12.)
 
 ## Exact next step
-Land once gate-1 and plants-1 are green. If the gate is red, fix only a failure this branch causes (that suite
-alone); a start-up bound red on unchanged start-up code is `INCOMPLETE: LAYOUT-JITTER` with numbers, not a chase.
+Land (all named jobs green: mei gate-2, plants-2, lint-3; keke -13 lint and percall). If CI is red, fix only a failure
+this branch causes (that suite alone); a start-up bound red on unchanged start-up code is `INCOMPLETE: LAYOUT-JITTER`
+with numbers, not a chase. Plants file note: add `SIGABRT|signal: 6` to `mask-always-owned`'s msg regex next time.
 Follow-up (own story): mbrtowc/mbstowcs/wcrtomb are still +4..+9 over next. Their quick paths call
 `locale::current()` mid-function; `view()`'s unstored/foreign case is now a call (next's was call-free inline), so
 those entries pay frame/spill cost. Fix: shape `quick` so the view is reached through a tail-call helper (as
