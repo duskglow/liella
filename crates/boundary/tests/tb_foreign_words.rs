@@ -106,6 +106,9 @@ fn foreign_block_words_neither_trusted_nor_written() {
     // Trace: no spec clause (D-X.58: a thread block another library made).
     let mut fds = [0i32; 2];
     assert_eq!(ipc::pipe(Some(&mut fds)), 0);
+    // A global locale other than "C" (MB_CUR_MAX 6, not 1): a locale word read from the block
+    // (the decoy aims it at zero words) would resolve to "C", so reading it changes an answer.
+    assert!(!lc::setlocale(6, c"C.UTF-8".as_ptr()).is_null(), "C.UTF-8 is available");
     std::thread::spawn(move || {
         let b = tb::current();
         let saved = words(b);
@@ -137,7 +140,7 @@ fn foreign_block_words_neither_trusted_nor_written() {
             1 << 8 | 1,
             usize::from(b'x'),
             1,
-            1,
+            6,
             first[15],
         ];
         assert_eq!(first, expect, "the answers with the block as the other library left it");
@@ -148,6 +151,7 @@ fn foreign_block_words_neither_trusted_nor_written() {
     })
     .join()
     .unwrap();
+    assert!(!lc::setlocale(6, c"C".as_ptr()).is_null());
     io::close(fds[0]);
     io::close(fds[1]);
 }
