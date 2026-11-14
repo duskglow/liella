@@ -1,0 +1,13 @@
+{"task": "HOTTEXT-REGEN-HOSTS-3", "model": "opus", "tokens": null,
+ "result": "Superseded by next: LT-4/LT-5 (D-X.91, D-X.88, D-X.92) already make the hot-text lists host- and profile-independent; merged origin/next taking next's side everywhere, branch now differs from next only in handoff/",
+ "branch": "task/hottext-regen-hosts-3", "head": "529da3a4a",
+ "gate": {"affected": "0 passed / 0 failed (0 suites selected: handoff-only diff), static ok", "peak": "353M"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "Close HOTTEXT-REGEN-HOSTS as superseded by LAYOUT-TRACE-HOST-CANONICAL (D-X.91) and LAYOUT-DELETE-LISTS (LT-5)", "recommendation": "land this notes-only branch (or close without landing); D-X.61 stays unused"}],
+ "informational": ["D-X.61 record removed: it never landed and describes the dropped union/provenance design; only status=active exists in records", "inherited head 6a56f31dc passed clippy and static (hottext-regen-hosts-3-lint0)"],
+ "refused": [],
+ "impact": [{"kind": "none", "what": "no code change: the story's goal is already met on next; the merge removes the conflicting branch work", "before": null, "after": null, "unit": null, "measured": true}],
+ "improvement": "Before a held story is resumed, check whether the change it waits on already did the story's job; this one only needed a superseded check",
+ "next_step": "none: close the story",
+ "report_file": "handoff/HOTTEXT-REGEN-HOSTS.md",
+ "jobs": ["hottext-regen-hosts-3-lint", "hottext-regen-hosts-3-gate"]}
