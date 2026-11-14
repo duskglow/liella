@@ -355,6 +355,9 @@ pub mod private {
         /// The loader's `dlopen` entry (DL-16a, plan/ph14/dl-16-dlopen.md §1): `(file, mode, caller)`
         /// to a handle or NULL, the failure text set in the calling thread's dlerror record; 0: none.
         pub dlopen: usize,
+        /// The loader's `dlsym`/`dlvsym` entry (DL-16b, plan §2): `(handle, name, version, caller)`
+        /// (`version` NULL for `dlsym`) to an address or NULL with the failure text set; 0: none.
+        pub dlsym: usize,
     }
 
     #[cfg(test)]

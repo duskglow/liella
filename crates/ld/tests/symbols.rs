@@ -226,11 +226,13 @@ fn versions_bind_like_the_reference() {
             assert_eq!(found(&o, name, want), expect, "{style}: {name} {want:?}");
         }
     }
-    // An object without version tables: every definition matches every request.
+    // An object without version tables: every definition matches a request without a version and a
+    // relocation's versioned reference (D-27.11), never a named version (`dlvsym`, dynlink.md).
     let stub = obj(&c["stub/libv.so"], HashStyle::Gnu);
-    for want in [Want::Oldest, Want::Default, Want::Version(b"VER_1")] {
+    for want in [Want::Oldest, Want::Default, Want::Reference(b"VER_1")] {
         assert_eq!(found(&stub, "f", want), "<base>");
     }
+    assert_eq!(found(&stub, "f", Want::Version(b"VER_1")), "-");
 }
 
 #[test]
