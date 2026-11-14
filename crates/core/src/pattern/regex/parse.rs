@@ -2,11 +2,12 @@
 //! (`RE_*`, `<regex.h>`), into a tree. Errors are the `regcomp` codes.
 //!
 //! The tree is an arena ([`Parsed::nodes`]) in which every node comes after its children, and
-//! no pass over it recurses (D-14 pending record REGCOMP-DEEP-NESTING-1): the parser keeps its
-//! open groups on an explicit stack, the facts the compiler needs about a node (whether it can
-//! match the empty string, the groups it holds) are computed as the node is added, and the
-//! top-down passes walk with explicit stacks. How deep a pattern nests is bounded by memory
-//! (`REG_ESPACE` when an allocation fails), never by the native stack.
+//! no pass over it recurses without a bound (D-14 pending record REGCOMP-DEEP-NESTING-2-1): the
+//! parser keeps its open groups on an explicit stack, the facts the compiler needs about a node
+//! (whether it can match the empty string, the groups it holds) are computed as the node is
+//! added, `hide_subpatterns` walks with an explicit stack, and the compiler recurses only to a
+//! fixed depth before it continues on one (program.rs `RECURSE_DEPTH`). How deep a pattern
+//! nests is bounded by memory (`REG_ESPACE` when an allocation fails), never by the native stack.
 #![allow(clippy::arithmetic_side_effects)] // pattern offsets are bounded by the pattern's length; node and stack counts by the arena's length
 
 use crate::ctype::{self, WClass};
