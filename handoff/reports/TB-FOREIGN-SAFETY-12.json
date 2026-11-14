@@ -1,0 +1,27 @@
+{"task": "TB-FOREIGN-SAFETY-12", "model": "opus", "tokens": null,
+ "result": "D-X.58 gate folded into the thread-block word's zero test (ownership mask ANDed in): MB_CUR_MAX, iswalpha, towupper, wcwidth, toupper equal next per call; test gap closed (C.UTF-8 global)",
+ "branch": "task/tb-foreign-safety-12", "head": "10301e40c",
+ "gate": {"affected": "pending: mei tb-foreign-safety-12-gate-2 (escalated FULL)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "process-flag unsafe category: the ownership mirror OWNED_HERE is now a usize mask (all ones / 0) instead of a bool; same single writer, same read form *OWNED_HERE.as_ptr() (static's body check unchanged); wording updated in policy.rs, docs/architecture.md, D-X.58",
+   "in a foreign process the hot paths now load the block's view/ctype word and discard it (ANDed with 0); no word is used as a pointer or a decision, none written (D-X.58 text says so)",
+   "mbrtowc/mbstowcs/wcrtomb remain +9/+8/+4 per call over next (were +11/+10/+6): their quick paths call locale::current() mid-function, and view()'s unstored/foreign case is a call; follow-up story"
+ ],
+ "refused": [],
+ "impact": [
+   {"kind": "perf", "what": "mb_cur_max per call (validation/percall/locale.c, Release)", "before": 14, "after": 12, "unit": "instr/call", "measured": true},
+   {"kind": "perf", "what": "iswalpha_2byte per call", "before": 32, "after": 30, "unit": "instr/call", "measured": true},
+   {"kind": "perf", "what": "towupper_2byte per call", "before": 31, "after": 29, "unit": "instr/call", "measured": true},
+   {"kind": "perf", "what": "wcwidth_2byte per call", "before": 50, "after": 48, "unit": "instr/call", "measured": true},
+   {"kind": "perf", "what": "mbrtowc_ascii per call", "before": 53, "after": 51, "unit": "instr/call", "measured": true},
+   {"kind": "perf", "what": "mbstowcs_short per call", "before": 572, "after": 570, "unit": "instr/call", "measured": true},
+   {"kind": "perf", "what": "wcrtomb_2byte per call", "before": 97, "after": 95, "unit": "instr/call", "measured": true},
+   {"kind": "cost", "what": "mbrtowc_ascii / mbstowcs_short / wcrtomb_2byte vs next d53c0d551: 51 vs 42, 570 vs 562, 95 vs 91 (pre-existing on this branch, reduced by 2; fix-forward: tail-call shaped quick path)", "before": null, "after": null, "unit": "instr/call", "measured": true},
+   {"kind": "coverage", "what": "plants on the folded gate (5) and tb_foreign_words strengthened to catch a read of the foreign block's locale word", "before": null, "after": 5, "unit": "plants", "measured": true}
+ ],
+ "improvement": "The percall probe plus a 1-line objdump of the internal __liella_libc_<fn> symbol in ~/wl/products/<sha>-release/libc.a found the register-sharing cost in one step; worth a tool that prints both base and new disassembly for a named entry.",
+ "next_step": "Land once gate-2 and plants-2 are green; follow-up story for the mbrtowc/mbstowcs/wcrtomb quick paths (+4..+9 over next).",
+ "report_file": "handoff/TB-FOREIGN-SAFETY.md",
+ "jobs": ["tb-foreign-safety-12-lint-3", "tb-foreign-safety-12-percall-2", "tb-foreign-safety-12-plants-2", "tb-foreign-safety-12-gate-2"]}

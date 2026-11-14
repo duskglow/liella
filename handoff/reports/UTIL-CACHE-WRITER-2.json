@@ -1,0 +1,19 @@
+{"task": "UTIL-CACHE-WRITER-2", "model": "opus", "tokens": null,
+ "result": "Finish of UTIL-CACHE-WRITER: every job rerun on the final tree under new labels (lint, direct gate 460/0, plants 13/13 CAUGHT, writer and reader fuzz with no finding); no code change",
+ "branch": "task/util-cache-writer-2", "head": null,
+ "gate": {"affected": "460 passed / 0 failed (5 suites, 1 ignored)", "peak": "1.9G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The decision is still a pending record (records/pending/UTIL-CACHE-WRITER-1.toml, D-NEW, series D-27): the coordinator assigns the id", "Run 1's fuzz job util-cache-writer-fuzz (shiki) predated the final commits to crates/ld/tests/cache_write.rs and fuzz/seeds/ld_cache/writer-*; util-cache-writer-2-fuzz replaces it", "origin/next has moved past the branch base fa251fbb0; the branch was not merged (no merge allowed by the brief)"],
+ "refused": [],
+ "impact": [
+   {"kind": "unblock", "what": "UTIL-3 (ldconfig) can write caches through cache::write and print them through Cache::get / Cache::generator", "before": null, "after": null, "unit": null, "measured": false},
+   {"kind": "coverage", "what": "tests in crates/ld/tests/cache_write.rs (round trip, layout, refusal, reference ldconfig -p, reference loader)", "before": 0, "after": 5, "unit": "tests", "measured": true},
+   {"kind": "coverage", "what": "plants caught on the writer and reader accessors", "before": 0, "after": 13, "unit": "plants", "measured": true},
+   {"kind": "coverage", "what": "ld_cache reader fuzz edges reached in 5 min from an empty corpus (writer-made seeds)", "before": 11, "after": 122, "unit": "edges", "measured": true},
+   {"kind": "coverage", "what": "new fuzz target ld_cache_write (writer then reader)", "before": 0, "after": 1, "unit": "targets", "measured": true}
+ ],
+ "improvement": "The verify's stale-content check could run at hand-back (handback-check) instead of after it: run 1 would have learned its fuzz job predated the seed commit before handing back, saving this continuation",
+ "next_step": "UTIL-3: ldconfig (conf parser, sorted directory scan feeding cache::Entry rows, links, -r via openat2, atomic replace, freestanding static product)",
+ "report_file": "handoff/UTIL-CACHE-WRITER.md",
+ "jobs": ["util-cache-writer-2-lint", "util-cache-writer-2-gate", "util-cache-writer-2-plants", "util-cache-writer-2-fuzz"]}

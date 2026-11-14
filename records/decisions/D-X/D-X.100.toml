@@ -1,0 +1,8 @@
+id = "D-X.100"
+section = "x"
+status = "active"
+story = "PLANTS-UNGROUPED-MUTANTS"
+date = "2026-11-14"
+body = '''
+**`cargo xtask plants` builds ungrouped unless a plant measures the start-up layout (`docs/plants.md`).** A mutant's behaviour does not depend on the start-up layout, and a traced product build costs minutes per mutant, so the tool sets `LIELLA_LAYOUT_TRACE=ungrouped` for the product build of an ordinary plant, its baseline and its command. A plant is built traced (`LIELLA_LAYOUT_TRACE=1`, the build and its command, always rebuilt) when its command names a start-up layout test (`cargo xtask affected`'s `LAYOUT_TESTS`: `hot_text_products`, `heap_meta_products`, `cold_bss_products`) or `layout-check` as a word, or runs `cargo xtask affected ... --run` without `--only`, or when the plant ends with the field `layout:traced`. The baseline builds once per layout the file uses (ungrouped first) and runs each command in its plants' layout. The verdict line names each build's layout. The tool owns the variable: a value in the caller's environment is overridden.
+'''

@@ -10,7 +10,9 @@
 //! relocation arithmetic, the dtv and `__tls_get_addr`'s lookup with its generation check); (2) the
 //! built `ld.so` running a `-nostdlib` program and two libraries with TLS of different alignments
 //! (4 to 64 bytes) through every model (LE, IE, GD, LD), checking `.tdata` contents, zero `.tbss`,
-//! alignment, that the models agree on one variable's address, and the canary and pointer guard.
+//! alignment, that the models agree on one variable's address, and the canary and pointer guard;
+//! (3) the built `ld.so` loaded as a library by a program of the host C library, whose thread blocks
+//! `__tls_get_addr` must not read (D-X.58).
 // ARCH(x86_64): the corpus is built by the host toolchain; the arithmetic is the x86-64 psABI's.
 #![cfg(target_arch = "x86_64")]
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::as_conversions, clippy::expect_used, clippy::panic)]
@@ -275,5 +277,92 @@ fn tls_interpreter_scope_entry_without_reading_its_file() {
         let o = o.unwrap();
         assert_eq!(o.status.code(), Some(0), "{how} with an unreadable interpreter: TLS check number {:?} failed; stderr: {}", o.status.code(), String::from_utf8_lossy(&o.stderr));
     }
+    std::fs::remove_dir_all(&d).ok();
+}
+
+// ------------------------------------------------------------------ (3) a process another loader started
+
+/// A program of the host C library that loads the built `ld.so` as a library (argv[1]) and calls
+/// its `__tls_get_addr` on a thread block it made itself, shaped like the loader's own: the self
+/// pointer, a dtv for generation 0 with module 1 at `tp - 64`, and bit 0 set in the word at 0x9c.
+/// It writes `returned` and exits 4 (the forged vector's address) or 5 if the call comes back.
+const FOREIGN: &str = r#"#include <dlfcn.h>
+#include <stdio.h>
+#include <asm/prctl.h>
+#include <sys/syscall.h>
+static unsigned long blk[1024] __attribute__((aligned(64)));
+static unsigned long dtv[4];
+static unsigned long ti[2] = {1, 8};
+static long sys(long n, long a, long b, long c) {
+  long r;
+  __asm__ volatile("syscall" : "=a"(r) : "a"(n), "D"(a), "S"(b), "d"(c) : "rcx", "r11", "memory");
+  return r;
+}
+int main(int argc, char **argv) {
+  void *h = argc > 1 ? dlopen(argv[1], RTLD_NOW | RTLD_LOCAL) : 0;
+  if (!h) { printf("dlopen: %s\n", dlerror()); return 2; }
+  unsigned long (*get)(unsigned long *) = (unsigned long (*)(unsigned long *))dlsym(h, "__tls_get_addr");
+  if (!get) { printf("dlsym: %s\n", dlerror()); return 2; }
+  fflush(stdout);
+  unsigned long tp = (unsigned long)&blk[512];
+  blk[512] = tp;
+  blk[513] = (unsigned long)dtv;
+  *(unsigned int *)((char *)tp + 0x9c) = 1;
+  dtv[0] = 0; dtv[1] = 1; dtv[2] = tp - 64;
+  if (sys(SYS_arch_prctl, ARCH_SET_FS, (long)tp, 0) != 0) return 3;
+  unsigned long a = get(ti);
+  sys(SYS_write, 1, (long)"returned\n", 9);
+  sys(SYS_exit_group, a == tp - 56 ? 4 : 5, 0, 0);
+  return 6;
+}
+"#;
+
+/// s27_3_c_0 and D-X.58 (whose thread block: a process-level fact, never a word of the block):
+/// `__tls_get_addr` of an `ld.so` that did not start the process refuses (status 127, its message)
+/// before it reads any word of the calling thread's block, even when the block's flags word and dtv
+/// look like its own.
+#[test]
+fn tls_get_addr_refuses_in_a_process_it_did_not_start() {
+    let (true, Some(ld)) = (tools_ok(), product()) else { return };
+    let d = target().join(format!("ld-tls-foreign-{}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    let c = d.join("foreign.c");
+    std::fs::write(&c, FOREIGN).unwrap();
+    let p = d.join("foreign");
+    let r = Command::new("cc").args(["-O1", "-fno-stack-protector"]).arg(&c).args(["-ldl", "-o"]).arg(&p).output().unwrap();
+    assert!(r.status.success(), "foreign.c: {}", String::from_utf8_lossy(&r.stderr));
+    let o = Command::new(&p).arg(&ld).output().unwrap();
+    let (out, err) = (String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
+    assert!(!out.starts_with("dlopen") && !out.starts_with("dlsym"), "the host loader did not load {}: {out}", ld.display());
+    assert!(!out.contains("returned"), "__tls_get_addr answered for a block it did not make (status {:?}): {out}{err}", o.status.code());
+    assert_eq!(o.status.code(), Some(127), "status; stdout {out}; stderr {err}");
+    assert!(err.contains("__tls_get_addr called in a process this loader did not start"), "stderr: {err}");
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// A `-nostdlib` program under the built `ld.so` that clears its thread block's dtv word (`%fs:8`)
+/// and asks for module 1; exits 4 if the call comes back.
+const NO_DTV: &str = "extern void *__tls_get_addr(unsigned long *);
+static unsigned long ti[2] = {1, 0};
+static void bye(int c) { __asm__ volatile(\"syscall\" :: \"a\"(231), \"D\"(c)); __builtin_unreachable(); }
+void _start(void) {
+  __asm__ volatile(\"movq $0, %%fs:8\" ::: \"memory\");
+  __tls_get_addr(ti);
+  bye(4);
+}
+";
+
+/// s27_3_c_0 (no spec clause for the failure: design §1 "Failure"): in a process the loader started,
+/// a thread block without a dtv word is refused (status 127, its message), never read through.
+#[test]
+fn tls_get_addr_refuses_a_thread_without_a_vector() {
+    let (true, Some(ld)) = (tools_ok(), product()) else { return };
+    let d = target().join(format!("ld-tls-nodtv-{}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    let p = build(&d, "nodtv", NO_DTV, &["-fPIE", "-pie", ld.to_str().unwrap()]);
+    let o = Command::new(&ld).arg(&p).output().unwrap();
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert_eq!(o.status.code(), Some(127), "status; stderr {err}");
+    assert!(err.contains("__tls_get_addr: this thread has no TLS vector"), "stderr: {err}");
     std::fs::remove_dir_all(&d).ok();
 }

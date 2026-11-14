@@ -170,12 +170,12 @@ pub extern "C" fn __wctomb_chk(s: *mut c_char, wc: wchar_t, buflen: size_t) -> c
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn btowc(c: c_int) -> wint_t {
-    mb_compat::btowc(c, locale::current())
+    locale::with_current(move |l| mb_compat::btowc(c, l))
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn wctob(wc: wint_t) -> c_int {
-    mb_compat::wctob(wc, locale::current())
+    locale::with_current(move |l| mb_compat::wctob(wc, l))
 }}
 
 export! { "GLIBC_2.2.5";
@@ -185,12 +185,12 @@ pub extern "C" fn mbsinit(ps: Option<&mbstate_t>) -> c_int {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __ctype_get_mb_cur_max() -> size_t {
-    mb_compat::mb_cur_max(locale::current())
+    locale::with_current(mb_compat::mb_cur_max)
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn wcwidth(wc: wchar_t) -> c_int {
-    u32::try_from(wc).map_or(-1, |c| locale::view().width(c))
+    u32::try_from(wc).map_or(-1, |c| locale::with_view(move |v| v.width(c)))
 }}
 
 export! { "GLIBC_2.2.5";

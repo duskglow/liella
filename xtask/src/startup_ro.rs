@@ -6,10 +6,10 @@
 //! `.rodata`) in the archive, after the hot-text grouping (which already places `STARTUP_NAMES`
 //! there, D-X.48):
 //! * every read-only data section (`.rodata*`) a start-up function's relocations address: the
-//!   functions are the keys of `crates/libc-so/startup-text.keys` (all profiles), found by their
+//!   functions are the keys of the build's traced `startup-text.keys` (all profiles), found by their
 //!   symbol, so the compiler-numbered constants (`.rodata..Lanon.*`, `.rodata.cst16`, an assembly
 //!   file's `.rodata`) follow the code that reads them;
-//! * the section of every read-only key of `crates/libc-so/startup-data.keys` (objects the page-fault
+//! * the section of every read-only key of the build's traced `startup-data.keys` (objects the page-fault
 //!   trace saw read, such as the ctype tables).
 //!
 //! The start object (`csys/src/machine/entry.S`, first in every link) holds an empty `.rodata1`
@@ -31,7 +31,7 @@ pub const SECTION: &str = crate::hottext::STARTUP_SECTION;
 /// library in one merge section (`.rodata.str1.1`, about 19 KiB) that start-up literals live in: the
 /// group's upper bound was 33 KiB on next 2e33a3cb9.
 pub const ALIGN: u64 = 65536;
-/// The tiers of `crates/libc-so/hot-text.list` whose functions' read-only data joins the group (ruling
+/// The tiers of the build's traced `hot-text.list` whose functions' read-only data joins the group (ruling
 /// #4313): the probes whose page faults `crates/core/tests/hot_text_products.rs` bounds (start-up, the
 /// setlocale + printf program and the coreutils-shaped tool) run functions of these tiers; `fork` and
 /// `extra` (other traced programs) stay out.
@@ -40,7 +40,7 @@ const HOT_TIERS: [&str; 5] = ["startup", "stdio", "strings", "locale", "tool"];
 /// localtime probes: their zone functions are in `extra`), traced per mode by
 /// `tools/hottext/probe_text.sh` (LAYOUT-STARTUP-RODATA-4: leaving them out split the `TZ` and `TZDIR`
 /// name literals off the windows start-up had faulted in, first localtime_r 19 -> 21 faults).
-const PROBE_KEYS: &str = "crates/libc-so/probe-text.keys";
+const PROBE_KEYS: &str = "probe-text.keys";
 /// The prefix the weakening pass gives a library name (`weaken_archive`); start-up keys name the
 /// final archive's symbols, this pass runs before it.
 const LIB_PREFIX: &str = "__liella_libc_";
@@ -357,11 +357,11 @@ type Inputs = (BTreeSet<String>, BTreeSet<String>, Vec<(String, Member)>);
 
 fn inputs(archive: &Path, root: &Path) -> Result<Inputs, String> {
     let read = |p: &str| fs::read_to_string(crate::hotlists::rel(root, p)?).map_err(|e| format!("{p}: {e}"));
-    let mut text_keys = keys(&read("crates/libc-so/startup-text.keys")?, |_| true);
-    text_keys.extend(crate::hottext::parse_list(&read("crates/libc-so/hot-text.list")?)?.into_iter().filter(|e| HOT_TIERS.contains(&e.tier)).map(|e| e.key));
+    let mut text_keys = keys(&read("startup-text.keys")?, |_| true);
+    text_keys.extend(crate::hottext::parse_list(&read("hot-text.list")?)?.into_iter().filter(|e| HOT_TIERS.contains(&e.tier)).map(|e| e.key));
     // The fault-bounded probe modes no tier covers (the first localtime_r, + mktime): traced on their own.
     text_keys.extend(keys(&read(PROBE_KEYS)?, |_| true));
-    let ro_keys = keys(&read("crates/libc-so/startup-data.keys")?, |k| k == "ro");
+    let ro_keys = keys(&read("startup-data.keys")?, |k| k == "ro");
     let listing = Command::new("readelf").arg("-SrsW").arg(archive).output().map_err(|e| format!("readelf: {e}"))?;
     if !listing.status.success() {
         return Err(format!("readelf -SrsW {} failed", archive.display()));

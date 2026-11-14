@@ -1,0 +1,10 @@
+id = "D-31.7"
+section = "s31"
+spec = "§31.3"
+ann = "SEC"
+status = "active"
+story = "UTIL-SPEC"
+date = "2026-11-14"
+body = '''
+**ldd never runs the operand's code or another interpreter (`plan/utilities.md` Q6, owner's approval 2026-11-14).** ldd lists each operand through Liella's loader in list mode (`--list`, D-27.16), which maps the dependencies and runs none of their code, so ldd and the loader agree on every resolution. For an operand whose `PT_INTERP` is not Liella's loader, ldd lists by Liella's rules and says so on standard error. So ldd on an untrusted file runs none of its code. No compatibility option: running an untrusted file's code is the behaviour this rule exists to remove. `-v` reads the version needs itself. `-d`, `-r` and `-u` need relocation processing, so they are refused with a message until DL-10.
+'''

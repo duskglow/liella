@@ -1,0 +1,20 @@
+{"task": "REGCOMP-DEEP-NESTING-3", "model": "opus", "tokens": null,
+ "result": "regcomp leaf fast paths cut the shallow-pattern surplus (literal_nosub +893 -> +228, ipv4 +3444 -> +1893 instr/call vs next); two rows still slower, not ready to land",
+ "branch": "task/regcomp-deep-nesting-3", "head": "0a9d61e1a",
+ "gate": {"affected": "not run (rows still slower); clippy, static, regex_deep_nesting 2/2, regex_pre14_triage 3/3, s14_search_clauses 71/71 pass", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "remaining surplus on regcomp_literal_nosub (+228) and regcomp_ipv4 (+1893)", "recommendation": "hybrid compiler: recursive below a fixed depth (e.g. 64), explicit stack beyond, so shallow patterns cost what next costs"}],
+ "informational": ["run 2's surplus was the explicit-stack compile loop per part (frame push/pop, step, resume per concatenation item; 72-byte Rep frames per repetition copy), not the inline stack setup (8 frame tags, 16 stores)"],
+ "refused": [],
+ "impact": [
+  {"kind": "perf", "what": "regcomp_literal_nosub per call vs run 2 head (base 17559)", "before": 18452, "after": 17787, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "regcomp_ipv4 per call vs run 2 head (base 132910)", "before": 136353, "after": 134802, "unit": "instr/call", "measured": true},
+  {"kind": "cost", "what": "regcomp_literal_nosub still above next (fix-forward: hybrid compiler, next run)", "before": 17559, "after": 17787, "unit": "instr/call", "measured": true},
+  {"kind": "cost", "what": "regcomp_ipv4 still above next (fix-forward: hybrid compiler, next run)", "before": 132910, "after": 134802, "unit": "instr/call", "measured": true},
+  {"kind": "perf", "what": "regcomp_kv_bre per call vs next", "before": 74139, "after": 72113, "unit": "instr/call", "measured": true},
+  {"kind": "coverage", "what": "plants file with 8 plants (5 new on the fast paths); not run yet", "before": 3, "after": 8, "unit": "plants", "measured": false}
+ ],
+ "improvement": "wl_trace cannot trace a primed base revision from a role host without a hand-made .synced copy; a --base option on wl_trace would make before/after splits one job",
+ "next_step": "recursive compile below a depth threshold with the explicit stack beyond it; then percall (regcomp.c, regex.c), direct gate, plants file via cargo xtask plants",
+ "report_file": "handoff/regex-deep-nesting.md",
+ "jobs": ["regcomp-deep-nesting-3-lint-final", "regcomp-deep-nesting-3-percall-final"]}
