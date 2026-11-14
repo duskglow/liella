@@ -1,38 +1,31 @@
-# LIBM-LGAMMAF-EDGE handoff (run 2, LIBM-LGAMMAF-EDGE-2: PENDING JOBS)
+# LIBM-LGAMMAF-EDGE handoff (run 3, LIBM-LGAMMAF-EDGE-3: INCOMPLETE, one typical row +4 instr)
 
-State: branch `task/libm-lgammaf-edge-2`, stacked on LIBM-F32-BESSEL-LARGE-7's head af1c82203 (BESSEL-LARGE-4's
-table method; REST-NEXT-3's `lgamma_edge` is on next and in the base: both prerequisites checked). Code head
-1d1a7e435 (3 commits); later commits are handoff/ only. Role shiki:~/w/sh2. Decision: pending record
+State: branch `task/libm-lgammaf-edge-3` (continues `task/libm-lgammaf-edge-2`), code head 4c914338c, stacked on
+af1c82203 (the merge base with origin/next). Role keke:~/w/n2. Decision: pending record
 records/pending/LIBM-LGAMMAF-EDGE-2-1.toml (series D-10; id to be assigned). Spec: ~/state/briefs/LIBM-LGAMMAF-EDGE.md
-plus the -2 brief's corrections.
+plus the -2 and -3 briefs. Full report with the percall table per commit: handoff/LIBM-LGAMMAF-EDGE-report.md.
 
-## Done
-- `lgamma_reflect` (crates/math/src/fast32/gamma.rs), reached from the cold `lgamma_edge` for x < -42: reflection in
-  double, exact reduction r = x - 2·nearest(x/2), sin πt by the Bessel band's octant Taylor polynomials (now
-  pub(super) in bessel.rs), Stirling with ln64. Proved bound 8.2 ulp of y (doc comment), margin 16; measured worst
-  3.0 ulp on 4459 operands. Sign from r (no integer conversion, D-10.95).
-- `lgamma_rest` (cold, out of line, only on a rounding-test refusal): for margin 11 264 (2^-8 ≤ |y| < 1) the
-  `lgamma_edge` kernel as the second try, then the table for the reflection and that piece.
-- Table crates/math/src/fast32/lgamma_tab.rs: 18 entries, all below -42, WRITTEN by
-  `lgammaf_table_is_the_refused_set` (LIELLA_LGAMMAF_TABLE_OUT=<file>; long-sweeps row added). The enumeration found
-  every small-|y| refusal decided by the second try (49 in [-2.6, -2.46] alone).
-- Oracle (oracle32.rs `lgamma_unknown`): reflection now covers -2^23 < x < -64, so the exhaustive sweep checks the
-  new operands without mp; `lgamma_oracle_decides_integers_and_large_operands` updated (-64.5 is now decided).
-- Tests: lgamma_reflection_is_within_its_bound, lgammaf_below_minus_42_takes_the_fast_path, lgammaf_table_entries,
-  lgammaf_small_refusals_take_the_second_try, gamma_margins row. Unit run (release) 12 passed; enumeration matched
-  (jobs libm-lgammaf-edge-2-gen3). Lint: xtask clippy, workspace all-features clippy, static all rc 0 (lint3).
-- Percall rows added to validation/percall/lgammaf.c: lgammaf_big, lgammaf_tab, lgammaf_retry.
+## Done (runs 2 and 3)
+- `lgamma_reflect` (crates/math/src/fast32/gamma.rs): lgammaf for -2^23 < x < -42 by reflection in double, proved
+  8.2 ulp bound, margin 16, measured worst 3.0 ulp; reached through the cold `lgamma_wide` (gamma_core refused x).
+- `lgamma_rest` (cold): the second try (`lgamma_edge`'s kernel for margin 11 264) then the 18-entry generated table
+  (lgamma_tab.rs). It recomputes the pieces with `lgamma_core_pieces::<false>` (no `lgamma_edge` kernels).
+- Run 3 hot-path fixes (the -2 head made the typical rows 4-13 instr slower): `special::lgamma` calls
+  `fast32::lgamma_first` and, on a refusal, ONE cold `lgammaf_after_first` (second try, then lgamma_accurate): two
+  calls there made the allocator pin a constant in rbx for the whole function. The x < -42 test moved out of
+  `lgamma_edge` into `lgamma_wide`. `eval_lgamma` (tests, eval(Fast::Lgamma)) still makes both tries.
+- Percall 4c914338c vs base: pos 323.8 (325.8), neg 371.6 (372.6), r_neg 378.6 (379.6), zero 1060 (1056: +4),
+  big 343 (302860), tab 631 (272874), retry 1247 (484530).
 
-## Pending (started detached on shiki at 09:38Z; collect with `~/bin/jobwait <label>` over ssh)
-libm-lgammaf-edge-2-gate (affected --run --base origin/next), libm-lgammaf-edge-2-plants (9 plants,
-handoff/LIBM-LGAMMAF-EDGE-2-plants.txt), libm-lgammaf-edge-2-sweep (exhaustive lgammaf, 2^32 x 4 modes, plus the
-table enumeration), libm-lgammaf-edge-2-percall (lgammaf.c: typical rows pos/neg/r_neg/zero against base, plus the
-three new rows). NOT VERIFIED until these are green.
-
-## Open / next
-- If the sweep or a plant is red: fix, rerun only that job. If percall shows a typical row slower: the change to
-  `eval_lgamma`'s refusal branch is the only hot-path edit (a call to the cold `lgamma_rest` in place of `?`).
-- Follow-up (not this story): `lgamma_edge`'s own refusals (608 operands: 594 at |x| < 2^-60 with margin 72 against a
-  proved 2.04 ulp, 14 in 2^-60..2^-20) still take the accurate path; a margin of 5 for the tiny piece would cut 594 to
-  about 40, which a table could then hold.
-Not to redo: the prerequisite check, the error analysis, the enumeration (current for margin 16).
+## Open / next (exact next step)
+1. lgammaf_zero +4 instr/call over base. Check first: how many of the row's 64 operands (bits 0xc0493471 - 32 ..)
+   the first try refuses; each one now pays gamma_core + ln64 in `lgamma_rest` before None. If that is it, skip the
+   recompute for edge refusals (e.g. a cheap test in `lgammaf_after_first`, or let the refusal carry the piece
+   without adding live registers to the answered path: re-measure the closure). Else disassemble
+   `special::lgamma<f32>` and `lgamma_edge` against base (scratch script: ~/work/LIBM-LGAMMAF-EDGE-3/dis.sh on keke,
+   sections by name; function symbols are stripped). Then percall again; land only at no row slower.
+2. Then collect gate/plants on the new head (plants file handoff/LIBM-LGAMMAF-EDGE-2-plants.txt, 9 plants, all
+   CAUGHT on 29bc9a5b3).
+- Follow-up #5641 (NOT in scope): `lgamma_edge`'s own refusals (608 operands, |x| < 2^-20) still take the accurate
+  path; a margin of 5 for the tiny piece would cut 594 to about 40.
+Not to redo: the prerequisite check, the error analysis, the enumeration (current for margin 16), the 9 plants.
