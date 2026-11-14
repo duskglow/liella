@@ -1,7 +1,12 @@
 # UTIL-CACHE-WRITER (UTIL-2): the ld.so cache writer in liella-ld
 
-**State.** Branch `task/util-cache-writer` (from origin/next `fa251fbb0`). Code head `1a1c96692`; the
-commits after it hold only handoff/ files. COMPLETE pending the coordinator's id for the decision record.
+**State.** Branch `task/util-cache-writer-2` (continues `task/util-cache-writer`, from origin/next
+`fa251fbb0`). Code head `1a1c96692`; the commits after it hold only handoff/ files. COMPLETE pending the
+coordinator's id for the decision record.
+
+**UTIL-CACHE-WRITER-2 (finish only, no code change).** Run 1's verify went red because its fuzz job ran
+before the last commits to `crates/ld/tests/cache_write.rs` and `fuzz/seeds/ld_cache/writer-*`. Run 2
+reran every job on the final tree on mei:~/w/s2 under new labels (table "Results, run 2" below).
 
 **What landed on the branch.**
 * `crates/ld/src/cache/writer.rs`: `cache::write(entries, generator, out)`, `cache::encoded_len`,
@@ -30,7 +35,19 @@ commits after it hold only handoff/ files. COMPLETE pending the coordinator's id
 * Liella orders them by path bytes, which is one of the outcomes the reference can produce. The
   black-box tests compare that one group as a set and pin Liella's order.
 
-**Results.** All jobs ran on shiki:~/w/sh1 against code head 1a1c96692.
+**Results, run 2 (these prove the final head).** mei:~/w/s2, tree = code head 1a1c96692 plus handoff/.
+| Job | Label | Result |
+|---|---|---|
+| Clippy (workspace, all features) + `xtask clippy` + `xtask static` | `util-cache-writer-2-lint` | green |
+| Gate (direct tier) | `util-cache-writer-2-gate` | 5 suites, 460 passed, 0 failed, 1 ignored, peak 1.9G |
+| Plants | `util-cache-writer-2-plants` | 13 of 13 CAUGHT, 0 WARN |
+| Fuzz | `util-cache-writer-2-fuzz` | `ld_cache_write` 6 min: 1.26M runs, 622 edges; then `ld_cache` 5 min with the seeds: 43M runs, 122 edges; no finding |
+
+Both fuzz corpora started empty (`/mnt/zram/claude/UTIL-CACHE-WRITER-2/fuzz`), so `ld_cache` reaching 122
+edges comes from the committed writer seeds.
+
+**Results, run 1 (superseded: the fuzz job predates the final test and seed commits).** All jobs ran on
+shiki:~/w/sh1.
 | Job | Label | Result |
 |---|---|---|
 | Gate | `util-cache-writer-gate` | 5 suites, 460 passed, 0 failed, 0 SKIPPED, peak 1.9G |
