@@ -1,0 +1,2 @@
+# UTIL-CACHE-WRITER-3 plants: the arch-seam test walks crates/ld/src recursively (src/cache/ included); cargo xtask plants handoff/UTIL-CACHE-WRITER-3-plants.txt (docs/plants.md)
+cpuid-in-cache-writer | crates/ld/src/cache/writer.rs | lit://! The loader cache writer (UTIL-2 ==> //! The loader cache writer cpuid (UTIL-2 | cargo test -p liella-ld --test ldso_run ldso_run_features_only_from_arch | msg:cache/writer.rs: .cpuid. outside the arch seam
