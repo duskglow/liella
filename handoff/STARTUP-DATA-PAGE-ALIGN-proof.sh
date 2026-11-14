@@ -30,7 +30,9 @@ build() {
         echo "proof: $tag $tree $p: sizes $(stat -c '%n=%s' target/liella/libc.a target/liella/libc.so.6 | tr '\n' ' ')"
         cp layout/contracts.tsv "$dir/$tag.contracts.tsv"
         sed -E '/^STARTUP-DATA-WINDOWS\t/s/(r[ow]-budget-[a-z]+)=[0-9]+/\1=0/g' "$dir/$tag.contracts.tsv" > layout/contracts.tsv
-        cargo xtask layout-check 2>&1 | grep -E 'STARTUP-DATA-WINDOWS(:| ok)' | grep -v -E 'BROKEN|protects' | sed "s/^/proof: $tag $tree $p: /" || true
+        # (the tree name holds `/` and `+`: prefix with the shell, not sed)
+        cargo xtask layout-check 2>&1 | grep -E 'STARTUP-DATA-WINDOWS(:| ok)' | grep -v -E 'BROKEN|protects' |
+            while IFS= read -r l; do echo "proof: $tag $tree $p: $l"; done || true
         cat "$dir/$tag.contracts.tsv" > layout/contracts.tsv
         if [ "$faults" = faults ]; then
             frc=0; cargo test -q -p liella --test hot_text_products page_fault_bound || frc=$?
