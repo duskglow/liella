@@ -40,15 +40,14 @@ load would add an `O` fault without any layout change. Neither is measured; both
 
 ## Proof jobs on this branch's head (brief step 3; started after the last commit)
 
-Each runs `proof.sh`: fresh `cargo xtask so`, `cargo xtask affected --only hot_text_products --run` (every
-start-up bound test), then the runner counts and perf sets. Trees are `git archive` of the branch head, except kanon
-(this story's role, synced).
-* kanon (Broadwell-EP), role kn1: `layout-haswell-tool-51-kanon-proof` (gate); `layout-haswell-tool-51-lint`
-  (cargo clippy --workspace --all-targets --all-features -D warnings, cargo xtask static).
-* shiki (Haswell-EP): `layout-haswell-tool-51-shiki-proof`, `/mnt/zram/claude/LAYOUT-HASWELL-TOOL-51/head`.
-* mei (Skylake-SP): `layout-haswell-tool-51-mei-proof`, `/mnt/zram/claude/LAYOUT-HASWELL-TOOL-51/head`.
-* keke (Zen 1): `layout-haswell-tool-51-keke-proof`, `/dev/shm/claude/LAYOUT-HASWELL-TOOL-51/head`.
-Their verdicts are in the hand-back and in each host's `~/logs/jobs.tsv` (this note was committed before they ran).
+NOT RUN: the permission layer REFUSED the single call that would start them, and per the rules they were not
+retried. The planned jobs were: `proof.sh` (fresh `cargo xtask so`, then `cargo xtask affected --only
+hot_text_products --run`, then the runner counts and perf sets) on `git archive` copies of head 40d4de569
+(shiki and mei `/mnt/zram/claude/LAYOUT-HASWELL-TOOL-51/head`, keke `/dev/shm/claude/LAYOUT-HASWELL-TOOL-51/head`,
+staged there; the scripts are in `~/work/LAYOUT-HASWELL-TOOL-51/` on all four hosts), kanon role kn1 under
+`~/bin/gate`, and `layout-haswell-tool-51-lint` (clippy --all-features -D warnings + `cargo xtask static`) on kn1.
+So the four-host proof and the lint of this head are NOT VERIFIED. The head adds only this note and the report json
+to origin/next 630f3afb2. The only evidence on that base is shiki `-g-next` (gate, rc 0) and `-m-next`.
 
 Diagnostic jobs (evidence, not on the head): shiki `layout-haswell-tool-51-m-next`, `-m-base`, `-m-n2`
 (count, rc 0), `-g-next` (gate, rc 0).
