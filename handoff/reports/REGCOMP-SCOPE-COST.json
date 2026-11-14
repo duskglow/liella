@@ -1,0 +1,18 @@
+{"task": "REGCOMP-SCOPE-COST", "model": "opus", "tokens": null,
+ "result": "Stopped for a ruling: the reference compiles ((a)*)* through depth 3000 at quadratic cost; Liella stops at 914 because the state model makes level k cost 5k+3 nodes, and even fused (about 2k+1) the 2^21 cap admits at most 1447. Probe results recorded in spec/behaviour/regex-nesting-depth.md; no product code changed.",
+ "branch": "task/regcomp-scope-cost", "head": "9ccd33fe7",
+ "gate": {"affected": "0 passed / 0 failed (docs-only change: no test reachable; clippy and static clean)", "peak": "464M"},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "Fuse the per-level instructions (ENTER+OPEN+loop SPLIT, CLOSE+EXIT): 5k+3 -> about 2k+1 nodes per level, cap at 1447 instead of 915, 2.5x less regcomp memory for grouped/nullable repetitions; touches program.rs, exec.rs, dfa.rs, required.rs", "recommendation": "do it in a continuation (M/L)"},
+  {"item": "The reference's 2000-3000 need 4-9 M nodes even after fusion: re-express the 2^21-node cap as a memory bound (about 600 MiB at 3000 fused, half the reference's 1.26 GiB) or keep 2^21 and record the gap as a resource limit in docs/differences-from-glibc.md", "recommendation": "owner's call; keep 2^21 plus a differences row unless the reference's depths are wanted"},
+  {"item": "Bounded repeats of bounded repeats ((a){1,2}){1,2}: Liella REG_ESPACE from 14, the reference compiles 16 (exponential in both)", "recommendation": "accept as the cap working as intended (D-14.8)"}],
+ "informational": ["Liella compiles ((a)+)+ from 20 to 914 where the reference answers REG_ESPACE within 4 GiB", "Liella's regcomp memory at the cap (143 MiB at 914) is about the reference's at the same depth (121 MiB)"],
+ "refused": [],
+ "impact": [
+  {"kind": "none", "what": "measurement and ruling request; no behaviour change", "before": null, "after": null, "unit": null, "measured": true},
+  {"kind": "unblock", "what": "the REGCOMP-SCOPE-COST continuation (fusion and/or cap ruling) has the depth table and the per-level node model", "before": null, "after": null, "unit": null, "measured": true}],
+ "improvement": "A brief that fixes a cap and asks for a depth should first check the cap's arithmetic floor (here quadratic nodes): one line of algebra would have turned this into a ruling before dispatch.",
+ "next_step": "After the ruling: implement the fusion (and the memory bound if granted), then the brief's proof (depth sweep test, corpora, percall, 64 KiB stack test, plants).",
+ "report_file": "handoff/regex-scope-cost.md",
+ "jobs": ["regcomp-scope-cost-clippy", "regcomp-scope-cost-static", "regcomp-scope-cost-gate", "regcomp-scope-cost-probe2", "regcomp-scope-cost-lprobe"]}
