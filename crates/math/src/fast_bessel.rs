@@ -180,7 +180,7 @@ pub fn hankel_kernel(n: usize, x: f64) -> (Dd, Dd, f64) {
 }
 
 /// `mode` with up and down swapped.
-fn mirrored(mode: Rounding) -> Rounding {
+pub(crate) fn mirrored(mode: Rounding) -> Rounding {
     match mode {
         Rounding::Up => Rounding::Down,
         Rounding::Down => Rounding::Up,

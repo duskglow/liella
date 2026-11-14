@@ -797,6 +797,58 @@ mod tests {
         }
     }
 
+    /// jnf and ynf of orders 0 and ±1 on the large band (D-10.109) and off it answer as the
+    /// accurate path for `J_n` and `Y_n` does, value and flags, in every mode (`J_{−1}(x) = −J_1(x)`,
+    /// `Y_{−1}(x) = −Y_1(x)`). (No spec clause: LIBM-JNF-LARGE, D-10.109.)
+    #[test]
+    fn jnf_ynf_low_orders_take_the_large_band() {
+        use crate::special::{jn, jn_accurate, yn, yn_accurate};
+        for x in [3.5f32, 524_288.0, 1e30, -524_288.0, -1e30] {
+            for n in [-1, 0, 1] {
+                for m in MODES {
+                    let (got, want) = (jn(n, x, m), jn_accurate(n, x, m));
+                    assert_eq!((got.0.to_bits(), got.1), (want.0.to_bits(), want.1), "jnf({n}, {x:e}) {m:?}");
+                    if x > 0.0 {
+                        let (got, want) = (yn(n, x, m), yn_accurate(n, x, m));
+                        assert_eq!((got.0.to_bits(), got.1), (want.0.to_bits(), want.1), "ynf({n}, {x:e}) {m:?}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// jnf and ynf of orders 0 and 1 are j0f, j1f, y0f and y1f bit for bit (value and flags) on
+    /// every `float` operand in every mode; order −1 is `−J_1(x)` and, for finite x > 0, `−Y_1(x)`,
+    /// each rounded in the mirrored mode. (No spec clause: LIBM-JNF-LARGE, D-10.109.)
+    #[test]
+    #[ignore]
+    fn jnf_ynf_low_orders_are_the_order_functions_exhaustively() {
+        use crate::special::{j0, j1, jn, y0, y1, yn};
+        let mir = crate::fast_bessel::mirrored;
+        let neg = |r: (f32, Status)| (r.0.to_bits() ^ 0x8000_0000, r.1);
+        let bits = |r: (f32, Status)| (r.0.to_bits(), r.1);
+        let checked = super::super::tests::exhaustive_by(|xs| {
+            let mut k = 0;
+            for &x in xs {
+                for m in MODES {
+                    assert_eq!(bits(jn(0, x, m)), bits(j0(x, m)), "jnf(0, {x:e}) {m:?}");
+                    assert_eq!(bits(jn(1, x, m)), bits(j1(x, m)), "jnf(1, {x:e}) {m:?}");
+                    assert_eq!(bits(yn(0, x, m)), bits(y0(x, m)), "ynf(0, {x:e}) {m:?}");
+                    assert_eq!(bits(yn(1, x, m)), bits(y1(x, m)), "ynf(1, {x:e}) {m:?}");
+                    if !x.is_nan() {
+                        assert_eq!(bits(jn(-1, x, m)), neg(j1(x, mir(m))), "jnf(-1, {x:e}) {m:?}");
+                    }
+                    if x > 0.0 && x < f32::INFINITY {
+                        assert_eq!(bits(yn(-1, x, m)), neg(y1(x, mir(m))), "ynf(-1, {x:e}) {m:?}");
+                    }
+                    k += 1;
+                }
+            }
+            k
+        });
+        std::println!("jnf/ynf orders 0, 1, -1: {checked} operand-mode pairs agree");
+    }
+
     /// The table is exactly the set of band operands the core's rounding test refuses (an
     /// exhaustive enumeration of 2^19 ≤ x < 2^128; J0 even, J1 odd, so x > 0 decides). On a
     /// mismatch it prints the table to paste into bessel_tab.rs, the nearest value and its side from

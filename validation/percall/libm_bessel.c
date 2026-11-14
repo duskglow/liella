@@ -16,6 +16,8 @@ static float (*volatile fj0)(float) = j0f;
 static float (*volatile fj1)(float) = j1f;
 static float (*volatile fy0)(float) = y0f;
 static float (*volatile fy1)(float) = y1f;
+static float (*volatile fjn)(int, float) = jnf;
+static float (*volatile fyn)(int, float) = ynf;
 
 /* float bands: tiny 2^-21 .. 2^-147 (geometric), mid [0.25, 30], large 2^19 .. 2^127 (geometric) */
 static void ftiny(void) { for (int k = 0; k < 64; k++) ft[k] = ldexpf(1.0f + (float)((k * 37) & 63) / 64.0f, -21 - 2 * k); }
@@ -34,6 +36,8 @@ static void dzero(double z) {
 }
 #define LOOPD(fp) { double (*f)(double) = fp; double acc = 0; for (long i = 0; i < n; i++) acc += f(dt[i & 63]); pc_sink += (long)(acc * 1e3); }
 #define LOOPF(fp) { float (*f)(float) = fp; double acc = 0; for (long i = 0; i < n; i++) acc += f(ft[i & 63]); pc_sink += (long)(acc * 1e3); }
+/* jnf/ynf of order k (LIBM-JNF-LARGE): orders 0 and +-1 share the float functions' bands. */
+#define LOOPFN(fp, k) { float (*f)(int, float) = fp; double acc = 0; for (long i = 0; i < n; i++) acc += f(k, ft[i & 63]); pc_sink += (long)(acc * 1e3); }
 /* Self-check against an oracle value (LIBM-BESSEL-SELFCHECK): `want` is the true value rounded to nearest, from mpmath
  * 1.4.1 (bessely at 400 bits) and agreeing with Liella's 384-bit path. The two libraries' results for y1(2.0) and
  * y0(1e-10) differ in the last place in round-to-nearest (Liella's is `want`), so printing 17 digits flagged a
@@ -54,6 +58,15 @@ CASE(bes_j0f_large, 1000000, 1) { flarge(); LOOPF(fj0); PC_CHECKING { pc_check("
 CASE(bes_j1f_large, 1000000, 1) { flarge(); LOOPF(fj1); PC_CHECKING { pc_check("%.9g", (double)fj1(1e6f)); } }
 CASE(bes_y0f_large, 1000000, 1) { flarge(); LOOPF(fy0); PC_CHECKING { pc_check("%.9g", (double)fy0(1e6f)); } }
 CASE(bes_y1f_large, 1000000, 1) { flarge(); LOOPF(fy1); PC_CHECKING { pc_check("%.9g", (double)fy1(1e6f)); } }
+CASE(bes_jnf0_large, 1000000, 1) { flarge(); LOOPFN(fjn, 0); PC_CHECKING { pc_check("%.9g", (double)fjn(0, 1e6f)); } }
+CASE(bes_jnf1_large, 1000000, 1) { flarge(); LOOPFN(fjn, 1); PC_CHECKING { pc_check("%.9g", (double)fjn(1, 1e6f)); } }
+CASE(bes_jnfm1_large, 1000000, 1) { flarge(); LOOPFN(fjn, -1); PC_CHECKING { pc_check("%.9g", (double)fjn(-1, 1e6f)); } }
+CASE(bes_ynf0_large, 1000000, 1) { flarge(); LOOPFN(fyn, 0); PC_CHECKING { pc_check("%.9g", (double)fyn(0, 1e6f)); } }
+CASE(bes_ynf1_large, 1000000, 1) { flarge(); LOOPFN(fyn, 1); PC_CHECKING { pc_check("%.9g", (double)fyn(1, 1e6f)); } }
+CASE(bes_jnf0_mid, 1000000, 1) { fmid(); LOOPFN(fjn, 0); PC_CHECKING { pc_check("%.9g", (double)fjn(0, 1.5f)); } }
+CASE(bes_ynf1_mid, 1000000, 1) { fmid(); LOOPFN(fyn, 1); PC_CHECKING { pc_check("%.9g", (double)fyn(1, 1.5f)); } }
+CASE(bes_jnf3_mid, 1000000, 1) { fmid(); LOOPFN(fjn, 3); PC_CHECKING { pc_check("%.9g", (double)fjn(3, 1.5f)); } }
+CASE(bes_ynf3_mid, 1000000, 1) { fmid(); LOOPFN(fyn, 3); PC_CHECKING { pc_check("%.9g", (double)fyn(3, 1.5f)); } }
 CASE(bes_j0_tiny, 1000000, 1) { dtiny(); LOOPD(dj0); PC_CHECKING { pc_check("%.17g", dj0(1e-10)); } }
 CASE(bes_j1_tiny, 1000000, 1) { dtiny(); LOOPD(dj1); PC_CHECKING { pc_check("%.17g", dj1(1e-10)); } }
 CASE(bes_y0_tiny, 1000000, 1) { dtiny(); LOOPD(dy0); PC_CHECKING { pc_check_near(dy0(1e-10), -0x1.d770c5f760b81p+3); } }
