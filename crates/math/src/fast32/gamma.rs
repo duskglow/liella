@@ -282,28 +282,39 @@ fn lgamma_tabled(d: u64, edge: bool) -> bool {
 }
 
 /// `lgammaf` by the fast path with the sign of Γ(x) (`signgam`), or `None` (see [`eval`]): the
-/// value as `eval(Fast::Lgamma, ..)`, the sign from Γ(x) itself ([`lgamma_core_signed`]). A
-/// refusal of the rounding test goes to [`lgamma_rest`] (out of line, so the answered path keeps
-/// its code).
+/// value as `eval(Fast::Lgamma, ..)`, the sign from Γ(x) itself ([`lgamma_core_signed`]). Any
+/// refusal goes to [`lgamma_rest`] with x and `mode` only: the callers keep both for the accurate
+/// path anyway, so the answered path ([`lgamma_first`]) holds nothing more across the rounding test
+/// (passing y, the margin, the sign and `edge` to the cold call cost the typical rows 4 to 13
+/// instructions, LIBM-LGAMMAF-EDGE-3).
 #[inline(always)]
 pub fn eval_lgamma(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
+    match lgamma_first(x, mode) {
+        Some(r) => Some(r),
+        None => lgamma_rest(x, mode),
+    }
+}
+
+/// The first try: the pieces of [`lgamma_core_signed`] and one rounding test.
+#[inline(always)]
+fn lgamma_first(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
     let (y, d, sign, edge) = lgamma_core_signed(x)?;
-    let Some((v, st)) = super::finish(x, y, d, mode, "lgammaf") else {
-        return lgamma_rest(x, y, d, sign, edge, mode);
-    };
+    let (v, st) = super::finish(x, y, d, mode, "lgammaf")?;
     Some(((v, if edge { st.hw(Status::HW_ANY) } else { st }), sign))
 }
 
-/// The second tries after the rounding test refused y (margin `d`, `edge` as
-/// [`lgamma_core_signed`]'s): for 2^-8 ≤ |y| < 1 [`lgamma_edge`]'s double-double kernel; then, in
-/// the pieces [`lgamma_tabled`] names, the table (a binary search by x's bits). A table entry's
+/// The second tries after [`lgamma_first`] refused x: its pieces again (y with margin `d`, `edge`
+/// as [`lgamma_core_signed`]'s; `None` there, the poles and the other operands no piece takes,
+/// stays `None`), then for 2^-8 ≤ |y| < 1 [`lgamma_edge`]'s double-double kernel; then, in the
+/// pieces [`lgamma_tabled`] names, the table (a binary search by x's bits). A table entry's
 /// value is rebuilt a 2^-28 relative step from F on its side, with y's sign (|y - lnΓ(x)| is far
 /// below |y| in every covered piece), so every rounding mode and the inexact flag follow from one
 /// more rounding test with margin 1. `None` otherwise (the accurate path). The hardware hint is
 /// [`Status::HW_ANY`] (the kernel's intermediates are not tracked here; cold).
 #[cold]
 #[inline(never)]
-fn lgamma_rest(x: f32, y: f64, d: u64, sign: i32, edge: bool, mode: Rounding) -> Option<((f32, Status), i32)> {
+fn lgamma_rest(x: f32, mode: Rounding) -> Option<((f32, Status), i32)> {
+    let (y, d, sign, edge) = lgamma_core_signed(x)?;
     if !lgamma_tabled(d, edge) {
         return None;
     }
