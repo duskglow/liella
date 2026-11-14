@@ -1,0 +1,29 @@
+{
+ "task": "DL-DLOPEN-CONCURRENT-3",
+ "model": "opus",
+ "tokens": 167000,
+ "result": "INCOMPLETE: context checkpoint. Merged next (trace-at-build default): start-up layout tests pass fast, interposed and release; R14-6 differences row + registered compat flag (pending id); gate 7729/0 on 811bc207f. A new readers check found the program's own TLS module listed with module 0 and no block (dlopen'd TLS objects are right): head 17d465549 is test-red until tls_of is fixed",
+ "branch": "task/dl-dlopen-concurrent-3",
+ "head": "17d465549",
+ "gate": {
+  "affected": "7729 passed / 0 failed on 811bc207f (dl-dlopen-concurrent-3-gate2; conformance 54/0); hot_text_products 25/25 release (dl-dlopen-concurrent-3-layout-release); final head 17d465549: dlopen_concurrent 3 passed / 1 failed (check 27, dl-dlopen-concurrent-3-lint3)",
+  "peak": "10G"
+ },
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": [
+  "Liella's libc.so.6 has no DT_NEEDED (the reference's names ld-linux-x86-64.so.2): in a program linked --as-needed, ld.so is not in the global scope and a dlopen'd object without its own DT_NEEDED cannot bind __tls_get_addr (undefined symbol; gate dl-dlopen-concurrent-3-gate). Not probed on the reference. Recommend a DL story: probe the reference's scope, then add the DT_NEEDED or keep the interpreter in the global scope.",
+  "COMPAT-NEW pending record records/pending/DL-DLOPEN-CONCURRENT-3-1.toml needs an id from the coordinator (CI auto-assigns only D-NEW); the DL-16c decision records/pending/DL-DLOPEN-CONCURRENT-1.toml is D-NEW (series D-27).",
+  "Process: one helper-object edit in this run used a python heredoc (no-heredoc rule); later edits used the Edit/Write tools."
+ ],
+ "refused": [],
+ "impact": [
+  {"kind": "correctness", "what": "defect found: dl_iterate_phdr reports dlpi_tls_modid 0 and dlpi_tls_data NULL for the program's own TLS module in a dynamic program (readers::tls_of); fix pending", "before": null, "after": null, "unit": null, "measured": true},
+  {"kind": "coverage", "what": "readers test checks 25-27 (dlopen'd and start-time PT_TLS objects); one plant added", "before": 7, "after": 8, "unit": "plants", "measured": true},
+  {"kind": "unblock", "what": "DL-17 once this branch lands", "before": null, "after": null, "unit": null, "measured": false}
+ ],
+ "improvement": "A plant whose premise depends on the corpus (a start-time TLS module existing) should be checked against the corpus first: here its survival exposed a real reader defect, but only after a 110-minute plants run under load.",
+ "next_step": "Find why tls_of's program image (START_OBJS bias + p_vaddr) differs from record_thread_tls's (biases[i] + vaddr), fix, rerun dlopen_concurrent, lint, gate, plants (8).",
+ "report_file": "handoff/DL-DLOPEN-CONCURRENT.md",
+ "jobs": ["dl-dlopen-concurrent-3-lint3"]
+}

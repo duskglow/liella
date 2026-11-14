@@ -1281,6 +1281,9 @@ fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize, early: Option<
             tls_release: fn_addr(thread_tls_release),
             dlopen: dlopen::entry_address(),
             dlsym: dlopen::dlsym::entry_address(),
+            dl_iterate: readers::iterate_address(),
+            dl_find_object: readers::find_object_address(),
+            dl_fork: dlopen::fork_address(),
         };
         let at = core::ptr::from_ref(&info).expose_provenance();
         let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), args(at), 0, 0);
@@ -1692,6 +1695,7 @@ fn list(env: &List<'_>, prog: &'static [u8], strict: bool) -> ! {
 const AUXV_WORDS_MAX: usize = 256;
 
 mod dlopen;
+mod readers;
 /// Words per program header.
 const PHDR_WORDS: usize = liella_rt::start::PHDR_WORDS;
 
