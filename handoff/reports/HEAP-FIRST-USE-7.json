@@ -13,4 +13,5 @@
  "improvement": "A first-touch-ordered layout makes any change to what start-up runs first move unrelated windows; a per-window slack report in the build would show the margin before a gate does.",
  "next_step": "Diff the fast traced lists up to __snprintf_chk vs next and shrink or move what pushes the printf group 0x1ac0 later; then bounds, gate, plants.",
  "report_file": "handoff/HEAP-FIRST-USE-7.md",
- "jobs": ["hfu7-bounds2", "heap-first-use-7-plants"]}
+ "jobs": ["heap-first-use-7-plants"],
+ "red_evidence": ["hfu7-bounds2 rc 1 on b032b6f42: lint and release 26/26 green, fast first float 4 > 3 (the open item)"]}
