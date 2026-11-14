@@ -46,9 +46,9 @@ fn setup(name: &str) -> Option<(PathBuf, PathBuf, PathBuf, PathBuf)> {
     Some((d, ld, libc, lib.join("liella-crt1.o")))
 }
 
-/// Build `out` from `src` (C, or C++ when `out` ends in `cxx`) with `flags` in `d`.
+/// Build `out` from `src` (C, or C++ when `out` ends in `cxx` or `cxx.so`) with `flags` in `d`.
 fn build(d: &Path, out: &str, src: &str, flags: &[&str]) -> PathBuf {
-    let cxx = out.ends_with("cxx");
+    let cxx = out.ends_with("cxx") || out.ends_with("cxx.so");
     let c = d.join(format!("{out}.{}", if cxx { "cc" } else { "c" }));
     std::fs::write(&c, src).unwrap();
     let o = d.join(out);
@@ -273,6 +273,7 @@ static void concurrent(void) {
     pthread_t th[3];
     for (int i = 0; i < 3; i++) CHECK(50, pthread_create(&th[i], NULL, reader, (void *)200000L) == 0, "pthread_create");
     for (int i = 0; i < 3000; i++) {
+        evlog[0] = 0; /* A's and B's constructors and destructors log here (this thread only). */
         void *p = dlopen(P("libP.so"), RTLD_NOW | RTLD_GLOBAL);
         void *a = dlopen(P("libA.so"), RTLD_NOW);
         CHECK(51, p && a, "open %d: %s", i, err());
@@ -322,7 +323,7 @@ int main(int argc, char **argv) {
     if (argc < 2) return 2;
     alarm(300);
     char p[4200];
-    snprintf(p, sizeof p, "%s/libplugin.so", argv[1]);
+    snprintf(p, sizeof p, "%s/libplugincxx.so", argv[1]);
     for (int i = 0; i < 300; i++) {
         void *h = dlopen(p, RTLD_NOW);
         if (!h) { fprintf(stderr, "dlopen %d: %s\n", i, dlerror()); return 3; }
@@ -350,10 +351,10 @@ fn corpus(d: &Path, ld: &Path, libc: &Path, crt1: &Path) -> PathBuf {
         f.extend_from_slice(extra);
         build(d, out, LIB, &f);
     };
-    let ldir = format!("-L{dir}");
+    let (ldir, rpath) = (format!("-L{dir}"), format!("-Wl,-rpath,{dir}"));
     lib("libB.so", "-DKIND_B", &[]);
-    lib("libA.so", "-DKIND_A", &["-Wl,--no-as-needed", &ldir, "-l:libB.so"]);
-    lib("libC.so", "-DKIND_C", &["-Wl,--no-as-needed", &ldir, "-l:libB.so"]);
+    lib("libA.so", "-DKIND_A", &["-Wl,--no-as-needed", &ldir, &rpath, "-l:libB.so"]);
+    lib("libC.so", "-DKIND_C", &["-Wl,--no-as-needed", &ldir, &rpath, "-l:libB.so"]);
     for (out, kind) in [("libG.so", "-DKIND_G"), ("libU.so", "-DKIND_U"), ("libN.so", "-DKIND_N"), ("libY.so", "-DKIND_Y"), ("libX.so", "-DKIND_X")] {
         lib(out, kind, &[]);
     }
@@ -414,10 +415,14 @@ fn s27_1_c_4_cxx_plugin_load_unload_loop() {
         return;
     }
     let file = |f: &str| String::from_utf8(Command::new("c++").arg(format!("-print-file-name={f}")).output().unwrap().stdout).unwrap().trim().to_owned();
-    let (begin, end, begin_s, end_s) = (file("crtbeginS.o"), file("crtendS.o"), file("crtbeginS.o"), file("crtendS.o"));
-    build(&d, "libplugin.so", PLUGIN, &["-x", "c++", "-nostdlib", "-fPIC", "-shared", "-fexceptions", &begin_s, &end_s]);
+    let (begin, end) = (file("crtbeginS.o"), file("crtendS.o"));
+    // libgcc_eh's unwinder symbols are hidden: the plugin carries its own copy (as `-static-libgcc`).
+    build(&d, "libplugincxx.so", PLUGIN, &["-nostdlib", "-fPIC", "-shared", "-fexceptions", &begin, "-lgcc_eh", "-lgcc", &end]);
     let interp = format!("-Wl,--dynamic-linker={}", ld.display());
-    let prog = build(&d, "prog_cxx", CXX_PROG, &["-nostdlib", "-fPIE", "-pie", "-Wl,--export-dynamic", "-Wl,--eh-frame-hdr", &interp, crt1.to_str().unwrap(), &begin, libc.to_str().unwrap(), ld.to_str().unwrap(), "-Wl,-Bstatic", "-lsupc++", "-lgcc_eh", "-lgcc", "-Wl,-Bdynamic", libc.to_str().unwrap(), ld.to_str().unwrap(), &end]);
+    // The program throws nothing itself: `-u` pulls the C++ exception runtime the plugin needs out of
+    // the static archives, and `--export-dynamic` lets the plugin bind to it.
+    let rt = "-Wl,-u,_ZTIi,-u,__cxa_allocate_exception,-u,__cxa_free_exception,-u,__cxa_throw,-u,__cxa_begin_catch,-u,__cxa_end_catch,-u,__gxx_personality_v0";
+    let prog = build(&d, "prog_cxx", CXX_PROG, &["-nostdlib", "-fPIE", "-pie", "-Wl,--export-dynamic", "-Wl,--eh-frame-hdr", rt, &interp, crt1.to_str().unwrap(), &begin, libc.to_str().unwrap(), ld.to_str().unwrap(), "-Wl,-Bstatic", "-lsupc++", "-lgcc_eh", "-lgcc", "-Wl,-Bdynamic", libc.to_str().unwrap(), ld.to_str().unwrap(), &end]);
     use std::os::unix::process::ExitStatusExt;
     for (how, mut cmd) in [("kernel-started", Command::new(&prog)), ("ld.so PROGRAM", { let mut c = Command::new(&ld); c.arg(&prog); c })] {
         let o = cmd.arg(&d).output().unwrap();
