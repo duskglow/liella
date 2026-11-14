@@ -64,7 +64,8 @@ fn build(d: &Path, out: &str, src: &str, flags: &[&str]) -> PathBuf {
 /// (`libslow`): a constructor that waits on a pipe the program names. KIND 4 (`libplain*`): a
 /// constructor that counts. KIND 5 (`libthrough`): calls back the program (the C++ case). KIND 6
 /// (`libtls`): a `PT_TLS` object (initial-exec) whose constructor records the caller's address of
-/// its variable.
+/// its variable. KIND 7 (`libdeptls`): the program's `DT_NEEDED` dependency with a `PT_TLS` segment
+/// (initial-exec), returning its variable's address.
 const LIB: &str = r#"#define _GNU_SOURCE
 #include <dlfcn.h>
 #include <link.h>
@@ -120,6 +121,10 @@ extern void *tls_addr;
    this -nostdlib object could only bind through a scope holding ld.so */
 __attribute__((tls_model("initial-exec"))) __thread int tls_v = 6;
 __attribute__((constructor)) static void c(void) { tls_addr = &tls_v; }
+#elif KIND == 7
+/* an initial dependency's TLS (initial-exec: a start-time module) */
+__attribute__((tls_model("initial-exec"))) __thread int dep_tls = 7;
+void *dep_tls_addr(void) { return &dep_tls; }
 #endif
 "#;
 
@@ -154,12 +159,24 @@ static int opening_cb(struct dl_phdr_info *i, size_t s, void *d) {
     return 0;
 }
 static int in_main(void) { return 1; }
-/* The program's own TLS: a start-time module listed before any dlopen'd one. */
+/* The program's own TLS and its dependency's: start-time modules listed before any dlopen'd one. */
 __thread int prog_tls = 3;
-struct tls_seen { size_t modid, prog_modid; void *data, *prog_data; };
+extern void *dep_tls_addr(void);
+struct tls_seen { size_t modid, prog_modid, dep_modid; void *data, *prog_data, *dep_data; };
+/* Whether a PT_LOAD of the listed object holds `p` (start-time names are not paths: the
+   program's is "", and the corpus's libc copy and libdeptls have no DT_SONAME). */
+static int holds(const struct dl_phdr_info *i, const void *p) {
+    for (int k = 0; k < i->dlpi_phnum; k++) {
+        const ElfW(Phdr) *h = &i->dlpi_phdr[k];
+        uintptr_t lo = i->dlpi_addr + h->p_vaddr;
+        if (h->p_type == PT_LOAD && (uintptr_t)p >= lo && (uintptr_t)p - lo < h->p_memsz) return 1;
+    }
+    return 0;
+}
 static int tls_cb(struct dl_phdr_info *i, size_t s, void *d) {
     struct tls_seen *t = d; (void)s;
-    if (!i->dlpi_name[0]) { t->prog_modid = i->dlpi_tls_modid; t->prog_data = i->dlpi_tls_data; }
+    if (holds(i, (void *)in_main)) { t->prog_modid = i->dlpi_tls_modid; t->prog_data = i->dlpi_tls_data; }
+    if (holds(i, (void *)dep_tls_addr)) { t->dep_modid = i->dlpi_tls_modid; t->dep_data = i->dlpi_tls_data; }
     if (!strstr(i->dlpi_name, "/libtls.so")) return 0;
     t->modid = i->dlpi_tls_modid; t->data = i->dlpi_tls_data;
     return 1;
@@ -199,9 +216,10 @@ static int readers(void) {
     /* A dlopen'd object with PT_TLS is listed with its module ID and this thread's block, the
        one its own code reaches (the module is given to every thread before publication). */
     if (!dlopen(at("libtls.so"), RTLD_NOW) || !tls_addr) FAIL(25, "dlopen libtls: %s", dlerror());
-    struct tls_seen t = { 0, 0, 0, 0 };
+    struct tls_seen t = { 0, 0, 0, 0, 0, 0 };
     if (dl_iterate_phdr(tls_cb, &t) != 1 || t.modid == 0 || t.data != tls_addr || *(int *)t.data != 6) FAIL(26, "libtls listed with module %zu block %p, its variable at %p", t.modid, t.data, tls_addr);
     if (t.prog_modid == 0 || t.prog_modid == t.modid || t.prog_data != (void *)&prog_tls) FAIL(27, "the program listed with module %zu block %p, its variable at %p (libtls module %zu)", t.prog_modid, t.prog_data, (void *)&prog_tls, t.modid);
+    if (t.dep_modid == 0 || t.dep_modid == t.modid || t.dep_modid == t.prog_modid || t.dep_data != dep_tls_addr() || *(int *)t.dep_data != 7) FAIL(28, "libdeptls listed with module %zu block %p, its variable at %p (program module %zu, libtls module %zu)", t.dep_modid, t.dep_data, dep_tls_addr(), t.prog_modid, t.modid);
     return 0;
 }
 
@@ -309,6 +327,7 @@ fn corpus(d: &Path, ld: &Path, libc: &Path, crt1: &Path) -> PathBuf {
     }
     kinds.push(("libthrough.so".into(), "-DKIND=5".into()));
     kinds.push(("libtls.so".into(), "-DKIND=6".into()));
+    kinds.push(("libdeptls.so".into(), "-DKIND=7".into()));
     for (out, defs) in &kinds {
         let mut flags: Vec<&str> = shared.to_vec();
         flags.extend(defs.split(' '));
@@ -319,7 +338,9 @@ fn corpus(d: &Path, ld: &Path, libc: &Path, crt1: &Path) -> PathBuf {
     build(d, "libneedsgone.so", "extern int gone_fn(void); int ng(void) { return gone_fn(); }\n", &["-nostdlib", "-fPIC", "-shared", "-Wl,--no-as-needed", &format!("-L{dir}"), "-l:libGone.so"]);
     std::fs::remove_file(d.join("libGone.so")).unwrap();
     let interp = format!("-Wl,--dynamic-linker={}", ld.display());
-    build(d, "prog", PROG, &["-nostdlib", "-fPIE", "-pie", "-Wl,--export-dynamic", &interp, crt1.to_str().unwrap(), libc.to_str().unwrap(), ld.to_str().unwrap(), "-lgcc"])
+    // libdeptls has no DT_SONAME: the program's DT_NEEDED names it by its path.
+    let dep = d.join("libdeptls.so");
+    build(d, "prog", PROG, &["-nostdlib", "-fPIE", "-pie", "-Wl,--export-dynamic", &interp, crt1.to_str().unwrap(), dep.to_str().unwrap(), libc.to_str().unwrap(), ld.to_str().unwrap(), "-lgcc"])
 }
 
 /// Run `prog DIR MODE` kernel-started and as `ld.so PROGRAM`; both must exit 0.
@@ -339,8 +360,8 @@ fn run(d: &Path, ld: &Path, prog: &Path, mode: &str) {
 /// `_dl_find_object` finds it with its link map); a callback may call `dlopen` and the running walk
 /// visits the new object; constructors call malloc, stdio, `dlopen` (P-7) and start and join a
 /// thread that reads; a `dlopen`'d `PT_TLS` object is listed with its module ID and the calling
-/// thread's block (`dlpi_tls_modid`, `dlpi_tls_data`, DL-16d), the program's own TLS module (start
-/// time) with its own ID and block.
+/// thread's block (`dlpi_tls_modid`, `dlpi_tls_data`, DL-16d), the program's own TLS module and its
+/// dependency's (start time) each with its own ID and block.
 #[test]
 fn s27_1_c_8_readers_see_published_objects_only() {
     let Some((d, ld, libc, crt1)) = setup("readers") else { return };
