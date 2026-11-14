@@ -397,9 +397,23 @@ pub(crate) fn foreign_errno() -> *mut core::ffi::c_int {
 /// D-X.60: the heap's cache word of the calling thread: the block's word in a process the
 /// runtime started, else the registry's; `None` with [`SPARE`] (a cache is never shared, so such
 /// a thread allocates with no cache).
-#[inline]
+/// Out of line, like [`heap_cache_word`]: only the heap's general paths ([`crate::heap::KernelPages`],
+/// the slow and checked paths) ask, and a call there is smaller than the inlined test at each site
+/// (the start-up text group carries those paths: STARTUP-TEXT-WINDOWS).
+#[inline(never)]
 pub(crate) fn heap_cache_slot() -> Option<&'static AtomicUsize> {
     if owned() { Some(&tb::current().heap_cache) } else { foreign_heap_cache_slot() }
+}
+
+/// D-X.60: [`heap_cache_slot`]'s value (0: none), the cache word as the heap's general paths read
+/// it ([`crate::heap::KernelPages`]): the block's word 0x90 (one `%fs`-relative load, HEAP-CUTS2 C4)
+/// in a process the runtime started, else the registry's. The fast paths read the block's word
+/// with no test ([`crate::heap::OwnPages`]). Out of line: the general paths read it at a dozen
+/// sites, several inlined into the start-up allocation (`Debug::alloc_checked`), and the inlined
+/// test with its cold call at each of them cost about 700 bytes of start-up text.
+#[inline(never)]
+pub(crate) fn heap_cache_word() -> usize {
+    if owned() { tb::read::<tb::HeapCache>() } else { foreign_heap_cache() }
 }
 
 /// [`heap_cache_slot`] in a process the runtime did not start. Out of line so that only this cold
@@ -418,7 +432,7 @@ fn foreign_heap_cache_slot() -> Option<&'static AtomicUsize> {
 #[cold]
 #[inline(never)]
 pub(crate) fn foreign_heap_cache() -> usize {
-    heap_cache_slot().map_or(0, |s| s.load(Relaxed))
+    foreign_heap_cache_slot().map_or(0, |s| s.load(Relaxed))
 }
 
 /// Empty words (a new thread's). The heap cache word is kept: the cache of the block's dead

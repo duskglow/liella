@@ -166,7 +166,7 @@ pub fn starve_registry(on: bool) {
 /// The calling thread's heap cache word as the heap sees it in a process the runtime did not
 /// start: whether it has one, and the value the fast paths read (0: none).
 pub fn heap_cache_word() -> (bool, usize) {
-    (crate::thread::heap_cache_slot().is_some(), crate::thread::foreign_heap_cache())
+    (crate::thread::heap_cache_slot().is_some(), crate::thread::heap_cache_word())
 }
 
 /// Whether the runtime started this process (D-X.58): true in a program linked against the

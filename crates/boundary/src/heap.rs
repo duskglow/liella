@@ -98,10 +98,10 @@ impl Pages for KernelPages {
     }
     #[inline(always)]
     fn cache_word(&self) -> usize {
-        // HEAP-CUTS2 C4: one `%fs`-relative load (plan S2 category tb-field) instead of the
-        // out-of-line thread-pointer call and the load through it. D-X.60: only in a process
-        // the runtime started; elsewhere 0x90 is another library's word, and the registry's.
-        if crate::thread::owned() { crate::tb::read::<crate::tb::HeapCache>() } else { crate::thread::foreign_heap_cache() }
+        // D-X.60: the block's word only in a process the runtime started; elsewhere 0x90 is
+        // another library's word, and the registry's. One out-of-line call (the general paths
+        // only: the fast paths take `OwnPages`, one `%fs`-relative load).
+        crate::thread::heap_cache_word()
     }
     fn address_limit(&self) -> Option<usize> {
         // `RLIMIT_AS` (9); `RLIM_INFINITY` is none.
