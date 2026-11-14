@@ -21,7 +21,7 @@
 use crate::locale::Locale;
 use crate::mem::TryVec;
 
-use super::parse::{Assert, Node, Parsed, Stack};
+use super::parse::{Assert, Item, Node, Parsed, Stack};
 use super::text::{is_word, set_matches, CharSet, Mode, SetDef};
 use super::ReError;
 
@@ -202,6 +202,14 @@ enum Step {
     Call(Call),
 }
 
+/// What one step of a repetition does next ([`Builder::rep_drive`]): its entry instruction, a
+/// node compiled in its place, or a copy of its operand to compile before the next step.
+enum RStep {
+    Done(u32),
+    Tail(Call),
+    Part(Call),
+}
+
 /// A node waiting for one of its parts, with what it does with the part's entry instruction.
 #[derive(Clone, Copy)]
 enum Frame {
@@ -334,6 +342,30 @@ impl Builder {
         }
     }
 
+    /// A node without parts (a leaf), compiled followed by `next`: its entry instruction;
+    /// `None` for any other node.
+    fn leaf(&mut self, it: Item, next: u32, chain: u32) -> Result<Option<u32>, ReError> {
+        Ok(Some(match it.node {
+            Node::Empty => next,
+            Node::Byte(b) => self.emit(OP_BYTE, u32::from(b), next, 0, chain)?,
+            Node::Set(k) => self.emit(OP_SET, k, next, 0, chain)?,
+            Node::Assert(a) => self.emit(OP_ASSERT, assert_code(a), next, 0, chain)?,
+            Node::Backref(g) => self.emit(OP_BACKREF, g, next, 0, chain)?,
+            Node::Cat(..) | Node::Alt(..) | Node::Group(..) | Node::Rep(..) => return Ok(None),
+        }))
+    }
+
+    /// Part `id` of a node compiled at once when it is a leaf without a hidden group: what
+    /// [`Self::start`] would make of it, with no frame and no step. Ordinary patterns are mostly
+    /// such parts, so the explicit stack costs them nothing.
+    fn quick(&mut self, t: &Parsed, id: u32, next: u32, chain: u32) -> Result<Option<u32>, ReError> {
+        let it = t.item(id);
+        if it.wrap != 0 {
+            return Ok(None);
+        }
+        self.leaf(it, next, chain)
+    }
+
     /// Begin compiling `c`.
     fn start(&mut self, t: &Parsed, c: Call, frames: &mut Stack<Frame, 8>) -> Result<Step, ReError> {
         let it = t.item(c.id);
@@ -344,32 +376,24 @@ impl Builder {
             frames.push(Frame::Open { g: it.wrap, chain })?;
             return Ok(Step::Call(Call { id: c.id, next: close, chain, share: NONE, bare: true }));
         }
-        let part = |id: u32, next: u32| Step::Call(Call { id, next, chain, share: NONE, bare: false });
+        if let Some(pc) = self.leaf(it, next, chain)? {
+            return Ok(Step::Done(pc));
+        }
         Ok(match it.node {
-            Node::Empty => Step::Done(next),
-            Node::Byte(b) => Step::Done(self.emit(OP_BYTE, u32::from(b), next, 0, chain)?),
-            Node::Set(k) => Step::Done(self.emit(OP_SET, k, next, 0, chain)?),
-            Node::Assert(a) => Step::Done(self.emit(OP_ASSERT, assert_code(a), next, 0, chain)?),
-            Node::Backref(g) => Step::Done(self.emit(OP_BACKREF, g, next, 0, chain)?),
-            Node::Cat(start, len) => {
-                let Some(k) = len.checked_sub(1) else { return Ok(Step::Done(next)) };
-                frames.push(Frame::Cat { start, k, chain })?;
-                part(kid(t, start, k), next)
-            }
+            Node::Cat(start, len) => self.cat(t, start, len, next, chain, frames)?,
             Node::Alt(start, len) => {
-                if len == 0 {
-                    return Ok(Step::Done(next));
-                }
-                frames.push(Frame::Alt { start, len, k: 0, next, chain, base: self.entries.len() })?;
-                part(kid(t, start, 0), next)
+                let base = self.entries.len();
+                self.alt(t, start, len, 0, next, chain, base, frames)?
             }
             Node::Group(g, x) => {
                 let close = self.emit(OP_CLOSE, g, next, 0, chain)?;
                 frames.push(Frame::Open { g, chain })?;
-                part(x, close)
+                Step::Call(Call { id: x, next: close, chain, share: NONE, bare: false })
             }
+            // Leaves: compiled above.
+            Node::Empty | Node::Byte(_) | Node::Set(_) | Node::Assert(_) | Node::Backref(_) => Step::Done(next),
             Node::Rep(x, m, n) => {
-                let mut r = Rep {
+                let r = Rep {
                     x,
                     m,
                     n,
@@ -390,7 +414,7 @@ impl Builder {
                     opt: 0,
                     entry: 0,
                 };
-                self.rep(t, &mut r, 0, frames)?
+                self.rep_drive(t, r, 0, frames)?
             }
         })
     }
@@ -399,33 +423,77 @@ impl Builder {
     fn resume(&mut self, t: &Parsed, f: Frame, ret: u32, frames: &mut Stack<Frame, 8>) -> Result<Step, ReError> {
         Ok(match f {
             Frame::Open { g, chain } => Step::Done(self.emit(OP_OPEN, g, ret, 0, chain)?),
-            Frame::Cat { start, k, chain } => {
-                let Some(k) = k.checked_sub(1) else { return Ok(Step::Done(ret)) };
-                frames.push(Frame::Cat { start, k, chain })?;
-                Step::Call(Call { id: kid(t, start, k), next: ret, chain, share: NONE, bare: false })
-            }
+            Frame::Cat { start, k, chain } => self.cat(t, start, k, ret, chain, frames)?,
             Frame::Alt { start, len, k, next, chain, base } => {
                 self.entries.push(ret)?;
-                let k = k + 1;
-                if k < len {
-                    frames.push(Frame::Alt { start, len, k, next, chain, base })?;
-                    return Ok(Step::Call(Call { id: kid(t, start, k), next, chain, share: NONE, bare: false }));
-                }
-                let mut pc = self.entries.pop().unwrap_or(next);
-                while self.entries.len() > base {
-                    let e = self.entries.pop().unwrap_or(NONE);
-                    pc = self.emit(OP_SPLIT, e, pc, 0, chain)?;
-                }
-                Step::Done(pc)
+                self.alt(t, start, len, k + 1, next, chain, base, frames)?
             }
-            Frame::Rep(mut r) => self.rep(t, &mut r, ret, frames)?,
+            Frame::Rep(r) => self.rep_drive(t, r, ret, frames)?,
         })
     }
 
+    /// The first `k` items of the concatenation whose children start at `start`, followed by
+    /// `next`: last first, the leaves at once, the first other item as a call (the rest waiting
+    /// as a frame).
+    fn cat(&mut self, t: &Parsed, start: u32, k: u32, next: u32, chain: u32, frames: &mut Stack<Frame, 8>) -> Result<Step, ReError> {
+        let (mut k, mut next) = (k, next);
+        while let Some(j) = k.checked_sub(1) {
+            let id = kid(t, start, j);
+            let Some(pc) = self.quick(t, id, next, chain)? else {
+                frames.push(Frame::Cat { start, k: j, chain })?;
+                return Ok(Step::Call(Call { id, next, chain, share: NONE, bare: false }));
+            };
+            (k, next) = (j, pc);
+        }
+        Ok(Step::Done(next))
+    }
+
+    /// The branches `k..len` of the alternation whose children start at `start`, each followed
+    /// by `next`, first to last (the leaves at once); then the splits over all the branches'
+    /// entries (on [`Self::entries`] from `base`).
+    #[allow(clippy::too_many_arguments)] // the fields of `Frame::Alt`, the builder and the tree
+    fn alt(&mut self, t: &Parsed, start: u32, len: u32, k: u32, next: u32, chain: u32, base: usize, frames: &mut Stack<Frame, 8>) -> Result<Step, ReError> {
+        let mut k = k;
+        while k < len {
+            let id = kid(t, start, k);
+            let Some(pc) = self.quick(t, id, next, chain)? else {
+                frames.push(Frame::Alt { start, len, k, next, chain, base })?;
+                return Ok(Step::Call(Call { id, next, chain, share: NONE, bare: false }));
+            };
+            self.entries.push(pc)?;
+            k += 1;
+        }
+        let mut pc = if self.entries.len() > base { self.entries.pop().unwrap_or(next) } else { next };
+        while self.entries.len() > base {
+            let e = self.entries.pop().unwrap_or(NONE);
+            pc = self.emit(OP_SPLIT, e, pc, 0, chain)?;
+        }
+        Ok(Step::Done(pc))
+    }
+
+    /// Step repetition `r` (the entry of its operand's copy just compiled: `ret`) until it is
+    /// done or needs a copy that is not a leaf; then it waits as a frame. A leaf operand's
+    /// copies are compiled here, so `a{2,5}` or `[0-9]{1,3}` push no frame.
+    fn rep_drive(&mut self, t: &Parsed, r: Rep, ret: u32, frames: &mut Stack<Frame, 8>) -> Result<Step, ReError> {
+        let (mut r, mut ret) = (r, ret);
+        loop {
+            match self.rep(t, &mut r, ret)? {
+                RStep::Done(pc) => return Ok(Step::Done(pc)),
+                RStep::Tail(c) => return Ok(Step::Call(c)),
+                RStep::Part(c) => {
+                    let Some(pc) = self.quick(t, c.id, c.next, c.chain)? else {
+                        frames.push(Frame::Rep(r))?;
+                        return Ok(Step::Call(c));
+                    };
+                    ret = pc;
+                }
+            }
+        }
+    }
+
     /// Compile a copy of the operand of `r` followed by `next` in `chain`, `r` waiting for it.
-    fn part(frames: &mut Stack<Frame, 8>, r: &Rep, next: u32, chain: u32, share: u32) -> Result<Step, ReError> {
-        frames.push(Frame::Rep(*r))?;
-        Ok(Step::Call(Call { id: r.x, next, chain, share, bare: false }))
+    fn part(r: &Rep, next: u32, chain: u32, share: u32) -> Result<RStep, ReError> {
+        Ok(RStep::Part(Call { id: r.x, next, chain, share, bare: false }))
     }
 
     /// The share value for a copy of the operand in `inner`: the body of a group-free scope may
@@ -440,11 +508,11 @@ impl Builder {
 
     /// A repetition `x{m,n}`, one step: in phase `Init` its start, in the others the use of
     /// `ret`, the entry of the operand's copy just compiled.
-    fn rep(&mut self, t: &Parsed, r: &mut Rep, ret: u32, frames: &mut Stack<Frame, 8>) -> Result<Step, ReError> {
+    fn rep(&mut self, t: &Parsed, r: &mut Rep, ret: u32) -> Result<RStep, ReError> {
         let (m, next, chain) = (r.m, r.next, r.chain);
         match r.phase {
-            Phase::Init => self.rep_init(t, r, frames),
-            Phase::Opt => Ok(Step::Done(self.emit(OP_SPLIT, ret, next, 0, chain)?)),
+            Phase::Init => self.rep_init(t, r),
+            Phase::Opt => Ok(RStep::Done(self.emit(OP_SPLIT, ret, next, 0, chain)?)),
             Phase::PlainLoop => {
                 self.patch(r.l, Inst { op: OP_SPLIT, a: ret, b: next, c: 0 });
                 if m >= 1 {
@@ -453,23 +521,23 @@ impl Builder {
                     // copy of `X` and stacked `+` grow linearly, not by doubling.
                     r.entry = ret;
                     r.i = 1;
-                    return self.plain_copies(r, frames);
+                    return self.plain_copies(r);
                 }
-                Ok(Step::Done(r.l))
+                Ok(RStep::Done(r.l))
             }
             Phase::PlainCopies => {
                 r.entry = ret;
-                self.plain_copies(r, frames)
+                self.plain_copies(r)
             }
             Phase::PlainBounded => {
                 r.cont = self.emit(OP_SPLIT, ret, next, 0, chain)?;
                 r.i += 1;
-                self.plain_bounded(r, frames)
+                self.plain_bounded(r)
             }
             Phase::PlainMand => {
                 r.entry = ret;
                 r.i += 1;
-                Self::plain_mand(r, frames)
+                Self::plain_mand(r)
             }
             Phase::ScopedLoop => {
                 let en = self.emit(OP_ENTER, r.scope, ret, r.enter_c, chain)?;
@@ -482,87 +550,87 @@ impl Builder {
                 }
                 r.entry = r.opt;
                 r.t = r.last;
-                self.scoped_mand(r, frames)
+                self.scoped_mand(r)
             }
             Phase::ScopedBounded => {
                 let en = self.emit(OP_ENTER, r.scope, ret, 0, chain)?;
                 r.cont = self.emit(OP_SPLIT, en, next, 0, chain)?;
                 r.i += 1;
-                self.scoped_bounded(r, frames)
+                self.scoped_bounded(r)
             }
             Phase::ScopedMand => {
                 r.entry = self.emit(OP_ENTER, r.scope, ret, r.enter_c, chain)?;
                 r.t -= 1;
-                self.scoped_mand(r, frames)
+                self.scoped_mand(r)
             }
         }
     }
 
     /// `X{m,}` plain: the mandatory copies before the loop's body (`for 1..m`).
-    fn plain_copies(&mut self, r: &mut Rep, frames: &mut Stack<Frame, 8>) -> Result<Step, ReError> {
+    fn plain_copies(&mut self, r: &mut Rep) -> Result<RStep, ReError> {
         if r.i < r.m {
             r.i += 1;
             r.phase = Phase::PlainCopies;
-            return Self::part(frames, r, r.entry, r.chain, NONE);
+            return Self::part(r,r.entry, r.chain, NONE);
         }
-        Ok(Step::Done(r.entry))
+        Ok(RStep::Done(r.entry))
     }
 
     /// `X{m,n}` plain: the optional copies (`for m..n`), then the mandatory ones.
-    fn plain_bounded(&mut self, r: &mut Rep, frames: &mut Stack<Frame, 8>) -> Result<Step, ReError> {
+    fn plain_bounded(&mut self, r: &mut Rep) -> Result<RStep, ReError> {
         if r.i < r.n.unwrap_or(0) {
             r.phase = Phase::PlainBounded;
-            return Self::part(frames, r, r.cont, r.chain, NONE);
+            return Self::part(r,r.cont, r.chain, NONE);
         }
         r.entry = r.cont;
         r.i = 0;
-        Self::plain_mand(r, frames)
+        Self::plain_mand(r)
     }
 
     /// The plain mandatory copies (`for 0..m`), last first.
-    fn plain_mand(r: &mut Rep, frames: &mut Stack<Frame, 8>) -> Result<Step, ReError> {
+    fn plain_mand(r: &mut Rep) -> Result<RStep, ReError> {
         if r.i < r.m {
             r.phase = Phase::PlainMand;
-            return Self::part(frames, r, r.entry, r.chain, NONE);
+            return Self::part(r,r.entry, r.chain, NONE);
         }
-        Ok(Step::Done(r.entry))
+        Ok(RStep::Done(r.entry))
     }
 
     /// `X{m,n}` scoped: the optional iterations (`for m..n`), then the mandatory copies.
-    fn scoped_bounded(&mut self, r: &mut Rep, frames: &mut Stack<Frame, 8>) -> Result<Step, ReError> {
+    fn scoped_bounded(&mut self, r: &mut Rep) -> Result<RStep, ReError> {
         if r.i < r.n.unwrap_or(0) {
             let inner = self.chain(r.chain, r.scope)?;
             let ex = self.emit(OP_EXIT, r.scope, r.next, r.cont, inner)?;
             r.phase = Phase::ScopedBounded;
-            return Self::part(frames, r, ex, inner, Self::inner_share(r, inner));
+            return Self::part(r,ex, inner, Self::inner_share(r, inner));
         }
         r.opt = r.cont;
         r.entry = r.opt;
         r.t = r.last;
-        self.scoped_mand(r, frames)
+        self.scoped_mand(r)
     }
 
     /// The scoped mandatory copies, last first (`for t in (1..=last).rev()`). After the last
     /// one an empty iteration stops the repetition; before it, the next copy follows whatever
     /// the iteration matched.
-    fn scoped_mand(&mut self, r: &mut Rep, frames: &mut Stack<Frame, 8>) -> Result<Step, ReError> {
+    fn scoped_mand(&mut self, r: &mut Rep) -> Result<RStep, ReError> {
         if r.t == 0 {
-            return Ok(Step::Done(r.entry));
+            return Ok(RStep::Done(r.entry));
         }
         let inner = if r.shared { self.chain_shared(r.chain, r.scope)? } else { self.chain(r.chain, r.scope)? };
         let ex = if r.t == r.m { self.emit(OP_EXIT, r.exit_a, r.next, r.opt, inner)? } else { self.emit(OP_EXIT, r.exit_a, r.entry, r.entry, inner)? };
         r.phase = Phase::ScopedMand;
-        Self::part(frames, r, ex, inner, Self::inner_share(r, inner))
+        Self::part(r,ex, inner, Self::inner_share(r, inner))
     }
 
-    fn rep_init(&mut self, t: &Parsed, r: &mut Rep, frames: &mut Stack<Frame, 8>) -> Result<Step, ReError> {
+    fn rep_init(&mut self, t: &Parsed, r: &mut Rep) -> Result<RStep, ReError> {
         let (x, m, n, next, chain, share) = (r.x, r.m, r.n, r.next, r.chain, r.share);
         if n == Some(0) {
-            return Ok(Step::Done(next));
+            return Ok(RStep::Done(next));
         }
         if m == 1 && n == Some(1) {
             // The operand itself, in the repetition's place.
-            return Ok(Step::Call(Call { id: x, next, chain, share, bare: false }));
+            return Ok(RStep::Tail(Call { id: x, next, chain, share, bare: false }));
         }
         let it = t.item(x);
         let groups = it.groups;
@@ -572,7 +640,7 @@ impl Builder {
             // `X?`: one optional pass; with no later iteration there is nothing to gate or to
             // reset (an enclosing repetition resets the groups at its own iterations).
             r.phase = Phase::Opt;
-            return Self::part(frames, r, next, chain, share);
+            return Self::part(r,next, chain, share);
         }
         if !scoped {
             // A body that consumes and has no groups: plain copies and a plain loop.
@@ -580,12 +648,12 @@ impl Builder {
                 None => {
                     r.l = self.emit(OP_SPLIT, NONE, next, 0, chain)?;
                     r.phase = Phase::PlainLoop;
-                    Self::part(frames, r, r.l, chain, NONE)
+                    Self::part(r,r.l, chain, NONE)
                 }
                 Some(_) => {
                     r.cont = next;
                     r.i = m;
-                    self.plain_bounded(r, frames)
+                    self.plain_bounded(r)
                 }
             };
         }
@@ -613,12 +681,12 @@ impl Builder {
                 let inner = if r.shared { self.chain_shared(chain, scope)? } else { self.chain(chain, scope)? };
                 let ex = self.emit(OP_EXIT, r.exit_a, next, r.l, inner)?;
                 r.phase = Phase::ScopedLoop;
-                Self::part(frames, r, ex, inner, Self::inner_share(r, inner))
+                Self::part(r,ex, inner, Self::inner_share(r, inner))
             }
             Some(_) => {
                 r.cont = next;
                 r.i = m;
-                self.scoped_bounded(r, frames)
+                self.scoped_bounded(r)
             }
         }
     }

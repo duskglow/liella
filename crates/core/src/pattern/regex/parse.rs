@@ -174,6 +174,16 @@ impl<T: Copy, const N: usize> Stack<T, N> {
         }
     }
 
+    /// Append the entries from `from` up to `out`, in order.
+    pub(crate) fn copy_from(&self, from: usize, out: &mut TryVec<T>) -> Result<(), ReError> {
+        let inline = self.inline.get(from.min(N)..self.len.min(N)).unwrap_or(&[]);
+        nomem(out.extend_from_slice(inline))?;
+        if self.len > N {
+            nomem(out.extend_from_slice(self.heap.as_slice().get(from.saturating_sub(N)..).unwrap_or(&[])))?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn truncate(&mut self, len: usize) {
         if len < self.len {
             self.heap.truncate(len.saturating_sub(N));
@@ -383,7 +393,12 @@ impl<'a> Parser<'a> {
     /// Add `node` (its children already added) to the tree.
     fn add(&mut self, node: Node) -> Result<u32, ReError> {
         let id = u32::try_from(self.nodes.len()).map_err(|_| ReError::ESpace)?;
-        let it = facts(&self.nodes, &self.kids, node, 0);
+        // A leaf (most nodes) has its facts without a look at children: [`facts`]'s first arms.
+        let it = match node {
+            Node::Byte(_) | Node::Set(_) => Item { node, nullable: false, groups: NO_GROUPS, wrap: 0 },
+            Node::Empty | Node::Assert(_) | Node::Backref(_) => Item { node, nullable: true, groups: NO_GROUPS, wrap: 0 },
+            Node::Cat(..) | Node::Alt(..) | Node::Group(..) | Node::Rep(..) => facts(&self.nodes, &self.kids, node, 0),
+        };
         nomem(self.nodes.push(it))?;
         Ok(id)
     }
@@ -399,10 +414,7 @@ impl<'a> Parser<'a> {
             return self.work.pop().ok_or(ReError::ESpace);
         }
         let start = u32::try_from(self.kids.len()).map_err(|_| ReError::ESpace)?;
-        nomem(self.kids.reserve(len))?;
-        for i in base..base + len {
-            nomem(self.kids.push(self.work.get(i).unwrap_or(u32::MAX)))?;
-        }
+        self.work.copy_from(base, &mut self.kids)?;
         self.work.truncate(base);
         let n = u32::try_from(len).map_err(|_| ReError::ESpace)?;
         self.add(if alt { Node::Alt(start, n) } else { Node::Cat(start, n) })
