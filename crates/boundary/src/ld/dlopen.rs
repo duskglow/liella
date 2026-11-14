@@ -22,7 +22,7 @@
 //! chain (DL-16c), objects with `PT_TLS` (DL-16d), unloading (DL-17), lazy binding (DL-20).
 
 use super::{array_words, c_string, dyn_string, env_entries, image_view, open_whole, own_object, read_auxv, ProcImage, SysMapper};
-use super::{AT_FDCWD, AUXV_WORDS_MAX, MAP_ANONYMOUS_I32, MAP_PRIVATE_I32, START_INTERP, START_N, START_OBJS, START_ARGS, START_PAGE};
+use super::{AT_FDCWD, AUXV_WORDS_MAX, INITIAL_TAIL, MAP_ANONYMOUS_I32, MAP_PRIVATE_I32, START_INTERP, START_N, START_OBJS, START_ARGS, START_PAGE};
 use crate::{conv, dlerr, raw, tb};
 use core::ffi::c_void;
 use core::mem::MaybeUninit;
@@ -33,10 +33,10 @@ use liella_kernel::uapi::{O_CLOEXEC, O_RDONLY, SEEK_END};
 use liella_ld::arch::{Arch, Native};
 use liella_ld::cache::Cache;
 use liella_ld::dlopen::{self as dl, Mode, Refusal};
-use liella_ld::elf::{pt, Elf};
+use liella_ld::elf::{pt, Elf, STB_GNU_UNIQUE};
 use liella_ld::reloc::{self, Obj, Objects, RelocError, VersionError};
 use liella_ld::search::{self, Ctx, PathBuf, Scope};
-use liella_ld::symbols::{Object, Request, Want};
+use liella_ld::symbols::{self, Found as SymFound, LookupError, Object, Request, UniqueRegistry, Want};
 use liella_ld::tls::{self as ltls, Module, Placed};
 use liella_ld::{init, map, start};
 
@@ -48,6 +48,69 @@ const NEW_MAX: usize = init::OBJECTS_MAX;
 const NAMES: usize = 128 * 1024;
 /// Entries of the dependency-list arena.
 const DEPS: usize = 16 * 1024;
+/// The unique-symbol table: (name, version) keys and the bytes of their strings. A full table makes
+/// the binding that needed one more entry fail with a text.
+type Unique = reloc::UniqueTable<1024, { 64 * 1024 }>;
+/// `SHN_ABS` (ELF gABI): an absolute symbol, not moved by the load bias.
+const SHN_ABS: u16 = 0xfff1;
+
+/// `objs[..k]` of the loader's object array (a field borrow, so another field may be borrowed
+/// mutably beside it).
+fn objs_of<'l>(objs: &'l [MaybeUninit<Obj<'static>>; CAP], k: usize) -> &'l [Obj<'static>] {
+    let k = k.min(CAP);
+    // UNSAFE(slice): the initialised prefix of a MaybeUninit array.
+    #[allow(unsafe_code)]
+    // SAFETY: every caller passes a `k` whose slots are written (the loaded objects and the
+    // attempt's new ones, written before `k` is advanced).
+    unsafe {
+        core::slice::from_raw_parts(objs.as_ptr().cast::<Obj<'static>>(), k)
+    }
+}
+
+/// `syms[..k]`, as [`objs_of`].
+fn syms_of<'l>(syms: &'l [MaybeUninit<Object<'static>>; CAP], k: usize) -> &'l [Object<'static>] {
+    let k = k.min(CAP);
+    // UNSAFE(slice): the initialised prefix of a MaybeUninit array.
+    #[allow(unsafe_code)]
+    // SAFETY: as `objs_of`.
+    unsafe {
+        core::slice::from_raw_parts(syms.as_ptr().cast::<Object<'static>>(), k)
+    }
+}
+
+/// The unique table as one lookup sees it: an entry recorded by this loader, or else the start's
+/// binding, which is the first unique definition in the start's global scope (the start bound every
+/// reference in that order); it is not recorded, so nothing is copied at the first `dl*` call.
+struct Uniq<'a> {
+    table: &'a mut Unique,
+    syms: &'a [Object<'static>],
+    start: &'a [usize],
+}
+
+/// A registry that records nothing (the start's scope has no unique table of its own here).
+struct NoUnique;
+
+impl UniqueRegistry for NoUnique {
+    fn find(&self, _: &[u8], _: &[u8]) -> Option<SymFound> {
+        None
+    }
+    fn record(&mut self, _: &[u8], _: &[u8], _: SymFound) -> Result<(), LookupError> {
+        Ok(())
+    }
+}
+
+impl UniqueRegistry for Uniq<'_> {
+    fn find(&self, name: &[u8], version: &[u8]) -> Option<SymFound> {
+        self.table.find(name, version).or_else(|| {
+            let want = if version.is_empty() { Want::Default } else { Want::Version(version) };
+            let f = symbols::lookup(self.syms, symbols::Scope::global(self.start), &Request::new(name, want), &mut NoUnique).ok()??;
+            (f.def.st.bind() == STB_GNU_UNIQUE).then_some(f)
+        })
+    }
+    fn record(&mut self, name: &[u8], version: &[u8], found: SymFound) -> Result<(), LookupError> {
+        self.table.record(name, version, found)
+    }
+}
 
 const DT_SONAME: u64 = 14;
 const DT_RPATH: u64 = 15;
@@ -94,6 +157,9 @@ struct Node {
     file: (usize, usize),
     /// A `dlopen`ed object's reservation (base, span): what DL-17 (and a failed attempt) unmaps.
     reserve: (u64, u64),
+    /// A `dlopen`ed object: the root of the call that loaded it, whose local scope it was relocated
+    /// with (`RTLD_NEXT` and `RTLD_DEFAULT` from it search that scope, probe P-5).
+    root: u16,
 }
 
 /// The loader's state (module documentation).
@@ -103,6 +169,14 @@ struct Loader {
     n: usize,
     /// Entries of `global`.
     n_global: usize,
+    /// The start-time objects (`ld.so` included when it joined at adoption), and how many of them
+    /// are global: the start's own global scope, `global[..n_start_global]`.
+    n_start: usize,
+    n_start_global: usize,
+    /// The namespace's `STB_GNU_UNIQUE` table (plan §2): the first definition bound for a (name,
+    /// version) is every later binding's; `unique_mark` is its length when a `dlopen` began.
+    unique: Unique,
+    unique_mark: usize,
     names_top: usize,
     deps_top: usize,
     /// `dlopen`ed objects whose constructors started, in that order (destructors run backwards).
@@ -166,6 +240,8 @@ fn unlock() {
         futex(FUTEX_WAKE_PRIVATE, 1);
     }
 }
+
+pub(super) mod dlsym;
 
 /// The address of [`entry`], for `StartInfo::dlopen`.
 pub(super) fn entry_address() -> usize {
@@ -245,25 +321,9 @@ impl Loader {
 
     /// `objs[..k]` (`k` may pass `n` by the objects of the attempt in progress).
     fn objs_upto(&self, k: usize) -> &[Obj<'static>] {
-        let k = k.min(CAP);
-        // UNSAFE(slice): the initialised prefix of a MaybeUninit array.
-        #[allow(unsafe_code)]
-        // SAFETY: every caller passes a `k` whose slots are written (the loaded objects and the
-        // attempt's new ones, written before `k` is advanced).
-        unsafe {
-            core::slice::from_raw_parts(self.objs.as_ptr().cast::<Obj<'static>>(), k)
-        }
+        objs_of(&self.objs, k)
     }
 
-    fn syms_upto(&self, k: usize) -> &[Object<'static>] {
-        let k = k.min(CAP);
-        // UNSAFE(slice): the initialised prefix of a MaybeUninit array.
-        #[allow(unsafe_code)]
-        // SAFETY: as `objs_upto`.
-        unsafe {
-            core::slice::from_raw_parts(self.syms.as_ptr().cast::<Object<'static>>(), k)
-        }
-    }
 }
 
 fn soname(o: &Obj<'static>) -> Option<&'static [u8]> {
@@ -348,7 +408,79 @@ fn adopt_start(l: &mut Loader) -> bool {
         }
         l.n = k.saturating_add(1);
     }
+    l.n_start = total;
+    l.n_start_global = l.n_global;
+    adopt_tls(l, n, interp) && adopt_deps(l, total)
+}
+
+/// The start's static TLS placement of each start-time object, computed again from the same
+/// segments in the same order as `link` placed them (`ltls::layout` is deterministic), so `dlsym` of
+/// an `STT_TLS` symbol finds the calling thread's block (plan §2).
+#[allow(clippy::indexing_slicing)] // n < CAP <= OBJECTS_MAX bounds (START_N's bound)
+fn adopt_tls(l: &mut Loader, n: usize, interp: usize) -> bool {
+    let mut mods: [Option<Module>; init::OBJECTS_MAX] = [None; init::OBJECTS_MAX];
+    let mut placed: [Option<Placed>; init::OBJECTS_MAX] = [None; init::OBJECTS_MAX];
+    let Some(objs) = l.objs_upto(n).get(..n) else { return false };
+    if n > mods.len() {
+        return false;
+    }
+    for (k, o) in objs.iter().enumerate() {
+        if k != interp {
+            mods[k] = o.elf.find(pt::TLS).map(|ph| Module::of(&ph));
+        }
+    }
+    if ltls::layout::<Native>(&mods[..n], &mut placed[..n], INITIAL_TAIL, ltls::SURPLUS).is_err() {
+        return false;
+    }
+    for (k, p) in placed[..n].iter().enumerate() {
+        let o = Obj { tls: *p, ..l.objs_upto(n)[k] };
+        l.objs[k] = MaybeUninit::new(o);
+    }
     true
+}
+
+/// Each start-time object's dependencies (its `DT_NEEDED` entries in order), for its local scope (a
+/// handle's `dlsym`, `RTLD_GLOBAL` promotion): a name matches a start-time object's `DT_SONAME`, a
+/// name with a `/` the object at that path by (`st_dev`, `st_ino`). A name that matches neither
+/// (a start-time object without `DT_SONAME` found by a bare name) is left out.
+#[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)] // deps_top < DEPS is checked
+fn adopt_deps(l: &mut Loader, total: usize) -> bool {
+    for q in 0..total {
+        let o = l.objs_upto(total)[q];
+        let start = l.deps_top;
+        for needed in o.dynm.needed().map_while(Result::ok) {
+            let j = l.by_soname(needed, total).or_else(|| {
+                if !needed.contains(&b'/') {
+                    return None;
+                }
+                let id = file_id(needed)?;
+                l.nodes[..total].iter().position(|nd| (nd.dev, nd.ino) == id)
+            });
+            let Some(j) = j else { continue };
+            if l.deps_top >= DEPS {
+                return false;
+            }
+            l.deps[l.deps_top] = u16::try_from(j).unwrap_or(0);
+            l.deps_top += 1;
+        }
+        l.nodes[q].deps = (u32::try_from(start).unwrap_or(0), u32::try_from(l.deps_top - start).unwrap_or(0));
+    }
+    true
+}
+
+/// The (`st_dev`, `st_ino`) of the file at `path` (no NUL in it), or `None`.
+fn file_id(path: &[u8]) -> Option<(u64, u64)> {
+    let mut buf = PathBuf::default();
+    if !buf.push(path) {
+        return None;
+    }
+    let c = buf.c_str()?;
+    let fd = crate::ffi_sys::liella_sys_openat(AT_FDCWD, core::ptr::with_exposed_provenance(c.as_ptr().expose_provenance()), i64::from(O_RDONLY | O_CLOEXEC), 0);
+    let _ = i32::try_from(fd).ok().filter(|&f| f >= 0)?;
+    let mut st = liella_kernel::uapi::Stat::default();
+    let ok = crate::ffi_sys::liella_sys_fstat(fd, core::ptr::from_mut(&mut st).cast::<c_void>()) == 0;
+    let _ = crate::ffi_sys::liella_sys_close(fd);
+    ok.then_some((st.dev, st.ino))
 }
 
 /// The start's `argc`, `argv`, `envp`, auxiliary vector (`i` = 0..4) as `run_init` recorded them.
@@ -702,7 +834,7 @@ fn make_global(l: &mut Loader, set: &[u16]) {
     }
 }
 
-/// Unmap the objects `base..k` of a failed attempt and rewind the arenas.
+/// Unmap the objects `base..k` of a failed attempt and rewind the arenas and the unique table.
 fn unwind(l: &mut Loader, base: usize, k: usize, names_top: usize, deps_top: usize) {
     for node in l.nodes.get(base..k).unwrap_or(&[]) {
         map::Mapper::unmap(&mut SysMapper { fd: -1 }, node.reserve.0, node.reserve.1);
@@ -710,7 +842,31 @@ fn unwind(l: &mut Loader, base: usize, k: usize, names_top: usize, deps_top: usi
     }
     l.names_top = names_top;
     l.deps_top = deps_top;
+    l.unique.truncate(l.unique_mark);
     l.surplus.rollback(l.tls_mark);
+}
+
+/// Pin the definers of the unique-table entries recorded since mark `from`: an object whose
+/// `STB_GNU_UNIQUE` definition was bound is never unloaded (plan §1, design §5).
+fn pin_unique(l: &mut Loader, from: usize) {
+    let mut owners = [0u16; 64];
+    let mut from = from;
+    loop {
+        let mut n = 0usize;
+        for (slot, o) in owners.iter_mut().zip(l.unique.owners(from)) {
+            *slot = u16::try_from(o).unwrap_or(u16::MAX);
+            n = n.saturating_add(1);
+        }
+        for &o in owners.get(..n).unwrap_or(&[]) {
+            if let Some(node) = l.nodes.get_mut(usize::from(o)) {
+                node.nodelete = true;
+            }
+        }
+        if n < owners.len() {
+            return;
+        }
+        from = from.saturating_add(n);
+    }
 }
 
 /// Give each new object (`base..k`) with `PT_TLS` a module ID and a place in the static surplus
@@ -749,7 +905,7 @@ fn thread_walk(l: &mut Loader) -> usize {
     if l.thread_walk == 0 {
         let req = Request::new(start::private::THREAD_WALK, Want::Version(start::private::NODE));
         let n = START_N.load(Acquire).min(l.n);
-        let found = l.objs_upto(n).iter().zip(l.syms_upto(n)).find_map(|(o, s)| s.lookup(&req).ok().flatten().map(|d| o.bias.wrapping_add(d.st.value)));
+        let found = l.objs_upto(n).iter().zip(syms_of(&l.syms, n)).find_map(|(o, s)| s.lookup(&req).ok().flatten().map(|d| o.bias.wrapping_add(d.st.value)));
         l.thread_walk = found.and_then(|a| usize::try_from(a).ok()).unwrap_or(0);
     }
     l.thread_walk
@@ -777,8 +933,9 @@ fn load_set(l: &mut Loader, given: &'static [u8], m: Mode, caller: usize) -> Res
     let page = START_PAGE.load(Relaxed);
     let base = l.n;
     let (names_top, deps_top) = (l.names_top, l.deps_top);
+    l.unique_mark = l.unique.len();
     l.tls_mark = l.surplus.len();
-    let who =(0..base).find(|&i| (l.nodes[i].lo..l.nodes[i].hi).contains(&caller)).unwrap_or(0);
+    let who = (0..base).find(|&i| (l.nodes[i].lo..l.nodes[i].hi).contains(&caller)).unwrap_or(0);
     let env = Env::read();
     let chain = [scope_of(l, who), scope_of(l, 0)];
     let chain = if who == 0 { &chain[..1] } else { &chain[..] };
@@ -862,19 +1019,32 @@ fn load_set(l: &mut Loader, given: &'static [u8], m: Mode, caller: usize) -> Res
     }
     let mut local = [0u16; CAP];
     let llen = local_scope(l, base, &mut local);
+    // The new set's scope (plan §2): the global scope, then the root's local scope; with
+    // `RTLD_DEEPBIND` the local scope first. Each object once.
     let mut scope = [0usize; CAP];
-    let mut sn = l.n_global;
-    scope[..sn].copy_from_slice(&l.global[..sn]);
-    for &i in &local[..llen] {
-        let i = usize::from(i);
-        if !l.nodes[i].global && sn < CAP {
+    let mut sn = 0usize;
+    let mut seen = [false; CAP];
+    let global = l.global[..l.n_global].iter().copied();
+    let local_it = local[..llen].iter().map(|&i| usize::from(i));
+    let mut push = |i: usize| {
+        if i < CAP && !seen[i] && sn < CAP {
+            seen[i] = true;
             scope[sn] = i;
             sn += 1;
         }
+    };
+    if m.deepbind {
+        local_it.chain(global).for_each(&mut push);
+    } else {
+        global.chain(local_it).for_each(&mut push);
     }
-    let (objs, syms) = (l.objs_upto(k), l.syms_upto(k));
+    for i in base..k {
+        l.nodes[i].root = u16::try_from(base).unwrap_or(0);
+    }
+    let start = &l.global[..l.n_start_global];
+    let (objs, syms) = (objs_of(&l.objs, k), syms_of(&l.syms, k));
     let set = Objects { objs, syms, global: &scope[..sn] };
-    let mut unique = reloc::UniqueTable::<64, 4096>::default();
+    let mut unique = Uniq { table: &mut l.unique, syms, start };
     let mut deferred = [false; NEW_MAX];
     for i in (base..k).rev() {
         match reloc::relocate_first::<Native, _>(&set, i, &mut ProcImage, page, &mut unique) {
@@ -914,6 +1084,7 @@ fn load_set(l: &mut Loader, given: &'static [u8], m: Mode, caller: usize) -> Res
     l.nodes[base - 1].l_next.store(first, Release);
     l.nodes[base].opens = 1;
     l.nodes[base].nodelete |= m.nodelete;
+    pin_unique(l, l.unique_mark);
     if m.global {
         make_global(l, &local[..llen]);
     }

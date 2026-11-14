@@ -1,4 +1,4 @@
-//! `cargo xtask plants <file> --dir <new-dir> [--timeout <secs>]`: run a story's plants (mutations
+//! `cargo xtask plants <file> --dir <new-dir> [--timeout <secs>] [--prepare-timeout <secs>]`: run a story's plants (mutations
 //! that its tests must catch) the one way the rules ask for, instead of a hand-written script per
 //! story (XTASK-PLANTS; `docs/plants.md`).
 //!
@@ -29,6 +29,7 @@
 
 use std::fs;
 use std::io::Write as _;
+use std::os::unix::process::CommandExt;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::time::Instant;
@@ -45,6 +46,11 @@ const EXIT_REFUSED: u8 = 3;
 /// The default limit for one command, in seconds (a mutant may loop forever). The project's per-plant limit
 /// (owner, 2026-11-05): `--timeout 600`.
 const DEFAULT_TIMEOUT: u64 = 600;
+
+/// The default limit for the product build (`cargo xtask so`, baseline and per plant), in seconds. It is
+/// separate from [`DEFAULT_TIMEOUT`]: that one decides CAUGHT-by-hang for a mutant's tests, and a traced cold
+/// build takes longer than it on a slow host. A build that runs into this limit says nothing about the mutant.
+const DEFAULT_PREPARE_TIMEOUT: u64 = 3600;
 
 /// The exit status of `timeout(1)` when it ended the command: a mutant that hangs is caught by the limit.
 const TIMED_OUT: i32 = 124;
@@ -86,6 +92,8 @@ pub enum Verdict {
     Equivalent,
     WarnRcOnly,
     WarnNoMsg,
+    /// The product build for the mutant ran into the prepare timeout: the mutant was not tested.
+    BuildTimeout,
 }
 
 impl Verdict {
@@ -96,6 +104,7 @@ impl Verdict {
             Verdict::Equivalent => "EQUIVALENT",
             Verdict::WarnRcOnly => "WARN-RC-ONLY",
             Verdict::WarnNoMsg => "WARN-NO-MSG",
+            Verdict::BuildTimeout => "BUILD-TIMEOUT",
         }
     }
 }
@@ -111,6 +120,8 @@ pub struct Config {
     pub dir: PathBuf,
     pub prepare: Vec<String>,
     pub timeout: u64,
+    /// The limit for `prepare` (the product build), apart from `timeout`.
+    pub prepare_timeout: u64,
     pub uses_products: fn(&Path, &[Plant]) -> Vec<bool>,
 }
 
@@ -200,15 +211,16 @@ pub fn main(root: &Path, args: &[String]) -> ExitCode {
     }
 }
 
-const USAGE: &str = "usage: cargo xtask plants <plants-file> --dir <new-directory> [--timeout <secs>]";
+const USAGE: &str = "usage: cargo xtask plants <plants-file> --dir <new-directory> [--timeout <secs>] [--prepare-timeout <secs>]";
 
 fn parse_args(root: &Path, args: &[String]) -> Result<Config, String> {
-    let (mut file, mut dir, mut timeout) = (None, None, DEFAULT_TIMEOUT);
+    let (mut file, mut dir, mut timeout, mut prepare_timeout) = (None, None, DEFAULT_TIMEOUT, DEFAULT_PREPARE_TIMEOUT);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--dir" => dir = Some(PathBuf::from(it.next().ok_or("--dir needs a directory")?)),
             "--timeout" => timeout = it.next().and_then(|t| t.parse().ok()).filter(|t| *t > 0).ok_or("--timeout needs a positive number of seconds")?,
+            "--prepare-timeout" => prepare_timeout = it.next().and_then(|t| t.parse().ok()).filter(|t| *t > 0).ok_or("--prepare-timeout needs a positive number of seconds")?,
             s if s.starts_with('-') => return Err(format!("unknown option {s} ({USAGE})")),
             s if file.is_none() => file = Some(PathBuf::from(s)),
             s => return Err(format!("unexpected argument {s} ({USAGE})")),
@@ -219,7 +231,7 @@ fn parse_args(root: &Path, args: &[String]) -> Result<Config, String> {
     let text = fs::read_to_string(&file).map_err(|e| format!("cannot read {}: {e}", file.display()))?;
     let dir = if dir.is_absolute() { dir } else { std::env::current_dir().map_err(|e| e.to_string())?.join(dir) };
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-    Ok(Config { src: root.to_path_buf(), plants: parse_plants(&text)?, text, dir, prepare: vec![cargo, "xtask".into(), "so".into()], timeout, uses_products: plants_use_products })
+    Ok(Config { src: root.to_path_buf(), plants: parse_plants(&text)?, text, dir, prepare: vec![cargo, "xtask".into(), "so".into()], timeout, prepare_timeout, uses_products: plants_use_products })
 }
 
 /// Parse a plants file (see the module comment). Every line is checked; the errors are joined.
@@ -390,7 +402,10 @@ fn on_ram(dir: &Path) -> Option<bool> {
 fn run_logged(cwd: &Path, argv: &[String], log: &Path, timeout: u64) -> Result<i32, String> {
     let file = fs::File::create(log).map_err(|e| format!("cannot create {}: {e}", log.display()))?;
     let err = file.try_clone().map_err(|e| e.to_string())?;
-    let status = Command::new("timeout")
+    // The child leads its own process group (timeout(1) makes the same group), so one group signal reaches every
+    // grandchild, such as the gdb and probes a build-time trace starts, however the step ended.
+    let mut child = Command::new("timeout")
+        .args(["-k", "10"])
         .arg(timeout.to_string())
         .args(argv)
         .current_dir(cwd)
@@ -399,9 +414,22 @@ fn run_logged(cwd: &Path, argv: &[String], log: &Path, timeout: u64) -> Result<i
         .stdin(Stdio::null())
         .stdout(file)
         .stderr(err)
-        .status()
+        .process_group(0)
+        .spawn()
         .map_err(|e| format!("cannot run {argv:?}: {e}"))?;
+    let pgid = child.id();
+    let status = child.wait().map_err(|e| format!("cannot wait for {argv:?}: {e}"))?;
+    kill_group(pgid);
     Ok(status.code().unwrap_or(128))
+}
+
+/// End every process left in group `pgid`: TERM, then KILL when the group is still there after a grace period.
+fn kill_group(pgid: u32) {
+    let signal = |sig: &str| Command::new("kill").args([sig, "--"]).arg(format!("-{pgid}")).stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success());
+    if signal("-TERM") {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        signal("-KILL");
+    }
 }
 
 fn sh(cmd: &str) -> Vec<String> {
@@ -618,10 +646,16 @@ pub fn run(cfg: &Config) -> Outcome {
             baseline.push((format!("baseline-{}", baseline.len()), sh(&p.cmd)));
         }
     }
-    for (name, argv) in &baseline {
+    for (i, (name, argv)) in baseline.iter().enumerate() {
         let log = logs.join(format!("{name}.log"));
-        match run_logged(&copy, argv, &log, cfg.timeout) {
+        // The first entry is the product build: it has its own limit.
+        let limit = if i == 0 { cfg.prepare_timeout } else { cfg.timeout };
+        match run_logged(&copy, argv, &log, limit) {
             Ok(0) => println!("plants: {name} ok ({})", argv.join(" ")),
+            Ok(TIMED_OUT) if i == 0 => {
+                println!("plants: BASELINE FAILED: so timed out after {limit} s (prepare timeout; --prepare-timeout <secs>); no plant was applied. Last lines of {}:\n{}", log.display(), tail(&log, 20));
+                return Outcome { code: EXIT_BASELINE, verdicts: Vec::new() };
+            }
             Ok(rc) => {
                 println!("plants: BASELINE FAILED: {name} rc {rc} ({}); no plant was applied. Last lines of {}:\n{}", argv.join(" "), log.display(), tail(&log, 20));
                 return Outcome { code: EXIT_BASELINE, verdicts: Vec::new() };
@@ -644,7 +678,7 @@ pub fn run(cfg: &Config) -> Outcome {
         if !products && products_hold_mutant {
             let log = logs.join(format!("{}.so-restore.log", p.id));
             let start = Instant::now();
-            match run_logged(&copy, &cfg.prepare, &log, cfg.timeout) {
+            match run_logged(&copy, &cfg.prepare, &log, cfg.prepare_timeout) {
                 Ok(0) => {
                     products_hold_mutant = false;
                     build = format!("the products, rebuilt unmutated after the last plant in {:.0}s (log {})", start.elapsed().as_secs_f64(), log.display());
@@ -686,7 +720,7 @@ pub fn run(cfg: &Config) -> Outcome {
             products_hold_mutant = true;
             let so_log = logs.join(format!("{}.so.log", p.id));
             let start = Instant::now();
-            built = run_logged(&copy, &cfg.prepare, &so_log, cfg.timeout);
+            built = run_logged(&copy, &cfg.prepare, &so_log, cfg.prepare_timeout);
             build = format!("the products, rebuilt with the mutant in {:.0}s (log {})", start.elapsed().as_secs_f64(), so_log.display());
             if !matches!(built, Ok(0)) {
                 // The mutant does not build: judged on the build's log, the command is not run.
@@ -694,6 +728,7 @@ pub fn run(cfg: &Config) -> Outcome {
                 log = so_log;
             }
         }
+        let build_timed_out = products && matches!(built, Ok(TIMED_OUT));
         let rc = if matches!(built, Ok(0)) { run_logged(&copy, &sh(&p.cmd), &log, cfg.timeout) } else { built };
         // Restore by writing (a fresh mtime) before anything else can go wrong.
         if let Err(e) = write_fresh(&file, &original) {
@@ -710,6 +745,7 @@ pub fn run(cfg: &Config) -> Outcome {
             }
         };
         let (verdict, detail) = match (&p.expect, rc) {
+            _ if build_timed_out => (Verdict::BuildTimeout, format!("the products build timed out after {} s (prepare timeout); the mutant was not tested", cfg.prepare_timeout)),
             (Expect::Equivalent(why), 0) => (Verdict::Equivalent, why.clone()),
             (_, 0) => (Verdict::Survived, format!("`{}` passed on the mutant", p.cmd)),
             (_, TIMED_OUT) => (Verdict::Caught, format!("caught by timeout ({}s)", cfg.timeout)),
@@ -720,7 +756,7 @@ pub fn run(cfg: &Config) -> Outcome {
         };
         println!("plants: {}: {} ({}; log {}; build: {build})", p.id, verdict.label(), detail, log.display());
         // XTASK-PLANTS-CATCHER: a failed command names what failed, kept beside the plants in results.txt.
-        if rc == 0 {
+        if rc == 0 || build_timed_out {
             results.push(format!("# {}: {}", p.id, verdict.label()));
         } else {
             let by = if rc == TIMED_OUT { format!("timeout ({}s)", cfg.timeout) } else { catcher(&String::from_utf8_lossy(&fs::read(&log).unwrap_or_default())) };
@@ -732,13 +768,14 @@ pub fn run(cfg: &Config) -> Outcome {
     let count = |v: Verdict| verdicts.iter().filter(|(_, x)| *x == v).count();
     let survived = count(Verdict::Survived);
     let summary = format!(
-        "{} plants: {} CAUGHT, {} SURVIVED, {} EQUIVALENT, {} WARN-RC-ONLY, {} WARN-NO-MSG{}",
+        "{} plants: {} CAUGHT, {} SURVIVED, {} EQUIVALENT, {} WARN-RC-ONLY, {} WARN-NO-MSG, {} BUILD-TIMEOUT{}",
         cfg.plants.len(),
         count(Verdict::Caught),
         survived,
         count(Verdict::Equivalent),
         count(Verdict::WarnRcOnly),
         count(Verdict::WarnNoMsg),
+        count(Verdict::BuildTimeout),
         if failed { ", and errors (see above)" } else { "" }
     );
     println!("plants: {summary}");
@@ -749,7 +786,7 @@ pub fn run(cfg: &Config) -> Outcome {
     } else {
         println!("plants: the plants file with these results: {} (commit it as handoff/<STORY>-plants.txt)", record.display());
     }
-    let code = if survived > 0 || failed { EXIT_SURVIVED } else { EXIT_OK };
+    let code = if survived > 0 || count(Verdict::BuildTimeout) > 0 || failed { EXIT_SURVIVED } else { EXIT_OK };
     Outcome { code, verdicts }
 }
 
@@ -773,7 +810,7 @@ mod tests {
     const CHECK: &str = "grep -q answer=42 src/value.txt || { echo WRONG-ANSWER; exit 1; }";
 
     fn config(src: &Path, dir: &Path, plants: &str) -> Config {
-        Config { src: src.to_path_buf(), text: plants.to_string(), plants: parse_plants(plants).unwrap(), dir: dir.to_path_buf(), prepare: sh("true"), timeout: 60, uses_products: |_, ps| vec![false; ps.len()] }
+        Config { src: src.to_path_buf(), text: plants.to_string(), plants: parse_plants(plants).unwrap(), dir: dir.to_path_buf(), prepare: sh("true"), timeout: 60, prepare_timeout: 60, uses_products: |_, ps| vec![false; ps.len()] }
     }
 
     /// The toy's products: `product.txt`, a copy of `src/value.txt`; every build appends a line to `builds.txt`.
@@ -982,6 +1019,7 @@ mod tests {
     // no spec clause: the default per-plant limit is 600 s (the project rule), and --timeout overrides it
     #[test]
     fn default_timeout_is_600_seconds() {
+        assert_eq!(DEFAULT_PREPARE_TIMEOUT, 3600);
         let (src, dir) = toy("defaulttimeout");
         let file = src.join("plants.txt");
         fs::write(&file, format!("d1 | src/value.txt | lit:answer=42 ==> answer=43 | {CHECK} | msg:WRONG-ANSWER\n")).unwrap();
@@ -991,6 +1029,9 @@ mod tests {
         assert_eq!(DEFAULT_TIMEOUT, 600);
         let cfg = parse_args(&src, &[f, "--dir".into(), d, "--timeout".into(), "7".into()]).unwrap();
         assert_eq!(cfg.timeout, 7);
+        assert_eq!(cfg.prepare_timeout, 3600);
+        let cfg = parse_args(&src, &[file.display().to_string(), "--dir".into(), dir.display().to_string(), "--prepare-timeout".into(), "9".into()]).unwrap();
+        assert_eq!((cfg.timeout, cfg.prepare_timeout), (600, 9));
         let _ = fs::remove_dir_all(src.parent().unwrap());
     }
 
@@ -1055,6 +1096,48 @@ mod tests {
         let _ = fs::remove_dir_all(src.parent().unwrap());
     }
 
+    // no spec clause: the build step has its own limit; a slow build is not cut by the test timeout
+    #[test]
+    fn slow_prepare_is_not_cut_by_the_test_timeout() {
+        let (src, dir) = toy("slowprep");
+        let mut cfg = config(&src, &dir, "q1 | src/value.txt | lit:answer=42 ==> answer=43 | grep -q answer=42 src/value.txt || { echo WRONG-ANSWER; exit 1; } | msg:WRONG-ANSWER\n");
+        cfg.prepare = sh("sleep 2");
+        cfg.timeout = 1;
+        cfg.prepare_timeout = 30;
+        let out = run(&cfg);
+        assert_eq!(out.verdicts, vec![("q1".to_string(), Verdict::Caught)]);
+        assert_eq!(out.code, EXIT_OK);
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    // no spec clause: a baseline build that runs into the prepare timeout is named as such
+    #[test]
+    fn baseline_prepare_timeout_is_reported() {
+        let (src, dir) = toy("prepbase");
+        let mut cfg = config(&src, &dir, "q1 | src/value.txt | lit:answer=42 ==> answer=43 | true | msg:x\n");
+        cfg.prepare = sh("sleep 30");
+        cfg.prepare_timeout = 1;
+        let out = run(&cfg);
+        assert_eq!(out.code, EXIT_BASELINE);
+        assert!(out.verdicts.is_empty());
+        assert!(dir.join("logs/so.log").exists());
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    // no spec clause: a mutant whose build times out is BUILD-TIMEOUT, never CAUGHT, and fails the run
+    #[test]
+    fn a_plant_build_that_times_out_is_not_caught() {
+        let (src, dir) = toy("prepplant");
+        let mut cfg = config(&src, &dir, "q1 | src/value.txt | lit:answer=42 ==> answer=43 | true | msg:x\n");
+        cfg.prepare = sh("if grep -q answer=43 src/value.txt; then sleep 30; fi");
+        cfg.prepare_timeout = 1;
+        cfg.uses_products = |_, ps| vec![true; ps.len()];
+        let out = run(&cfg);
+        assert_eq!(out.verdicts, vec![("q1".to_string(), Verdict::BuildTimeout)]);
+        assert_ne!(out.code, EXIT_OK);
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
     // no spec clause: a plant whose command hangs is CAUGHT by the timeout, even with a msg: its log cannot match
     #[test]
     fn a_plant_that_times_out_is_caught() {
@@ -1064,6 +1147,29 @@ mod tests {
         let out = run(&cfg);
         assert_eq!(out.verdicts, vec![("h1".to_string(), Verdict::Caught)]);
         assert_eq!(out.code, EXIT_OK);
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    // no spec clause: a step that ends at its limit leaves no process of its group alive (a grandchild that ignores TERM, as the step's own leader does not)
+    #[test]
+    fn a_timed_out_step_leaves_no_process_of_its_group() {
+        let (src, dir) = toy("killtree");
+        fs::create_dir_all(&dir).unwrap();
+        let pidfile = dir.join("grandchild.pid");
+        let log = dir.join("step.log");
+        let cmd = format!("(trap '' TERM; exec sleep 300) & echo $! > {}; wait", pidfile.display());
+        let rc = run_logged(&dir, &sh(&cmd), &log, 1).unwrap();
+        assert_eq!(rc, TIMED_OUT);
+        let pid = fs::read_to_string(&pidfile).unwrap().trim().to_string();
+        let alive = |pid: &str| fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|st| !st.rsplit(')').next().unwrap_or("").trim_start().starts_with('Z'));
+        // Reaping by init may lag the kill: poll a bounded number of times.
+        for _ in 0..500 {
+            if !alive(&pid) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(!alive(&pid), "grandchild {pid} survived the step's timeout");
         let _ = fs::remove_dir_all(src.parent().unwrap());
     }
 }

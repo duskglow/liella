@@ -5,10 +5,11 @@
 //! Clause tests for spec §27 (19 clauses).
 //! The dlopen and dlsym clauses are checked by dynamic-link conformance programs
 //! (`conformance/run.sh`, LINK-HELPERS / DLOPEN-HELPERS), run under the reference and under
-//! Liella's ld.so. Until Liella's loader opens objects (DL-16a) and looks them up (DL-16b), the
-//! programs carry PENDING-LIELLA: the reference must meet the expectations, Liella's run is
-//! reported PENDING and counted, and it turns into a FAIL the day Liella's run passes (then drop
-//! the directive and the pending assertion here).
+//! Liella's ld.so. A program for behaviour Liella's loader does not have yet carries
+//! PENDING-LIELLA: the reference must meet the expectations, Liella's run is reported PENDING and
+//! counted, and it turns into a FAIL the day Liella's run passes (then drop the directive and the
+//! pending assertion here). `s27_dlopen_failures` (DL-16a) and `s27_dlsym_handles` (DL-16b) pass
+//! on both.
 
 #![allow(clippy::unwrap_used, missing_docs)]
 
@@ -27,11 +28,11 @@ fn conformance(names: &[&str]) -> String {
     out
 }
 
-/// Asserts that `name` ran pending on Liella until `story`: the reference met its expectations
-/// and Liella's run failed as expected (run.sh fails the run once Liella's passes).
-fn assert_pending(out: &str, name: &str, story: &str) {
-    let line = format!("conformance: PENDING {name} on Liella until {story}");
-    assert!(out.lines().any(|l| l.starts_with(&line)), "{name} is not reported pending on {story}:\n{out}");
+/// Asserts that `name` ran as a full program, not pending: run.sh (whose success [`conformance`]
+/// checks) passed both the reference's run and Liella's.
+fn assert_not_pending(out: &str, name: &str) {
+    let line = format!("conformance: PENDING {name} ");
+    assert!(!out.lines().any(|l| l.starts_with(&line)), "{name} is still reported pending:\n{out}");
 }
 
 clause!(s27_1_c_1, "27.1", "Contract", r##"**`dlopen(path, mode)`** loads an ELF shared object and its dependencies into the process and runs their constructors. It returns a handle, and repeated opens are reference-counted."##);
@@ -42,11 +43,12 @@ clause!(s27_1_c_2, "27.1", "Contract", r##"**`dlmopen(lmid, ...)`** loads into a
 /// §27.1 Contract: **`dlsym(handle, name)`** returns the address of a symbol. The special handles are `RTLD_DEFAULT` (global lookup order) and `RTLD_NEXT` (the next occurrence after the caller's object, for interposition). **`dlvsym`** requests a specific symbol version.
 ///
 /// `s27_dlsym_handles`: RTLD_DEFAULT and RTLD_NEXT through two helpers, dlvsym, and the dlerror
-/// texts of the failing lookups. Pending on Liella until DL-16b (DL-DLSYM).
+/// texts of the failing lookups. Passes under the reference and under Liella's ld.so (DL-16b,
+/// DL-DLSYM).
 #[test]
 fn s27_1_c_3() {
     let out = conformance(&["s27_dlsym_handles"]);
-    assert_pending(&out, "s27_dlsym_handles", "DL-16b");
+    assert_not_pending(&out, "s27_dlsym_handles");
 }
 clause!(s27_1_c_4, "27.1", "Contract", r##"**`dlclose`** decrements the reference count. At zero, it runs destructors and unmaps the object, unless the object is `NODELETE` or has unique symbols or TLS in use."##);
 clause!(s27_1_c_5, "27.1", "Contract", r##"**`dlerror()`** returns a Text describing the last failure on this thread, and clears it. It returns `NULL` if there was no error. ⚑ HIST: this is yet another error channel. `dlsym` returning `NULL` is ambiguous for symbols whose value is 0, so callers must check `dlerror`."##);

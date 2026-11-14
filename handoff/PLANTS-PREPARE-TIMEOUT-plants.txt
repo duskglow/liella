@@ -1,0 +1,13 @@
+pt1 | xtask/src/plants.rs | lit:let limit = if i == 0 { cfg.prepare_timeout } else { cfg.timeout }; ==> let limit = cfg.timeout; | cargo test -p xtask --bin xtask plants:: | msg:baseline_prepare_timeout_is_reported|slow_prepare_is_not_cut|panicked
+pt2 | xtask/src/plants.rs | lit:built = run_logged(&copy, &cfg.prepare, &so_log, cfg.prepare_timeout); ==> built = run_logged(&copy, &cfg.prepare, &so_log, cfg.timeout); | cargo test -p xtask --bin xtask plants:: | msg:a_plant_build_that_times_out_is_not_caught.*FAILED|panicked
+pt3 | xtask/src/plants.rs | lit:_ if build_timed_out => ==> _ if false && build_timed_out => | cargo test -p xtask --bin xtask plants:: | msg:a_plant_build_that_times_out_is_not_caught.*FAILED|panicked
+pt4 | xtask/src/plants.rs | lit: || count(Verdict::BuildTimeout) > 0 ==> | cargo test -p xtask --bin xtask plants:: | msg:a_plant_build_that_times_out_is_not_caught.*FAILED|panicked
+pt5 | xtask/src/plants.rs | lit:DEFAULT_PREPARE_TIMEOUT: u64 = 3600 ==> DEFAULT_PREPARE_TIMEOUT: u64 = 360 | cargo test -p xtask --bin xtask plants:: | msg:default_timeout_is_600_seconds.*FAILED|panicked
+pt6 | xtask/src/plants.rs | lit:Ok(TIMED_OUT) if i == 0 => ==> Ok(TIMED_OUT) if false => | cargo test -p xtask --bin xtask plants:: | equivalent:the generic rc arm that follows returns the same EXIT_BASELINE with the same outcome; only the message text differs, which no test reads
+# cargo xtask plants results (6 plants: 5 CAUGHT, 0 SURVIVED, 1 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG, 0 BUILD-TIMEOUT):
+# pt1: CAUGHT, caught by xtask plants::tests::slow_prepare_is_not_cut_by_the_test_timeout
+# pt2: CAUGHT, caught by xtask plants::tests::a_plant_build_that_times_out_is_not_caught
+# pt3: CAUGHT, caught by xtask plants::tests::a_plant_build_that_times_out_is_not_caught
+# pt4: CAUGHT, caught by xtask plants::tests::a_plant_build_that_times_out_is_not_caught
+# pt5: CAUGHT, caught by xtask plants::tests::default_timeout_is_600_seconds
+# pt6: EQUIVALENT
