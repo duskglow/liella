@@ -150,7 +150,7 @@ fn lgamma_core_pieces<const EDGE: bool>(x: f32) -> Option<(f64, u64, i32, bool)>
         return Some(((xd - 0.5) * (lx - 1.0) + (HALF_LN_2PI_M_HALF + s), LGAMMA_DELTA, 1, false));
     }
     let Some(g) = gamma_core(xd) else {
-        return if EDGE { lgamma_wide(xd) } else if xd < -42.0 { lgamma_reflect(xd) } else { None };
+        return if EDGE { lgamma_edge(xd) } else { lgamma_wide(xd) };
     };
     let y = ln64(crate::dd::abs(g));
     let a = crate::dd::abs(y);
@@ -170,23 +170,25 @@ const LGAMMA_TINY: f64 = f64::from_bits(0x3c30_0000_0000_0000);
 /// 2^26: the largest margin [`lgamma_edge`] hands to [`super::round`] (whose test holds below 2^27).
 const EDGE_MAX_MARGIN: f64 = 67_108_864.0;
 
-/// lnΓ(x) where [`gamma_core`] refuses x: x < -42 by [`lgamma_reflect`] (its margin is not
-/// [`lgamma_edge`]'s: the fourth value is false there), the rest by [`lgamma_edge`]. Its own
-/// function, so that [`lgamma_edge`]'s other call (|y| < 2^-8, the cbench row's x = -3.14382577)
-/// does not pass the test (the test and the inlined reflection inside [`lgamma_edge`] cost that
-/// row 6 instructions per call, LIBM-LGAMMAF-EDGE-3).
+/// lnΓ(x) for x < -42 by [`lgamma_reflect`] (its margin is not [`lgamma_edge`]'s: the fourth
+/// value is false), `None` for every other x (NaN included). Reached only where the `double`
+/// pieces and [`lgamma_edge`]'s kernel's domain have refused x, and its own function: inlined
+/// into [`lgamma_edge`], the reflection made that function's prologue save more registers, and
+/// a test ahead of [`lgamma_edge`] in [`lgamma_core_signed`] split its two refusal calls into
+/// two call sites; each cost the cbench row beside the zero at -3.14382577 4 to 6 instructions
+/// per call (LIBM-LGAMMAF-EDGE-3, -4).
 #[cold]
 #[inline(never)]
 fn lgamma_wide(xd: f64) -> Option<(f64, u64, i32, bool)> {
     if xd < -42.0 {
         return lgamma_reflect(xd);
     }
-    lgamma_edge(xd)
+    None
 }
 
 /// lnΓ(x) for the operands [`lgamma_core_signed`]'s `double` pieces refuse, as its (y, margin in
-/// ulp of y, sign of Γ(x)), or `None` (the poles, x ≤ -16 off the poles, 0, NaN: the accurate
-/// path; [`lgamma_wide`] takes x < -42 before it).
+/// ulp of y, sign of Γ(x)), or `None` (the poles, -42 ≤ x ≤ -16 off the poles, 0, NaN: the
+/// accurate path). x < -42, outside the kernel's domain, goes on to [`lgamma_wide`].
 /// Cold: on the cbench row's 256 operands only x = -3.14382577 comes here (LIBM-F32-REST-NEXT).
 /// * |y| < 2^-8 beside the negative zeros, and 2^-60 ≤ |x| < 2^-20: the `double` tier's
 ///   double-double kernel ([`crate::fast_gamma::lgamma_kernel`], x in its domain: |x| < 16, not a
@@ -218,7 +220,7 @@ fn lgamma_edge(xd: f64) -> Option<(f64, u64, i32, bool)> {
         return Some((-ln64(a), LGAMMA_DELTA, if xd < 0.0 { -1 } else { 1 }, true));
     }
     if !crate::fast_gamma::domain(xd, false) {
-        return None;
+        return lgamma_wide(xd);
     }
     let (y, eps, sign) = crate::fast_gamma::lgamma_kernel(xd)?;
     let v = y.hi + y.lo;

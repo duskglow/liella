@@ -293,7 +293,7 @@ pub fn lgamma<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
         if let Some(((r, st), sign)) = crate::fast32::lgamma_first(f32::from_bits(b), mode) {
             return ((F::from_bits(u128::from(r.to_bits())), st), sign);
         }
-        return lgammaf_after_first(x, f32::from_bits(b), mode);
+        return lgammaf_after_first(x, mode);
     }
     if F::PREC == 53 {
         let xf = as_f64(x);
@@ -315,12 +315,16 @@ pub fn lgamma<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
 /// second tries ([`crate::fast32::lgamma_rest`]), then [`lgamma_accurate`]. One cold call on the
 /// refusal path, as with the accurate path alone: a second call there made [`lgamma`]'s `float`
 /// body keep a constant in a saved register on every call (4 to 15 instructions on the typical
-/// percall rows, LIBM-LGAMMAF-EDGE-3).
+/// percall rows, LIBM-LGAMMAF-EDGE-3). It takes x alone (its `float` bits again here): with a
+/// second argument [`lgamma`] kept x both in a `float` register, saved around its cold calls, and
+/// as bits (LIBM-LGAMMAF-EDGE-4).
 #[cold]
 #[inline(never)]
-fn lgammaf_after_first<F: Float>(x: F, xf: f32, mode: Rounding) -> ((F, Status), i32) {
-    if let Some(((r, st), sign)) = crate::fast32::lgamma_rest(xf, mode) {
-        return ((F::from_bits(u128::from(r.to_bits())), st), sign);
+fn lgammaf_after_first<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
+    if let Ok(b) = u32::try_from(x.to_bits()) {
+        if let Some(((r, st), sign)) = crate::fast32::lgamma_rest(f32::from_bits(b), mode) {
+            return ((F::from_bits(u128::from(r.to_bits())), st), sign);
+        }
     }
     lgamma_accurate(x, mode)
 }
