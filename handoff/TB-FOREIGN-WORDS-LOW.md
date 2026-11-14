@@ -37,7 +37,7 @@ handoff/TB-FOREIGN-WORDS-LOW-report.md (-1..-4), git history of this file (-5..-
   host (pfbase above). Not caused by this branch; the job is rc 1.
 - plants (f5b8f7320): 5 CAUGHT, slow-path-own-copy SURVIVED init_startup_group_ends too (now `equivalent:` with
   the reason), the two cache-word plants caught by a SIGSEGV in the mutant (WARN-NO-MSG; msg widened).
-  plants2 (a76a10cd3, same code): the rerun with the fixed file; result in the report json.
+  plants2 (a76a10cd3, same code): **rc 0, 7 CAUGHT, 1 EQUIVALENT, no WARN**.
 - Correction to the comment on `OwnPages` (crates/boundary/src/heap.rs): "a second copy ... put the first
   allocation of a new size class on a text page of its own" held before trace-at-build; -7 and -8 no longer see it
   (slow-path-own-copy passes heap_meta_products and the first-window test). Not edited in this run (a code change
